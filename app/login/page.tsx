@@ -54,9 +54,12 @@ export default function LoginPage () {
 	return (
 		<div className='flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-950 via-slate-950 to-black p-4'>
 			<div className='w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/60 p-8 backdrop-blur-xl shadow-2xl'>
-				<h2 className='mb-6 text-center text-3xl font-bold tracking-tight text-white'>
-					{isSignUp ? 'Create an Account' : 'Welcome Back'}
-				</h2>
+				<div className='flex flex-col items-center mb-6'>
+					<img src='/logo.png' alt='Lekhan Logo' className='h-20 w-20 rounded-2xl shadow-lg border border-white/10 mb-3' />
+					<h2 className='text-3xl font-extrabold tracking-tight text-white'>
+						{isSignUp ? 'Join Lekhan' : 'Welcome to Lekhan'}
+					</h2>
+				</div>
 
 				{error && (
 					<div className='mb-4 rounded-lg bg-red-950/50 border border-red-500/30 p-3 text-sm text-red-400'>

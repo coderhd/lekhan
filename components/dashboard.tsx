@@ -68,13 +68,16 @@ export default function Dashboard ({ user }: DashboardProps) {
 			<div className='mx-auto max-w-6xl'>
 				{/* Top Header */}
 				<header className='mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-white/5 pb-6'>
-					<div>
-						<h1 className='text-3xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent'>
-							Collaborative Workspace
-						</h1>
-						<p className='text-sm text-slate-400 mt-1'>
-							Logged in as: <span className='text-slate-300 font-semibold'>{user.email}</span>
-						</p>
+					<div className='flex items-center gap-3'>
+						<img src='/logo.png' alt='Lekhan Logo' className='h-12 w-12 rounded-xl shadow-md border border-white/10' />
+						<div>
+							<h1 className='text-3xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent'>
+								Lekhan Workspace
+							</h1>
+							<p className='text-sm text-slate-400 mt-0.5'>
+								Logged in as: <span className='text-slate-300 font-semibold'>{user.email}</span>
+							</p>
+						</div>
 					</div>
 					<div className='flex items-center gap-3'>
 						<button

@@ -181,11 +181,12 @@ export default function EditorWorkspace ({
 					>
 						<ArrowLeft className='h-5 w-5' />
 					</button>
+					<img src='/logo.png' alt='Lekhan Logo' className='h-8 w-8 rounded-lg shadow-sm border border-white/10 hidden sm:block' />
 					<input
 						type='text'
 						value={title}
 						onChange={handleTitleChange}
-						className='bg-transparent text-xl font-bold tracking-tight text-white focus:outline-none border-b border-transparent focus:border-indigo-500 pb-0.5 max-w-[300px] sm:max-w-[450px]'
+						className='bg-transparent text-xl font-bold tracking-tight text-white focus:outline-none border-b border-transparent focus:border-indigo-500 pb-0.5 max-w-[200px] sm:max-w-[350px]'
 						placeholder='Untitled Document'
 					/>
 					<SyncIndicator isConnected={isConnected} isSynced={isSynced} />

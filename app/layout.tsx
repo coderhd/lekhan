@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-	title: 'Local-First Collaborative Editor',
+	title: 'Lekhan - Collaborative Local-First Editor',
 	description: 'A premium collaborative document editor featuring offline sync and AI capabilities',
 }
 
