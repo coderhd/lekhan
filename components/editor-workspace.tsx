@@ -6,11 +6,12 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
-import { Bold, Italic, Code, Heading1, Heading2, List, ListOrdered, ArrowLeft } from 'lucide-react'
+import { Bold, Italic, Code, Heading1, Heading2, List, ListOrdered, ArrowLeft, History, EyeOff } from 'lucide-react'
 import { useEditorCollab } from '@/hooks/use-editor-collab'
 import SyncIndicator from './sync-indicator'
 import { supabase } from '@/lib/supabase'
 import ShareModal from './share-modal'
+import VersionHistory from './version-history'
 
 interface EditorWorkspaceProps {
 	documentId: string
@@ -42,6 +43,54 @@ export default function EditorWorkspace ({
 	const [title, setTitle] = useState(initialTitle)
 	const [userColor] = useState(() => CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)])
 	const [isShareOpen, setIsShareOpen] = useState(false)
+	const [isHistoryOpen, setIsHistoryOpen] = useState(false)
+	const [previewDoc, setPreviewDoc] = useState<Y.Doc | null>(null)
+	const [previewVersionName, setPreviewVersionName] = useState<string | null>(null)
+	const [isViewer, setIsViewer] = useState(false)
+
+	// Fetch viewer role on load
+	useEffect(() => {
+		const checkRole = async () => {
+			const { data: doc } = await supabase
+				.from('documents')
+				.select('owner_id')
+				.eq('id', documentId)
+				.single()
+
+			if (doc && doc.owner_id === currentUser.id) {
+				setIsViewer(false)
+				return
+			}
+
+			const { data: member } = await supabase
+				.from('document_members')
+				.select('role')
+				.eq('document_id', documentId)
+				.eq('user_id', currentUser.id)
+				.single()
+
+			setIsViewer(member ? member.role === 'viewer' : false)
+		}
+		checkRole()
+	}, [documentId, currentUser.id])
+
+	// Preview Editor Configuration
+	const previewEditor = useEditor({
+		extensions: previewDoc ? [
+			StarterKit.configure({
+				history: false,
+			}),
+			Collaboration.configure({
+				document: previewDoc,
+			}),
+		] : [],
+		editorProps: {
+			attributes: {
+				class: 'prose prose-invert max-w-none focus:outline-none min-h-[500px] p-8 text-white/60 select-none pointer-events-none',
+			},
+		},
+		editable: false,
+	}, [previewDoc])
 
 	const collabUser = {
 		id: currentUser.id,
@@ -164,6 +213,13 @@ export default function EditorWorkspace ({
 					</div>
 
 					<button
+						onClick={() => setIsHistoryOpen(true)}
+						className='rounded-xl bg-slate-800 border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-700 active:scale-95 flex items-center justify-center'
+						title='Version History'
+					>
+						<History className='h-4 w-4' />
+					</button>
+					<button
 						onClick={() => setIsShareOpen(true)}
 						className='rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 active:scale-95'
 					>
@@ -173,10 +229,27 @@ export default function EditorWorkspace ({
 			</header>
 
 			{/* Main Workspace Grid */}
-			<main className='flex-1 flex flex-col md:flex-row max-w-6xl mx-auto w-full p-4 md:p-8 gap-6'>
+			<main className='flex-1 flex flex-col md:flex-row max-w-6xl mx-auto w-full p-4 md:p-8 gap-6 h-[calc(100vh-80px)] overflow-hidden'>
 				<div className='flex-1 flex flex-col rounded-2xl border border-white/5 bg-slate-900/30 backdrop-blur-md overflow-hidden'>
-					{/* Formatting Toolbar */}
-					<div className='flex flex-wrap items-center gap-1 border-b border-white/5 bg-slate-900/50 p-2'>
+					{/* Preview Mode Banner */}
+					{previewVersionName && (
+						<div className='flex items-center justify-between bg-indigo-950/40 border-b border-indigo-500/20 px-6 py-2.5 text-xs text-indigo-300 font-semibold backdrop-blur-md'>
+							<span>Previewing checkpoint: <span className='font-bold text-white'>"{previewVersionName}"</span> (Read-Only)</span>
+							<button
+								onClick={() => {
+									setPreviewDoc(null)
+									setPreviewVersionName(null)
+								}}
+								className='flex items-center gap-1 hover:text-white transition'
+							>
+								<EyeOff className='h-3.5 w-3.5' />
+								<span>Exit Preview</span>
+							</button>
+						</div>
+					)}
+
+					{/* Formatting Toolbar - disabled in preview */}
+					<div className={`flex flex-wrap items-center gap-1 border-b border-white/5 bg-slate-900/50 p-2 ${previewDoc ? 'opacity-30 pointer-events-none' : ''}`}>
 						<button
 							onClick={() => editor.chain().focus().toggleBold().run()}
 							className={`rounded-lg p-2 hover:bg-slate-800 transition ${editor.isActive('bold') ? 'bg-slate-800 text-indigo-400' : 'text-slate-400'}`}
@@ -232,9 +305,27 @@ export default function EditorWorkspace ({
 
 					{/* Editor Canvas */}
 					<div className='flex-1 overflow-y-auto bg-slate-950/20'>
-						<EditorContent editor={editor} />
+						{previewDoc && previewEditor ? (
+							<EditorContent editor={previewEditor} />
+						) : (
+							<EditorContent editor={editor} />
+						)}
 					</div>
 				</div>
+
+				{/* Version History Sidebar */}
+				<VersionHistory
+					isOpen={isHistoryOpen}
+					onClose={() => setIsHistoryOpen(false)}
+					documentId={documentId}
+					ydoc={ydoc}
+					token={token}
+					isViewer={isViewer}
+					onPreviewVersion={(tempDoc, versionName) => {
+						setPreviewDoc(tempDoc)
+						setPreviewVersionName(versionName || null)
+					}}
+				/>
 			</main>
 
 			{/* Footer links */}
