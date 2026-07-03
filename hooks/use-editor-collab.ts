@@ -1,11 +1,7 @@
 import { useEffect, useState } from 'react'
 import * as Y from 'yjs'
 
-export interface CollabUser {
-	id: string
-	name: string
-	color: string
-}
+import { CollabUser } from '@/types'
 
 export function useEditorCollab (
 	documentId: string,

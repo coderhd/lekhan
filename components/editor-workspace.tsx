@@ -9,11 +9,12 @@ import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
 import { Bold, Italic, Code, Heading1, Heading2, List, ListOrdered, ArrowLeft, History, EyeOff, Sparkles } from 'lucide-react'
 import { useEditorCollab } from '@/hooks/use-editor-collab'
 import SyncIndicator from './sync-indicator'
-import { supabase } from '@/lib/supabase'
 import ShareModal from './share-modal'
 import VersionHistory from './version-history'
 import AIAssistantPanel from './ai-assistant-panel'
 import * as Y from 'yjs'
+import { CollabUser } from '@/types'
+import { fetchDocumentDetails, fetchMemberRole, updateDocumentTitle } from '@/services/db'
 
 interface EditorWorkspaceProps {
 	documentId: string
@@ -54,25 +55,18 @@ export default function EditorWorkspace ({
 	// Fetch viewer role on load
 	useEffect(() => {
 		const checkRole = async () => {
-			const { data: doc } = await supabase
-				.from('documents')
-				.select('owner_id')
-				.eq('id', documentId)
-				.single()
+			try {
+				const doc = await fetchDocumentDetails(documentId)
+				if (doc && doc.owner_id === currentUser.id) {
+					setIsViewer(false)
+					return
+				}
 
-			if (doc && doc.owner_id === currentUser.id) {
-				setIsViewer(false)
-				return
+				const role = await fetchMemberRole(documentId, currentUser.id)
+				setIsViewer(role === 'viewer')
+			} catch (err) {
+				console.error('Error fetching role:', err)
 			}
-
-			const { data: member } = await supabase
-				.from('document_members')
-				.select('role')
-				.eq('document_id', documentId)
-				.eq('user_id', currentUser.id)
-				.single()
-
-			setIsViewer(member ? member.role === 'viewer' : false)
 		}
 		checkRole()
 	}, [documentId, currentUser.id])
@@ -159,10 +153,7 @@ export default function EditorWorkspace ({
 		const newTitle = e.target.value
 		setTitle(newTitle)
 		try {
-			await supabase
-				.from('documents')
-				.update({ title: newTitle })
-				.eq('id', documentId)
+			await updateDocumentTitle(documentId, newTitle)
 		} catch (err) {
 			console.error('Error updating title:', err)
 		}

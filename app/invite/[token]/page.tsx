@@ -3,20 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-
-interface InviteDetails {
-	id: string
-	document_id: string
-	role: 'editor' | 'viewer'
-	status: 'pending' | 'accepted' | 'declined'
-	documents: {
-		title: string
-	}
-	profiles: {
-		email: string
-		full_name: string | null
-	}
-}
+import { DocumentInvitation } from '@/types'
+import { fetchInvitationDetails, acceptInvitation, declineInvitation } from '@/services/db'
 
 export default function InvitePage ({
 	params,
@@ -25,7 +13,7 @@ export default function InvitePage ({
 }) {
 	const router = useRouter()
 	const [user, setUser] = useState<any | null>(null)
-	const [invite, setInvite] = useState<InviteDetails | null>(null)
+	const [invite, setInvite] = useState<DocumentInvitation | null>(null)
 	const [loading, setLoading] = useState(true)
 	const [processing, setProcessing] = useState(false)
 
@@ -45,27 +33,7 @@ export default function InvitePage ({
 				setUser(session.user)
 
 				// 2. Fetch invitation details
-				const { data, error } = await supabase
-					.from('document_invitations')
-					.select(`
-						id,
-						document_id,
-						role,
-						status,
-						documents (title),
-						profiles:inviter_id (email, full_name)
-					`)
-					.eq('token', params.token)
-					.single()
-
-				if (error || !data) {
-					console.error('Invite load error:', error)
-					alert('Invalid or expired invitation link')
-					router.push('/')
-					return
-				}
-
-				const invitation = data as any as InviteDetails
+				const invitation = await fetchInvitationDetails(params.token)
 
 				if (invitation.status === 'accepted') {
 					router.push(`/doc/${invitation.document_id}`)
@@ -91,30 +59,7 @@ export default function InvitePage ({
 		setProcessing(true)
 
 		try {
-			// 1. Add user to document_members
-			const { error: memberError } = await supabase
-				.from('document_members')
-				.insert({
-					document_id: invite.document_id,
-					user_id: user.id,
-					role: invite.role,
-				})
-
-			if (memberError && !memberError.message.includes('duplicate key')) {
-				// If they are already a member, we ignore duplicate key error
-				throw memberError
-			}
-
-			// 2. Update status in document_invitations
-			const { error: inviteError } = await supabase
-				.from('document_invitations')
-				.update({ status: 'accepted' })
-				.eq('id', invite.id)
-
-			if (inviteError) {
-				throw inviteError
-			}
-
+			await acceptInvitation(invite, user.id)
 			router.push(`/doc/${invite.document_id}`)
 		} catch (err: any) {
 			alert(`Failed to accept: ${err.message}`)
@@ -129,15 +74,7 @@ export default function InvitePage ({
 		setProcessing(true)
 
 		try {
-			const { error } = await supabase
-				.from('document_invitations')
-				.update({ status: 'declined' })
-				.eq('id', invite.id)
-
-			if (error) {
-				throw error
-			}
-
+			await declineInvitation(invite.id)
 			router.push('/')
 		} catch (err: any) {
 			alert(`Failed to decline: ${err.message}`)

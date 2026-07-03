@@ -3,19 +3,9 @@
 import { useState, useEffect } from 'react'
 import * as Y from 'yjs'
 import { supabase } from '@/lib/supabase'
+import { DocumentVersion } from '@/types'
+import { fetchVersions } from '@/services/db'
 import { History, Save, ArrowLeft, RefreshCw } from 'lucide-react'
-
-interface Version {
-	id: string
-	document_id: string
-	version_name: string
-	created_at: string
-	created_by: string
-	profiles?: {
-		email: string
-		full_name: string | null
-	}
-}
 
 interface VersionHistoryProps {
 	isOpen: boolean
@@ -36,31 +26,16 @@ export default function VersionHistory ({
 	isViewer,
 	onPreviewVersion,
 }: VersionHistoryProps) {
-	const [versions, setVersions] = useState<Version[]>([])
+	const [versions, setVersions] = useState<DocumentVersion[]>([])
 	const [newVersionName, setNewVersionName] = useState('')
 	const [loading, setLoading] = useState(true)
 	const [saving, setSaving] = useState(false)
 	const [activePreviewId, setActivePreviewId] = useState<string | null>(null)
 
-	const fetchVersions = async () => {
+	const loadVersions = async () => {
 		try {
-			const { data, error } = await supabase
-				.from('document_versions')
-				.select(`
-					id,
-					document_id,
-					version_name,
-					created_at,
-					created_by,
-					profiles:created_by (email, full_name)
-				`)
-				.eq('document_id', documentId)
-				.order('created_at', { ascending: false })
-
-			if (error) {
-				throw error
-			}
-			setVersions((data as any) || [])
+			const data = await fetchVersions(documentId)
+			setVersions(data)
 		} catch (err) {
 			console.error('Error fetching versions:', err)
 		} finally {
@@ -70,7 +45,7 @@ export default function VersionHistory ({
 
 	useEffect(() => {
 		if (isOpen) {
-			fetchVersions()
+			loadVersions()
 		}
 	}, [isOpen, documentId])
 
@@ -107,7 +82,7 @@ export default function VersionHistory ({
 
 			setNewVersionName('')
 			alert('Version saved successfully!')
-			fetchVersions()
+			loadVersions()
 		} catch (err: any) {
 			alert(`Failed to save: ${err.message}`)
 		} finally {
@@ -115,7 +90,7 @@ export default function VersionHistory ({
 		}
 	}
 
-	const handleSelectVersion = async (version: Version) => {
+	const handleSelectVersion = async (version: DocumentVersion) => {
 		if (activePreviewId === version.id) {
 			// Toggle off preview
 			setActivePreviewId(null)
@@ -150,7 +125,7 @@ export default function VersionHistory ({
 		}
 	}
 
-	const handleRestore = async (version: Version) => {
+	const handleRestore = async (version: DocumentVersion) => {
 		if (isViewer) {
 			alert('Viewers cannot restore versions')
 			return

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { X, Copy, Mail, Globe, Lock } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { fetchDocumentDetails, createInvitation, updateDocumentPublicStatus } from '@/services/db'
 
 interface ShareModalProps {
 	isOpen: boolean
@@ -33,15 +33,7 @@ export default function ShareModal ({
 
 	const fetchDocPublicState = async () => {
 		try {
-			const { data, error } = await supabase
-				.from('documents')
-				.select('is_public')
-				.eq('id', documentId)
-				.single()
-
-			if (error) {
-				throw error
-			}
+			const data = await fetchDocumentDetails(documentId)
 			setIsPublic(data.is_public)
 		} catch (err) {
 			console.error('Error fetching doc public state:', err)
@@ -55,20 +47,7 @@ export default function ShareModal ({
 
 		try {
 			const token = crypto.randomUUID()
-			const { error } = await supabase
-				.from('document_invitations')
-				.insert({
-					document_id: documentId,
-					inviter_id: userId,
-					invitee_email: email,
-					role: role,
-					token: token,
-					status: 'pending',
-				})
-
-			if (error) {
-				throw error
-			}
+			await createInvitation(documentId, userId, email, role, token)
 
 			// Generate the direct link
 			const generatedLink = `${window.location.origin}/invite/${token}`
@@ -87,14 +66,7 @@ export default function ShareModal ({
 		setIsPublic(nextState)
 
 		try {
-			const { error } = await supabase
-				.from('documents')
-				.update({ is_public: nextState })
-				.eq('id', documentId)
-
-			if (error) {
-				throw error
-			}
+			await updateDocumentPublicStatus(documentId, nextState)
 		} catch (err: any) {
 			setIsPublic(!nextState)
 			alert(`Failed to change privacy settings: ${err.message}`)

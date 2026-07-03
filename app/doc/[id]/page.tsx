@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { fetchDocumentDetails } from '@/services/db'
 import EditorWorkspace from '@/components/editor-workspace'
 
 export default function DocumentPage ({
@@ -29,23 +30,12 @@ export default function DocumentPage ({
 				setUser(session.user)
 				setToken(session.access_token)
 
-				// 2. Fetch document details
-				const { data: doc, error: docError } = await supabase
-					.from('documents')
-					.select('title')
-					.eq('id', params.id)
-					.single()
-
-				if (docError || !doc) {
-					console.error('Doc load error:', docError)
-					alert('Document not found or access denied')
-					router.push('/')
-					return
-				}
-
+				// 2. Fetch document details using wrapper service
+				const doc = await fetchDocumentDetails(params.id)
 				setDocumentTitle(doc.title)
-			} catch (err) {
-				console.error('Unexpected error loading document page:', err)
+			} catch (err: any) {
+				console.error('Error loading document page:', err)
+				alert('Document not found or access denied')
 				router.push('/')
 			} finally {
 				setLoading(false)
