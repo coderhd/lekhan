@@ -87,7 +87,7 @@ export default function VersionHistory ({
 			const base64State = Buffer.from(stateUpdate).toString('base64')
 
 			// 2. Call Next.js API route
-			const res = await fetch('/app/api/version' === '' ? '/api/version' : '/api/version', {
+			const res = await fetch('/api/version', {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',

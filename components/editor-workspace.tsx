@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase'
 import ShareModal from './share-modal'
 import VersionHistory from './version-history'
 import AIAssistantPanel from './ai-assistant-panel'
+import * as Y from 'yjs'
 
 interface EditorWorkspaceProps {
 	documentId: string

@@ -68,7 +68,7 @@ export async function POST (request: NextRequest) {
 				.eq('user_id', user.id)
 				.single()
 
-			isEditor = member && member.role === 'editor'
+			isEditor = !!(member && member.role === 'editor')
 		}
 
 		if (!isOwner && !isEditor) {
