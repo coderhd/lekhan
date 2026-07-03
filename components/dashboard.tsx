@@ -3,20 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { DocumentItem, MemberDocumentItem } from '@/types'
+import { fetchOwnedDocuments, fetchSharedDocuments, createDocument } from '@/services/db'
 import Invitations from './invitations'
-
-interface DocumentItem {
-	id: string
-	title: string
-	owner_id: string
-	created_at: string
-	updated_at: string
-}
-
-interface MemberDocumentItem {
-	role: 'editor' | 'viewer'
-	documents: DocumentItem
-}
 
 interface DashboardProps {
 	user: {
@@ -35,32 +24,12 @@ export default function Dashboard ({ user }: DashboardProps) {
 
 	const fetchDocuments = async () => {
 		try {
-			// 1. Fetch documents owned by current user
-			const { data: ownedData, error: ownedError } = await supabase
-				.from('documents')
-				.select('*')
-				.eq('owner_id', user.id)
-				.order('updated_at', { ascending: false })
-
-			if (ownedError) {
-				throw ownedError
-			}
-
-			// 2. Fetch documents shared with current user
-			const { data: sharedData, error: sharedError } = await supabase
-				.from('document_members')
-				.select(`
-					role,
-					documents (*)
-				`)
-				.eq('user_id', user.id)
-
-			if (sharedError) {
-				throw sharedError
-			}
-
-			setMyDocs(ownedData || [])
-			setSharedDocs((sharedData as any) || [])
+			const [owned, shared] = await Promise.all([
+				fetchOwnedDocuments(user.id),
+				fetchSharedDocuments(user.id),
+			])
+			setMyDocs(owned)
+			setSharedDocs(shared)
 		} catch (err) {
 			console.error('Error fetching documents:', err)
 		} finally {
@@ -74,19 +43,8 @@ export default function Dashboard ({ user }: DashboardProps) {
 
 	const handleCreateDocument = async () => {
 		try {
-			const { data, error } = await supabase
-				.from('documents')
-				.insert({
-					title: 'Untitled Document',
-					owner_id: user.id,
-				})
-				.select()
-				.single()
-
-			if (error) {
-				throw error
-			}
-			router.push(`/doc/${data.id}`)
+			const doc = await createDocument(user.id)
+			router.push(`/doc/${doc.id}`)
 		} catch (err: any) {
 			alert(`Failed to create document: ${err.message}`)
 		}
@@ -134,7 +92,7 @@ export default function Dashboard ({ user }: DashboardProps) {
 					</div>
 				</header>
 
-				{/* Pending Notifications List */}
+				{/* Pending Invitations List */}
 				<Invitations
 					userEmail={user.email}
 					userId={user.id}

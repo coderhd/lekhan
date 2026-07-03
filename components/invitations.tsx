@@ -1,22 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
-
-interface Invitation {
-	id: string
-	document_id: string
-	role: 'editor' | 'viewer'
-	inviter_id: string
-	invitee_email: string
-	documents: {
-		title: string
-	}
-	profiles: {
-		email: string
-		full_name: string | null
-	}
-}
+import { DocumentInvitation } from '@/types'
+import { fetchPendingInvitations, acceptInvitation, declineInvitation } from '@/services/db'
 
 interface InvitationsProps {
 	userEmail: string
@@ -29,29 +15,13 @@ export default function Invitations ({
 	userId,
 	onRefresh,
 }: InvitationsProps) {
-	const [invites, setInvites] = useState<Invitation[]>([])
+	const [invites, setInvites] = useState<DocumentInvitation[]>([])
 	const [loading, setLoading] = useState(true)
 
 	const fetchInvitations = async () => {
 		try {
-			const { data, error } = await supabase
-				.from('document_invitations')
-				.select(`
-					id,
-					document_id,
-					role,
-					inviter_id,
-					invitee_email,
-					documents (title),
-					profiles:inviter_id (email, full_name)
-				`)
-				.eq('invitee_email', userEmail)
-				.eq('status', 'pending')
-
-			if (error) {
-				throw error
-			}
-			setInvites((data as any) || [])
+			const data = await fetchPendingInvitations(userEmail)
+			setInvites(data)
 		} catch (err) {
 			console.error('Error fetching invitations:', err)
 		} finally {
@@ -65,31 +35,9 @@ export default function Invitations ({
 		}
 	}, [userEmail])
 
-	const handleAccept = async (invite: Invitation) => {
+	const handleAccept = async (invite: DocumentInvitation) => {
 		try {
-			// 1. Add user to document_members
-			const { error: memberError } = await supabase
-				.from('document_members')
-				.insert({
-					document_id: invite.document_id,
-					user_id: userId,
-					role: invite.role,
-				})
-
-			if (memberError) {
-				throw memberError
-			}
-
-			// 2. Update invitation status to accepted
-			const { error: inviteError } = await supabase
-				.from('document_invitations')
-				.update({ status: 'accepted' })
-				.eq('id', invite.id)
-
-			if (inviteError) {
-				throw inviteError
-			}
-
+			await acceptInvitation(invite, userId)
 			alert('Invitation accepted!')
 			fetchInvitations()
 			onRefresh()
@@ -100,15 +48,7 @@ export default function Invitations ({
 
 	const handleDecline = async (inviteId: string) => {
 		try {
-			const { error } = await supabase
-				.from('document_invitations')
-				.update({ status: 'declined' })
-				.eq('id', inviteId)
-
-			if (error) {
-				throw error
-			}
-
+			await declineInvitation(inviteId)
 			alert('Invitation declined')
 			fetchInvitations()
 		} catch (err: any) {
