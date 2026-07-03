@@ -61,7 +61,6 @@
 			"@tiptap/pm": "^2.4.0",
 			"@tiptap/react": "^2.4.0",
 			"@tiptap/starter-kit": "^2.4.0",
-			"better-sqlite3": "^11.1.2",
 			"class-variance-authority": "^0.7.0",
 			"clsx": "^2.1.1",
 			"lucide-react": "^0.400.0",
@@ -76,7 +75,6 @@
 			"yjs": "^13.6.15"
 		},
 		"devDependencies": {
-			"@types/better-sqlite3": "^7.6.11",
 			"@types/node": "^20.14.9",
 			"@types/react": "^18.3.3",
 			"@types/react-dom": "^18.3.0",
@@ -286,41 +284,46 @@
 	module.exports = { getSupabaseClient, verifyUserRole }
 	```
 
-- [ ] **Step 2: Implement server/wal.js for SQLite caching**
-	Set up a local SQLite file database to write incoming updates instantly before batching.
+- [ ] **Step 2: Implement server/wal.js for flat-file binary caching**
+	Set up a local flat-file append-only log to write incoming updates instantly before batching.
 	```javascript
-	const Database = require('better-sqlite3')
-	const db = new Database('wal.db')
+	const fs = require('fs')
+	const path = require('path')
+	const logDir = path.join(__dirname, '../wal_logs')
 
-	db.exec(`
-		CREATE TABLE IF NOT EXISTS update_log (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			document_id TEXT NOT NULL,
-			update_bin BLOB NOT NULL,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		)
-	`)
-
-	const insertStmt = db.prepare(`
-		INSERT INTO update_log (document_id, update_bin) VALUES (?, ?)
-	`)
-	const selectStmt = db.prepare(`
-		SELECT update_bin FROM update_log WHERE document_id = ? ORDER BY id
-	`)
-	const deleteStmt = db.prepare(`
-		DELETE FROM update_log WHERE document_id = ?
-	`)
+	if (!fs.existsSync(logDir)) {
+		fs.mkdirSync(logDir, { recursive: true })
+	}
 
 	function appendUpdate (documentId, binary) {
-		insertStmt.run(documentId, binary)
+		const logPath = path.join(logDir, `${documentId}.bin`)
+		const lengthBuffer = Buffer.alloc(4)
+		lengthBuffer.writeUInt32BE(binary.length, 0)
+		fs.appendFileSync(logPath, Buffer.concat([lengthBuffer, binary]))
 	}
 
 	function getPendingUpdates (documentId) {
-		return selectStmt.all(documentId).map(row => row.update_bin)
+		const logPath = path.join(logDir, `${documentId}.bin`)
+		if (!fs.existsSync(logPath)) return []
+		const data = fs.readFileSync(logPath)
+		const updates = []
+		let offset = 0
+		while (offset < data.length) {
+			if (offset + 4 > data.length) break
+			const length = data.readUInt32BE(offset)
+			offset += 4
+			if (offset + length > data.length) break
+			updates.push(data.subarray(offset, offset + length))
+			offset += length
+		}
+		return updates
 	}
 
 	function clearUpdates (documentId) {
-		deleteStmt.run(documentId)
+		const logPath = path.join(logDir, `${documentId}.bin`)
+		if (fs.existsSync(logPath)) {
+			fs.unlinkSync(logPath)
+		}
 	}
 
 	module.exports = { appendUpdate, getPendingUpdates, clearUpdates }
@@ -332,7 +335,7 @@
 
 - [ ] **Step 4: Commit**
 	Run: `git add .`
-	Run: `git commit -m "feat: add websocket server with SQLite WAL cache"`
+	Run: `git commit -m "feat: add websocket server with local flat-file WAL cache"`
 
 ---
 
