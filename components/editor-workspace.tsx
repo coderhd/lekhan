@@ -10,6 +10,7 @@ import { Bold, Italic, Code, Heading1, Heading2, List, ListOrdered, ArrowLeft } 
 import { useEditorCollab } from '@/hooks/use-editor-collab'
 import SyncIndicator from './sync-indicator'
 import { supabase } from '@/lib/supabase'
+import ShareModal from './share-modal'
 
 interface EditorWorkspaceProps {
 	documentId: string
@@ -40,6 +41,7 @@ export default function EditorWorkspace ({
 	const router = useRouter()
 	const [title, setTitle] = useState(initialTitle)
 	const [userColor] = useState(() => CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)])
+	const [isShareOpen, setIsShareOpen] = useState(false)
 
 	const collabUser = {
 		id: currentUser.id,
@@ -161,7 +163,10 @@ export default function EditorWorkspace ({
 						))}
 					</div>
 
-					<button className='rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 active:scale-95'>
+					<button
+						onClick={() => setIsShareOpen(true)}
+						className='rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-500 active:scale-95'
+					>
 						Share
 					</button>
 				</div>
@@ -240,6 +245,14 @@ export default function EditorWorkspace ({
 					<a href='https://linkedin.com/in/harshdave' className='text-indigo-400 hover:underline' target='_blank' rel='noreferrer'>LinkedIn Profile</a>
 				</p>
 			</footer>
+
+			<ShareModal
+				isOpen={isShareOpen}
+				onClose={() => setIsShareOpen(false)}
+				documentId={documentId}
+				documentTitle={title}
+				userId={currentUser.id}
+			/>
 		</div>
 	)
 }
