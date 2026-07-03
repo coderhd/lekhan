@@ -6,12 +6,13 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
-import { Bold, Italic, Code, Heading1, Heading2, List, ListOrdered, ArrowLeft, History, EyeOff } from 'lucide-react'
+import { Bold, Italic, Code, Heading1, Heading2, List, ListOrdered, ArrowLeft, History, EyeOff, Sparkles } from 'lucide-react'
 import { useEditorCollab } from '@/hooks/use-editor-collab'
 import SyncIndicator from './sync-indicator'
 import { supabase } from '@/lib/supabase'
 import ShareModal from './share-modal'
 import VersionHistory from './version-history'
+import AIAssistantPanel from './ai-assistant-panel'
 
 interface EditorWorkspaceProps {
 	documentId: string
@@ -44,6 +45,7 @@ export default function EditorWorkspace ({
 	const [userColor] = useState(() => CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)])
 	const [isShareOpen, setIsShareOpen] = useState(false)
 	const [isHistoryOpen, setIsHistoryOpen] = useState(false)
+	const [isAIPanelOpen, setIsAIPanelOpen] = useState(false)
 	const [previewDoc, setPreviewDoc] = useState<Y.Doc | null>(null)
 	const [previewVersionName, setPreviewVersionName] = useState<string | null>(null)
 	const [isViewer, setIsViewer] = useState(false)
@@ -213,11 +215,24 @@ export default function EditorWorkspace ({
 					</div>
 
 					<button
-						onClick={() => setIsHistoryOpen(true)}
-						className='rounded-xl bg-slate-800 border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-700 active:scale-95 flex items-center justify-center'
+						onClick={() => {
+							setIsHistoryOpen(true)
+							setIsAIPanelOpen(false)
+						}}
+						className={`rounded-xl border px-3 py-2 text-sm font-semibold transition active:scale-95 flex items-center justify-center ${isHistoryOpen ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}
 						title='Version History'
 					>
 						<History className='h-4 w-4' />
+					</button>
+					<button
+						onClick={() => {
+							setIsAIPanelOpen(true)
+							setIsHistoryOpen(false)
+						}}
+						className={`rounded-xl border px-3 py-2 text-sm font-semibold transition active:scale-95 flex items-center justify-center ${isAIPanelOpen ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}
+						title='AI Companion'
+					>
+						<Sparkles className='h-4 w-4' />
 					</button>
 					<button
 						onClick={() => setIsShareOpen(true)}
@@ -325,6 +340,14 @@ export default function EditorWorkspace ({
 						setPreviewDoc(tempDoc)
 						setPreviewVersionName(versionName || null)
 					}}
+				/>
+
+				{/* AI Companion Sidebar */}
+				<AIAssistantPanel
+					isOpen={isAIPanelOpen}
+					onClose={() => setIsAIPanelOpen(false)}
+					editor={editor}
+					token={token}
 				/>
 			</main>
 
