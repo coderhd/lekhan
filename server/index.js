@@ -152,6 +152,7 @@ server.on('upgrade', async (request, socket, head) => {
 	const documentId = url.searchParams.get('documentId')
 
 	if (!token || !documentId) {
+		socket.write('HTTP/1.1 400 Bad Request\r\n\r\n')
 		socket.destroy()
 		return
 	}
@@ -163,6 +164,7 @@ server.on('upgrade', async (request, socket, head) => {
 
 		if (!role) {
 			console.log(`[Connection] Access denied for doc ${documentId}`)
+			socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
 			socket.destroy()
 			return
 		}
@@ -175,6 +177,7 @@ server.on('upgrade', async (request, socket, head) => {
 		})
 	} catch (err) {
 		console.error('[Upgrade Error]', err)
+		socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n')
 		socket.destroy()
 	}
 })

@@ -52,7 +52,7 @@ export default function Dashboard({ user }: DashboardProps) {
 		}
 	}
 
-	const handleScrollCheck = (target: HTMLDivElement, setter: React.Dispatch<React.SetStateAction<{left: boolean, right: boolean}>>) => {
+	const handleScrollCheck = (target: HTMLDivElement, setter: React.Dispatch<React.SetStateAction<{ left: boolean, right: boolean }>>) => {
 		const left = target.scrollLeft > 0
 		const right = target.scrollLeft < target.scrollWidth - target.clientWidth - 1
 		setter({ left, right })
@@ -234,7 +234,7 @@ export default function Dashboard({ user }: DashboardProps) {
 		<div className="min-h-screen bg-background text-on-surface">
 			{/* Header */}
 			<header className="fixed top-0 w-full z-50 bg-surface/5 backdrop-blur-md border-b border-black/10 dark:border-white/10 flex justify-center h-16">
-				<div className="max-w-7xl w-full flex justify-between items-center px-margin">
+				<div className="w-full flex justify-between items-center px-margin">
 					<div className="flex items-baseline group cursor-pointer" onClick={() => router.push('/')}>
 						<img alt="Lekhan Logo" className="h-6 w-6 object-contain cursor-pointer hover:scale-110 premium-transition self-center" src="./logo.png" />
 						<span className="font-display-lg text-display-lg-mobile md:text-headline-md font-bold text-primary-container premium-transition group-hover:text-primary leading-none ml-[2px]">ekhan</span>
@@ -389,14 +389,14 @@ export default function Dashboard({ user }: DashboardProps) {
 								) : (
 									<div className="relative group/carousel">
 										{myDocsScrollState.left && (
-											<button 
-												onClick={() => scrollContainer(myDocsScrollRef, 'left')} 
+											<button
+												onClick={() => scrollContainer(myDocsScrollRef, 'left')}
 												className="absolute left-0 top-1/2 -translate-y-1/2 -ml-5 z-10 w-10 h-10 rounded-full bg-surface shadow-lg border border-black/10 dark:border-white/10 flex items-center justify-center opacity-0 group-hover/carousel:opacity-100 transition-opacity hover:scale-110 text-on-surface"
 											>
 												<span className="material-symbols-outlined">chevron_left</span>
 											</button>
 										)}
-										<div 
+										<div
 											ref={myDocsScrollRef}
 											onScroll={(e) => handleScrollCheck(e.currentTarget, setMyDocsScrollState)}
 											className="flex overflow-x-auto hide-scrollbar gap-gutter pb-lg snap-x"
@@ -443,7 +443,7 @@ export default function Dashboard({ user }: DashboardProps) {
 															</div>
 														</div>
 													</div>
-													
+
 													{/* Card Body */}
 													<div className="p-4 flex flex-col flex-1 bg-surface-container-lowest">
 														<InlineEdit
@@ -464,11 +464,11 @@ export default function Dashboard({ user }: DashboardProps) {
 														</div>
 													</div>
 												</div>
-										))}
+											))}
 										</div>
 										{myDocsScrollState.right && filteredMyDocs.length > 0 && (
-											<button 
-												onClick={() => scrollContainer(myDocsScrollRef, 'right')} 
+											<button
+												onClick={() => scrollContainer(myDocsScrollRef, 'right')}
 												className="absolute right-0 top-1/2 -translate-y-1/2 -mr-5 z-10 w-10 h-10 rounded-full bg-surface shadow-lg border border-black/10 dark:border-white/10 flex items-center justify-center opacity-0 group-hover/carousel:opacity-100 transition-opacity hover:scale-110 text-on-surface"
 											>
 												<span className="material-symbols-outlined">chevron_right</span>
@@ -492,7 +492,7 @@ export default function Dashboard({ user }: DashboardProps) {
 										<img src="/undraw_no-data_ig65.svg" alt="No shared documents" className="w-48 h-48 mb-6 opacity-90 drop-shadow-sm -ml-8" />
 										<h3 className="text-lg font-bold text-on-surface mb-2">No shared documents yet</h3>
 										<p className="text-sm text-on-surface-variant max-w-md">
-											{sharedDocs.length === 0 
+											{sharedDocs.length === 0
 												? "Documents appear here when you're invited to collaborate."
 												: "No shared documents match your search query."}
 										</p>
@@ -500,14 +500,14 @@ export default function Dashboard({ user }: DashboardProps) {
 								) : (
 									<div className="relative group/carousel">
 										{sharedDocsScrollState.left && (
-											<button 
-												onClick={() => scrollContainer(sharedDocsScrollRef, 'left')} 
+											<button
+												onClick={() => scrollContainer(sharedDocsScrollRef, 'left')}
 												className="absolute left-0 top-1/2 -translate-y-1/2 -ml-5 z-10 w-10 h-10 rounded-full bg-surface shadow-lg border border-black/10 dark:border-white/10 flex items-center justify-center opacity-0 group-hover/carousel:opacity-100 transition-opacity hover:scale-110 text-on-surface"
 											>
 												<span className="material-symbols-outlined">chevron_left</span>
 											</button>
 										)}
-										<div 
+										<div
 											ref={sharedDocsScrollRef}
 											onScroll={(e) => handleScrollCheck(e.currentTarget, setSharedDocsScrollState)}
 											className="flex overflow-x-auto hide-scrollbar gap-gutter pb-lg snap-x"
@@ -537,11 +537,11 @@ export default function Dashboard({ user }: DashboardProps) {
 														</div>
 													</div>
 												</div>
-										))}
+											))}
 										</div>
 										{sharedDocsScrollState.right && filteredSharedDocs.length > 0 && (
-											<button 
-												onClick={() => scrollContainer(sharedDocsScrollRef, 'right')} 
+											<button
+												onClick={() => scrollContainer(sharedDocsScrollRef, 'right')}
 												className="absolute right-0 top-1/2 -translate-y-1/2 -mr-5 z-10 w-10 h-10 rounded-full bg-surface shadow-lg border border-black/10 dark:border-white/10 flex items-center justify-center opacity-0 group-hover/carousel:opacity-100 transition-opacity hover:scale-110 text-on-surface"
 											>
 												<span className="material-symbols-outlined">chevron_right</span>
@@ -559,7 +559,7 @@ export default function Dashboard({ user }: DashboardProps) {
 			<button onClick={handleCreateDocument} className="md:hidden fixed bottom-margin right-margin w-14 h-14 shimmer-btn animate-shimmer text-on-primary-container rounded-full shadow-2xl flex items-center justify-center active:scale-90 premium-transition z-50">
 				<span className="material-symbols-outlined text-3xl">add</span>
 			</button>
-			
+
 			<ConfirmDialog
 				open={!!documentToDelete}
 				onOpenChange={(open) => !open && setDocumentToDelete(null)}

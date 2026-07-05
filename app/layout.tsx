@@ -6,11 +6,11 @@ import { ThemeProvider } from '@/components/theme-provider'
 export const metadata: Metadata = {
 	title: 'Lekhan - Collaborative Local-First Editor',
 	description: 'A premium collaborative document editor featuring offline sync and AI capabilities',
-	metadataBase: new URL('https://lekhan.house-of-edtech.com'),
+	metadataBase: new URL('https://house-of-edtech-seven.vercel.app'),
 	openGraph: {
 		title: 'Lekhan - Collaborative Local-First Editor',
 		description: 'A premium collaborative document editor featuring offline sync and AI capabilities',
-		url: 'https://lekhan.house-of-edtech.com',
+		url: 'https://house-of-edtech-seven.vercel.app',
 		siteName: 'Lekhan',
 		images: [
 			{
@@ -27,6 +27,10 @@ export const metadata: Metadata = {
 		title: 'Lekhan - Collaborative Local-First Editor',
 		description: 'A premium collaborative document editor featuring offline sync and AI capabilities',
 		images: ['/landing-light.png'],
+	},
+	icons: {
+		icon: '/logo.png',
+		apple: '/logo.png',
 	},
 }
 

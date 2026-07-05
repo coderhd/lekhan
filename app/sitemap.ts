@@ -3,19 +3,19 @@ import { MetadataRoute } from 'next'
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
     {
-      url: 'https://lekhan.house-of-edtech.com',
+      url: 'https://house-of-edtech-seven.vercel.app',
       lastModified: new Date(),
       changeFrequency: 'yearly',
       priority: 1,
     },
     {
-      url: 'https://lekhan.house-of-edtech.com/login',
+      url: 'https://house-of-edtech-seven.vercel.app/login',
       lastModified: new Date(),
       changeFrequency: 'monthly',
       priority: 0.8,
     },
     {
-      url: 'https://lekhan.house-of-edtech.com/signup',
+      url: 'https://house-of-edtech-seven.vercel.app/signup',
       lastModified: new Date(),
       changeFrequency: 'monthly',
       priority: 0.8,
