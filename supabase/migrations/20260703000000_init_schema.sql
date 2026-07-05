@@ -114,20 +114,26 @@ CREATE POLICY delete_documents ON public.documents
 
 -- 3. Document Members Policies
 CREATE POLICY select_members ON public.document_members
-	FOR SELECT USING (
-		user_id = auth.uid() OR
+	FOR SELECT USING (true);
+
+CREATE POLICY insert_members ON public.document_members
+	FOR INSERT WITH CHECK (
 		EXISTS (
 			SELECT 1 FROM public.documents 
 			WHERE documents.id = public.document_members.document_id AND documents.owner_id = auth.uid()
-		) OR
-		EXISTS (
-			SELECT 1 FROM public.document_members as m
-			WHERE m.document_id = public.document_members.document_id AND m.user_id = auth.uid()
 		)
 	);
 
-CREATE POLICY modify_members ON public.document_members
-	FOR ALL USING (
+CREATE POLICY update_members ON public.document_members
+	FOR UPDATE USING (
+		EXISTS (
+			SELECT 1 FROM public.documents 
+			WHERE documents.id = public.document_members.document_id AND documents.owner_id = auth.uid()
+		)
+	);
+
+CREATE POLICY delete_members ON public.document_members
+	FOR DELETE USING (
 		EXISTS (
 			SELECT 1 FROM public.documents 
 			WHERE documents.id = public.document_members.document_id AND documents.owner_id = auth.uid()
@@ -141,8 +147,26 @@ CREATE POLICY select_invitations ON public.document_invitations
 		invitee_email = (SELECT email FROM public.profiles WHERE id = auth.uid())
 	);
 
-CREATE POLICY modify_invitations ON public.document_invitations
-	FOR ALL USING (
+CREATE POLICY insert_invitations ON public.document_invitations
+	FOR INSERT WITH CHECK (
+		inviter_id = auth.uid() OR
+		EXISTS (
+			SELECT 1 FROM public.documents 
+			WHERE documents.id = public.document_invitations.document_id AND documents.owner_id = auth.uid()
+		)
+	);
+
+CREATE POLICY update_invitations ON public.document_invitations
+	FOR UPDATE USING (
+		inviter_id = auth.uid() OR
+		EXISTS (
+			SELECT 1 FROM public.documents 
+			WHERE documents.id = public.document_invitations.document_id AND documents.owner_id = auth.uid()
+		)
+	);
+
+CREATE POLICY delete_invitations ON public.document_invitations
+	FOR DELETE USING (
 		inviter_id = auth.uid() OR
 		EXISTS (
 			SELECT 1 FROM public.documents 

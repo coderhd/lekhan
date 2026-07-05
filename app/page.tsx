@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import Dashboard from '@/components/dashboard'
+import GlobalLoader from '@/components/global-loader'
+import LandingPage from '@/components/landing-page'
 
 export default function Home () {
 	const router = useRouter()
@@ -14,14 +16,11 @@ export default function Home () {
 		const checkSession = async () => {
 			try {
 				const { data: { user: sessionUser } } = await supabase.auth.getUser()
-				if (!sessionUser) {
-					router.push('/login')
-				} else {
+				if (sessionUser) {
 					setUser(sessionUser)
 				}
 			} catch (err) {
 				console.error('Session check error:', err)
-				router.push('/login')
 			} finally {
 				setLoading(false)
 			}
@@ -33,11 +32,10 @@ export default function Home () {
 		const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
 			if (session) {
 				setUser(session.user)
-				setLoading(false)
 			} else {
 				setUser(null)
-				router.push('/login')
 			}
+			setLoading(false)
 		})
 
 		return () => {
@@ -46,19 +44,16 @@ export default function Home () {
 	}, [router])
 
 	if (loading) {
-		return (
-			<div className='flex min-h-screen items-center justify-center bg-slate-950 text-white'>
-				<div className='flex flex-col items-center gap-3'>
-					<span className='h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent' />
-					<p className='text-sm text-slate-400 font-semibold'>Initializing workspace...</p>
-				</div>
-			</div>
-		)
+		return <GlobalLoader text="Loading..." />
 	}
 
 	if (!user) {
-		return null
+		return <LandingPage />
 	}
 
-	return <Dashboard user={user} />
+	return <Dashboard user={{
+		id: user.id,
+		email: user.email,
+		full_name: user.user_metadata?.full_name
+	}} />
 }

@@ -1,9 +1,9 @@
 const { createClient } = require('@supabase/supabase-js')
 
-function getSupabaseClient (token) {
+function getSupabaseClient(token) {
 	return createClient(
 		process.env.NEXT_PUBLIC_SUPABASE_URL,
-		process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+		process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
 		{
 			auth: {
 				persistSession: false,
@@ -18,9 +18,28 @@ function getSupabaseClient (token) {
 	)
 }
 
-async function verifyUserRole (supabase, documentId) {
-	const { data: { user } } = await supabase.auth.getUser()
-	if (!user) {
+async function verifyUserRole(supabase, documentId, token) {
+	if (token === 'anonymous') {
+		const anonClient = createClient(
+			process.env.NEXT_PUBLIC_SUPABASE_URL,
+			process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+			{ auth: { persistSession: false, autoRefreshToken: false } }
+		)
+		const { data: doc } = await anonClient
+			.from('documents')
+			.select('is_public')
+			.eq('id', documentId)
+			.single()
+		
+		if (doc && doc.is_public) {
+			return 'viewer'
+		}
+		return null
+	}
+
+	const { data: { user }, error } = await supabase.auth.getUser(token)
+	if (error || !user) {
+		console.error(`[Auth] getUser failed for doc ${documentId}:`, error?.message || 'No user found')
 		return null
 	}
 

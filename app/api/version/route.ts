@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-export async function POST (request: NextRequest) {
+export async function POST(request: NextRequest) {
 	const authHeader = request.headers.get('Authorization')
 	if (!authHeader) {
 		return NextResponse.json({ error: 'Missing authorization header' }, { status: 401 })
@@ -12,7 +12,7 @@ export async function POST (request: NextRequest) {
 	// Initialize Supabase with the client's JWT to respect RLS
 	const supabaseClient = createClient(
 		process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-		process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+		process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '',
 		{
 			auth: {
 				persistSession: false,
@@ -29,7 +29,7 @@ export async function POST (request: NextRequest) {
 	// Admin client for storage uploads (bypassing public write limits)
 	const supabaseAdmin = createClient(
 		process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-		process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+		process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '',
 		{
 			auth: {
 				persistSession: false,
@@ -106,8 +106,9 @@ export async function POST (request: NextRequest) {
 		}
 
 		return NextResponse.json({ success: true, version })
-	} catch (err: any) {
+	} catch (err: unknown) {
+		const message = err instanceof Error ? err.message : String(err)
 		console.error('[API Version Error]', err)
-		return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 })
+		return NextResponse.json({ error: message || 'Internal server error' }, { status: 500 })
 	}
 }

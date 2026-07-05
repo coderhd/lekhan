@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 const SARVAM_API_KEY = process.env.SARVAM_API_KEY || ''
 const SARVAM_API_URL = 'https://api.sarvam.ai'
 
-export async function POST (request: NextRequest) {
+export async function POST(request: NextRequest) {
 	const authHeader = request.headers.get('Authorization')
 	if (!authHeader) {
 		return NextResponse.json({ error: 'Missing authorization header' }, { status: 401 })
@@ -15,7 +15,7 @@ export async function POST (request: NextRequest) {
 	// Validate user session with Supabase
 	const supabase = createClient(
 		process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-		process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+		process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '',
 		{
 			auth: {
 				persistSession: false,
@@ -84,10 +84,11 @@ export async function POST (request: NextRequest) {
 					'api-subscription-key': SARVAM_API_KEY,
 				},
 				body: JSON.stringify({
-					input: text,
+					inputs: [text],
 					target_language_code: targetLanguage,
 					speaker: speaker,
-					speech_sample_rate: 24000,
+					model: 'bulbul:v3',
+					speech_sample_rate: 22050,
 					enable_preprocessing: true,
 				}),
 			})
@@ -98,8 +99,8 @@ export async function POST (request: NextRequest) {
 			}
 
 			const data = await response.json()
-			// Sarvam returns JSON containing base64 audio
-			return NextResponse.json({ base64Audio: data.base64_audio || data.audio })
+			// Sarvam returns JSON containing an array of base64-encoded WAVs
+			return NextResponse.json({ base64Audio: data.audios?.[0] || data.base64_audio || data.audio })
 		}
 
 		if (action === 'chat') {
@@ -114,7 +115,7 @@ export async function POST (request: NextRequest) {
 					'api-subscription-key': SARVAM_API_KEY,
 				},
 				body: JSON.stringify({
-					model: 'sarvam-30b',
+					model: 'sarvam-105b',
 					messages: [
 						{
 							role: 'system',
@@ -136,8 +137,9 @@ export async function POST (request: NextRequest) {
 		}
 
 		return NextResponse.json({ error: `Invalid action: ${action}` }, { status: 400 })
-	} catch (err: any) {
+	} catch (err: unknown) {
+		const message = err instanceof Error ? err.message : String(err)
 		console.error('[API AI Error]', err)
-		return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 })
+		return NextResponse.json({ error: message || 'Internal server error' }, { status: 500 })
 	}
 }

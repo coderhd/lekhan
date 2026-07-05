@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import * as Y from 'yjs'
+import type { WebsocketProvider } from 'y-websocket'
+import type { IndexeddbPersistence } from 'y-indexeddb'
 
 import { CollabUser } from '@/types'
 
@@ -13,32 +15,41 @@ export function useEditorCollab (
 	const [isSynced, setIsSynced] = useState(false)
 	const [activeUsers, setActiveUsers] = useState<CollabUser[]>([])
 	const [isDirty, setIsDirty] = useState(false)
+	const [provider, setProvider] = useState<WebsocketProvider | null>(null)
 
 	useEffect(() => {
 		if (typeof window === 'undefined') {
 			return
 		}
 
-		// Dynamically import client-only providers to prevent SSR issues
+		let isCancelled = false
+		let doc: Y.Doc | null = null
+		let wsProvider: WebsocketProvider | null = null
+		let indexeddbProvider: IndexeddbPersistence | null = null
+
 		Promise.all([
 			import('y-websocket'),
 			import('y-indexeddb'),
 		]).then(([{ WebsocketProvider }, { IndexeddbPersistence }]) => {
-			const doc = new Y.Doc()
+			if (isCancelled) {
+				return
+			}
+			doc = new Y.Doc()
 			setYdoc(doc)
 
 			// 1. Initialize IndexedDB local persistence
-			const indexeddbProvider = new IndexeddbPersistence(documentId, doc)
+			indexeddbProvider = new IndexeddbPersistence(documentId, doc)
 			indexeddbProvider.on('synced', () => {
-				console.log('[IndexedDB] Local document loaded successfully')
+				// Initial sync completed
 			})
 
 			// 2. Initialize WebSocket remote provider
 			const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080'
-			const wsProvider = new WebsocketProvider(wsUrl, documentId, doc, {
+			wsProvider = new WebsocketProvider(wsUrl, documentId, doc, {
 				params: { token, documentId },
 				connect: true,
 			})
+			setProvider(wsProvider)
 
 			// 3. Track connection status
 			wsProvider.on('status', ({ status }: { status: string }) => {
@@ -66,7 +77,7 @@ export function useEditorCollab (
 			awareness.on('change', () => {
 				const states = Array.from(awareness.getStates().values())
 				const users = states
-					.map((state: any) => state.user)
+					.map((state: { user?: CollabUser }) => state.user)
 					.filter(Boolean) as CollabUser[]
 				setActiveUsers(users)
 			})
@@ -78,13 +89,20 @@ export function useEditorCollab (
 					setIsDirty(true)
 				}
 			})
-
-			return () => {
-				doc.destroy()
-				wsProvider.destroy()
-				indexeddbProvider.destroy()
-			}
 		})
+
+		return () => {
+			isCancelled = true
+			if (doc) doc.destroy()
+			if (wsProvider) wsProvider.destroy()
+			if (indexeddbProvider) indexeddbProvider.destroy()
+			
+			// Clear states to prevent stale instances during remount
+			setYdoc(null)
+			setProvider(null)
+			setIsConnected(false)
+			setIsSynced(false)
+		}
 	}, [documentId, token, user.name, user.color])
 
 	return {
@@ -93,5 +111,6 @@ export function useEditorCollab (
 		isSynced,
 		activeUsers,
 		hasUnsyncedChanges: isDirty && (!isConnected || !isSynced),
+		provider,
 	}
 }

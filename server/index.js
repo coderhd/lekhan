@@ -11,7 +11,7 @@ const port = process.env.PORT || 8080
 // Initialize privileged Supabase client for backend operations
 const supabaseAdmin = createClient(
 	process.env.NEXT_PUBLIC_SUPABASE_URL,
-	process.env.SUPABASE_SERVICE_ROLE_KEY,
+	process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY,
 	{
 		auth: {
 			persistSession: false,
@@ -159,7 +159,7 @@ server.on('upgrade', async (request, socket, head) => {
 	try {
 		// Authenticate and verify role using client JWT
 		const supabaseClient = getSupabaseClient(token)
-		const role = await verifyUserRole(supabaseClient, documentId)
+		const role = await verifyUserRole(supabaseClient, documentId, token)
 
 		if (!role) {
 			console.log(`[Connection] Access denied for doc ${documentId}`)

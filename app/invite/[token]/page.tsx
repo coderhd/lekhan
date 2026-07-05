@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { DocumentInvitation } from '@/types'
 import { fetchInvitationDetails, acceptInvitation, declineInvitation } from '@/services/db'
+import GlobalLoader from '@/components/global-loader'
+import { toast } from 'sonner'
 
 export default function InvitePage ({
 	params,
@@ -25,7 +27,7 @@ export default function InvitePage ({
 				if (!session) {
 					// Save token in cookie and redirect to login
 					document.cookie = `pending_invite_token=${params.token}; path=/; max-age=3600`
-					alert('Please log in or sign up to accept this invitation')
+					toast.error('Please log in or sign up to accept this invitation')
 					router.push('/login')
 					return
 				}
@@ -61,8 +63,9 @@ export default function InvitePage ({
 		try {
 			await acceptInvitation(invite, user.id)
 			router.push(`/doc/${invite.document_id}`)
-		} catch (err: any) {
-			alert(`Failed to accept: ${err.message}`)
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err)
+			toast.error(`Failed to accept: ${message}`)
 			setProcessing(false)
 		}
 	}
@@ -76,21 +79,15 @@ export default function InvitePage ({
 		try {
 			await declineInvitation(invite.id)
 			router.push('/')
-		} catch (err: any) {
-			alert(`Failed to decline: ${err.message}`)
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err)
+			toast.error(`Failed to decline: ${message}`)
 			setProcessing(false)
 		}
 	}
 
 	if (loading) {
-		return (
-			<div className='flex min-h-screen items-center justify-center bg-slate-950 text-white'>
-				<div className='flex flex-col items-center gap-3'>
-					<span className='h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent' />
-					<p className='text-sm text-slate-400 font-semibold'>Verifying invitation link...</p>
-				</div>
-			</div>
-		)
+		return <GlobalLoader text="Processing invitation..." />
 	}
 
 	if (!invite) {
@@ -98,7 +95,7 @@ export default function InvitePage ({
 	}
 
 	return (
-		<div className='flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-950 via-slate-950 to-black p-4'>
+		<div className='flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black p-4'>
 			<div className='w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/60 p-8 backdrop-blur-xl shadow-2xl text-center'>
 				<h2 className='text-2xl font-bold tracking-tight text-white mb-2'>
 					Document Invitation
@@ -125,7 +122,7 @@ export default function InvitePage ({
 					<p className='text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1'>
 						Access Role
 					</p>
-					<span className='inline-block rounded-full bg-indigo-950 border border-indigo-500/30 px-3 py-0.5 text-xs font-semibold text-indigo-400 capitalize'>
+					<span className='inline-block rounded-full bg-orange-500/20 border border-orange-500/30 px-3 py-0.5 text-xs font-semibold text-orange-300 capitalize'>
 						{invite.role}
 					</span>
 				</div>
@@ -134,7 +131,7 @@ export default function InvitePage ({
 					<button
 						onClick={handleAccept}
 						disabled={processing}
-						className='flex-1 rounded-lg bg-indigo-600 py-2.5 font-semibold text-white transition hover:bg-indigo-500 active:scale-95 disabled:opacity-50 text-sm'
+						className='flex-1 rounded-lg bg-orange-500 py-2.5 font-semibold text-black transition hover:bg-orange-400 active:scale-95 disabled:opacity-50 text-sm'
 					>
 						{processing ? 'Processing...' : 'Accept Invitation'}
 					</button>

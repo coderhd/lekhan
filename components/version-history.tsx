@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import * as Y from 'yjs'
 import { supabase } from '@/lib/supabase'
+import { toast } from 'sonner'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { DocumentVersion } from '@/types'
 import { fetchVersions } from '@/services/db'
 import { History, Save, ArrowLeft, RefreshCw } from 'lucide-react'
@@ -15,9 +17,10 @@ interface VersionHistoryProps {
 	token: string
 	isViewer: boolean
 	onPreviewVersion: (tempDoc: Y.Doc | null, versionName?: string) => void
+	onRestoreVersion: (tempDoc: Y.Doc) => void
 }
 
-export default function VersionHistory ({
+export default function VersionHistory({
 	isOpen,
 	onClose,
 	documentId,
@@ -25,10 +28,12 @@ export default function VersionHistory ({
 	token,
 	isViewer,
 	onPreviewVersion,
+	onRestoreVersion,
 }: VersionHistoryProps) {
 	const [versions, setVersions] = useState<DocumentVersion[]>([])
 	const [newVersionName, setNewVersionName] = useState('')
 	const [loading, setLoading] = useState(true)
+	const [versionToRestore, setVersionToRestore] = useState<DocumentVersion | null>(null)
 	const [saving, setSaving] = useState(false)
 	const [activePreviewId, setActivePreviewId] = useState<string | null>(null)
 
@@ -81,10 +86,11 @@ export default function VersionHistory ({
 			}
 
 			setNewVersionName('')
-			alert('Version saved successfully!')
+			toast.success('Version saved successfully!')
 			loadVersions()
-		} catch (err: any) {
-			alert(`Failed to save: ${err.message}`)
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err)
+			toast.error(`Failed to save: ${message}`)
 		} finally {
 			setSaving(false)
 		}
@@ -118,22 +124,25 @@ export default function VersionHistory ({
 
 			setActivePreviewId(version.id)
 			onPreviewVersion(tempDoc, version.version_name)
-		} catch (err: any) {
-			alert(`Failed to load version: ${err.message}`)
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err)
+			toast.error(`Failed to load version: ${message}`)
 		} finally {
 			setLoading(false)
 		}
 	}
 
-	const handleRestore = async (version: DocumentVersion) => {
+	const handleRestore = (version: DocumentVersion) => {
 		if (isViewer) {
-			alert('Viewers cannot restore versions')
+			toast.error('Viewers cannot restore versions')
 			return
 		}
+		setVersionToRestore(version)
+	}
 
-		if (!confirm(`Are you sure you want to restore the document to "${version.version_name}"?`)) {
-			return
-		}
+	const executeRestore = async () => {
+		if (!versionToRestore) return
+		const version = versionToRestore
 
 		setLoading(true)
 		try {
@@ -152,23 +161,18 @@ export default function VersionHistory ({
 			const targetDoc = new Y.Doc()
 			Y.applyUpdate(targetDoc, uint8Array)
 
-			const targetText = targetDoc.getText('default').toString()
-
-			// 2. Perform delta replacement in live ydoc
-			ydoc.transact(() => {
-				const currentText = ydoc.getText('default')
-				currentText.delete(0, currentText.length)
-				currentText.insert(0, targetText)
-			})
+			onRestoreVersion(targetDoc)
 
 			// 3. Clear preview
 			setActivePreviewId(null)
 			onPreviewVersion(null)
-			alert('Document restored successfully!')
-		} catch (err: any) {
-			alert(`Failed to restore: ${err.message}`)
+			toast.success('Document restored successfully!')
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err)
+			toast.error(`Failed to restore: ${message}`)
 		} finally {
 			setLoading(false)
+			setVersionToRestore(null)
 		}
 	}
 
@@ -177,17 +181,22 @@ export default function VersionHistory ({
 	}
 
 	return (
-		<div className='w-80 border-l border-white/5 bg-slate-900/50 p-6 flex flex-col h-full backdrop-blur-md animate-in slide-in-from-right duration-200'>
-			<div className='flex items-center justify-between border-b border-white/5 pb-4 mb-6'>
-				<h3 className='text-lg font-bold text-white flex items-center gap-2'>
-					<History className='h-4 w-4 text-indigo-400' />
-					Version History
-				</h3>
+		<aside className='absolute right-0 top-0 bottom-0 w-80 bg-surface-container-low border-l border-white/10 p-6 flex flex-col z-[60] shadow-2xl backdrop-blur-xl animate-in slide-in-from-right duration-200'>
+			<div className='flex items-center justify-between border-b border-white/10 pb-4 mb-6'>
+				<div className='flex items-center gap-sm'>
+					<div className='w-8 h-8 rounded-lg bg-primary-container/20 flex items-center justify-center'>
+						<span className="material-symbols-outlined text-primary-container">history</span>
+					</div>
+					<div>
+						<h3 className="font-title-lg text-title-lg text-on-surface">History</h3>
+						<p className="text-[10px] text-primary-container/80 uppercase tracking-widest font-bold">Version Timeline</p>
+					</div>
+				</div>
 				<button
 					onClick={onClose}
-					className='rounded-lg p-1 hover:bg-slate-800 text-slate-400 hover:text-white transition'
+					className='rounded-lg p-1 hover:bg-white/10 text-on-surface-variant hover:text-on-surface transition'
 				>
-					<ArrowLeft className='h-4 w-4' />
+					<span className="material-symbols-outlined text-lg">close</span>
 				</button>
 			</div>
 
@@ -198,51 +207,54 @@ export default function VersionHistory ({
 						type='text'
 						value={newVersionName}
 						onChange={(e) => setNewVersionName(e.target.value)}
-						className='w-full rounded-lg border border-slate-700 bg-slate-800/40 p-2 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none'
+						className='w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl p-2.5 text-xs text-on-surface placeholder:text-on-surface-variant/40 focus:ring-2 focus:ring-primary-container/50 focus:border-primary-container outline-none premium-transition'
 						placeholder='Checkpoint Name (e.g., Draft v2)'
 						required
 					/>
 					<button
 						type='submit'
 						disabled={saving}
-						className='w-full flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500 active:scale-95 disabled:opacity-50'
+						className='w-full rounded-xl bg-primary-container text-on-primary-container font-semibold py-2.5 text-xs hover:brightness-110 active:scale-95 transition-all shadow-sm flex items-center justify-center gap-1.5'
 					>
-						<Save className='h-3.5 w-3.5' />
+						<span className="material-symbols-outlined text-sm">save</span>
 						<span>{saving ? 'Saving...' : 'Save Checkpoint'}</span>
 					</button>
 				</form>
 			)}
 
 			{/* Timeline list */}
-			<div className='flex-1 overflow-y-auto space-y-4 pr-1.5'>
+			<div className='flex-1 overflow-y-auto space-y-4 pr-1.5 no-scrollbar'>
 				{loading ? (
-					<div className='text-center text-xs text-slate-400 py-4 flex items-center justify-center gap-2'>
-						<RefreshCw className='h-3.5 w-3.5 animate-spin text-indigo-400' />
+					<div className='text-center text-xs text-on-surface-variant/70 py-4 flex items-center justify-center gap-2'>
+						<span className="animate-spin h-3.5 w-3.5 border-2 border-primary-container border-t-transparent rounded-full" />
 						<span>Loading...</span>
 					</div>
 				) : versions.length === 0 ? (
-					<p className='text-center text-xs text-slate-500 italic py-4'>No versions captured yet.</p>
+					<div className="flex flex-col items-center justify-center pt-24 pb-10 text-center opacity-0 animate-fade-in-up stagger-2">
+						<img src="/undraw_no-data_ig65.svg" alt="No versions" className="w-32 h-32 mb-4 opacity-90 drop-shadow-sm" />
+						<p className='text-xs text-on-surface-variant font-medium'>No versions captured yet.</p>
+					</div>
 				) : (
 					versions.map((v) => (
 						<div
 							key={v.id}
-							className={`rounded-xl border p-4 transition text-left cursor-pointer ${activePreviewId === v.id ? 'bg-indigo-950/20 border-indigo-500/50' : 'bg-slate-950/40 border-white/5 hover:border-slate-700'}`}
+							className={`rounded-xl border p-4 transition text-left cursor-pointer ${activePreviewId === v.id ? 'bg-white/10 border-primary-container/50' : 'bg-white/5 border-white/10 hover:border-white/20'}`}
 							onClick={() => handleSelectVersion(v)}
 						>
 							<div className='flex justify-between items-start gap-2'>
-								<h4 className='font-bold text-sm text-white truncate max-w-[150px]'>
+								<h4 className='font-bold text-sm text-on-surface truncate max-w-[150px]'>
 									{v.version_name}
 								</h4>
 								{activePreviewId === v.id && (
-									<span className='rounded bg-indigo-500/20 px-1.5 py-0.5 text-[9px] font-bold text-indigo-300 uppercase'>
-										Previewing
+									<span className='rounded bg-primary-container/20 border border-primary-container/30 px-1.5 py-0.5 text-[8px] font-bold text-primary-container uppercase tracking-wider'>
+										Active
 									</span>
 								)}
 							</div>
-							<p className='text-[10px] text-slate-500 mt-1'>
+							<p className='text-[10px] text-on-surface-variant/70 mt-1'>
 								By: {v.profiles?.full_name || v.profiles?.email}
 							</p>
-							<p className='text-[10px] text-slate-500'>
+							<p className='text-[10px] text-on-surface-variant/50'>
 								{new Date(v.created_at).toLocaleString()}
 							</p>
 
@@ -252,7 +264,7 @@ export default function VersionHistory ({
 										e.stopPropagation()
 										handleRestore(v)
 									}}
-									className='mt-3 w-full rounded bg-indigo-600 py-1.5 text-[10px] font-semibold text-white transition hover:bg-indigo-500'
+									className='mt-3 w-full rounded-xl bg-primary-container text-on-primary-container font-semibold py-2 text-xs hover:brightness-110 transition-all'
 								>
 									Restore this version
 								</button>
@@ -261,6 +273,14 @@ export default function VersionHistory ({
 					))
 				)}
 			</div>
-		</div>
+			<ConfirmDialog
+				open={!!versionToRestore}
+				onOpenChange={(open) => !open && setVersionToRestore(null)}
+				title="Restore Version"
+				description={`Are you sure you want to restore the document to "${versionToRestore?.version_name}"?`}
+				onConfirm={executeRestore}
+				confirmText="Restore"
+			/>
+		</aside>
 	)
 }

@@ -2,6 +2,8 @@
 
 import { useState, useRef } from 'react'
 import { Sparkles, Languages, Volume2, ArrowLeft, RefreshCw, Play, Pause } from 'lucide-react'
+import { toast } from 'sonner'
+import { CustomSelect } from './ui/custom-select'
 
 const LANGUAGES = [
 	{ code: 'hi-IN', name: 'Hindi' },
@@ -29,7 +31,7 @@ interface AIAssistantPanelProps {
 	token: string
 }
 
-export default function AIAssistantPanel ({
+export default function AIAssistantPanel({
 	isOpen,
 	onClose,
 	editor,
@@ -41,11 +43,20 @@ export default function AIAssistantPanel ({
 	const [targetLang, setTargetLang] = useState('hi-IN')
 	const [speaker, setSpeaker] = useState('shubh')
 	const [prompt, setPrompt] = useState('')
-	
-	// Audio playing states
+
 	const [audioUrl, setAudioUrl] = useState<string | null>(null)
 	const [isPlaying, setIsPlaying] = useState(false)
 	const audioRef = useRef<HTMLAudioElement | null>(null)
+
+	const handleTabSwitch = (tab: 'assistant' | 'translate' | 'tts') => {
+		setActiveTab(tab)
+		setResult('')
+		setAudioUrl(null)
+		if (isPlaying && audioRef.current) {
+			audioRef.current.pause()
+			setIsPlaying(false)
+		}
+	}
 
 	const getSelectionText = () => {
 		const { from, to } = editor.state.selection
@@ -56,7 +67,7 @@ export default function AIAssistantPanel ({
 	const handleTranslate = async () => {
 		const text = getSelectionText()
 		if (!text) {
-			alert('Please select some text in the editor to translate')
+			toast.error('Please select some text in the editor to translate')
 			return
 		}
 
@@ -83,8 +94,9 @@ export default function AIAssistantPanel ({
 
 			const data = await res.json()
 			setResult(data.translatedText)
-		} catch (err: any) {
-			alert(`Translation failed: ${err.message}`)
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err)
+			toast.error(`Translation failed: ${message}`)
 		} finally {
 			setLoading(false)
 		}
@@ -93,12 +105,11 @@ export default function AIAssistantPanel ({
 	const handleTTS = async () => {
 		let text = getSelectionText()
 		if (!text) {
-			// Fallback to entire doc text if no selection
 			text = editor.getText().trim()
 		}
 
 		if (!text) {
-			alert('Document is empty. Type something to read aloud!')
+			toast.error('Document is empty. Type something to read aloud!')
 			return
 		}
 
@@ -127,13 +138,14 @@ export default function AIAssistantPanel ({
 			const url = `data:audio/wav;base64,${data.base64Audio}`
 			setAudioUrl(url)
 			setIsPlaying(true)
-			
+
 			if (audioRef.current) {
 				audioRef.current.src = url
 				audioRef.current.play()
 			}
-		} catch (err: any) {
-			alert(`TTS failed: ${err.message}`)
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err)
+			toast.error(`TTS failed: ${message}`)
 		} finally {
 			setLoading(false)
 		}
@@ -142,7 +154,7 @@ export default function AIAssistantPanel ({
 	const handleChatAction = async (actionPrompt: string) => {
 		const text = getSelectionText()
 		if (!text) {
-			alert('Please select some text to execute this action')
+			toast.error('Please select some text to execute this action')
 			return
 		}
 
@@ -169,8 +181,9 @@ export default function AIAssistantPanel ({
 
 			const data = await res.json()
 			setResult(data.text)
-		} catch (err: any) {
-			alert(`AI error: ${err.message}`)
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err)
+			toast.error(`AI error: ${message}`)
 		} finally {
 			setLoading(false)
 		}
@@ -209,8 +222,9 @@ export default function AIAssistantPanel ({
 			const data = await res.json()
 			setResult(data.text)
 			setPrompt('')
-		} catch (err: any) {
-			alert(`AI error: ${err.message}`)
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err)
+			toast.error(`AI error: ${message}`)
 		} finally {
 			setLoading(false)
 		}
@@ -237,79 +251,84 @@ export default function AIAssistantPanel ({
 	}
 
 	return (
-		<div className='w-80 border-l border-white/5 bg-slate-900/50 p-6 flex flex-col h-full backdrop-blur-md animate-in slide-in-from-right duration-200'>
+		<aside className='absolute right-0 top-0 bottom-0 w-80 bg-surface-container-low border-l border-white/10 p-6 flex flex-col z-[60] shadow-2xl backdrop-blur-xl animate-in slide-in-from-right duration-200'>
 			<audio
 				ref={audioRef}
 				onEnded={() => setIsPlaying(false)}
 				className='hidden'
 			/>
-			
-			<div className='flex items-center justify-between border-b border-white/5 pb-4 mb-6'>
-				<h3 className='text-lg font-bold text-white flex items-center gap-2'>
-					<Sparkles className='h-4 w-4 text-indigo-400' />
-					AI Companion
-				</h3>
+
+			<div className='flex items-center justify-between border-b border-white/10 pb-4 mb-6'>
+				<div className='flex items-center gap-sm'>
+					<div className='w-8 h-8 rounded-lg bg-primary-container/20 flex items-center justify-center'>
+						<span className="material-symbols-outlined text-primary-container">auto_awesome</span>
+					</div>
+					<div>
+						<h3 className="font-title-lg text-title-lg text-on-surface">AI Assistant</h3>
+						<p className="text-[10px] text-primary-container/80 uppercase tracking-widest font-bold">Lekhan Intelligence</p>
+					</div>
+				</div>
 				<button
 					onClick={onClose}
-					className='rounded-lg p-1 hover:bg-slate-800 text-slate-400 hover:text-white transition'
+					className='rounded-lg p-1 hover:bg-white/10 text-on-surface-variant hover:text-on-surface transition'
 				>
-					<ArrowLeft className='h-4 w-4' />
+					<span className="material-symbols-outlined text-lg">close</span>
 				</button>
 			</div>
 
 			{/* Sub Tabs */}
-			<div className='mb-6 flex gap-1 rounded-lg bg-slate-950 p-1'>
+			<div className='mb-6 flex gap-1 rounded-xl bg-white/5 border border-white/10 p-1'>
 				<button
-					onClick={() => setActiveTab('assistant')}
-					className={`flex-1 rounded px-2.5 py-1.5 text-center text-xs font-semibold transition ${activeTab === 'assistant' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+					onClick={() => handleTabSwitch('assistant')}
+					className={`flex-1 rounded-lg px-2.5 py-1.5 text-center text-xs font-semibold transition ${activeTab === 'assistant' ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant hover:text-on-surface hover:bg-white/5'}`}
 				>
 					Assistant
 				</button>
 				<button
-					onClick={() => setActiveTab('translate')}
-					className={`flex-1 rounded px-2.5 py-1.5 text-center text-xs font-semibold transition ${activeTab === 'translate' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+					onClick={() => handleTabSwitch('translate')}
+					className={`flex-1 rounded-lg px-2.5 py-1.5 text-center text-xs font-semibold transition ${activeTab === 'translate' ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant hover:text-on-surface hover:bg-white/5'}`}
 				>
 					Translate
 				</button>
 				<button
-					onClick={() => setActiveTab('tts')}
-					className={`flex-1 rounded px-2.5 py-1.5 text-center text-xs font-semibold transition ${activeTab === 'tts' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
+					onClick={() => handleTabSwitch('tts')}
+					className={`flex-1 rounded-lg px-2.5 py-1.5 text-center text-xs font-semibold transition ${activeTab === 'tts' ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant hover:text-on-surface hover:bg-white/5'}`}
 				>
 					Speech
 				</button>
 			</div>
 
 			{/* Tab Contents */}
-			<div className='flex-1 overflow-y-auto pr-1 space-y-4 text-left'>
+			<div className='flex-1 overflow-y-auto px-1.5 -mx-1.5 py-1 -my-1 space-y-4 text-left no-scrollbar'>
 				{activeTab === 'assistant' && (
 					<div className='space-y-4'>
 						<div className='space-y-2'>
-							<p className='text-xs font-bold uppercase tracking-wider text-slate-400'>
+							<p className='text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60'>
 								Quick Actions
 							</p>
 							<div className='grid grid-cols-2 gap-2'>
 								<button
 									onClick={() => handleChatAction('Summarize the following text')}
-									className='rounded-lg border border-white/5 bg-slate-950/40 p-2.5 text-xs text-slate-300 transition hover:border-indigo-500/30 hover:bg-slate-900/50'
+									className='rounded-xl border border-white/10 bg-white/5 p-2.5 text-xs text-on-surface transition hover:border-primary-container hover:bg-white/10'
 								>
 									Summarize
 								</button>
 								<button
 									onClick={() => handleChatAction('Fix spelling and grammar in this text')}
-									className='rounded-lg border border-white/5 bg-slate-950/40 p-2.5 text-xs text-slate-300 transition hover:border-indigo-500/30 hover:bg-slate-900/50'
+									className='rounded-xl border border-white/10 bg-white/5 p-2.5 text-xs text-on-surface transition hover:border-primary-container hover:bg-white/10'
 								>
 									Fix Grammar
 								</button>
 								<button
 									onClick={() => handleChatAction('Improve the writing style of this text')}
-									className='rounded-lg border border-white/5 bg-slate-950/40 p-2.5 text-xs text-slate-300 transition hover:border-indigo-500/30 hover:bg-slate-900/50'
+									className='rounded-xl border border-white/10 bg-white/5 p-2.5 text-xs text-on-surface transition hover:border-primary-container hover:bg-white/10'
 									title='Make flow better'
 								>
 									Improve Flow
 								</button>
 								<button
 									onClick={() => handleChatAction('Extend this text with more details')}
-									className='rounded-lg border border-white/5 bg-slate-950/40 p-2.5 text-xs text-slate-300 transition hover:border-indigo-500/30 hover:bg-slate-900/50'
+									className='rounded-xl border border-white/10 bg-white/5 p-2.5 text-xs text-on-surface transition hover:border-primary-container hover:bg-white/10'
 								>
 									Expand
 								</button>
@@ -317,20 +336,20 @@ export default function AIAssistantPanel ({
 						</div>
 
 						<form onSubmit={handleCustomPrompt} className='space-y-2'>
-							<label className='block text-xs font-bold uppercase tracking-wider text-slate-400'>
+							<label className='block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60'>
 								Ask Assistant
 							</label>
 							<textarea
 								value={prompt}
 								onChange={(e) => setPrompt(e.target.value)}
-								className='w-full rounded-lg border border-slate-700 bg-slate-800/40 p-2.5 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none min-h-[60px]'
+								className='w-full bg-white/5 border border-white/10 rounded-xl p-2.5 text-xs text-on-surface placeholder:text-on-surface-variant/40 focus:ring-2 focus:ring-primary-container/50 focus:border-primary-container outline-none premium-transition min-h-[60px]'
 								placeholder='Ask the AI to generate content or rewrite text...'
 								required
 							/>
 							<button
 								type='submit'
 								disabled={loading}
-								className='w-full rounded-lg bg-indigo-600 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500 active:scale-95 disabled:opacity-50'
+								className='w-full rounded-xl bg-primary-container text-on-primary-container font-semibold py-2.5 text-xs hover:brightness-110 active:scale-95 transition-all shadow-sm'
 							>
 								Submit
 							</button>
@@ -341,28 +360,23 @@ export default function AIAssistantPanel ({
 				{activeTab === 'translate' && (
 					<div className='space-y-4'>
 						<div>
-							<label className='block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5'>
+							<label className='block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60 mb-1.5'>
 								Target Indian Language
 							</label>
-							<select
+							<CustomSelect
 								value={targetLang}
-								onChange={(e) => setTargetLang(e.target.value)}
-								className='w-full rounded-lg border border-slate-700 bg-slate-800/40 p-2 text-xs text-white focus:border-indigo-500 focus:outline-none'
-							>
-								{LANGUAGES.map(lang => (
-									<option key={lang.code} value={lang.code}>
-										{lang.name}
-									</option>
-								))}
-							</select>
+								onValueChange={setTargetLang}
+								options={LANGUAGES.map(lang => ({ label: lang.name, value: lang.code }))}
+								triggerClassName='w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl p-2.5 h-[38px] text-xs text-on-surface focus:ring-2 focus:ring-primary-container/50 outline-none premium-transition'
+							/>
 						</div>
 
 						<button
 							onClick={handleTranslate}
 							disabled={loading}
-							className='w-full flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500 active:scale-95'
+							className='w-full flex items-center justify-center gap-1.5 rounded-xl bg-primary-container text-on-primary-container font-semibold py-2.5 text-xs hover:brightness-110 active:scale-95 transition-all shadow-sm'
 						>
-							<Languages className='h-3.5 w-3.5' />
+							<span className="material-symbols-outlined text-sm">translate</span>
 							<span>Translate Selection</span>
 						</button>
 					</div>
@@ -371,60 +385,50 @@ export default function AIAssistantPanel ({
 				{activeTab === 'tts' && (
 					<div className='space-y-4'>
 						<div>
-							<label className='block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5'>
+							<label className='block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60 mb-1.5'>
 								Language
 							</label>
-							<select
+							<CustomSelect
 								value={targetLang}
-								onChange={(e) => setTargetLang(e.target.value)}
-								className='w-full rounded-lg border border-slate-700 bg-slate-800/40 p-2 text-xs text-white focus:border-indigo-500 focus:outline-none mb-4'
-							>
-								{LANGUAGES.map(lang => (
-									<option key={lang.code} value={lang.code}>
-										{lang.name}
-									</option>
-								))}
-							</select>
+								onValueChange={setTargetLang}
+								options={LANGUAGES.map(lang => ({ label: lang.name, value: lang.code }))}
+								triggerClassName='w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl p-2.5 h-[38px] text-xs text-on-surface focus:ring-2 focus:ring-primary-container/50 outline-none premium-transition mb-4'
+							/>
 
-							<label className='block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5'>
+							<label className='block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60 mb-1.5'>
 								Voice Speaker
 							</label>
-							<select
+							<CustomSelect
 								value={speaker}
-								onChange={(e) => setSpeaker(e.target.value)}
-								className='w-full rounded-lg border border-slate-700 bg-slate-800/40 p-2 text-xs text-white focus:border-indigo-500 focus:outline-none'
-							>
-								{SPEAKERS.map(sp => (
-									<option key={sp.id} value={sp.id}>
-										{sp.name}
-									</option>
-								))}
-							</select>
+								onValueChange={setSpeaker}
+								options={SPEAKERS.map(sp => ({ label: sp.name, value: sp.id }))}
+								triggerClassName='w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl p-2.5 h-[38px] text-xs text-on-surface focus:ring-2 focus:ring-primary-container/50 outline-none premium-transition'
+							/>
 						</div>
 
 						<button
 							onClick={handleTTS}
 							disabled={loading}
-							className='w-full flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 py-2 text-xs font-semibold text-white transition hover:bg-indigo-500 active:scale-95'
+							className='w-full flex items-center justify-center gap-1.5 rounded-xl bg-primary-container text-on-primary-container font-semibold py-2.5 text-xs hover:brightness-110 active:scale-95 transition-all shadow-sm'
 						>
-							<Volume2 className='h-3.5 w-3.5' />
+							<span className="material-symbols-outlined text-sm">volume_up</span>
 							<span>Read Aloud Selection</span>
 						</button>
 
 						{/* Audio player UI */}
 						{audioUrl && (
-							<div className='rounded-xl border border-white/5 bg-slate-950/60 p-4 flex items-center justify-between'>
-								<span className='text-xs text-slate-400 font-medium truncate max-w-[150px]'>
+							<div className='rounded-xl border border-white/10 bg-white/5 p-4 flex items-center justify-between'>
+								<span className='text-[10px] text-on-surface-variant/70 font-medium truncate max-w-[150px]'>
 									Generated Audio Accent
 								</span>
 								<button
 									onClick={togglePlay}
-									className='rounded-full bg-indigo-600 p-2 text-white hover:bg-indigo-500 transition active:scale-90'
+									className='rounded-full bg-primary-container p-2 text-on-primary-container hover:brightness-110 transition active:scale-90 flex items-center justify-center'
 								>
 									{isPlaying ? (
-										<Pause className='h-4 w-4 fill-current' />
+										<span className="material-symbols-outlined text-sm">pause</span>
 									) : (
-										<Play className='h-4 w-4 fill-current ml-0.5' />
+										<span className="material-symbols-outlined text-sm">play_arrow</span>
 									)}
 								</button>
 							</div>
@@ -434,30 +438,36 @@ export default function AIAssistantPanel ({
 
 				{/* Loading Indicator */}
 				{loading && (
-					<div className='text-center text-xs text-slate-400 py-4 flex items-center justify-center gap-2'>
-						<RefreshCw className='h-3.5 w-3.5 animate-spin text-indigo-400' />
+					<div className='text-center text-xs text-on-surface-variant/70 py-4 flex items-center justify-center gap-2'>
+						<span className="animate-spin h-3.5 w-3.5 border-2 border-primary-container border-t-transparent rounded-full" />
 						<span>AI thinking...</span>
 					</div>
 				)}
 
 				{/* Output Results panel */}
 				{result && !loading && (
-					<div className='mt-6 border-t border-white/5 pt-6 space-y-3'>
-						<p className='text-xs font-bold uppercase tracking-wider text-slate-400'>
+					<div className='mt-6 border-t border-white/10 pt-6 space-y-3'>
+						<p className='text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60'>
 							AI Output
 						</p>
-						<div className='rounded-xl bg-slate-950/60 border border-white/5 p-4 text-xs text-slate-200 whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed'>
+						<div className='rounded-xl bg-white/5 border border-white/10 p-4 text-xs text-on-surface whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed'>
 							{result}
 						</div>
 						<button
 							onClick={insertResult}
-							className='w-full rounded bg-indigo-600 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-500'
+							className='w-full rounded-xl bg-primary-container text-on-primary-container font-semibold py-2 text-xs hover:brightness-110 transition-all'
 						>
 							Insert at Cursor
 						</button>
 					</div>
 				)}
 			</div>
-		</div>
+
+			<div className='mt-auto pt-6 text-left border-t border-white/5'>
+				<p className='text-[10px] text-on-surface-variant/50 leading-relaxed'>
+					AI-generated content may be inaccurate or misleading. Always review and verify important information before using it in your document.
+				</p>
+			</div>
+		</aside>
 	)
 }

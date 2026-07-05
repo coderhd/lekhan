@@ -28,7 +28,7 @@ export async function fetchSharedDocuments (userId: string): Promise<MemberDocum
 	if (error) {
 		throw error
 	}
-	return (data as any[]) || []
+	return (data as unknown as MemberDocumentItem[]) || []
 }
 
 export async function createDocument (ownerId: string): Promise<DocumentItem> {
@@ -51,6 +51,17 @@ export async function updateDocumentTitle (documentId: string, title: string): P
 	const { error } = await supabase
 		.from('documents')
 		.update({ title })
+		.eq('id', documentId)
+
+	if (error) {
+		throw error
+	}
+}
+
+export async function deleteDocument (documentId: string): Promise<void> {
+	const { error } = await supabase
+		.from('documents')
+		.delete()
 		.eq('id', documentId)
 
 	if (error) {
@@ -100,7 +111,7 @@ export async function fetchPendingInvitations (email: string): Promise<DocumentI
 	if (error) {
 		throw error
 	}
-	return (data as any[]) || []
+	return (data as unknown as DocumentInvitation[]) || []
 }
 
 export async function acceptInvitation (invite: DocumentInvitation, userId: string): Promise<void> {
@@ -177,7 +188,7 @@ export async function fetchInvitationDetails (token: string): Promise<DocumentIn
 	if (error) {
 		throw error
 	}
-	return data as any as DocumentInvitation
+	return data as unknown as DocumentInvitation
 }
 
 export async function fetchVersions (documentId: string): Promise<DocumentVersion[]> {
@@ -197,7 +208,7 @@ export async function fetchVersions (documentId: string): Promise<DocumentVersio
 	if (error) {
 		throw error
 	}
-	return (data as any[]) || []
+	return (data as unknown as DocumentVersion[]) || []
 }
 
 export async function fetchMemberRole (documentId: string, userId: string): Promise<'editor' | 'viewer' | null> {
@@ -212,4 +223,68 @@ export async function fetchMemberRole (documentId: string, userId: string): Prom
 		return null
 	}
 	return data ? (data.role as 'editor' | 'viewer') : null
+}
+
+export async function fetchOwnedDocumentsWithMembers (userId: string): Promise<(DocumentItem & { document_members: any[] })[]> {
+	const { data, error } = await supabase
+		.from('documents')
+		.select(`
+			*,
+			document_members (
+				id,
+				user_id,
+				role,
+				profiles:user_id (email, full_name)
+			)
+		`)
+		.eq('owner_id', userId)
+		.order('updated_at', { ascending: false })
+
+	if (error) {
+		throw error
+	}
+	return data || []
+}
+
+export async function fetchPastCollaborators (userId: string): Promise<{email: string; full_name: string}[]> {
+	const { data: docs, error: docsError } = await supabase
+		.from('documents')
+		.select('id')
+		.eq('owner_id', userId)
+
+	if (docsError) throw docsError
+	
+	if (!docs || docs.length === 0) return []
+
+	const docIds = docs.map(d => d.id)
+
+	const { data: members, error: membersError } = await supabase
+		.from('document_members')
+		.select('profiles:user_id (email, full_name)')
+		.in('document_id', docIds)
+
+	if (membersError) throw membersError
+
+	const uniqueMap = new Map<string, {email: string; full_name: string}>()
+	for (const m of (members || [])) {
+		const profile = m.profiles as unknown as {email: string; full_name: string | null}
+		if (profile && profile.email) {
+			uniqueMap.set(profile.email, {
+				email: profile.email,
+				full_name: profile.full_name || profile.email
+			})
+		}
+	}
+
+	return Array.from(uniqueMap.values())
+}
+
+export async function removeDocumentMember (documentId: string, userId: string): Promise<void> {
+	const { error } = await supabase
+		.from('document_members')
+		.delete()
+		.eq('document_id', documentId)
+		.eq('user_id', userId)
+
+	if (error) throw error
 }

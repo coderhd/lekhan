@@ -4,7 +4,7 @@ import path from 'path'
 
 // Mock the environment variables needed for server scripts
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'
-process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'mock-anon-key'
+process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'mock-anon-key'
 
 const wal = require('../server/wal')
 const auth = require('../server/auth')
@@ -43,7 +43,7 @@ describe('Write-Ahead Log (WAL) Cache System', () => {
 	it('should clear updates when requested', () => {
 		const update = new Uint8Array([1, 2, 3])
 		wal.appendUpdate(testDocId, update)
-		
+
 		let pending = wal.getPendingUpdates(testDocId)
 		expect(pending.length).toBe(1)
 

@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { fetchDocumentDetails } from '@/services/db'
+import { fetchDocumentDetails, fetchMemberRole } from '@/services/db'
+import GlobalLoader from '@/components/global-loader'
 import EditorWorkspace from '@/components/editor-workspace'
+import { toast } from 'sonner'
 
 export default function DocumentPage ({
 	params,
@@ -21,21 +23,41 @@ export default function DocumentPage ({
 		const loadDocumentAndSession = async () => {
 			try {
 				// 1. Get current session and token
-				const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-				if (sessionError || !session) {
-					router.push('/login')
-					return
+				const { data: { session } } = await supabase.auth.getSession()
+				
+				if (session) {
+					setUser(session.user)
+					setToken(session.access_token)
+				} else {
+					// Check if document is public
+					try {
+						const doc = await fetchDocumentDetails(params.id)
+						if (doc && doc.is_public) {
+							// Mock anonymous user
+							const randomId = Math.random().toString(36).substring(7)
+							setUser({
+								id: `anon-${randomId}`,
+								email: 'anonymous@public',
+								full_name: 'Anonymous Viewer'
+							})
+							setToken('anonymous')
+						} else {
+							router.push('/login')
+							return
+						}
+					} catch (e) {
+						router.push('/login')
+						return
+					}
 				}
-
-				setUser(session.user)
-				setToken(session.access_token)
 
 				// 2. Fetch document details using wrapper service
 				const doc = await fetchDocumentDetails(params.id)
 				setDocumentTitle(doc.title)
-			} catch (err: any) {
+			} catch (err: unknown) {
+				const message = err instanceof Error ? err.message : String(err)
 				console.error('Error loading document page:', err)
-				alert('Document not found or access denied')
+				toast.error('Document not found or access denied')
 				router.push('/')
 			} finally {
 				setLoading(false)
@@ -46,14 +68,7 @@ export default function DocumentPage ({
 	}, [params.id, router])
 
 	if (loading) {
-		return (
-			<div className='flex min-h-screen items-center justify-center bg-slate-950 text-white'>
-				<div className='flex flex-col items-center gap-3'>
-					<span className='h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent' />
-					<p className='text-sm text-slate-400 font-semibold'>Opening document...</p>
-				</div>
-			</div>
-		)
+		return <GlobalLoader text="Loading document..." />
 	}
 
 	if (!user || !token || !documentTitle) {
@@ -65,7 +80,11 @@ export default function DocumentPage ({
 			documentId={params.id}
 			initialTitle={documentTitle}
 			token={token}
-			currentUser={user}
+			currentUser={{
+				id: user.id,
+				email: user.email,
+				full_name: user.user_metadata?.full_name || user.full_name
+			}}
 		/>
 	)
 }

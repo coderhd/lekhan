@@ -1,9 +1,33 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { Toaster } from '@/components/ui/sonner'
+import { ThemeProvider } from '@/components/theme-provider'
 
 export const metadata: Metadata = {
 	title: 'Lekhan - Collaborative Local-First Editor',
 	description: 'A premium collaborative document editor featuring offline sync and AI capabilities',
+	metadataBase: new URL('https://lekhan.house-of-edtech.com'),
+	openGraph: {
+		title: 'Lekhan - Collaborative Local-First Editor',
+		description: 'A premium collaborative document editor featuring offline sync and AI capabilities',
+		url: 'https://lekhan.house-of-edtech.com',
+		siteName: 'Lekhan',
+		images: [
+			{
+				url: '/landing-light.png',
+				width: 1200,
+				height: 630,
+			},
+		],
+		locale: 'en_US',
+		type: 'website',
+	},
+	twitter: {
+		card: 'summary_large_image',
+		title: 'Lekhan - Collaborative Local-First Editor',
+		description: 'A premium collaborative document editor featuring offline sync and AI capabilities',
+		images: ['/landing-light.png'],
+	},
 }
 
 export default function RootLayout ({
@@ -12,9 +36,17 @@ export default function RootLayout ({
 	children: React.ReactNode
 }) {
 	return (
-		<html lang='en'>
-			<body className='min-h-screen bg-background text-foreground antialiased'>
-				{children}
+		<html lang='en' suppressHydrationWarning className="dark">
+			<body className='min-h-screen bg-background text-on-surface antialiased selection:bg-primary/30 dark:selection:bg-primary dark:selection:text-on-primary'>
+				<ThemeProvider
+					attribute="class"
+					defaultTheme="dark"
+					enableSystem={false}
+					disableTransitionOnChange
+				>
+					<main className="flex-1 flex flex-col">{children}</main>
+					<Toaster />
+				</ThemeProvider>
 			</body>
 		</html>
 	)
