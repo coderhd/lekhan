@@ -43,7 +43,7 @@ export default function LandingPage() {
 						<span className="font-display-lg text-xl md:text-2xl font-bold text-primary-container transition-colors group-hover:text-primary leading-none ml-[2px]">ekhan</span>
 					</div>
 					<div className="flex items-center gap-4">
-						<ThemeToggle theme={theme} toggleTheme={toggleTheme} />
+						<ThemeToggle />
 						<button 
 							onClick={() => router.push('/login')}
 							className="font-label-sm text-sm bg-primary-container text-on-primary font-bold px-6 py-2 rounded-lg hover:bg-primary transition-colors active:scale-95 shadow-sm"

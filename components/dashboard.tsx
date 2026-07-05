@@ -254,7 +254,7 @@ export default function Dashboard({ user }: DashboardProps) {
 					</div>
 
 					<div className="flex items-center gap-md">
-						<ThemeToggle theme={theme} toggleTheme={toggleTheme} />
+						<ThemeToggle />
 						<div className="relative" ref={notificationsRef}>
 							<button
 								onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}

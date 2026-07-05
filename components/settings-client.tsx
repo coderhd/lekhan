@@ -113,7 +113,7 @@ export default function SettingsClient({ user, documents, setDocuments }: {
 						</div>
 					</div>
 					<div className="flex items-center gap-md">
-						<ThemeToggle theme={theme} toggleTheme={toggleTheme} />
+						<ThemeToggle />
 						<ProfileMenu user={user} size="sm" />
 					</div>
 				</div>

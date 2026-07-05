@@ -352,7 +352,7 @@ export default function EditorWorkspace({
 						/>
 
 						<div className="hidden md:block ml-2">
-							<ThemeToggle theme={theme} toggleTheme={toggleTheme} />
+							<ThemeToggle />
 						</div>
 
 						<div className="ml-2">

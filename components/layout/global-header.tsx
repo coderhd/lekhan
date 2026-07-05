@@ -2,7 +2,7 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { ThemeToggle } from '../theme-toggle'
+import ThemeToggle from '../theme-toggle'
 
 interface GlobalHeaderProps {
 	children?: React.ReactNode // For injecting context-specific UI like search bars or sync indicators

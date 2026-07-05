@@ -1,15 +1,26 @@
+'use client'
+
 import { Moon, Sun } from 'lucide-react'
+import { useTheme } from 'next-themes'
+import { useEffect, useState } from 'react'
 
-interface ThemeToggleProps {
-	theme: 'light' | 'dark'
-	toggleTheme: () => void
-}
+export default function ThemeToggle() {
+	const { resolvedTheme, setTheme } = useTheme()
+	const [mounted, setMounted] = useState(false)
 
-export default function ThemeToggle({ theme, toggleTheme }: ThemeToggleProps) {
-	const isDark = theme === 'dark'
+	useEffect(() => {
+		setMounted(true)
+	}, [])
+
+	if (!mounted) {
+		return <div className="h-7 w-12" />
+	}
+
+	const isDark = resolvedTheme === 'dark'
+
 	return (
 		<button
-			onClick={toggleTheme}
+			onClick={() => setTheme(isDark ? 'light' : 'dark')}
 			className="relative inline-flex h-7 w-12 items-center rounded-full bg-black/10 dark:bg-white/10 border border-black/20 dark:border-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-container/50 hover:bg-black/20 dark:hover:bg-white/20"
 			title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
 		>

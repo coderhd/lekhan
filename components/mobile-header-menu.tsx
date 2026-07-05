@@ -75,7 +75,7 @@ export default function MobileHeaderMenu({
                     
 					<div className="flex items-center justify-between px-4 py-2">
 						<span className="text-sm font-medium text-on-surface">Theme</span>
-						<ThemeToggle theme={theme} toggleTheme={toggleTheme} />
+						<ThemeToggle />
 					</div>
 				</div>
 			)}
