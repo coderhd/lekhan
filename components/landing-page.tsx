@@ -38,9 +38,9 @@ export default function LandingPage() {
 			{/* Top Navigation */}
 			<nav className="fixed top-0 w-full bg-surface/5 backdrop-blur-xl border-b border-black/10 dark:border-white/10 z-50">
 				<div className="flex justify-between items-center px-4 md:px-10 h-16 w-full max-w-[1200px] mx-auto">
-					<div className="flex items-baseline group cursor-pointer" onClick={() => router.push('/')}>
-						<img alt="Lekhan Logo" className="h-6 w-6 object-contain cursor-pointer hover:scale-110 transition-transform self-center" src="/logo.png" />
-						<span className="font-display-lg text-xl md:text-2xl font-bold text-primary-container transition-colors group-hover:text-primary leading-none ml-[2px]">ekhan</span>
+					<div className="flex items-center group cursor-pointer" onClick={() => router.push('/')}>
+						<img alt="Lekhan Logo" className="h-6 w-6 md:h-7 md:w-7 object-contain cursor-pointer hover:scale-110 transition-transform" src="/logo.png" />
+						<span className="font-display-lg text-xl md:text-2xl font-bold text-primary-container transition-colors group-hover:text-primary leading-none translate-y-[1px]">ekhan</span>
 					</div>
 					<div className="flex items-center gap-4">
 						<ThemeToggle />
@@ -54,127 +54,167 @@ export default function LandingPage() {
 				</div>
 			</nav>
 
-			<main className="pt-20">
+			<main className="pt-16">
 				{/* Hero Section */}
-				<section className="relative px-4 pt-20 pb-20 overflow-hidden flex flex-col items-center text-center min-h-[70vh] justify-center">
+				<section className="relative px-4 pt-20 pb-20 overflow-hidden flex flex-col md:flex-row items-center justify-center lg:justify-between min-h-[90vh] lg:min-h-[100svh] max-w-[1200px] mx-auto gap-12">
 					<div className="hero-glow top-20 -left-20"></div>
 					<div className="hero-glow bottom-0 -right-20"></div>
 
-					<div className="inline-flex items-center gap-2 px-3 py-1 glass rounded-full mb-8">
-						<span className="w-2 h-2 rounded-full bg-primary-container animate-pulse"></span>
-						<span className="text-label-sm font-label-sm text-on-surface-variant">LOCAL-FIRST EDITOR</span>
-					</div>
-
-					<h1 className="font-display-lg-mobile md:text-display-lg text-4xl md:text-6xl font-bold text-on-surface mb-6 max-w-2xl leading-tight">
-						Elevate your <span className="text-primary-container">writing flow.</span>
-					</h1>
-
-					<p className="text-lg md:text-xl text-on-surface-variant mb-10 max-w-lg mx-auto">
-						The premium, local-first collaborative editor for high-performance teams.
-					</p>
-
-					<div className="flex flex-col sm:flex-row w-full max-w-md gap-4 px-4 mx-auto justify-center">
-						<button
-							onClick={() => router.push('/signup')}
-							className="bg-primary-container text-on-primary text-base px-6 py-4 rounded-lg font-bold tracking-wide active:scale-[0.98] transition-transform flex-1"
-						>
-							Get started
-						</button>
-						<button
-							onClick={() => router.push('/login')}
-							className="glass text-on-surface text-base px-6 py-4 rounded-lg font-semibold border border-white/10 active:scale-[0.98] transition-transform flex-1"
-						>
-							Log In
-						</button>
-					</div>
-
-					{/* Collaboration Cursor Teaser */}
-					<div className="mt-16 w-full max-w-sm glass aspect-video rounded-xl p-6 relative overflow-hidden flex flex-col justify-end items-start border border-white/5 mx-auto">
-						<div className="absolute top-1/2 left-1/4 flex items-start gap-1">
-							<div className="cursor-anim"></div>
-							<div className="bg-primary-container px-2 py-0.5 rounded-sm">
-								<span className="text-[10px] font-bold text-on-primary-container">Alex</span>
-							</div>
+					<div className="flex-1 flex flex-col items-center md:items-start text-center md:text-left z-10">
+						<div className="inline-flex items-center gap-2 px-3 py-1 glass rounded-full mb-8">
+							<span className="w-2 h-2 rounded-full bg-primary-container animate-pulse"></span>
+							<span className="text-label-sm font-label-sm text-on-surface-variant">THE FUTURE OF COLLABORATION</span>
 						</div>
-						<div className="space-y-3 w-full opacity-40">
-							<div className="h-2 w-3/4 bg-white/20 rounded"></div>
-							<div className="h-2 w-1/2 bg-white/20 rounded"></div>
-							<div className="h-2 w-5/6 bg-white/20 rounded"></div>
+
+						<h1 className="font-display-lg-mobile md:text-display-lg text-5xl md:text-6xl lg:text-7xl font-bold text-on-surface mb-6 leading-[1.1]">
+							Write together, <br className="hidden md:block" />
+							<span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-container to-primary">without limits.</span>
+						</h1>
+
+						<p className="text-lg md:text-xl text-on-surface-variant mb-10 max-w-lg">
+							Lekhan is a premium, local-first editor designed to keep high-performance teams in sync. Lightning fast, offline capable, and fiercely private.
+						</p>
+
+						<div className="flex flex-col sm:flex-row w-full sm:w-auto gap-4">
+							<button
+								onClick={() => router.push('/signup')}
+								className="bg-primary-container text-on-primary text-base px-8 py-4 rounded-xl font-bold tracking-wide active:scale-[0.98] hover:shadow-lg hover:shadow-primary-container/20 transition-all"
+							>
+								Start Writing Free
+							</button>
+							<button
+								onClick={() => {
+									const el = document.getElementById('how-it-works')
+									if (el) el.scrollIntoView({ behavior: 'smooth' })
+								}}
+								className="glass text-on-surface text-base px-8 py-4 rounded-xl font-semibold border border-white/10 active:scale-[0.98] hover:bg-white/5 transition-all"
+							>
+								How it works
+							</button>
+						</div>
+					</div>
+
+					<div className="flex-1 w-full max-w-lg md:max-w-none relative z-10">
+						<img src="/hero-illustration.svg" alt="Team Collaboration" className="w-full h-auto drop-shadow-2xl animate-fade-in-up" />
+					</div>
+				</section>
+
+				{/* How it works Section */}
+				<section id="how-it-works" className="px-4 py-24 md:py-32 max-w-[1200px] mx-auto relative z-10">
+					<div className="mb-16 text-center">
+						<h2 className="font-display-md text-3xl md:text-4xl font-bold text-on-surface mb-4">How Lekhan works</h2>
+						<p className="text-xl text-on-surface-variant max-w-2xl mx-auto">A seamless workflow designed to get out of your way.</p>
+					</div>
+
+					<div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
+						{/* Connecting Line */}
+						<div className="hidden md:block absolute top-12 left-[16%] right-[16%] h-0.5 bg-primary-container/20 z-0"></div>
+
+						{/* Step 1 */}
+						<div className="flex flex-col items-center text-center relative z-10">
+							<div className="w-24 h-24 rounded-full bg-surface border-4 border-primary-container/20 flex items-center justify-center mb-6 shadow-xl text-2xl font-bold text-primary-container">
+								1
+							</div>
+							<h3 className="font-headline-md text-2xl font-bold text-on-surface mb-3">Create & Write</h3>
+							<p className="text-on-surface-variant leading-relaxed">Start a new document instantly. No loading screens, no waiting. Your words are saved locally the moment you type.</p>
+						</div>
+
+						{/* Step 2 */}
+						<div className="flex flex-col items-center text-center relative z-10 mt-8 md:mt-0">
+							<div className="w-24 h-24 rounded-full bg-surface border-4 border-primary-container/20 flex items-center justify-center mb-6 shadow-xl text-2xl font-bold text-primary-container">
+								2
+							</div>
+							<h3 className="font-headline-md text-2xl font-bold text-on-surface mb-3">Invite Collaborators</h3>
+							<p className="text-on-surface-variant leading-relaxed">Share your document with team members. They can join instantly and see your changes in real-time, zero latency.</p>
+						</div>
+
+						{/* Step 3 */}
+						<div className="flex flex-col items-center text-center relative z-10 mt-8 md:mt-0">
+							<div className="w-24 h-24 rounded-full bg-surface border-4 border-primary-container/20 flex items-center justify-center mb-6 shadow-xl text-2xl font-bold text-primary-container">
+								3
+							</div>
+							<h3 className="font-headline-md text-2xl font-bold text-on-surface mb-3">Sync Seamlessly</h3>
+							<p className="text-on-surface-variant leading-relaxed">Go offline? No problem. Keep writing, and Lekhan will automatically merge everyone's changes when you reconnect.</p>
 						</div>
 					</div>
 				</section>
 
 				{/* Features Grid */}
-				<section className="px-4 pb-20 max-w-[1200px] mx-auto">
-					<div className="mb-12 text-center md:text-left">
-						<h2 className="font-headline-md text-3xl font-bold text-on-surface mb-2">Designed for focus.</h2>
-						<p className="text-lg text-on-surface-variant">Experience the next generation of team collaboration.</p>
+				<section className="px-4 py-24 md:py-32 max-w-[1200px] mx-auto relative z-10">
+					<div className="mb-16 text-center md:text-left">
+						<h2 className="font-display-md text-3xl md:text-4xl font-bold text-on-surface mb-4">Engineered for focus and speed.</h2>
+						<p className="text-xl text-on-surface-variant max-w-2xl">Experience the next generation of team collaboration where your thoughts flow uninterrupted.</p>
 					</div>
-					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 						{/* Card 1 */}
-						<div className="glass p-8 rounded-xl flex flex-col items-start transition-all hover:border-primary-container/30">
-							<div className="w-12 h-12 rounded-lg bg-primary-container/10 flex items-center justify-center mb-6 text-primary-container">
-								<DownloadCloud className="w-6 h-6" />
+						<div className="glass p-8 rounded-2xl flex flex-col items-start transition-all hover:border-primary-container/40 hover:-translate-y-1">
+							<div className="w-14 h-14 rounded-xl bg-primary-container/10 flex items-center justify-center mb-6 text-primary-container shadow-inner">
+								<DownloadCloud className="w-7 h-7" />
 							</div>
-							<h3 className="font-headline-md text-xl font-semibold text-on-surface mb-3">Local-First Sync</h3>
-							<p className="font-body-md text-body-md text-on-surface-variant">Instant sync with data that stays on your device. Never wait for a loading spinner again.</p>
+							<h3 className="font-headline-md text-xl font-bold text-on-surface mb-3">Local-First Architecture</h3>
+							<p className="font-body-md text-body-md text-on-surface-variant leading-relaxed">Changes are saved to your device instantly and synced quietly in the background. Never stare at a loading spinner again.</p>
 						</div>
 						{/* Card 2 */}
-						<div className="glass p-8 rounded-xl flex flex-col items-start transition-all hover:border-primary-container/30">
-							<div className="w-12 h-12 rounded-lg bg-primary-container/10 flex items-center justify-center mb-6 text-primary-container">
-								<Users className="w-6 h-6" />
+						<div className="glass p-8 rounded-2xl flex flex-col items-start transition-all hover:border-primary-container/40 hover:-translate-y-1">
+							<div className="w-14 h-14 rounded-xl bg-primary-container/10 flex items-center justify-center mb-6 text-primary-container shadow-inner">
+								<Users className="w-7 h-7" />
 							</div>
-							<h3 className="font-headline-md text-xl font-semibold text-on-surface mb-3">Real-time Collab</h3>
-							<p className="font-body-md text-body-md text-on-surface-variant">Work together seamlessly with zero-latency editing. See changes as they happen.</p>
+							<h3 className="font-headline-md text-xl font-bold text-on-surface mb-3">Real-Time Multiplayer</h3>
+							<p className="font-body-md text-body-md text-on-surface-variant leading-relaxed">Collaborate with colleagues seamlessly. See cursors dance across the screen with zero-latency updates.</p>
 						</div>
 						{/* Card 3 */}
-						<div className="glass p-8 rounded-xl flex flex-col items-start transition-all hover:border-primary-container/30">
-							<div className="w-12 h-12 rounded-lg bg-primary-container/10 flex items-center justify-center mb-6 text-primary-container">
-								<WifiOff className="w-6 h-6" />
+						<div className="glass p-8 rounded-2xl flex flex-col items-start transition-all hover:border-primary-container/40 hover:-translate-y-1">
+							<div className="w-14 h-14 rounded-xl bg-primary-container/10 flex items-center justify-center mb-6 text-primary-container shadow-inner">
+								<WifiOff className="w-7 h-7" />
 							</div>
-							<h3 className="font-headline-md text-xl font-semibold text-on-surface mb-3">Offline Mode</h3>
-							<p className="font-body-md text-body-md text-on-surface-variant">Write anytime, anywhere. Your work is always accessible, even without an internet connection.</p>
+							<h3 className="font-headline-md text-xl font-bold text-on-surface mb-3">True Offline Mode</h3>
+							<p className="font-body-md text-body-md text-on-surface-variant leading-relaxed">Inspiration doesn't require Wi-Fi. Write anywhere, anytime, and we'll handle the syncing when you reconnect.</p>
 						</div>
 						{/* Card 4 */}
-						<div className="glass p-8 rounded-xl flex flex-col items-start transition-all hover:border-primary-container/30">
-							<div className="w-12 h-12 rounded-lg bg-primary-container/10 flex items-center justify-center mb-6 text-primary-container">
-								<Lock className="w-6 h-6" />
+						<div className="glass p-8 rounded-2xl flex flex-col items-start transition-all hover:border-primary-container/40 hover:-translate-y-1">
+							<div className="w-14 h-14 rounded-xl bg-primary-container/10 flex items-center justify-center mb-6 text-primary-container shadow-inner">
+								<Lock className="w-7 h-7" />
 							</div>
-							<h3 className="font-headline-md text-xl font-semibold text-on-surface mb-3">Privacy by Design</h3>
-							<p className="font-body-md text-body-md text-on-surface-variant">End-to-end encryption and complete data ownership. Your thoughts belong only to you.</p>
+							<h3 className="font-headline-md text-xl font-bold text-on-surface mb-3">Privacy by Design</h3>
+							<p className="font-body-md text-body-md text-on-surface-variant leading-relaxed">Your data is yours. With robust security and complete ownership, your thoughts remain exclusively in your control.</p>
 						</div>
 					</div>
 				</section>
 
 				{/* Stats Section */}
-				<section className="px-4 pb-20 text-center max-w-[1200px] mx-auto">
-					<div className="glass py-12 px-6 rounded-2xl border border-primary-container/10">
-						<div className="grid grid-cols-2 gap-8 max-w-2xl mx-auto">
+				<section className="px-4 py-24 md:py-32 text-center max-w-[1200px] mx-auto relative z-10">
+					<div className="glass py-16 px-8 rounded-[2.5rem] border border-primary-container/20 relative overflow-hidden">
+						<div className="absolute inset-0 bg-gradient-to-r from-primary-container/5 to-transparent pointer-events-none"></div>
+						<div className="grid grid-cols-1 md:grid-cols-3 gap-10 max-w-4xl mx-auto relative z-10">
 							<div>
-								<div className="font-display-lg-mobile md:text-5xl text-4xl font-bold text-primary-container mb-2">0ms</div>
-								<div className="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-widest">Latency</div>
+								<div className="font-display-lg md:text-6xl text-5xl font-bold text-primary-container mb-3 drop-shadow-sm">0ms</div>
+								<div className="text-label-md font-bold text-on-surface-variant uppercase tracking-widest">Typing Latency</div>
 							</div>
 							<div>
-								<div className="font-display-lg-mobile md:text-5xl text-4xl font-bold text-primary-container mb-2">100%</div>
-								<div className="text-label-sm font-label-sm text-on-surface-variant uppercase tracking-widest">Ownership</div>
+								<div className="font-display-lg md:text-6xl text-5xl font-bold text-primary-container mb-3 drop-shadow-sm">100%</div>
+								<div className="text-label-md font-bold text-on-surface-variant uppercase tracking-widest">Data Ownership</div>
+							</div>
+							<div>
+								<div className="font-display-lg md:text-6xl text-5xl font-bold text-primary-container mb-3 drop-shadow-sm">24/7</div>
+								<div className="text-label-md font-bold text-on-surface-variant uppercase tracking-widest">Offline Access</div>
 							</div>
 						</div>
 					</div>
 				</section>
 
 				{/* CTA Section */}
-				<section className="px-4 pb-20 relative max-w-[1200px] mx-auto">
-					<div className="bg-primary-container p-10 rounded-3xl text-center overflow-hidden relative">
+				<section className="px-4 py-24 md:py-32 relative max-w-[1200px] mx-auto z-10">
+					<div className="bg-primary-container p-12 md:p-16 rounded-[2.5rem] text-center overflow-hidden relative shadow-2xl shadow-primary-container/20">
 						<div className="absolute inset-0 opacity-10 pointer-events-none">
-							<div className="absolute top-0 left-0 w-full h-full" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
+							<div className="absolute top-0 left-0 w-full h-full" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1.5px, transparent 0)', backgroundSize: '32px 32px' }}></div>
 						</div>
-						<h2 className="font-headline-md text-3xl font-bold text-on-primary mb-4">Ready to perform?</h2>
-						<p className="text-lg text-on-primary-fixed-variant mb-8 max-w-md mx-auto">Join thousands of high-performance teams writing the future.</p>
+						<h2 className="font-display-md text-4xl md:text-5xl font-bold text-on-primary mb-6">Ready to do your best work?</h2>
+						<p className="text-xl text-on-primary-fixed-variant mb-10 max-w-2xl mx-auto">Join forward-thinking teams who have already upgraded their writing workflow.</p>
 						<button
 							onClick={() => router.push('/signup')}
-							className="bg-surface text-primary-container text-base px-8 py-4 rounded-lg font-bold uppercase active:scale-95 transition-transform relative z-10"
+							className="bg-surface text-primary-container text-lg px-10 py-5 rounded-xl font-bold active:scale-95 hover:shadow-xl transition-all relative z-10"
 						>
-							Get Started Now
+							Start Collaborating Now
 						</button>
 					</div>
 				</section>
@@ -184,9 +224,9 @@ export default function LandingPage() {
 			<footer className="bg-surface border-t border-white/5">
 				<div className="flex flex-col md:flex-row justify-between items-center py-10 px-4 md:px-10 w-full max-w-[1200px] mx-auto space-y-8 md:space-y-0">
 					<div className="flex flex-col items-center md:items-start gap-4">
-						<div className="flex items-baseline group cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-							<img alt="Lekhan Logo" className="h-6 w-6 object-contain cursor-pointer hover:scale-110 transition-transform self-center" src="/logo.png" />
-							<span className="font-display-lg text-xl md:text-2xl font-bold text-primary-container transition-colors group-hover:text-primary leading-none ml-[2px]">ekhan</span>
+						<div className="flex items-center group cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+							<img alt="Lekhan Logo" className="h-6 w-6 md:h-7 md:w-7 object-contain cursor-pointer hover:scale-110 transition-transform" src="/logo.png" />
+							<span className="font-display-lg text-xl md:text-2xl font-bold text-primary-container transition-colors group-hover:text-primary leading-none translate-y-[1px]">ekhan</span>
 						</div>
 						<p className="font-body-md text-sm text-on-surface-variant text-center md:text-left max-w-xs">
 							Designed for focused teams.

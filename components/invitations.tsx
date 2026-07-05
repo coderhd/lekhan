@@ -13,7 +13,7 @@ interface InvitationsProps {
 	variant?: 'default' | 'dropdown'
 }
 
-export default function Invitations ({
+export default function Invitations({
 	userEmail,
 	userId,
 	onRefresh,
@@ -95,26 +95,26 @@ export default function Invitations ({
 	}
 
 	return (
-		<div className='mb-8 rounded-xl border border-primary/20 bg-card/60 p-6 backdrop-blur-md'>
-			<h3 className='mb-4 text-lg font-semibold text-primary flex items-center gap-2'>
-				<span className='flex h-2 w-2 rounded-full bg-primary animate-pulse' />
+		<div className='mb-8 rounded-2xl border border-black/10 dark:border-white/10 bg-surface-container p-6 shadow-sm'>
+			<h3 className='mb-4 text-lg font-semibold text-primary-container flex items-center gap-2'>
+				<span className='flex h-2 w-2 rounded-full bg-primary-container animate-pulse' />
 				Pending Invitations ({invites.length})
 			</h3>
-			<div className='space-y-3'>
+			<div className='space-y-0'>
 				{invites.map((invite) => (
 					<div
 						key={invite.id}
-						className='flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-lg bg-background/40 p-4 border border-border'
+						className='flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4 border-b border-black/5 dark:border-white/5 last:border-0'
 					>
 						<div>
-							<p className='text-sm font-medium text-foreground'>
+							<p className='text-sm font-medium text-on-surface'>
 								Invitation to join{' '}
-								<span className='font-bold text-primary'>
+								<span className='font-bold text-primary-container'>
 									{invite.documents?.title || 'Untitled'}
 								</span>{' '}
 								as <span className='capitalize font-bold'>{invite.role}</span>
 							</p>
-							<p className='text-xs text-muted-foreground mt-1'>
+							<p className='text-xs text-on-surface-variant mt-1'>
 								Invited by:{' '}
 								{invite.profiles?.full_name || invite.profiles?.email}
 							</p>
@@ -122,13 +122,13 @@ export default function Invitations ({
 						<div className='flex items-center gap-2'>
 							<button
 								onClick={() => handleAccept(invite)}
-								className='rounded-md bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90'
+								className='rounded-lg bg-primary-container px-4 py-2 text-xs font-bold text-on-primary-container transition hover:brightness-110 active:scale-95 shadow-sm'
 							>
 								Accept
 							</button>
 							<button
 								onClick={() => handleDecline(invite.id)}
-								className='rounded-md bg-secondary px-3.5 py-1.5 text-xs font-semibold text-secondary-foreground border border-border transition hover:bg-secondary/80'
+								className='rounded-lg bg-transparent px-4 py-2 text-xs font-bold text-on-surface-variant border border-black/20 dark:border-white/20 transition hover:bg-black/5 dark:hover:bg-white/5 active:scale-95'
 							>
 								Decline
 							</button>

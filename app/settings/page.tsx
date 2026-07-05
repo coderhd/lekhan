@@ -21,7 +21,11 @@ export default function SettingsPage() {
 					router.push('/login')
 					return
 				}
-				setUser(sessionUser)
+				setUser({
+					id: sessionUser.id,
+					email: sessionUser.email,
+					full_name: sessionUser.user_metadata?.full_name
+				})
 				const docs = await fetchOwnedDocumentsWithMembers(sessionUser.id)
 				setDocuments(docs)
 			} catch (err) {

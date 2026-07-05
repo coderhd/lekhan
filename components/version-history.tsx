@@ -181,7 +181,7 @@ export default function VersionHistory({
 	}
 
 	return (
-		<aside className='absolute right-0 top-0 bottom-0 w-80 bg-surface-container-low border-l border-white/10 p-6 flex flex-col z-[60] shadow-2xl backdrop-blur-xl animate-in slide-in-from-right duration-200'>
+		<aside className='absolute right-0 top-0 bottom-0 w-80 bg-background border-l border-white/10 p-6 flex flex-col z-[60] shadow-md backdrop-blur-xl animate-in slide-in-from-right duration-200'>
 			<div className='flex items-center justify-between border-b border-white/10 pb-4 mb-6'>
 				<div className='flex items-center gap-sm'>
 					<div className='w-8 h-8 rounded-lg bg-primary-container/20 flex items-center justify-center'>
@@ -213,8 +213,8 @@ export default function VersionHistory({
 					/>
 					<button
 						type='submit'
-						disabled={saving}
-						className='w-full rounded-xl bg-primary-container text-on-primary-container font-semibold py-2.5 text-xs hover:brightness-110 active:scale-95 transition-all shadow-sm flex items-center justify-center gap-1.5'
+						disabled={saving || !newVersionName.trim()}
+						className='w-full rounded-xl bg-primary-container text-on-primary-container font-semibold py-2.5 text-xs hover:brightness-110 active:scale-95 transition-all shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:pointer-events-none'
 					>
 						<span className="material-symbols-outlined text-sm">save</span>
 						<span>{saving ? 'Saving...' : 'Save Checkpoint'}</span>
@@ -238,7 +238,7 @@ export default function VersionHistory({
 					versions.map((v) => (
 						<div
 							key={v.id}
-							className={`rounded-xl border p-4 transition text-left cursor-pointer ${activePreviewId === v.id ? 'bg-white/10 border-primary-container/50' : 'bg-white/5 border-white/10 hover:border-white/20'}`}
+							className={`rounded-xl border p-4 transition text-left cursor-pointer ${activePreviewId === v.id ? 'bg-primary-container/10 dark:bg-primary-container/20 border-primary-container/50' : 'bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10 hover:border-black/20 dark:hover:border-white/20'}`}
 							onClick={() => handleSelectVersion(v)}
 						>
 							<div className='flex justify-between items-start gap-2'>

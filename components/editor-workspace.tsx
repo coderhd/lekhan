@@ -363,10 +363,10 @@ export default function EditorWorkspace({
 
 				{/* Row 2: Formatting Toolbar or Read Only Banner */}
 				{!isViewer ? (
-					<div className={`min-h-[40px] py-2 px-margin flex flex-wrap justify-start xl:justify-center items-center gap-y-2 bg-surface-container-low border-y border-black/10 dark:border-white/10 ${previewDoc ? 'opacity-40 pointer-events-none' : ''}`}>
+					<div className={`min-h-[40px] py-2 px-margin flex flex-nowrap overflow-x-auto hide-scrollbar justify-start xl:justify-center items-center bg-surface-container-low border-y border-black/10 dark:border-white/10 ${previewDoc ? 'opacity-40 pointer-events-none' : ''}`}>
 
 					{/* Font Family Selection */}
-					<div className="flex items-center border-r border-black/10 dark:border-white/10 h-6 px-1">
+					<div className="flex shrink-0 items-center border-r border-black/10 dark:border-white/10 h-6 px-1">
 						<CustomSelect
 							value={editor?.getAttributes('textStyle').fontFamily || ''}
 							onValueChange={(val) => {
@@ -389,7 +389,7 @@ export default function EditorWorkspace({
 					</div>
 
 					{/* Text Style / Headings Selection */}
-					<div className="flex items-center border-r border-black/10 dark:border-white/10 h-6 px-1">
+					<div className="flex shrink-0 items-center border-r border-black/10 dark:border-white/10 h-6 px-1">
 						<CustomSelect
 							value={
 								editor?.isActive('heading', { level: 1 }) ? 'h1' :
@@ -418,29 +418,29 @@ export default function EditorWorkspace({
 						/>
 					</div>
 
-					<div className="flex items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6">
+					<div className="flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6">
 						<button onClick={() => editor?.chain().focus().undo().run()} className="p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded transition-colors text-on-surface-variant hover:text-on-surface flex items-center justify-center"><span className="material-symbols-outlined text-[18px]">undo</span></button>
 						<button onClick={() => editor?.chain().focus().redo().run()} className="p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded transition-colors text-on-surface-variant hover:text-on-surface flex items-center justify-center"><span className="material-symbols-outlined text-[18px]">redo</span></button>
 					</div>
-					<div className="flex items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6">
+					<div className="flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6">
 						<button onClick={() => editor?.chain().focus().toggleBold().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('bold') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_bold</span></button>
 						<button onClick={() => editor?.chain().focus().toggleItalic().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('italic') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_italic</span></button>
 						<button onClick={() => editor?.chain().focus().toggleUnderline().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('underline') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_underlined</span></button>
 						<button onClick={() => editor?.chain().focus().toggleStrike().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('strike') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_strikethrough</span></button>
 					</div>
-					<div className="flex items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6">
+					<div className="flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6">
 						<button onClick={() => editor?.chain().focus().setTextAlign('left').run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive({ textAlign: 'left' }) ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_align_left</span></button>
 						<button onClick={() => editor?.chain().focus().setTextAlign('center').run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive({ textAlign: 'center' }) ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_align_center</span></button>
 						<button onClick={() => editor?.chain().focus().setTextAlign('right').run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive({ textAlign: 'right' }) ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_align_right</span></button>
 					</div>
-					<div className="flex items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6">
+					<div className="flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6">
 						<button onClick={() => editor?.chain().focus().toggleBulletList().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('bulletList') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_list_bulleted</span></button>
 						<button onClick={() => editor?.chain().focus().toggleOrderedList().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('orderedList') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_list_numbered</span></button>
 						<button onClick={() => editor?.chain().focus().toggleTaskList().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('taskList') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">check_box</span></button>
 						<button onClick={() => editor?.chain().focus().toggleBlockquote().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('blockquote') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Blockquote"><span className="material-symbols-outlined text-[18px]">format_quote</span></button>
 						<button onClick={() => editor?.chain().focus().toggleCodeBlock().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('codeBlock') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Code Block"><span className="material-symbols-outlined text-[18px]">code_blocks</span></button>
 					</div>
-					<div className="flex items-center gap-xs px-md h-6 border-r border-black/10 dark:border-white/10">
+					<div className="flex shrink-0 items-center gap-xs px-md h-6 border-r border-black/10 dark:border-white/10">
 						<button
 							onClick={() => {
 								const url = window.prompt('URL')
@@ -457,7 +457,7 @@ export default function EditorWorkspace({
 						</button>
 						<ImageUploadButton onUpload={(url) => editor?.chain().focus().setImage({ src: url }).run()} />
 					</div>
-					<div className="flex items-center gap-xs px-md h-6">
+					<div className="flex shrink-0 items-center gap-xs px-md h-6">
 						<ColorHighlightPopover editor={editor} />
 					</div>
 					</div>

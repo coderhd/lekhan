@@ -136,7 +136,7 @@ export default function ShareModal({
 						</div>
 						<button
 							onClick={handleTogglePublic}
-							className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-colors duration-200 focus:outline-none ${isPublic ? 'bg-primary-container border-primary-container' : 'bg-black/10 dark:bg-transparent border-black/20 dark:border-white/20'}`}
+							className={`relative inline-flex h-6 w-11 shrink-0 ml-2 items-center rounded-full border transition-colors duration-200 focus:outline-none ${isPublic ? 'bg-primary-container border-primary-container' : 'bg-black/10 dark:bg-transparent border-black/20 dark:border-white/20'}`}
 						>
 							<span
 								className={`inline-block h-4 w-4 transform rounded-full transition-transform duration-200 ${isPublic ? 'translate-x-6 bg-white' : 'translate-x-1 bg-black/40 dark:bg-white/40'}`}

@@ -181,8 +181,8 @@ export default function SettingsClient({ user, documents, setDocuments }: {
 
 									<button
 										type="submit"
-										disabled={loading}
-										className="mt-6 w-full bg-primary-container text-on-primary-fixed font-bold py-3 rounded-lg shadow-md hover:shadow-primary-container/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 disabled:opacity-50"
+										disabled={loading || password.length < 6 || password !== confirmPassword}
+										className="mt-6 w-full bg-primary-container text-on-primary-fixed font-bold py-3 rounded-lg shadow-md hover:shadow-primary-container/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none"
 									>
 										{loading ? 'Updating...' : 'Change Password'}
 									</button>

@@ -251,14 +251,14 @@ export default function AIAssistantPanel({
 	}
 
 	return (
-		<aside className='absolute right-0 top-0 bottom-0 w-80 bg-surface-container-low border-l border-white/10 p-6 flex flex-col z-[60] shadow-2xl backdrop-blur-xl animate-in slide-in-from-right duration-200'>
+		<aside className='absolute right-0 top-0 bottom-0 w-80 bg-background border-l border-black/10 dark:border-white/10 p-6 flex flex-col z-[60] shadow-md backdrop-blur-xl animate-in slide-in-from-right duration-200'>
 			<audio
 				ref={audioRef}
 				onEnded={() => setIsPlaying(false)}
 				className='hidden'
 			/>
 
-			<div className='flex items-center justify-between border-b border-white/10 pb-4 mb-6'>
+			<div className='flex items-center justify-between border-b border-black/10 dark:border-white/10 pb-4 mb-6'>
 				<div className='flex items-center gap-sm'>
 					<div className='w-8 h-8 rounded-lg bg-primary-container/20 flex items-center justify-center'>
 						<span className="material-symbols-outlined text-primary-container">auto_awesome</span>
@@ -270,29 +270,29 @@ export default function AIAssistantPanel({
 				</div>
 				<button
 					onClick={onClose}
-					className='rounded-lg p-1 hover:bg-white/10 text-on-surface-variant hover:text-on-surface transition'
+					className='rounded-lg p-1 hover:bg-black/10 dark:hover:bg-white/10 text-on-surface-variant hover:text-on-surface transition'
 				>
 					<span className="material-symbols-outlined text-lg">close</span>
 				</button>
 			</div>
 
 			{/* Sub Tabs */}
-			<div className='mb-6 flex gap-1 rounded-xl bg-white/5 border border-white/10 p-1'>
+			<div className='mb-6 flex gap-1 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 p-1'>
 				<button
 					onClick={() => handleTabSwitch('assistant')}
-					className={`flex-1 rounded-lg px-2.5 py-1.5 text-center text-xs font-semibold transition ${activeTab === 'assistant' ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant hover:text-on-surface hover:bg-white/5'}`}
+					className={`flex-1 rounded-lg px-2.5 py-1.5 text-center text-xs font-semibold transition ${activeTab === 'assistant' ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant hover:text-on-surface hover:bg-black/5 dark:hover:bg-white/5'}`}
 				>
 					Assistant
 				</button>
 				<button
 					onClick={() => handleTabSwitch('translate')}
-					className={`flex-1 rounded-lg px-2.5 py-1.5 text-center text-xs font-semibold transition ${activeTab === 'translate' ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant hover:text-on-surface hover:bg-white/5'}`}
+					className={`flex-1 rounded-lg px-2.5 py-1.5 text-center text-xs font-semibold transition ${activeTab === 'translate' ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant hover:text-on-surface hover:bg-black/5 dark:hover:bg-white/5'}`}
 				>
 					Translate
 				</button>
 				<button
 					onClick={() => handleTabSwitch('tts')}
-					className={`flex-1 rounded-lg px-2.5 py-1.5 text-center text-xs font-semibold transition ${activeTab === 'tts' ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant hover:text-on-surface hover:bg-white/5'}`}
+					className={`flex-1 rounded-lg px-2.5 py-1.5 text-center text-xs font-semibold transition ${activeTab === 'tts' ? 'bg-primary-container text-on-primary-container' : 'text-on-surface-variant hover:text-on-surface hover:bg-black/5 dark:hover:bg-white/5'}`}
 				>
 					Speech
 				</button>
@@ -309,26 +309,26 @@ export default function AIAssistantPanel({
 							<div className='grid grid-cols-2 gap-2'>
 								<button
 									onClick={() => handleChatAction('Summarize the following text')}
-									className='rounded-xl border border-white/10 bg-white/5 p-2.5 text-xs text-on-surface transition hover:border-primary-container hover:bg-white/10'
+									className='rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-2.5 text-xs text-on-surface transition hover:border-primary-container hover:bg-black/10 dark:hover:bg-white/10'
 								>
 									Summarize
 								</button>
 								<button
 									onClick={() => handleChatAction('Fix spelling and grammar in this text')}
-									className='rounded-xl border border-white/10 bg-white/5 p-2.5 text-xs text-on-surface transition hover:border-primary-container hover:bg-white/10'
+									className='rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-2.5 text-xs text-on-surface transition hover:border-primary-container hover:bg-black/10 dark:hover:bg-white/10'
 								>
 									Fix Grammar
 								</button>
 								<button
 									onClick={() => handleChatAction('Improve the writing style of this text')}
-									className='rounded-xl border border-white/10 bg-white/5 p-2.5 text-xs text-on-surface transition hover:border-primary-container hover:bg-white/10'
+									className='rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-2.5 text-xs text-on-surface transition hover:border-primary-container hover:bg-black/10 dark:hover:bg-white/10'
 									title='Make flow better'
 								>
 									Improve Flow
 								</button>
 								<button
 									onClick={() => handleChatAction('Extend this text with more details')}
-									className='rounded-xl border border-white/10 bg-white/5 p-2.5 text-xs text-on-surface transition hover:border-primary-container hover:bg-white/10'
+									className='rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-2.5 text-xs text-on-surface transition hover:border-primary-container hover:bg-black/10 dark:hover:bg-white/10'
 								>
 									Expand
 								</button>
@@ -342,7 +342,7 @@ export default function AIAssistantPanel({
 							<textarea
 								value={prompt}
 								onChange={(e) => setPrompt(e.target.value)}
-								className='w-full bg-white/5 border border-white/10 rounded-xl p-2.5 text-xs text-on-surface placeholder:text-on-surface-variant/40 focus:ring-2 focus:ring-primary-container/50 focus:border-primary-container outline-none premium-transition min-h-[60px]'
+								className='w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl p-2.5 text-xs text-on-surface placeholder:text-on-surface-variant/40 focus:ring-2 focus:ring-primary-container/50 focus:border-primary-container outline-none premium-transition min-h-[60px]'
 								placeholder='Ask the AI to generate content or rewrite text...'
 								required
 							/>
@@ -417,7 +417,7 @@ export default function AIAssistantPanel({
 
 						{/* Audio player UI */}
 						{audioUrl && (
-							<div className='rounded-xl border border-white/10 bg-white/5 p-4 flex items-center justify-between'>
+							<div className='rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-4 flex items-center justify-between'>
 								<span className='text-[10px] text-on-surface-variant/70 font-medium truncate max-w-[150px]'>
 									Generated Audio Accent
 								</span>
@@ -446,11 +446,11 @@ export default function AIAssistantPanel({
 
 				{/* Output Results panel */}
 				{result && !loading && (
-					<div className='mt-6 border-t border-white/10 pt-6 space-y-3'>
+					<div className='mt-6 border-t border-black/10 dark:border-white/10 pt-6 space-y-3'>
 						<p className='text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60'>
 							AI Output
 						</p>
-						<div className='rounded-xl bg-white/5 border border-white/10 p-4 text-xs text-on-surface whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed'>
+						<div className='rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 p-4 text-xs text-on-surface whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed'>
 							{result}
 						</div>
 						<button
@@ -463,7 +463,7 @@ export default function AIAssistantPanel({
 				)}
 			</div>
 
-			<div className='mt-auto pt-6 text-left border-t border-white/5'>
+			<div className='mt-auto pt-6 text-left border-t border-black/5 dark:border-white/5'>
 				<p className='text-[10px] text-on-surface-variant/50 leading-relaxed'>
 					AI-generated content may be inaccurate or misleading. Always review and verify important information before using it in your document.
 				</p>

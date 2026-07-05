@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { DocumentItem, MemberDocumentItem } from '@/types'
-import { fetchOwnedDocuments, fetchSharedDocuments, createDocument, deleteDocument, updateDocumentTitle } from '@/services/db'
+import { fetchOwnedDocuments, fetchSharedDocuments, createDocument, deleteDocument, updateDocumentTitle, fetchPendingInvitations } from '@/services/db'
 import Invitations from './invitations'
 import ProfileMenu from './profile-menu'
 import ThemeToggle from './theme-toggle'
@@ -27,6 +27,7 @@ export default function Dashboard({ user }: DashboardProps) {
 	const router = useRouter()
 	const [myDocs, setMyDocs] = useState<DocumentItem[]>([])
 	const [sharedDocs, setSharedDocs] = useState<MemberDocumentItem[]>([])
+	const [pendingInvitesCount, setPendingInvitesCount] = useState(0)
 	const [loading, setLoading] = useState(true)
 	const [searchQuery, setSearchQuery] = useState('')
 	const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
@@ -112,12 +113,14 @@ export default function Dashboard({ user }: DashboardProps) {
 
 	const fetchDocuments = async () => {
 		try {
-			const [owned, shared] = await Promise.all([
+			const [owned, shared, invites] = await Promise.all([
 				fetchOwnedDocuments(user.id),
 				fetchSharedDocuments(user.id),
+				fetchPendingInvitations(user.email)
 			])
 			setMyDocs(owned)
 			setSharedDocs(shared)
+			setPendingInvitesCount(invites.length)
 		} catch (err) {
 			console.error('Error fetching documents:', err)
 		} finally {
@@ -235,9 +238,9 @@ export default function Dashboard({ user }: DashboardProps) {
 			{/* Header */}
 			<header className="fixed top-0 w-full z-50 bg-surface/5 backdrop-blur-md border-b border-black/10 dark:border-white/10 flex justify-center h-16">
 				<div className="w-full flex justify-between items-center px-margin">
-					<div className="flex items-baseline group cursor-pointer" onClick={() => router.push('/')}>
-						<img alt="Lekhan Logo" className="h-6 w-6 object-contain cursor-pointer hover:scale-110 premium-transition self-center" src="./logo.png" />
-						<span className="font-display-lg text-display-lg-mobile md:text-headline-md font-bold text-primary-container premium-transition group-hover:text-primary leading-none ml-[2px]">ekhan</span>
+					<div className="flex items-center group cursor-pointer" onClick={() => router.push('/')}>
+						<img alt="Lekhan Logo" className="h-6 w-6 md:h-7 md:w-7 object-contain cursor-pointer hover:scale-110 premium-transition" src="./logo.png" />
+						<span className="font-display-lg text-xl md:text-2xl font-bold text-primary-container premium-transition group-hover:text-primary leading-none translate-y-[1px]">ekhan</span>
 					</div>
 
 					<div className="hidden md:flex flex-1 max-w-xl mx-xl">
@@ -261,6 +264,9 @@ export default function Dashboard({ user }: DashboardProps) {
 								className="p-2 flex items-center justify-center rounded-lg hover:bg-black/5 dark:hover:bg-white/10 premium-transition text-on-surface-variant hover:text-on-surface relative hover:scale-110 active:scale-90"
 							>
 								<span className="material-symbols-outlined leading-none">notifications</span>
+								{pendingInvitesCount > 0 && (
+									<span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-error animate-pulse" />
+								)}
 							</button>
 
 							{/* Notification Dropdown */}
@@ -289,7 +295,7 @@ export default function Dashboard({ user }: DashboardProps) {
 						<div className="flex justify-center items-center min-h-[calc(100vh-6rem)]">
 							<GlobalLoader fullScreen={false} text="Loading dashboard..." />
 						</div>
-					) : filteredMyDocs.length === 0 && filteredSharedDocs.length === 0 ? (
+					) : filteredMyDocs.length === 0 && filteredSharedDocs.length === 0 && pendingInvitesCount === 0 ? (
 						myDocs.length === 0 && sharedDocs.length === 0 ? (
 							<div className="flex flex-col items-center justify-center py-20 text-center opacity-0 animate-fade-in-up stagger-2 min-h-[60vh]">
 								<img src="/undraw_team-assignment_lzot.svg" alt="No documents" className="w-80 h-80 md:w-96 md:h-96 mb-8 opacity-90 drop-shadow-sm" />
@@ -299,7 +305,7 @@ export default function Dashboard({ user }: DashboardProps) {
 								</p>
 								<button onClick={handleCreateDocument} className="flex items-center gap-sm bg-primary text-on-primary font-bold px-xl py-3 rounded-lg hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 premium-transition">
 									<span className="material-symbols-outlined">add</span>
-									Create your first document
+									Create
 								</button>
 							</div>
 						) : (
@@ -313,12 +319,29 @@ export default function Dashboard({ user }: DashboardProps) {
 						)
 					) : (
 						<>
+							{/* Mobile Search Bar */}
+							<div className="md:hidden w-full -mt-4 mb-2">
+								<div className="relative w-full group">
+									<span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant premium-transition group-focus-within:text-primary-container">search</span>
+									<input
+										type="text"
+										value={searchQuery}
+										onChange={(e) => setSearchQuery(e.target.value)}
+										className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl py-2 pl-10 pr-4 focus:ring-2 focus:ring-primary-container/50 focus:border-primary-container outline-none premium-transition placeholder:text-on-surface-variant/50"
+										placeholder="Search..."
+									/>
+								</div>
+							</div>
+
+							{pendingInvitesCount > 0 && myDocs.length === 0 && sharedDocs.length === 0 && (
+								<Invitations userEmail={user.email} userId={user.id} onRefresh={fetchDocuments} variant="default" />
+							)}
 							{/* My Documents */}
 							<section>
 								<div className="flex items-center justify-between mb-lg border-b border-white/10 pb-4 opacity-0 animate-fade-in-up stagger-1">
 									<div className="flex items-center gap-sm">
 										<span className="material-symbols-outlined text-primary-container">folder</span>
-										<h2 className="font-headline-md text-headline-md text-on-surface">Documents</h2>
+										<h2 className="font-headline-md text-title-lg md:text-headline-md text-on-surface">Documents</h2>
 									</div>
 									<div className="flex items-center gap-sm">
 										{(myDocs.length > 0 || sharedDocs.length > 0) && (
@@ -326,7 +349,7 @@ export default function Dashboard({ user }: DashboardProps) {
 												<DropdownMenu.Trigger asChild>
 													<button className="flex items-center gap-2 h-10 px-3 rounded-lg border border-black/10 dark:border-white/10 bg-surface-container-low hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-sm font-medium">
 														<span className="material-symbols-outlined text-[18px]">filter_list</span>
-														Filter
+														<span className="hidden md:inline">Filter</span>
 													</button>
 												</DropdownMenu.Trigger>
 												<DropdownMenu.Portal>
@@ -369,7 +392,7 @@ export default function Dashboard({ user }: DashboardProps) {
 												</DropdownMenu.Portal>
 											</DropdownMenu.Root>
 										)}
-										<button onClick={handleCreateDocument} className="flex items-center gap-sm bg-primary text-on-primary font-bold px-lg py-2 rounded-lg hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 premium-transition ml-2">
+										<button onClick={handleCreateDocument} className="hidden md:flex items-center gap-sm bg-primary text-on-primary font-bold px-lg py-2 rounded-lg hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 premium-transition ml-2">
 											<span className="material-symbols-outlined">add</span>
 											New
 										</button>
@@ -483,7 +506,7 @@ export default function Dashboard({ user }: DashboardProps) {
 								<div className="flex items-center justify-between mb-lg border-b border-white/10 pb-4 opacity-0 animate-fade-in-up stagger-2">
 									<div className="flex items-center gap-sm">
 										<span className="material-symbols-outlined text-primary-container">groups</span>
-										<h2 className="font-headline-md text-headline-md text-on-surface">Shared</h2>
+										<h2 className="font-headline-md text-title-lg md:text-headline-md text-on-surface">Shared</h2>
 									</div>
 								</div>
 
@@ -556,7 +579,7 @@ export default function Dashboard({ user }: DashboardProps) {
 			</main>
 
 			{/* FAB for mobile */}
-			<button onClick={handleCreateDocument} className="md:hidden fixed bottom-margin right-margin w-14 h-14 shimmer-btn animate-shimmer text-on-primary-container rounded-full shadow-2xl flex items-center justify-center active:scale-90 premium-transition z-50">
+			<button onClick={handleCreateDocument} className="md:hidden fixed bottom-8 right-8 z-[100] w-14 h-14 shimmer-btn animate-shimmer text-on-primary-container rounded-full shadow-2xl flex items-center justify-center active:scale-90 premium-transition">
 				<span className="material-symbols-outlined text-3xl">add</span>
 			</button>
 

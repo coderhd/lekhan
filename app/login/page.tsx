@@ -41,12 +41,12 @@ export default function LoginPage() {
 			{/* Ambient Glow Effects */}
 			<div className="hero-glow top-0 left-0" style={{ transform: 'translate(-10%, -10%)' }}></div>
 			<div className="hero-glow bottom-0 right-0" style={{ transform: 'translate(10%, 10%)' }}></div>
-			
+
 			{/* Top Navigation Bar */}
 			<header className="w-full fixed top-0 bg-surface/5 backdrop-blur-xl border-b border-on-surface/10 z-50 flex justify-between items-center px-4 md:px-8 h-16">
-				<Link href="/" className="flex items-baseline group cursor-pointer">
-					<img alt="Lekhan Logo" className="h-6 w-6 object-contain cursor-pointer hover:scale-110 transition-transform self-center" src="/logo.png" />
-					<span className="font-display-lg text-xl md:text-2xl font-bold text-primary-container transition-colors group-hover:text-primary leading-none ml-[2px]">ekhan</span>
+				<Link href="/" className="flex items-center group cursor-pointer">
+					<img alt="Lekhan Logo" className="h-6 w-6 md:h-7 md:w-7 object-contain cursor-pointer hover:scale-110 transition-transform" src="/logo.png" />
+					<span className="font-display-lg text-xl md:text-2xl font-bold text-primary-container transition-colors group-hover:text-primary leading-none translate-y-[1px]">ekhan</span>
 				</Link>
 			</header>
 
@@ -59,49 +59,50 @@ export default function LoginPage() {
 						<h1 className="font-display-lg text-2xl md:text-3xl font-bold text-on-surface">Welcome Back</h1>
 						<p className="font-body-md text-on-surface-variant max-w-[280px]">Collaborate and create in your shared workspace.</p>
 					</div>
-					
+
 					{/* Login Form */}
 					<form onSubmit={handleLogin} className="flex flex-col gap-5">
 						{error && (
 							<div className="p-3 bg-error-container/20 border border-error/50 rounded-lg text-error text-sm text-center font-medium flex items-center justify-center gap-2">
-								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
 								{error}
 							</div>
 						)}
-						
+
 						<div className="flex flex-col gap-1.5">
 							<label className="font-label-sm text-on-surface-variant ml-2 text-xs font-semibold uppercase tracking-wider">Email Address</label>
 							<div className="relative group">
 								<Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant w-5 h-5 group-focus-within:text-primary transition-colors" />
-								<input 
+								<input
 									type="email"
 									value={email}
 									onChange={(e) => setEmail(e.target.value)}
 									required
-									className="w-full bg-black/5 dark:bg-black/20 border border-black/10 dark:border-white/10 rounded-lg py-3 pl-10 pr-4 font-body-md text-on-surface focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container/30 transition-all placeholder:text-on-surface-variant/50" 
-									placeholder="name@company.com" 
-								/>
-							</div>
-						</div>
-						
-						<div className="flex flex-col gap-1.5">
-							<div className="flex justify-between items-center px-2">
-								<label className="font-label-sm text-on-surface-variant text-xs font-semibold uppercase tracking-wider">Password</label>
-							</div>
-							<div className="relative group">
-								<Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant w-5 h-5 group-focus-within:text-primary transition-colors" />
-								<input 
-									type="password"
-									value={password}
-									onChange={(e) => setPassword(e.target.value)}
-									required
-									className="w-full bg-black/5 dark:bg-black/20 border border-black/10 dark:border-white/10 rounded-lg py-3 pl-10 pr-4 font-body-md text-on-surface focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container/30 transition-all placeholder:text-on-surface-variant/50" 
-									placeholder="••••••••" 
+									className="w-full bg-black/5 dark:bg-black/20 border border-black/10 dark:border-white/10 rounded-lg py-3 pl-10 pr-4 font-body-md text-on-surface focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container/30 transition-all placeholder:text-on-surface-variant/50"
+									placeholder="name@company.com"
 								/>
 							</div>
 						</div>
 
-						<button 
+						<div className="flex flex-col gap-1.5">
+							<div className="flex justify-between items-center px-2">
+								<label className="font-label-sm text-on-surface-variant text-xs font-semibold uppercase tracking-wider">Password</label>
+								<Link href="/forgot-password" className="text-primary text-xs font-semibold hover:underline">Forgot Password?</Link>
+							</div>
+							<div className="relative group">
+								<Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant w-5 h-5 group-focus-within:text-primary transition-colors" />
+								<input
+									type="password"
+									value={password}
+									onChange={(e) => setPassword(e.target.value)}
+									required
+									className="w-full bg-black/5 dark:bg-black/20 border border-black/10 dark:border-white/10 rounded-lg py-3 pl-10 pr-4 font-body-md text-on-surface focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container/30 transition-all placeholder:text-on-surface-variant/50"
+									placeholder="••••••••"
+								/>
+							</div>
+						</div>
+
+						<button
 							type="submit"
 							disabled={loading}
 							className="mt-4 w-full bg-primary-container text-on-primary-fixed font-bold py-3 rounded-lg shadow-lg hover:shadow-primary-container/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 disabled:opacity-50"
@@ -109,7 +110,7 @@ export default function LoginPage() {
 							{loading ? 'Signing In...' : 'Sign In'}
 						</button>
 					</form>
-					
+
 					{/* Footer Link */}
 					<div className="text-center">
 						<p className="font-body-md text-sm text-on-surface-variant">
