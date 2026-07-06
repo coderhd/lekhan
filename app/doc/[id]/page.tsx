@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { use, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { fetchDocumentDetails, fetchMemberRole } from '@/services/db'
@@ -9,10 +9,11 @@ import EditorWorkspace from '@/components/editor-workspace'
 import { toast } from 'sonner'
 
 export default function DocumentPage ({
-	params,
+	params: paramsPromise,
 }: {
-	params: { id: string }
+	params: Promise<{ id: string }>
 }) {
+	const params = use(paramsPromise)
 	const router = useRouter()
 	const [user, setUser] = useState<any | null>(null)
 	const [token, setToken] = useState<string | null>(null)

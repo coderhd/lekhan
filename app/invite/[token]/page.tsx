@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { use, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { DocumentInvitation } from '@/types'
@@ -9,10 +9,11 @@ import GlobalLoader from '@/components/global-loader'
 import { toast } from 'sonner'
 
 export default function InvitePage ({
-	params,
+	params: paramsPromise,
 }: {
-	params: { token: string }
+	params: Promise<{ token: string }>
 }) {
+	const params = use(paramsPromise)
 	const router = useRouter()
 	const [user, setUser] = useState<any | null>(null)
 	const [invite, setInvite] = useState<DocumentInvitation | null>(null)
