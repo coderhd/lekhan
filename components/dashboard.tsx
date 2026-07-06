@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import { DocumentItem, MemberDocumentItem } from '@/types'
 import { fetchOwnedDocuments, fetchSharedDocuments, createDocument, deleteDocument, updateDocumentTitle, fetchPendingInvitations } from '@/services/db'
 import Invitations from './invitations'
@@ -31,13 +30,9 @@ export default function Dashboard({ user }: DashboardProps) {
 	const [loading, setLoading] = useState(true)
 	const [searchQuery, setSearchQuery] = useState('')
 	const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
-	const [myDocsLimit, setMyDocsLimit] = useState(8)
-	const [sharedDocsLimit, setSharedDocsLimit] = useState(8)
 	const [editingTitleId, setEditingTitleId] = useState<string | null>(null)
-	const [editTitleValue, setEditTitleValue] = useState('')
 	const [activeActionMenuId, setActiveActionMenuId] = useState<string | null>(null)
 	const [documentToDelete, setDocumentToDelete] = useState<string | null>(null)
-	const [theme, setTheme] = useState<'light' | 'dark'>('dark')
 	const [filterDate, setFilterDate] = useState('all')
 	const [sortBy, setSortBy] = useState('newest')
 
@@ -64,7 +59,6 @@ export default function Dashboard({ user }: DashboardProps) {
 	useEffect(() => {
 		if (typeof window !== 'undefined') {
 			const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' || 'dark'
-			setTheme(savedTheme)
 			if (savedTheme === 'dark') {
 				document.documentElement.classList.add('dark')
 			} else {
@@ -97,17 +91,6 @@ export default function Dashboard({ user }: DashboardProps) {
 		}
 		return () => document.removeEventListener('mousedown', handleClickOutside)
 	}, [isNotificationsOpen])
-
-	const toggleTheme = () => {
-		const nextTheme = theme === 'dark' ? 'light' : 'dark'
-		setTheme(nextTheme)
-		localStorage.setItem('theme', nextTheme)
-		if (nextTheme === 'dark') {
-			document.documentElement.classList.add('dark')
-		} else {
-			document.documentElement.classList.remove('dark')
-		}
-	}
 
 	// Removed infinite scroll listener in favor of Load More buttons
 
@@ -142,10 +125,7 @@ export default function Dashboard({ user }: DashboardProps) {
 		}
 	}
 
-	const handleSignOut = async () => {
-		await supabase.auth.signOut()
-		router.push('/login')
-	}
+
 
 	const handleDeleteDocument = (id: string, e: React.MouseEvent) => {
 		e.stopPropagation()

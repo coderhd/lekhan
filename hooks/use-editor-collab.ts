@@ -83,7 +83,7 @@ export function useEditorCollab (
 			})
 
 			// 5. Track local changes (dirty flag)
-			doc.on('update', (update, origin) => {
+			doc.on('update', (_update, origin) => {
 				// If change was made by the local user, set dirty flag
 				if (origin !== wsProvider && origin !== indexeddbProvider) {
 					setIsDirty(true)

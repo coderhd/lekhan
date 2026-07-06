@@ -1,14 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+
 import Link from 'next/link'
 import Image from 'next/image'
 import { Mail, Lock, User } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 export default function SignupPage() {
-	const router = useRouter()
+
 	const [fullName, setFullName] = useState('')
 	const [email, setEmail] = useState('')
 	const [password, setPassword] = useState('')

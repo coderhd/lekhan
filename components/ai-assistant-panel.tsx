@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { Sparkles, Languages, Volume2, ArrowLeft, RefreshCw, Play, Pause } from 'lucide-react'
+
 import { toast } from 'sonner'
 import { CustomSelect } from './ui/custom-select'
 

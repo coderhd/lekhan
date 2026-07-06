@@ -1,19 +1,19 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import Image from 'next/image'
+
 import { DownloadCloud, Users, WifiOff, Lock } from 'lucide-react'
 import ThemeToggle from './theme-toggle'
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 
 export default function LandingPage() {
 	const router = useRouter()
-	const [theme, setTheme] = useState<'light' | 'dark'>('dark')
+
 
 	useEffect(() => {
 		if (typeof window !== 'undefined') {
 			const savedTheme = (localStorage.getItem('theme') as 'light' | 'dark') || 'dark'
-			setTheme(savedTheme)
+
 			if (savedTheme === 'dark') {
 				document.documentElement.classList.add('dark')
 			} else {
@@ -22,16 +22,7 @@ export default function LandingPage() {
 		}
 	}, [])
 
-	const toggleTheme = () => {
-		const nextTheme = theme === 'dark' ? 'light' : 'dark'
-		setTheme(nextTheme)
-		localStorage.setItem('theme', nextTheme)
-		if (nextTheme === 'dark') {
-			document.documentElement.classList.add('dark')
-		} else {
-			document.documentElement.classList.remove('dark')
-		}
-	}
+
 
 	return (
 		<div className="bg-background text-on-surface selection:bg-primary-container/30 min-h-screen relative overflow-hidden transition-colors duration-300">

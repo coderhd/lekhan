@@ -1,7 +1,7 @@
 'use client'
 
-import { BubbleMenu, Editor } from '@tiptap/react'
-import { Sparkles, Languages, Volume2, Type, Bold, Italic, Underline } from 'lucide-react'
+import { BubbleMenu } from '@tiptap/react'
+import { Languages, Volume2, Bold, Italic, Underline } from 'lucide-react'
 import { toast } from 'sonner'
 import { useState } from 'react'
 

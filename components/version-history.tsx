@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { DocumentVersion } from '@/types'
 import { fetchVersions } from '@/services/db'
-import { History, Save, ArrowLeft, RefreshCw } from 'lucide-react'
+
 import GlobalLoader from '@/components/global-loader'
 
 interface VersionHistoryProps {

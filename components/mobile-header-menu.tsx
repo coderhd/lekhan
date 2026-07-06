@@ -34,8 +34,7 @@ export default function MobileHeaderMenu({
 	setIsHistoryOpen,
 	isAIPanelOpen,
 	setIsAIPanelOpen,
-	theme,
-	toggleTheme,
+
 	activeUsers,
 	isConnected,
 	isSynced,

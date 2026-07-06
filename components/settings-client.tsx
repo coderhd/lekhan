@@ -4,12 +4,9 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { removeDocumentMember } from '@/services/db'
-import Link from 'next/link'
 import { toast } from 'sonner'
 import ThemeToggle from './theme-toggle'
 import ProfileMenu from './profile-menu'
-
-import { DocumentItem } from '@/types'
 
 export default function SettingsClient({ user, documents, setDocuments }: { 
 	user: { id: string; email: string; full_name?: string }, 
@@ -22,13 +19,13 @@ export default function SettingsClient({ user, documents, setDocuments }: {
 	const [passwordError, setPasswordError] = useState('')
 	const [passwordSuccess, setPasswordSuccess] = useState('')
 	const [loading, setLoading] = useState(false)
-	const [theme, setTheme] = useState<'light' | 'dark'>('dark')
+
 	const [currentPage, setCurrentPage] = useState(1)
 
 	useEffect(() => {
 		if (typeof window !== 'undefined') {
 			const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' || 'dark'
-			setTheme(savedTheme)
+
 			if (savedTheme === 'dark') {
 				document.documentElement.classList.add('dark')
 			} else {
@@ -37,16 +34,7 @@ export default function SettingsClient({ user, documents, setDocuments }: {
 		}
 	}, [])
 
-	const toggleTheme = () => {
-		const nextTheme = theme === 'dark' ? 'light' : 'dark'
-		setTheme(nextTheme)
-		localStorage.setItem('theme', nextTheme)
-		if (nextTheme === 'dark') {
-			document.documentElement.classList.add('dark')
-		} else {
-			document.documentElement.classList.remove('dark')
-		}
-	}
+
 
 	const handleChangePassword = async (e: React.FormEvent) => {
 		e.preventDefault()
@@ -103,8 +91,8 @@ export default function SettingsClient({ user, documents, setDocuments }: {
 	return (
 		<div className="h-screen bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container flex flex-col font-body-md overflow-hidden">
 			{/* Redesigned Top Header */}
-			<header className="flex-none w-full z-50 bg-surface/5 backdrop-blur-md border-b border-black/10 dark:border-white/10 flex flex-col justify-center h-16">
-				<div className="px-6 md:px-10 flex justify-between items-center">
+			<header className="flex-none w-full z-50 bg-surface/5 backdrop-blur-md border-b border-black/10 dark:border-white/10 flex flex-col items-center justify-center h-16">
+				<div className="w-full px-6 md:px-10 flex justify-between items-center max-w-[1400px]">
 					<div className="flex items-center gap-3">
 						<div className="flex items-center group cursor-pointer" onClick={() => router.push('/')}>
 							<img alt="Lekhan Logo" className="h-6 w-6 md:h-7 md:w-7 object-contain cursor-pointer hover:scale-110 premium-transition" src="/logo.png" />
@@ -120,9 +108,9 @@ export default function SettingsClient({ user, documents, setDocuments }: {
 				</div>
 			</header>
 
-			<main className="flex-1 overflow-hidden flex justify-center">
-				<div className="w-full max-w-6xl h-full flex flex-col lg:flex-row">
-					<div className="flex-1 lg:w-2/3 h-full overflow-y-auto hide-scrollbar p-4 md:p-8 lg:pr-8">
+			<main className="flex-1 overflow-hidden flex justify-center px-6 md:px-10">
+				<div className="w-full max-w-[1400px] h-full flex flex-col lg:flex-row">
+					<div className="flex-1 lg:w-2/3 h-full overflow-y-auto hide-scrollbar py-8 lg:pr-8">
 						<div className="space-y-8 pb-16">
 							{/* Profile Section */}
 							<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">

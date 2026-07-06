@@ -1,6 +1,6 @@
 'use client'
 
-import { Cloud, CloudOff, CloudLightning } from 'lucide-react'
+import { Cloud, CloudOff } from 'lucide-react'
 
 interface SyncIndicatorProps {
 	isConnected: boolean

@@ -3,7 +3,7 @@
 import { use, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { fetchDocumentDetails, fetchMemberRole } from '@/services/db'
+import { fetchDocumentDetails } from '@/services/db'
 import GlobalLoader from '@/components/global-loader'
 import EditorWorkspace from '@/components/editor-workspace'
 import { toast } from 'sonner'
@@ -55,7 +55,7 @@ export default function DocumentPage ({
 							router.push('/login')
 							return
 						}
-					} catch (e) {
+					} catch {
 						router.push('/login')
 						return
 					}
@@ -65,7 +65,7 @@ export default function DocumentPage ({
 				const doc = await fetchDocumentDetails(params.id)
 				setDocumentTitle(doc.title)
 			} catch (err: unknown) {
-				const message = err instanceof Error ? err.message : String(err)
+
 				console.error('Error loading document page:', err)
 				toast.error('Document not found or access denied')
 				router.push('/')

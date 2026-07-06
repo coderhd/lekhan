@@ -16,13 +16,7 @@ import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
-import {
-	Bold, Italic, Code, Heading1, Heading2, List, ListOrdered,
-	EyeOff, Sparkles,
-	AlignLeft, AlignCenter, AlignRight, AlignJustify,
-	Underline as UnderlineIcon, Highlighter, CheckSquare,
-	Link as LinkIcon
-} from 'lucide-react'
+import { EyeOff } from 'lucide-react'
 import { useEditorCollab } from '@/hooks/use-editor-collab'
 import SyncIndicator from './sync-indicator'
 import { InlineEdit } from './inline-edit'
@@ -39,9 +33,8 @@ import GlobalLoader from './global-loader'
 import { CustomSelect } from './ui/custom-select'
 import { PromptDialog } from './ui/prompt-dialog'
 import * as Y from 'yjs'
-import { CollabUser } from '@/types'
 import { fetchDocumentDetails, fetchMemberRole, updateDocumentTitle } from '@/services/db'
-import { supabase } from '@/lib/supabase'
+
 
 interface EditorWorkspaceProps {
 	documentId: string
@@ -155,10 +148,6 @@ export default function EditorWorkspace({
 		}
 	}
 
-	const handleSignOut = async () => {
-		await supabase.auth.signOut()
-		router.push('/login')
-	}
 
 	useEffect(() => {
 		const checkRole = async () => {
@@ -272,7 +261,6 @@ export default function EditorWorkspace({
 		return <GlobalLoader text="Loading workspace..." />
 	}
 
-	const initials = getInitials(currentUser?.full_name || currentUser?.email || 'Anonymous')
 
 	return (
 		<div className="bg-background text-on-background font-body-md selection:bg-primary-container selection:text-on-primary-container h-screen overflow-hidden flex flex-col">
