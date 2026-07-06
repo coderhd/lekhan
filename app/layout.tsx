@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 		siteName: 'Lekhan',
 		images: [
 			{
-				url: '/landing-light.png',
+				url: '/logo.png',
 				width: 1200,
 				height: 630,
 			},
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
 		card: 'summary_large_image',
 		title: 'Lekhan - Collaborative Local-First Editor',
 		description: 'A premium collaborative document editor featuring offline sync and AI capabilities',
-		images: ['/landing-light.png'],
+		images: ['/logo.png'],
 	},
 	icons: {
 		icon: '/logo.png',

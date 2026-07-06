@@ -38,6 +38,7 @@ import { ColorHighlightPopover } from './color-highlight-popover'
 import { ImageUploadButton } from './image-upload-button'
 import GlobalLoader from './global-loader'
 import { CustomSelect } from './ui/custom-select'
+import { PromptDialog } from './ui/prompt-dialog'
 import * as Y from 'yjs'
 import { CollabUser } from '@/types'
 import { fetchDocumentDetails, fetchMemberRole, updateDocumentTitle } from '@/services/db'
@@ -130,6 +131,7 @@ export default function EditorWorkspace({
 	const [previewVersionName, setPreviewVersionName] = useState<string | null>(null)
 	const [isViewer, setIsViewer] = useState<boolean | null>(null)
 	const [theme, setTheme] = useState<'light' | 'dark'>('dark')
+	const [isLinkPromptOpen, setIsLinkPromptOpen] = useState(false)
 
 	useEffect(() => {
 		if (typeof window !== 'undefined') {
@@ -442,14 +444,7 @@ export default function EditorWorkspace({
 					</div>
 					<div className="flex shrink-0 items-center gap-xs px-md h-6 border-r border-black/10 dark:border-white/10">
 						<button
-							onClick={() => {
-								const url = window.prompt('URL')
-								if (url) {
-									editor?.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
-								} else if (url === '') {
-									editor?.chain().focus().unsetLink().run()
-								}
-							}}
+							onClick={() => setIsLinkPromptOpen(true)}
 							className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('link') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}
 							title="Link"
 						>
@@ -533,6 +528,22 @@ export default function EditorWorkspace({
 				documentId={documentId}
 				documentTitle={title}
 				userId={currentUser.id}
+			/>
+
+			<PromptDialog
+				open={isLinkPromptOpen}
+				onOpenChange={setIsLinkPromptOpen}
+				title="Add Link"
+				description="Enter the URL you want to link to. Leave empty to remove the link."
+				placeholder="https://example.com"
+				onSubmit={(url) => {
+					if (url) {
+						editor?.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+					} else {
+						editor?.chain().focus().unsetLink().run()
+					}
+				}}
+				defaultValue={editor?.getAttributes('link').href || ''}
 			/>
 		</div>
 	)

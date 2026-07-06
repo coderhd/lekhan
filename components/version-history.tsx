@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { DocumentVersion } from '@/types'
 import { fetchVersions } from '@/services/db'
 import { History, Save, ArrowLeft, RefreshCw } from 'lucide-react'
+import GlobalLoader from '@/components/global-loader'
 
 interface VersionHistoryProps {
 	isOpen: boolean
@@ -225,9 +226,8 @@ export default function VersionHistory({
 			{/* Timeline list */}
 			<div className='flex-1 overflow-y-auto space-y-4 pr-1.5 no-scrollbar'>
 				{loading ? (
-					<div className='text-center text-xs text-on-surface-variant/70 py-4 flex items-center justify-center gap-2'>
-						<span className="animate-spin h-3.5 w-3.5 border-2 border-primary-container border-t-transparent rounded-full" />
-						<span>Loading...</span>
+					<div className="py-8">
+						<GlobalLoader fullScreen={false} size="sm" />
 					</div>
 				) : versions.length === 0 ? (
 					<div className="flex flex-col items-center justify-center pt-24 pb-10 text-center opacity-0 animate-fade-in-up stagger-2">

@@ -348,6 +348,11 @@ body {
 	background: hsl(var(--surface-container-high));
 }
 
+/* Fix highlight text color in dark mode to be readable against light backgrounds */
+.dark .ProseMirror mark {
+	color: #1a1a1a;
+}
+
 .ProseMirror hr {
 	border: none;
 	border-top: 1px solid hsl(var(--border));

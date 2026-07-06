@@ -23,6 +23,7 @@ export default function SettingsClient({ user, documents, setDocuments }: {
 	const [passwordSuccess, setPasswordSuccess] = useState('')
 	const [loading, setLoading] = useState(false)
 	const [theme, setTheme] = useState<'light' | 'dark'>('dark')
+	const [currentPage, setCurrentPage] = useState(1)
 
 	useEffect(() => {
 		if (typeof window !== 'undefined') {
@@ -200,7 +201,7 @@ export default function SettingsClient({ user, documents, setDocuments }: {
 									</div>
 								) : (
 									<div className="space-y-6">
-										{documents.map((doc) => {
+										{documents.slice((currentPage - 1) * 5, currentPage * 5).map((doc) => {
 											const members = doc.document_members || []
 											
 											return (
@@ -244,6 +245,28 @@ export default function SettingsClient({ user, documents, setDocuments }: {
 												</div>
 											)
 										})}
+										
+										{documents.length > 5 && (
+											<div className="flex items-center justify-between pt-4 border-t border-black/10 dark:border-white/10">
+												<button 
+													onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+													disabled={currentPage === 1}
+													className="px-4 py-2 text-sm font-semibold rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 disabled:pointer-events-none transition-colors"
+												>
+													Previous
+												</button>
+												<span className="text-sm text-on-surface-variant">
+													Page {currentPage} of {Math.ceil(documents.length / 5)}
+												</span>
+												<button 
+													onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(documents.length / 5)))}
+													disabled={currentPage === Math.ceil(documents.length / 5)}
+													className="px-4 py-2 text-sm font-semibold rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 disabled:pointer-events-none transition-colors"
+												>
+													Next
+												</button>
+											</div>
+										)}
 									</div>
 								)}
 							</section>
