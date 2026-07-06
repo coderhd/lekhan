@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { readJsonWithLimit, PayloadTooLargeError } from '@/lib/request-limits'
 
 const SARVAM_API_KEY = process.env.SARVAM_API_KEY || ''
 const SARVAM_API_URL = 'https://api.sarvam.ai'
+
+// This endpoint only ever needs to carry writing-assistant-sized text, never
+// arbitrary payloads — caps are deliberately tight, both to bound memory and
+// to bound what gets forwarded (and billed) to Sarvam.
+const MAX_BODY_BYTES = 200 * 1024 // 200KB
+const MAX_TEXT_LENGTH = 10_000 // translate / tts input
+const MAX_PROMPT_LENGTH = 6_000 // chat prompt
+const MAX_SHORT_FIELD_LENGTH = 50 // targetLanguage / speaker codes
 
 export async function POST(request: NextRequest) {
 	const authHeader = request.headers.get('Authorization')
@@ -35,10 +44,43 @@ export async function POST(request: NextRequest) {
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 		}
 
-		const { action, text, targetLanguage, speaker, prompt } = await request.json()
+		let action: string, text: string | undefined, targetLanguage: string | undefined,
+			speaker: string | undefined, prompt: string | undefined
+		try {
+			const body = await readJsonWithLimit<{
+				action?: string
+				text?: string
+				targetLanguage?: string
+				speaker?: string
+				prompt?: string
+			}>(request, MAX_BODY_BYTES)
+			action = body.action ?? ''
+			text = body.text
+			targetLanguage = body.targetLanguage
+			speaker = body.speaker
+			prompt = body.prompt
+		} catch (err) {
+			if (err instanceof PayloadTooLargeError) {
+				return NextResponse.json({ error: 'Request payload too large' }, { status: 413 })
+			}
+			return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+		}
 
 		if (!action) {
 			return NextResponse.json({ error: 'Missing action parameter' }, { status: 400 })
+		}
+
+		if (typeof text === 'string' && text.length > MAX_TEXT_LENGTH) {
+			return NextResponse.json({ error: `text exceeds maximum length of ${MAX_TEXT_LENGTH} characters` }, { status: 400 })
+		}
+		if (typeof prompt === 'string' && prompt.length > MAX_PROMPT_LENGTH) {
+			return NextResponse.json({ error: `prompt exceeds maximum length of ${MAX_PROMPT_LENGTH} characters` }, { status: 400 })
+		}
+		if (typeof targetLanguage === 'string' && targetLanguage.length > MAX_SHORT_FIELD_LENGTH) {
+			return NextResponse.json({ error: 'Invalid targetLanguage' }, { status: 400 })
+		}
+		if (typeof speaker === 'string' && speaker.length > MAX_SHORT_FIELD_LENGTH) {
+			return NextResponse.json({ error: 'Invalid speaker' }, { status: 400 })
 		}
 
 		if (!SARVAM_API_KEY) {
