@@ -104,7 +104,7 @@ export default function SettingsClient({ user, documents, setDocuments }: {
 		<div className="h-screen bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container flex flex-col font-body-md overflow-hidden">
 			{/* Redesigned Top Header */}
 			<header className="flex-none w-full z-50 bg-surface/5 backdrop-blur-md border-b border-black/10 dark:border-white/10 flex flex-col justify-center h-16">
-				<div className="px-margin flex justify-between items-center">
+				<div className="px-6 md:px-10 flex justify-between items-center">
 					<div className="flex items-center gap-md">
 						<img alt="Lekhan Logo" className="h-6 w-6 object-contain cursor-pointer hover:scale-110 premium-transition" src="/logo.png" onClick={() => router.push('/')} />
 						<div className="flex items-center gap-sm group">

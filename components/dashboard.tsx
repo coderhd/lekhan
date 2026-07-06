@@ -237,7 +237,7 @@ export default function Dashboard({ user }: DashboardProps) {
 		<div className="min-h-screen bg-background text-on-surface">
 			{/* Header */}
 			<header className="fixed top-0 w-full z-50 bg-surface/5 backdrop-blur-md border-b border-black/10 dark:border-white/10 flex justify-center h-16">
-				<div className="w-full flex justify-between items-center px-margin">
+				<div className="w-full flex justify-between items-center px-6 md:px-10 max-w-[1400px]">
 					<div className="flex items-center group cursor-pointer" onClick={() => router.push('/')}>
 						<img alt="Lekhan Logo" className="h-6 w-6 md:h-7 md:w-7 object-contain cursor-pointer hover:scale-110 premium-transition" src="./logo.png" />
 						<span className="font-display-lg text-xl md:text-2xl font-bold text-primary-container premium-transition group-hover:text-primary leading-none translate-y-[1px]">ekhan</span>
@@ -288,7 +288,7 @@ export default function Dashboard({ user }: DashboardProps) {
 			</header>
 
 			{/* Main Content */}
-			<main className="pt-24 pb-xl px-margin flex justify-center">
+			<main className="pt-24 pb-xl px-6 md:px-10 flex justify-center">
 				<div className="max-w-7xl w-full flex flex-col gap-xl">
 
 					{loading ? (

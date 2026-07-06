@@ -29,7 +29,6 @@ import { InlineEdit } from './inline-edit'
 import ShareModal from './share-modal'
 import VersionHistory from './version-history'
 import MobileHeaderMenu from './mobile-header-menu'
-import MobileInfoPanel from './mobile-info-panel'
 import AIAssistantPanel from './ai-assistant-panel'
 import AIBubbleMenu from './ai-bubble-menu'
 import ProfileMenu from './profile-menu'
@@ -280,7 +279,7 @@ export default function EditorWorkspace({
 			{/* Redesigned Top Header and Integrated Toolbar */}
 			<header className="flex-none w-full z-50 bg-surface-container/80 backdrop-blur-xl border-b border-black/10 dark:border-white/10 flex flex-col">
 				{/* Row 1: App Controls & Document Title */}
-				<div className="h-14 px-margin flex justify-between items-center border-b border-white/5">
+				<div className="h-14 px-6 md:px-10 flex justify-between items-center border-b border-white/5">
 					<div className="flex items-center gap-md">
 						<img alt="Lekhan Logo" className="h-6 w-6 object-contain cursor-pointer hover:scale-110 premium-transition" src="/logo.png" onClick={() => router.push('/')} />
 						<div className="flex items-center gap-sm group">
@@ -295,23 +294,46 @@ export default function EditorWorkspace({
 								</div>
 							)}
 						</div>
-						<div className="hidden lg:flex items-center gap-xs ml-2 text-on-surface-variant/60 font-label-sm text-label-sm">
+						<div className="hidden md:flex items-center gap-xs ml-2 text-on-surface-variant/60 font-label-sm text-label-sm">
 							<SyncIndicator isConnected={isConnected} isSynced={isSynced} />
 						</div>
 					</div>
 
-					<div className="flex items-center gap-md">
-						<div className="hidden sm:flex -space-x-2 items-center mr-4">
-							{activeUsers.map((activeUser, idx) => (
+					<div className="flex items-center gap-sm md:gap-md">
+						<div className="hidden sm:flex -space-x-2 items-center mr-2 md:mr-4">
+							{activeUsers.slice(0, 3).map((activeUser, idx) => (
 								<div
 									key={idx}
 									style={{ backgroundColor: activeUser.color, color: '#ffffff' }}
-									className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-surface-container-low shadow-sm text-[10px] font-bold select-none"
+									className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-surface-container-low shadow-sm text-[10px] font-bold select-none relative z-10 hover:z-20 hover:scale-110 transition-transform"
 									title={activeUser.name}
 								>
 									{getInitials(activeUser.name)}
 								</div>
 							))}
+							{activeUsers.length > 3 && (
+								<div className="relative group z-0">
+									<div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-surface-container-low bg-surface-container-high text-on-surface shadow-sm text-[10px] font-bold select-none cursor-pointer hover:z-20 hover:scale-110 transition-transform">
+										+{activeUsers.length - 3}
+									</div>
+									<div className="absolute top-full right-0 pt-2 w-max min-w-[160px] hidden group-hover:flex flex-col z-50 animate-in fade-in zoom-in-95">
+										<div className="bg-surface-container-high border border-black/10 dark:border-white/10 rounded-xl shadow-xl p-3 gap-2 flex flex-col">
+											<div className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">More Collaborators</div>
+											{activeUsers.slice(3).map((activeUser, idx) => (
+												<div key={idx} className="flex items-center gap-2">
+													<div
+														style={{ backgroundColor: activeUser.color, color: '#ffffff' }}
+														className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold select-none shadow-sm"
+													>
+														{getInitials(activeUser.name)}
+													</div>
+													<span className="text-sm font-medium text-on-surface truncate">{activeUser.name}</span>
+												</div>
+											))}
+										</div>
+									</div>
+								</div>
+							)}
 						</div>
 
 						<button
@@ -332,18 +354,6 @@ export default function EditorWorkspace({
 							<span className="hidden lg:inline">AI Companion</span>
 						</button>
 
-						{!isViewer && (
-							<button
-								onClick={() => setIsShareOpen(true)}
-								className="bg-primary-container text-on-primary-container px-2 md:px-4 h-8 rounded-lg font-bold text-sm hover:brightness-110 active:scale-95 transition-all shadow-sm ml-2 flex items-center justify-center gap-xs"
-							>
-								<span className="material-symbols-outlined text-lg">share</span>
-								<span className="hidden md:inline">Share</span>
-							</button>
-						)}
-
-						<MobileInfoPanel activeUsers={activeUsers} isConnected={isConnected} isSynced={isSynced} />
-
 						<MobileHeaderMenu
 							isHistoryOpen={isHistoryOpen}
 							setIsHistoryOpen={setIsHistoryOpen}
@@ -351,13 +361,26 @@ export default function EditorWorkspace({
 							setIsAIPanelOpen={setIsAIPanelOpen}
 							theme={theme}
 							toggleTheme={toggleTheme}
+							activeUsers={activeUsers}
+							isConnected={isConnected}
+							isSynced={isSynced}
 						/>
 
-						<div className="hidden md:block ml-2">
+						{!isViewer && (
+							<button
+								onClick={() => setIsShareOpen(true)}
+								className="bg-primary-container text-on-primary-container px-2 lg:px-4 h-8 rounded-lg font-bold text-sm hover:brightness-110 active:scale-95 transition-all shadow-sm flex items-center justify-center gap-xs"
+							>
+								<span className="material-symbols-outlined text-lg">share</span>
+								<span className="hidden lg:inline">Share</span>
+							</button>
+						)}
+
+						<div className="hidden md:block">
 							<ThemeToggle />
 						</div>
 
-						<div className="ml-2">
+						<div>
 							<ProfileMenu user={currentUser} size="sm" />
 						</div>
 					</div>
@@ -365,7 +388,7 @@ export default function EditorWorkspace({
 
 				{/* Row 2: Formatting Toolbar or Read Only Banner */}
 				{!isViewer ? (
-					<div className={`min-h-[40px] py-2 px-margin flex flex-nowrap overflow-x-auto hide-scrollbar justify-start xl:justify-center items-center bg-surface-container-low border-y border-black/10 dark:border-white/10 ${previewDoc ? 'opacity-40 pointer-events-none' : ''}`}>
+					<div className={`min-h-[40px] py-2 px-6 md:px-10 flex flex-nowrap overflow-x-auto hide-scrollbar justify-start xl:justify-center items-center bg-surface-container-low border-y border-black/10 dark:border-white/10 ${previewDoc ? 'opacity-40 pointer-events-none' : ''}`}>
 
 					{/* Font Family Selection */}
 					<div className="flex shrink-0 items-center border-r border-black/10 dark:border-white/10 h-6 px-1">
@@ -457,7 +480,7 @@ export default function EditorWorkspace({
 					</div>
 					</div>
 				) : (
-					<div className="min-h-[40px] py-2 px-margin flex justify-center items-center bg-blue-500/10 border-y border-blue-500/20 text-blue-600 dark:text-blue-400 text-sm font-semibold">
+					<div className="min-h-[40px] py-2 px-6 md:px-10 flex justify-center items-center bg-blue-500/10 border-y border-blue-500/20 text-blue-600 dark:text-blue-400 text-sm font-semibold">
 						<span className="material-symbols-outlined mr-2 text-base">visibility</span>
 						You only have viewing access to this document.
 					</div>
