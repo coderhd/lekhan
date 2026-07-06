@@ -43,7 +43,7 @@ export default function LoginPage() {
 			<div className="hero-glow bottom-0 right-0" style={{ transform: 'translate(10%, 10%)' }}></div>
 
 			{/* Top Navigation Bar */}
-			<header className="w-full fixed top-0 bg-surface/5 backdrop-blur-xl border-b border-on-surface/10 z-50 flex justify-between items-center px-4 md:px-8 h-16">
+			<header className="w-full fixed top-0 bg-surface/5 backdrop-blur-xl border-b border-on-surface/10 z-50 flex justify-center items-center px-6 md:px-10 h-16">
 				<Link href="/" className="flex items-center group cursor-pointer">
 					<img alt="Lekhan Logo" className="h-6 w-6 md:h-7 md:w-7 object-contain cursor-pointer hover:scale-110 transition-transform" src="/logo.png" />
 					<span className="font-display-lg text-xl md:text-2xl font-bold text-primary-container transition-colors group-hover:text-primary leading-none translate-y-[1px]">ekhan</span>

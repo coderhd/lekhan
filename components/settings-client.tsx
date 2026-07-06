@@ -105,13 +105,13 @@ export default function SettingsClient({ user, documents, setDocuments }: {
 			{/* Redesigned Top Header */}
 			<header className="flex-none w-full z-50 bg-surface/5 backdrop-blur-md border-b border-black/10 dark:border-white/10 flex flex-col justify-center h-16">
 				<div className="px-6 md:px-10 flex justify-between items-center">
-					<div className="flex items-center gap-md">
-						<img alt="Lekhan Logo" className="h-6 w-6 object-contain cursor-pointer hover:scale-110 premium-transition" src="/logo.png" onClick={() => router.push('/')} />
-						<div className="flex items-center gap-sm group">
-							<div className="px-2 py-1 text-sm font-bold text-on-surface truncate">
-								Settings
-							</div>
+					<div className="flex items-center gap-3">
+						<div className="flex items-center group cursor-pointer" onClick={() => router.push('/')}>
+							<img alt="Lekhan Logo" className="h-6 w-6 md:h-7 md:w-7 object-contain cursor-pointer hover:scale-110 premium-transition" src="/logo.png" />
+							<span className="font-display-lg text-xl md:text-2xl font-bold text-primary-container premium-transition group-hover:text-primary leading-none translate-y-[1px]">ekhan</span>
 						</div>
+						<span className="text-on-surface-variant/30 text-2xl font-light leading-none -translate-y-[1px]">/</span>
+						<span className="font-label-sm text-sm font-bold text-on-surface-variant uppercase tracking-widest translate-y-[1px]">Settings</span>
 					</div>
 					<div className="flex items-center gap-md">
 						<ThemeToggle />

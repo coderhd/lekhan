@@ -405,7 +405,7 @@ export default function Dashboard({ user }: DashboardProps) {
 										<h3 className="text-lg font-bold text-on-surface mb-2">No owned documents yet</h3>
 										<p className="text-sm text-on-surface-variant max-w-md">
 											{myDocs.length === 0
-												? "You haven't created any documents. Use the New button above to start collaborating!"
+												? "You haven't created any documents. Use the New button to start collaborating!"
 												: "No documents match your search query."}
 										</p>
 									</div>

@@ -25,7 +25,16 @@ export default function DocumentPage ({
 			try {
 				// 1. Get current session and token
 				const { data: { session } } = await supabase.auth.getSession()
+				const { error: userError } = await supabase.auth.getUser()
 				
+				// If there is an auth error that is NOT just a missing session, it means the token expired or is invalid
+				if (userError && userError.name !== 'AuthSessionMissingError') {
+					console.error('Session error (token expired):', userError)
+					toast.error('Session expired. Please log in again.')
+					router.push('/login')
+					return
+				}
+
 				if (session) {
 					setUser(session.user)
 					setToken(session.access_token)
