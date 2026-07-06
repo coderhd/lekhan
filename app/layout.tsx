@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/components/theme-provider'
-import Footer from '@/components/footer'
+import { GlobalFooter } from '@/components/layout/global-footer'
 
 export const metadata: Metadata = {
 	title: 'Lekhan - Collaborative Local-First Editor',
@@ -56,7 +56,7 @@ export default function RootLayout ({
 				>
 					<div className="flex flex-col min-h-screen">
 						<main className="flex-1 flex flex-col">{children}</main>
-						<Footer />
+						<GlobalFooter />
 					</div>
 					<Toaster />
 				</ThemeProvider>

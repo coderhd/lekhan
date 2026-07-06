@@ -29,8 +29,8 @@ The application utilizes a modern, edge-ready architecture to deliver low-latenc
 │   └── globals.css       # Global styles (Tailwind directives)
 ├── components/           # Reusable UI components
 │   ├── ui/               # Base Shadcn UI components
+│   ├── layout/           # Global layout components like global-footer.tsx
 │   ├── editor-workspace.tsx # Core collaborative editor component
-│   ├── footer.tsx        # Global footer containing submission details
 │   └── ai-assistant-panel.tsx # AI integration interface
 ├── lib/                  # Utilities and generic helpers (e.g., Supabase client setup)
 ├── services/             # Abstraction layer for database and external APIs
@@ -43,7 +43,7 @@ The application utilizes a modern, edge-ready architecture to deliver low-latenc
 
 ## 🔑 Important Files
 
-- `app/layout.tsx`: The root layout of the application. It handles global fonts (via `<head> <link>` tags to bypass Turbopack `@import` limitations), the theme provider, global state, and the global `Footer`.
+- `app/layout.tsx`: The root layout of the application. It handles global fonts (via `<head> <link>` tags to bypass Turbopack `@import` limitations), the theme provider, global state, and the `GlobalFooter`.
 - `app/doc/[id]/page.tsx`: The primary workspace entry point. In Next.js 16, dynamic params (`params.id`) are asynchronous and must be unwrapped using `React.use()`.
 - `services/db.ts`: Handles all interaction with the Supabase database. Includes functions like `fetchDocumentDetails`, which fetches authorization roles to lock down the UI for Viewers.
 - `package.json`: Contains project dependencies, updated to Next.js v16 and React v19.
@@ -85,4 +85,4 @@ The repository contains a robust testing suite fulfilling QA requirements:
 
 - **Harsh Dave**
 - [GitHub Profile](https://github.com/coderhd)
-- [LinkedIn Profile](https://www.linkedin.com/in/harsh-dave-1095/)
+- [LinkedIn Profile](https://www.linkedin.com/in/harshdave95/)
