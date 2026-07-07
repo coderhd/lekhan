@@ -19,6 +19,7 @@ import Link from '@tiptap/extension-link'
 import { EyeOff } from 'lucide-react'
 import { useEditorCollab } from '@/hooks/use-editor-collab'
 import SyncIndicator from './sync-indicator'
+import OfflineBanner from './offline-banner'
 import { InlineEdit } from './inline-edit'
 import ShareModal from './share-modal'
 import VersionHistory from './version-history'
@@ -198,8 +199,9 @@ export default function EditorWorkspace({
 
 	const {
 		ydoc,
-		isConnected,
 		isSynced,
+		connectionState,
+		isOffline,
 		activeUsers,
 		hasUnsyncedChanges,
 		provider,
@@ -283,7 +285,7 @@ export default function EditorWorkspace({
 							)}
 						</div>
 						<div className="hidden md:flex items-center gap-xs ml-2 text-on-surface-variant/60 font-label-sm text-label-sm">
-							<SyncIndicator isConnected={isConnected} isSynced={isSynced} />
+							<SyncIndicator connectionState={connectionState} isSynced={isSynced} />
 						</div>
 					</div>
 
@@ -350,7 +352,7 @@ export default function EditorWorkspace({
 							theme={theme}
 							toggleTheme={toggleTheme}
 							activeUsers={activeUsers}
-							isConnected={isConnected}
+							connectionState={connectionState}
 							isSynced={isSynced}
 						/>
 
@@ -432,24 +434,24 @@ export default function EditorWorkspace({
 					</div>
 
 					<div className="flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6">
-						<button onClick={() => editor?.chain().focus().undo().run()} className="p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded transition-colors text-on-surface-variant hover:text-on-surface flex items-center justify-center"><span className="material-symbols-outlined text-[18px]">undo</span></button>
-						<button onClick={() => editor?.chain().focus().redo().run()} className="p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded transition-colors text-on-surface-variant hover:text-on-surface flex items-center justify-center"><span className="material-symbols-outlined text-[18px]">redo</span></button>
+						<button onClick={() => editor?.chain().focus().undo().run()} className="p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded transition-colors text-on-surface-variant hover:text-on-surface flex items-center justify-center" title="Undo"><span className="material-symbols-outlined text-[18px]">undo</span></button>
+						<button onClick={() => editor?.chain().focus().redo().run()} className="p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded transition-colors text-on-surface-variant hover:text-on-surface flex items-center justify-center" title="Redo"><span className="material-symbols-outlined text-[18px]">redo</span></button>
 					</div>
 					<div className="flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6">
-						<button onClick={() => editor?.chain().focus().toggleBold().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('bold') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_bold</span></button>
-						<button onClick={() => editor?.chain().focus().toggleItalic().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('italic') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_italic</span></button>
-						<button onClick={() => editor?.chain().focus().toggleUnderline().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('underline') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_underlined</span></button>
-						<button onClick={() => editor?.chain().focus().toggleStrike().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('strike') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_strikethrough</span></button>
+						<button onClick={() => editor?.chain().focus().toggleBold().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('bold') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Bold"><span className="material-symbols-outlined text-[18px]">format_bold</span></button>
+						<button onClick={() => editor?.chain().focus().toggleItalic().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('italic') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Italic"><span className="material-symbols-outlined text-[18px]">format_italic</span></button>
+						<button onClick={() => editor?.chain().focus().toggleUnderline().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('underline') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Underline"><span className="material-symbols-outlined text-[18px]">format_underlined</span></button>
+						<button onClick={() => editor?.chain().focus().toggleStrike().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('strike') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Strike"><span className="material-symbols-outlined text-[18px]">format_strikethrough</span></button>
 					</div>
 					<div className="flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6">
-						<button onClick={() => editor?.chain().focus().setTextAlign('left').run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive({ textAlign: 'left' }) ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_align_left</span></button>
-						<button onClick={() => editor?.chain().focus().setTextAlign('center').run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive({ textAlign: 'center' }) ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_align_center</span></button>
-						<button onClick={() => editor?.chain().focus().setTextAlign('right').run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive({ textAlign: 'right' }) ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_align_right</span></button>
+						<button onClick={() => editor?.chain().focus().setTextAlign('left').run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive({ textAlign: 'left' }) ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Align Left"><span className="material-symbols-outlined text-[18px]">format_align_left</span></button>
+						<button onClick={() => editor?.chain().focus().setTextAlign('center').run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive({ textAlign: 'center' }) ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Align Center"><span className="material-symbols-outlined text-[18px]">format_align_center</span></button>
+						<button onClick={() => editor?.chain().focus().setTextAlign('right').run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive({ textAlign: 'right' }) ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Align Right"><span className="material-symbols-outlined text-[18px]">format_align_right</span></button>
 					</div>
 					<div className="flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6">
-						<button onClick={() => editor?.chain().focus().toggleBulletList().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('bulletList') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_list_bulleted</span></button>
-						<button onClick={() => editor?.chain().focus().toggleOrderedList().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('orderedList') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">format_list_numbered</span></button>
-						<button onClick={() => editor?.chain().focus().toggleTaskList().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('taskList') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}><span className="material-symbols-outlined text-[18px]">check_box</span></button>
+						<button onClick={() => editor?.chain().focus().toggleBulletList().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('bulletList') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Bullet List"><span className="material-symbols-outlined text-[18px]">format_list_bulleted</span></button>
+						<button onClick={() => editor?.chain().focus().toggleOrderedList().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('orderedList') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Ordered List"><span className="material-symbols-outlined text-[18px]">format_list_numbered</span></button>
+						<button onClick={() => editor?.chain().focus().toggleTaskList().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('taskList') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Task List"><span className="material-symbols-outlined text-[18px]">check_box</span></button>
 						<button onClick={() => editor?.chain().focus().toggleBlockquote().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('blockquote') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Blockquote"><span className="material-symbols-outlined text-[18px]">format_quote</span></button>
 						<button onClick={() => editor?.chain().focus().toggleCodeBlock().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('codeBlock') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Code Block"><span className="material-symbols-outlined text-[18px]">code_blocks</span></button>
 					</div>
@@ -473,6 +475,9 @@ export default function EditorWorkspace({
 						You only have viewing access to this document.
 					</div>
 				)}
+
+				{/* Row 3: Offline Warning — shown regardless of viewer/toolbar row above */}
+				{isOffline && <OfflineBanner />}
 			</header>
 
 			<div className="flex-1 flex overflow-hidden relative">

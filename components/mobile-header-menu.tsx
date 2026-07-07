@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import ThemeToggle from './theme-toggle'
 import { Users } from 'lucide-react'
 import SyncIndicator from './sync-indicator'
+import type { ConnectionState } from '@/hooks/use-editor-collab'
 
 interface MobileHeaderMenuProps {
 	isHistoryOpen: boolean
@@ -13,7 +14,7 @@ interface MobileHeaderMenuProps {
 	theme: 'light' | 'dark'
 	toggleTheme: () => void
 	activeUsers: { name: string; color: string; id: string }[]
-	isConnected: boolean
+	connectionState: ConnectionState
 	isSynced: boolean
 }
 
@@ -36,7 +37,7 @@ export default function MobileHeaderMenu({
 	setIsAIPanelOpen,
 
 	activeUsers,
-	isConnected,
+	connectionState,
 	isSynced,
 }: MobileHeaderMenuProps) {
 	const [isOpen, setIsOpen] = useState(false)
@@ -69,7 +70,7 @@ export default function MobileHeaderMenu({
 					<div className="px-4 py-3 flex flex-col gap-4 border-b border-black/5 dark:border-white/5">
 						<div>
 							<h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Status</h3>
-							<SyncIndicator isConnected={isConnected} isSynced={isSynced} />
+							<SyncIndicator connectionState={connectionState} isSynced={isSynced} />
 						</div>
 						
 						{activeUsers.length > 0 && (

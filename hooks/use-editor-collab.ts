@@ -5,6 +5,19 @@ import type { IndexeddbPersistence } from 'y-indexeddb'
 
 import { CollabUser } from '@/types'
 
+export type ConnectionState = 'connected' | 'connecting' | 'offline'
+
+type WsStatus = 'connecting' | 'connected' | 'disconnected'
+
+// The sync server runs on Render's free tier, which spins the process down
+// after inactivity and takes roughly 50s to cold-start back up (per
+// Render's own docs). During that window the browser has a perfectly good
+// internet connection — the collaboration *server* is just waking up.
+// Flashing a red "Offline" indicator for up to 50s on every session start
+// would be a false alarm, so the UI stays optimistic ("connecting") for a
+// grace period before it treats this as a genuine disconnect.
+const RECONNECT_GRACE_PERIOD_MS = 60_000
+
 export function useEditorCollab (
 	documentId: string,
 	token: string,
@@ -16,6 +29,7 @@ export function useEditorCollab (
 	const [activeUsers, setActiveUsers] = useState<CollabUser[]>([])
 	const [isDirty, setIsDirty] = useState(false)
 	const [provider, setProvider] = useState<WebsocketProvider | null>(null)
+	const [connectionState, setConnectionState] = useState<ConnectionState>('connecting')
 
 	useEffect(() => {
 		if (typeof window === 'undefined') {
@@ -26,6 +40,80 @@ export function useEditorCollab (
 		let doc: Y.Doc | null = null
 		let wsProvider: WebsocketProvider | null = null
 		let indexeddbProvider: IndexeddbPersistence | null = null
+		let graceTimer: ReturnType<typeof setTimeout> | null = null
+		let browserOnline = navigator.onLine
+		let lastWsStatus: WsStatus = 'connecting'
+		// True once the grace period has elapsed without a successful
+		// connection, for the *current* attempt. Reset whenever we get a
+		// fresh reason to be optimistic again (websocket connects, or the
+		// browser regains network after being offline) so a single sustained
+		// failure doesn't permanently block recovery, while still avoiding
+		// flicker back to "connecting" on every retry pulse while genuinely
+		// stuck offline.
+		let hasExceededGracePeriod = false
+
+		const clearGraceTimer = () => {
+			if (graceTimer) {
+				clearTimeout(graceTimer)
+				graceTimer = null
+			}
+		}
+
+		// The single source of truth for what the UI should show. Called
+		// whenever either the websocket status or the browser's own
+		// online/offline signal changes.
+		const evaluateConnectionState = () => {
+			if (!browserOnline) {
+				// No point being optimistic if the device itself has no
+				// network — this is unambiguous, so skip the grace period.
+				clearGraceTimer()
+				hasExceededGracePeriod = false
+				setConnectionState('offline')
+				return
+			}
+
+			if (lastWsStatus === 'connected') {
+				clearGraceTimer()
+				hasExceededGracePeriod = false
+				setConnectionState('connected')
+				return
+			}
+
+			if (hasExceededGracePeriod) {
+				// Already gave this attempt its full grace period; don't
+				// flicker back to "connecting" on every subsequent retry
+				// pulse while the server is still genuinely unreachable.
+				setConnectionState('offline')
+				return
+			}
+
+			// Browser is online but the websocket isn't connected yet — this
+			// is exactly the Render cold-start scenario (or a brief reconnect
+			// blip). Stay optimistic until the grace period elapses.
+			setConnectionState('connecting')
+			if (!graceTimer) {
+				graceTimer = setTimeout(() => {
+					graceTimer = null
+					hasExceededGracePeriod = true
+					setConnectionState('offline')
+				}, RECONNECT_GRACE_PERIOD_MS)
+			}
+		}
+
+		const handleBrowserOnline = () => {
+			browserOnline = true
+			// Network just came back — worth a fresh optimistic attempt
+			// rather than continuing to show "offline" from before.
+			hasExceededGracePeriod = false
+			evaluateConnectionState()
+		}
+		const handleBrowserOffline = () => {
+			browserOnline = false
+			evaluateConnectionState()
+		}
+
+		window.addEventListener('online', handleBrowserOnline)
+		window.addEventListener('offline', handleBrowserOffline)
 
 		Promise.all([
 			import('y-websocket'),
@@ -52,12 +140,14 @@ export function useEditorCollab (
 			setProvider(wsProvider)
 
 			// 3. Track connection status
-			wsProvider.on('status', ({ status }: { status: string }) => {
+			wsProvider.on('status', ({ status }: { status: WsStatus }) => {
+				lastWsStatus = status
 				const connected = status === 'connected'
 				setIsConnected(connected)
 				if (!connected) {
 					setIsSynced(false)
 				}
+				evaluateConnectionState()
 			})
 
 			wsProvider.on('sync', (isSyncedState: boolean) => {
@@ -93,15 +183,19 @@ export function useEditorCollab (
 
 		return () => {
 			isCancelled = true
+			clearGraceTimer()
+			window.removeEventListener('online', handleBrowserOnline)
+			window.removeEventListener('offline', handleBrowserOffline)
 			if (doc) doc.destroy()
 			if (wsProvider) wsProvider.destroy()
 			if (indexeddbProvider) indexeddbProvider.destroy()
-			
+
 			// Clear states to prevent stale instances during remount
 			setYdoc(null)
 			setProvider(null)
 			setIsConnected(false)
 			setIsSynced(false)
+			setConnectionState('connecting')
 		}
 	}, [documentId, token, user.name, user.color])
 
@@ -109,6 +203,8 @@ export function useEditorCollab (
 		ydoc,
 		isConnected,
 		isSynced,
+		connectionState,
+		isOffline: connectionState === 'offline',
 		activeUsers,
 		hasUnsyncedChanges: isDirty && (!isConnected || !isSynced),
 		provider,

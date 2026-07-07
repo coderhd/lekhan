@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import EditorWorkspace from '../components/editor-workspace'
+import EditorWorkspace from '../../components/editor-workspace'
 import * as Y from 'yjs'
 
 // Mock the hook to avoid actual websocket connections during test
@@ -11,6 +11,8 @@ vi.mock('@/hooks/use-editor-collab', () => ({
 			ydoc: mockDoc,
 			isConnected: true,
 			isSynced: true,
+			connectionState: 'connected',
+			isOffline: false,
 			activeUsers: [],
 			hasUnsyncedChanges: false,
 			provider: null
@@ -54,8 +56,8 @@ describe('EditorWorkspace Formatting', () => {
 			/>
 		)
 
-		expect(await screen.findByTitle('Heading 1')).toBeDefined()
-		expect(await screen.findByTitle('Heading 2')).toBeDefined()
+		expect(await screen.findByTitle('Bold')).toBeDefined()
+		expect(await screen.findByTitle('Italic')).toBeDefined()
 		expect(await screen.findByTitle('Bullet List')).toBeDefined()
 		expect(await screen.findByTitle('Ordered List')).toBeDefined()
 	})

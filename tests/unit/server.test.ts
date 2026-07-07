@@ -4,8 +4,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'
 process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'mock-anon-key'
 
-const wal = require('../server/wal')
-const auth = require('../server/auth')
+const wal = require('../../server/wal')
+const auth = require('../../server/auth')
 
 describe('Write-Ahead Log (WAL) Cache System', () => {
 	const testDocId = 'test-doc-uuid'
