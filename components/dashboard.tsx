@@ -22,6 +22,8 @@ interface DashboardProps {
 	}
 }
 
+import { GlobalHeader } from './layout/global-header'
+
 export default function Dashboard({ user }: DashboardProps) {
 	const router = useRouter()
 	const [myDocs, setMyDocs] = useState<DocumentItem[]>([])
@@ -216,26 +218,8 @@ export default function Dashboard({ user }: DashboardProps) {
 	return (
 		<div className="min-h-screen bg-background text-on-surface">
 			{/* Header */}
-			<header className="fixed top-0 w-full z-50 bg-surface/5 backdrop-blur-md border-b border-black/10 dark:border-white/10 flex justify-center h-16">
-				<div className="w-full flex justify-between items-center px-6 md:px-10 max-w-[1400px]">
-					<div className="flex items-center group cursor-pointer" onClick={() => router.push('/')}>
-						<img alt="Lekhan Logo" className="h-6 w-6 md:h-7 md:w-7 object-contain cursor-pointer hover:scale-110 premium-transition" src="./logo.png" />
-						<span className="font-display-lg text-xl md:text-2xl font-bold text-primary-container premium-transition group-hover:text-primary leading-none translate-y-[1px]">ekhan</span>
-					</div>
-
-					<div className="hidden md:flex flex-1 max-w-xl mx-xl">
-						<div className="relative w-full group">
-							<span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant premium-transition group-focus-within:text-primary-container">search</span>
-							<input
-								type="text"
-								value={searchQuery}
-								onChange={(e) => setSearchQuery(e.target.value)}
-								className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl py-2 pl-10 pr-4 focus:ring-2 focus:ring-primary-container/50 focus:border-primary-container outline-none premium-transition placeholder:text-on-surface-variant/50"
-								placeholder="Search..."
-							/>
-						</div>
-					</div>
-
+			<GlobalHeader
+				rightActions={
 					<div className="flex items-center gap-md">
 						<ThemeToggle />
 						<div className="relative" ref={notificationsRef}>
@@ -264,8 +248,21 @@ export default function Dashboard({ user }: DashboardProps) {
 
 						<ProfileMenu user={user} size="md" />
 					</div>
+				}
+			>
+				<div className="hidden md:flex flex-1 max-w-xl mx-xl">
+					<div className="relative w-full group">
+						<span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant premium-transition group-focus-within:text-primary-container">search</span>
+						<input
+							type="text"
+							value={searchQuery}
+							onChange={(e) => setSearchQuery(e.target.value)}
+							className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl py-2 pl-10 pr-4 focus:ring-2 focus:ring-primary-container/50 focus:border-primary-container outline-none premium-transition placeholder:text-on-surface-variant/50"
+							placeholder="Search..."
+						/>
+					</div>
 				</div>
-			</header>
+			</GlobalHeader>
 
 			{/* Main Content */}
 			<main className="pt-24 pb-xl px-6 md:px-10 flex justify-center">

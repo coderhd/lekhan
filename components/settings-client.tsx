@@ -8,6 +8,8 @@ import { toast } from 'sonner'
 import ThemeToggle from './theme-toggle'
 import ProfileMenu from './profile-menu'
 
+import { GlobalHeader } from './layout/global-header'
+
 export default function SettingsClient({ user, documents, setDocuments }: { 
 	user: { id: string; email: string; full_name?: string }, 
 	documents: any[], 
@@ -90,23 +92,17 @@ export default function SettingsClient({ user, documents, setDocuments }: {
 
 	return (
 		<div className="h-screen bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container flex flex-col font-body-md overflow-hidden">
-			{/* Redesigned Top Header */}
-			<header className="flex-none w-full z-50 bg-surface/5 backdrop-blur-md border-b border-black/10 dark:border-white/10 flex flex-col items-center justify-center h-16">
-				<div className="w-full px-6 md:px-10 flex justify-between items-center max-w-[1400px]">
-					<div className="flex items-center gap-3">
-						<div className="flex items-center group cursor-pointer" onClick={() => router.push('/')}>
-							<img alt="Lekhan Logo" className="h-6 w-6 md:h-7 md:w-7 object-contain cursor-pointer hover:scale-110 premium-transition" src="/logo.png" />
-							<span className="font-display-lg text-xl md:text-2xl font-bold text-primary-container premium-transition group-hover:text-primary leading-none translate-y-[1px]">ekhan</span>
-						</div>
-						<span className="text-on-surface-variant/30 text-2xl font-light leading-none -translate-y-[1px]">/</span>
-						<span className="font-label-sm text-sm font-bold text-on-surface-variant uppercase tracking-widest translate-y-[1px]">Settings</span>
-					</div>
+			<GlobalHeader
+				rightActions={
 					<div className="flex items-center gap-md">
 						<ThemeToggle />
 						<ProfileMenu user={user} size="sm" />
 					</div>
-				</div>
-			</header>
+				}
+			>
+				<span className="text-on-surface-variant/30 text-2xl font-light leading-none -translate-y-[1px]">/</span>
+				<span className="font-label-sm text-sm font-bold text-on-surface-variant uppercase tracking-widest translate-y-[1px]">Settings</span>
+			</GlobalHeader>
 
 			<main className="flex-1 overflow-hidden flex justify-center px-6 md:px-10">
 				<div className="w-full max-w-[1400px] h-full flex flex-col lg:flex-row">
