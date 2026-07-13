@@ -1,7 +1,6 @@
 # Lekhan - Collaborative Local-First Editor
 
-Welcome to **Lekhan**, a premium collaborative document editor featuring a local-first architecture, offline synchronization, and AI capabilities. This project was developed as part of the House of EdTech Assignment.
-
+Welcome to **Lekhan**, a premium collaborative document editor featuring a local-first architecture, offline synchronization, and AI capabilities.
 ## 🚀 Features
 
 - **Local-First Architecture:** The editor prioritizes local state. Changes are reflected instantly and synchronized with the cloud asynchronously in the background.
