@@ -11,3 +11,10 @@ This ledger tracks the completion of each task in the implementation plan.
 - Task 7: complete (commits 72b6de9..3d58574, review clean)
 - Task 8: complete (commits 3d58574..4b91e7b, review clean)
 - Task 9: complete (commits 4b91e7b..501d11e, review clean)
+
+## Global Header and Session Lock Contrast (2026-07-19)
+
+- Task 1: complete (working-tree changes; commit blocked by .git/index.lock, review clean)
+- Task 2: pending
+- Task 3: pending
+- Task 4: pending

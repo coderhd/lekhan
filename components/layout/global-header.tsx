@@ -1,9 +1,11 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import ThemeToggle from '../theme-toggle'
 import { supabase } from '@/lib/supabase'
+import { useGlobalHeaderSlots } from './global-header-context'
 
 interface GlobalHeaderProps {
 	children?: React.ReactNode // For center/left items
@@ -11,8 +13,13 @@ interface GlobalHeaderProps {
 }
 
 export function GlobalHeader({ children, rightActions }: GlobalHeaderProps) {
+	const pathname = usePathname()
+	const { slots } = useGlobalHeaderSlots()
 	const [user, setUser] = useState<any | null>(null)
 	const [loading, setLoading] = useState(true)
+	const [isVisible, setIsVisible] = useState(true)
+	const lastScrollY = useRef(0)
+	const frame = useRef<number | null>(null)
 
 	useEffect(() => {
 		const checkSession = async () => {
@@ -37,8 +44,47 @@ export function GlobalHeader({ children, rightActions }: GlobalHeaderProps) {
 		}
 	}, [])
 
+	useEffect(() => {
+		lastScrollY.current = window.scrollY
+
+		const handleScroll = () => {
+			if (frame.current !== null) return
+			frame.current = 1
+			window.requestAnimationFrame(() => {
+				const currentY = Math.max(window.scrollY, 0)
+				const delta = currentY - lastScrollY.current
+				if (currentY <= 16 || delta < 0) setIsVisible(true)
+				else if (delta > 0) setIsVisible(false)
+				lastScrollY.current = currentY
+				frame.current = null
+			})
+		}
+
+		window.addEventListener('scroll', handleScroll, { passive: true })
+		return () => {
+			window.removeEventListener('scroll', handleScroll)
+			if (frame.current !== null) window.cancelAnimationFrame(frame.current)
+		}
+	}, [])
+
+	if (
+		pathname === '/login' ||
+		pathname === '/signup' ||
+		pathname === '/forgot-password' ||
+		pathname === '/doc' ||
+		pathname?.startsWith('/doc/')
+	) {
+		return null
+	}
+
+	const mainContent = slots.main?.content ?? children
+	const rightContent = slots.right?.content ?? rightActions
+
 	return (
-		<header className="sticky top-0 z-50 flex min-h-[4rem] items-center justify-between border-b border-border/40 bg-background/80 px-6 py-3 backdrop-blur-md transition-colors duration-300">
+		<header
+			className={`sticky top-0 z-50 flex min-h-[4rem] items-center justify-between border-b border-border/40 bg-background/80 px-6 py-3 backdrop-blur-md transition-[transform,opacity] duration-300 motion-reduce:transition-none ${isVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'}`}
+			data-header-visible={isVisible}
+		>
 			<div className="flex items-center gap-4 flex-1">
 				{/* <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-80">
 					<img 
@@ -54,12 +100,12 @@ export function GlobalHeader({ children, rightActions }: GlobalHeaderProps) {
 					<img alt="Lekhan Logo" className="h-6 w-6 md:h-7 md:w-7 object-contain cursor-pointer hover:scale-110 transition-transform" src="/logo.png" />
 					<span className="font-display-lg text-xl md:text-2xl font-bold text-primary-container transition-colors group-hover:text-primary leading-none translate-y-[1px]">ekhan</span>
 				</Link>
-				{children}
+				{mainContent}
 			</div>
 
 			<div className="flex items-center gap-4">
-				{rightActions ? (
-					rightActions
+				{rightContent ? (
+					rightContent
 				) : (
 					<>
 						<ThemeToggle />

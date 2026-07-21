@@ -7,7 +7,7 @@ import { DownloadCloud, Users, WifiOff, Lock } from 'lucide-react'
 import ThemeToggle from './theme-toggle'
 import { useEffect } from 'react'
 
-import { GlobalHeader } from './layout/global-header'
+import { GlobalHeaderSlot } from './layout/global-header-context'
 
 export default function LandingPage() {
 	const router = useRouter()
@@ -29,8 +29,7 @@ export default function LandingPage() {
 
 	return (
 		<div className="bg-background text-on-surface selection:bg-primary-container/30 min-h-screen relative overflow-hidden transition-colors duration-300">
-			<GlobalHeader
-				rightActions={
+			<GlobalHeaderSlot slot="right">
 					<div className="flex items-center gap-6">
 						<Link
 							href="/#features"
@@ -52,10 +51,9 @@ export default function LandingPage() {
 							Log In
 						</button>
 					</div>
-				}
-			/>
+			</GlobalHeaderSlot>
 
-			<main className="pt-16">
+			<main className="pt-8">
 				{/* Hero Section */}
 				<section className="relative px-6 md:px-10 pt-20 pb-20 overflow-hidden flex flex-col lg:flex-row items-center justify-center lg:justify-between min-h-[90vh] lg:min-h-[100svh] max-w-[1200px] mx-auto gap-12">
 					<div className="hero-glow top-20 -left-20"></div>

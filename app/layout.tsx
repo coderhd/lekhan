@@ -3,6 +3,8 @@ import './globals.css'
 import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/components/theme-provider'
 import { GlobalFooter } from '@/components/layout/global-footer'
+import { GlobalHeader } from '@/components/layout/global-header'
+import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
 
 export const metadata: Metadata = {
 	title: {
@@ -10,11 +12,11 @@ export const metadata: Metadata = {
 		template: '%s | Lekhan',
 	},
 	description: 'Write, edit, and collaborate in real-time with Lekhan. A local-first editor with zero typing latency, full offline support, and AI assistance. Start writing free.',
-	metadataBase: new URL('https://house-of-edtech-seven.vercel.app'),
+	metadataBase: new URL('https://lekhan.online'),
 	openGraph: {
 		title: 'Lekhan — Write Together, Without Limits',
 		description: 'A local-first collaborative editor with zero typing latency, offline support, and AI-assisted writing. Built for teams that value speed and privacy.',
-		url: 'https://house-of-edtech-seven.vercel.app',
+		url: 'https://lekhan.online',
 		siteName: 'Lekhan',
 		images: [
 			{
@@ -61,12 +63,15 @@ export default function RootLayout ({
 					disableTransitionOnChange
 				>
 					<SessionReauthProvider>
-						<div className="flex flex-col min-h-screen">
-							<main className="flex-1 flex flex-col">{children}</main>
-							<GlobalFooter />
-						</div>
-						<SessionInfoBanner />
-						<Toaster />
+						<GlobalHeaderProvider>
+							<GlobalHeader />
+							<div className="flex min-h-screen flex-col">
+								<main className="flex flex-1 flex-col">{children}</main>
+								<GlobalFooter />
+							</div>
+							<SessionInfoBanner />
+							<Toaster />
+						</GlobalHeaderProvider>
 					</SessionReauthProvider>
 				</ThemeProvider>
 			</body>

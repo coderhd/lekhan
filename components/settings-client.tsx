@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import ThemeToggle from './theme-toggle'
 import ProfileMenu from './profile-menu'
 
-import { GlobalHeader } from './layout/global-header'
+import { GlobalHeaderSlot } from './layout/global-header-context'
 
 export default function SettingsClient({ user, documents, setDocuments }: { 
 	user: { id: string; email: string; full_name?: string }, 
@@ -92,17 +92,16 @@ export default function SettingsClient({ user, documents, setDocuments }: {
 
 	return (
 		<div className="h-screen bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container flex flex-col font-body-md overflow-hidden">
-			<GlobalHeader
-				rightActions={
+			<GlobalHeaderSlot slot="right">
 					<div className="flex items-center gap-md">
 						<ThemeToggle />
 						<ProfileMenu user={user} size="sm" />
 					</div>
-				}
-			>
+			</GlobalHeaderSlot>
+			<GlobalHeaderSlot slot="main">
 				<span className="text-on-surface-variant/30 text-2xl font-light leading-none -translate-y-[1px]">/</span>
 				<span className="font-label-sm text-sm font-bold text-on-surface-variant uppercase tracking-widest translate-y-[1px]">Settings</span>
-			</GlobalHeader>
+			</GlobalHeaderSlot>
 
 			<main className="flex-1 overflow-hidden flex justify-center px-6 md:px-10">
 				<div className="w-full max-w-[1400px] h-full flex flex-col lg:flex-row">

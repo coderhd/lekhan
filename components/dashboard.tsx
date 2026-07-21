@@ -22,7 +22,7 @@ interface DashboardProps {
 	}
 }
 
-import { GlobalHeader } from './layout/global-header'
+import { GlobalHeaderSlot } from './layout/global-header-context'
 
 export default function Dashboard({ user }: DashboardProps) {
 	const router = useRouter()
@@ -217,9 +217,7 @@ export default function Dashboard({ user }: DashboardProps) {
 
 	return (
 		<div className="min-h-screen bg-background text-on-surface">
-			{/* Header */}
-			<GlobalHeader
-				rightActions={
+			<GlobalHeaderSlot slot="right">
 					<div className="flex items-center gap-md">
 						<ThemeToggle />
 						<div className="relative" ref={notificationsRef}>
@@ -248,8 +246,8 @@ export default function Dashboard({ user }: DashboardProps) {
 
 						<ProfileMenu user={user} size="md" />
 					</div>
-				}
-			>
+			</GlobalHeaderSlot>
+			<GlobalHeaderSlot slot="main">
 				<div className="hidden md:flex flex-1 max-w-xl mx-xl">
 					<div className="relative w-full group">
 						<span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant premium-transition group-focus-within:text-primary-container">search</span>
@@ -262,10 +260,10 @@ export default function Dashboard({ user }: DashboardProps) {
 						/>
 					</div>
 				</div>
-			</GlobalHeader>
+			</GlobalHeaderSlot>
 
 			{/* Main Content */}
-			<main className="pt-24 pb-xl px-6 md:px-10 flex justify-center">
+			<main className="pt-8 pb-xl px-6 md:px-10 flex justify-center">
 				<div className="max-w-7xl w-full flex flex-col gap-xl">
 
 					{loading ? (

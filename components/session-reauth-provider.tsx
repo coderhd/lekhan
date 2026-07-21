@@ -55,7 +55,7 @@ export function SessionReauthProvider({ children }: { children: React.ReactNode 
 
 	// Record activity
 	const recordActivity = () => {
-		if (typeof window !== 'undefined' && !isLocked) {
+		if (typeof window !== 'undefined' && !isLocked && userEmail) {
 			localStorage.setItem('lekhan_last_activity', Date.now().toString())
 		}
 	}
@@ -80,29 +80,43 @@ export function SessionReauthProvider({ children }: { children: React.ReactNode 
 	// Listen for auth session and set email
 	useEffect(() => {
 		const checkSession = async () => {
-			const { data: { session } } = await supabase.auth.getSession()
-			if (session?.user) {
-				setUserEmail(session.user.email ?? null)
-				// Set initial session start time if not present
-				if (!localStorage.getItem('lekhan_session_start')) {
-					localStorage.setItem('lekhan_session_start', Date.now().toString())
+			try {
+				const { data } = await supabase.auth.getSession()
+				const session = data?.session
+				if (session?.user) {
+					setUserEmail(session.user.email ?? null)
+					if (!localStorage.getItem('lekhan_session_start')) {
+						const now = Date.now().toString()
+						localStorage.setItem('lekhan_session_start', now)
+						localStorage.setItem('lekhan_last_activity', now)
+					}
+				} else {
+					setUserEmail(null)
+					setIsLocked(false)
+					localStorage.removeItem('lekhan_session_start')
+					localStorage.removeItem('lekhan_last_activity')
 				}
-			} else {
-				setUserEmail(null)
+			} catch (err) {
+				console.error('Check session error:', err)
 			}
 		}
 
 		checkSession()
 
-		const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+		const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
 			if (session?.user) {
 				setUserEmail(session.user.email ?? null)
-				if (!localStorage.getItem('lekhan_session_start')) {
-					localStorage.setItem('lekhan_session_start', Date.now().toString())
+				const now = Date.now().toString()
+				if (event === 'SIGNED_IN' || !localStorage.getItem('lekhan_session_start')) {
+					setIsLocked(false)
+					localStorage.setItem('lekhan_session_start', now)
+					localStorage.setItem('lekhan_last_activity', now)
 				}
 			} else {
 				setUserEmail(null)
 				setIsLocked(false)
+				localStorage.removeItem('lekhan_session_start')
+				localStorage.removeItem('lekhan_last_activity')
 			}
 		})
 
@@ -219,6 +233,9 @@ export function SessionReauthProvider({ children }: { children: React.ReactNode 
 		try {
 			await supabase.auth.signOut()
 			setIsLocked(false)
+			setUserEmail(null)
+			localStorage.removeItem('lekhan_session_start')
+			localStorage.removeItem('lekhan_last_activity')
 			router.push('/login')
 			toast.success('Signed out successfully')
 		} catch (err) {
@@ -231,7 +248,7 @@ export function SessionReauthProvider({ children }: { children: React.ReactNode 
 			{children}
 
 			{/* Reauthentication Modal Overlay */}
-			{isLocked && (
+			{isProtectedRoute && isLocked && (
 				<div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-md px-4 animate-in fade-in duration-300">
 					<div className="glass w-full max-w-md rounded-2xl p-6 md:p-8 flex flex-col gap-6 border border-white/10 shadow-2xl relative">
 						

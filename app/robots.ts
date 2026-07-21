@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: '/',
       disallow: ['/api/', '/doc/', '/settings/'],
     },
-    sitemap: 'https://house-of-edtech-seven.vercel.app/sitemap.xml',
+    sitemap: 'https://lekhan.online/sitemap.xml',
   }
 }
