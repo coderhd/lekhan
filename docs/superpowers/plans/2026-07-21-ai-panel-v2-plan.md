@@ -1,33 +1,29 @@
-# AI Panel v2 Implementation Plan
+# AI Panel v2 Implementation Plan (Revised)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rework Lekhan's AI assistant from a side-panel tabbed UI to an inline command palette with diff preview, new Sarvam features (transliterate, language detection), expanded language/voice coverage, and mobile scroll fixes.
+**Goal:** Rework Lekhan's AI assistant from a side-panel tabbed UI to a Lekhan Bot prompt bar with a unified `/` slash menu, inline diff preview, new Sarvam features, and expanded language/voice coverage.
 
-**Architecture:** The AI interaction moves to a floating command palette triggered by `/ai`, `Cmd+J`, or a bubble menu button. Results appear inline via a diff preview card with Accept/Insert Below/Copy/Discard actions. The side panel becomes a lightweight Settings surface for language/voice preferences. The API route adds two new Sarvam actions (transliterate, detect-language).
+**Architecture:** Two distinct systems: (1) **`/` slash menu** — a TipTap suggestion extension for block commands (headings, lists, code) with an "Ask Lekhan Bot" entry that opens the prompt bar. (2) **Lekhan Bot prompt bar** — a hidden-by-default input bar at the bottom of the editor canvas, triggered by `/ai` (via slash menu), `Cmd+L` (L = Lekhan), or the `✨` bubble menu button. Features quick-action presets (Summarize, Fix Grammar, Translate, etc.) and a freeform prompt input. Results appear inline via a diff preview card. The side panel becomes a lightweight Settings surface.
 
 **Tech Stack:** Next.js 16, React 19, TipTap 2.x, Tailwind CSS, Sarvam AI APIs, Vitest, TypeScript
 
 ## Global Constraints
 
 - All code uses tabs for indentation, single quotes, no semicolons
-- Component files use kebab-case naming (`ai-command-palette.tsx`)
-- Event handlers use `handle` prefix (`handleTranslate`)
-- Boolean state uses verb prefix (`isLoading`, `hasSelection`)
-- Use `@tiptap/react` v2.4.0+ (already installed)
+- Component files use kebab-case naming
+- Event handlers use `handle` prefix, booleans use verb prefix (`isLoading`)
 - Use Material Symbols Outlined for icons (existing pattern)
 - All new popup/floating UIs must include mobile touch scroll CSS
 - Tests run via `npx vitest run` (jsdom environment, setup at `tests/unit/setup.ts`)
 - Design spec: `docs/superpowers/specs/2026-07-21-ai-panel-v2-design.md`
-- **Note:** The `/ai` slash command trigger (TipTap suggestion extension) is deferred to a follow-up task. This plan implements `Cmd+J` and bubble menu triggers first — adding the suggestion extension later is additive and won't require rework.
 
 ---
 
 ### Task 1: API Route — Add Transliterate and Detect-Language Actions
 
 **Files:**
-- Modify: `app/api/ai/route.ts:47-84` (body parsing — add `sourceLanguage` field)
-- Modify: `app/api/ai/route.ts:179-181` (add new action handlers before the `Invalid action` fallback)
+- Modify: `app/api/ai/route.ts`
 - Test: `tests/unit/api-ai.test.ts`
 
 **Interfaces:**
@@ -76,16 +72,11 @@ it('should return error if transliterate params are missing', async () => {
 			'Authorization': 'Bearer fake-token',
 			'Content-Type': 'application/json',
 		},
-		body: JSON.stringify({
-			action: 'transliterate',
-			text: 'नमस्ते',
-			// missing sourceLanguage and targetLanguage
-		}),
+		body: JSON.stringify({ action: 'transliterate', text: 'नमस्ते' }),
 	})
 
 	const response = await POST(req)
 	expect(response.status).toBe(400)
-
 	const data = await response.json()
 	expect(data.error).toContain('Missing')
 })
@@ -113,15 +104,11 @@ it('should return detected language if action is detect-language', async () => {
 			'Authorization': 'Bearer fake-token',
 			'Content-Type': 'application/json',
 		},
-		body: JSON.stringify({
-			action: 'detect-language',
-			text: 'नमस्ते दुनिया',
-		}),
+		body: JSON.stringify({ action: 'detect-language', text: 'नमस्ते दुनिया' }),
 	})
 
 	const response = await POST(req)
 	expect(response.status).toBe(200)
-
 	const data = await response.json()
 	expect(data.languageCode).toBe('hi-IN')
 	expect(data.languageName).toBe('Hindi')
@@ -135,15 +122,11 @@ it('should return error if detect-language text is missing', async () => {
 			'Authorization': 'Bearer fake-token',
 			'Content-Type': 'application/json',
 		},
-		body: JSON.stringify({
-			action: 'detect-language',
-			// missing text
-		}),
+		body: JSON.stringify({ action: 'detect-language' }),
 	})
 
 	const response = await POST(req)
 	expect(response.status).toBe(400)
-
 	const data = await response.json()
 	expect(data.error).toContain('Missing text')
 })
@@ -152,44 +135,22 @@ it('should return error if detect-language text is missing', async () => {
 - [ ] **Step 3: Run tests to verify they fail**
 
 Run: `npx vitest run tests/unit/api-ai.test.ts`
-Expected: 4 new tests FAIL (action handlers don't exist yet)
+Expected: 4 new tests FAIL
 
-- [ ] **Step 4: Implement transliterate and detect-language actions**
+- [ ] **Step 4: Implement new actions in `app/api/ai/route.ts`**
 
-In `app/api/ai/route.ts`:
+**a) Add `sourceLanguage` to body parsing (after line 48):**
 
-**a) Add `sourceLanguage` to body parsing (line ~47-61):**
+Add `sourceLanguage: string | undefined` to the destructured vars and the generic type, then add to assignment: `sourceLanguage = body.sourceLanguage`
 
-Replace the body destructuring block:
-```typescript
-let action: string, text: string | undefined, targetLanguage: string | undefined,
-	speaker: string | undefined, prompt: string | undefined,
-	sourceLanguage: string | undefined
-try {
-	const body = await readJsonWithLimit<{
-		action?: string
-		text?: string
-		targetLanguage?: string
-		sourceLanguage?: string
-		speaker?: string
-		prompt?: string
-	}>(request, MAX_BODY_BYTES)
-	action = body.action ?? ''
-	text = body.text
-	targetLanguage = body.targetLanguage
-	sourceLanguage = body.sourceLanguage
-	speaker = body.speaker
-	prompt = body.prompt
-```
-
-**b) Add `sourceLanguage` validation (after the existing `speaker` validation ~line 82-84):**
+**b) Add `sourceLanguage` validation (after the existing `speaker` validation, line ~84):**
 ```typescript
 if (typeof sourceLanguage === 'string' && sourceLanguage.length > MAX_SHORT_FIELD_LENGTH) {
 	return NextResponse.json({ error: 'Invalid sourceLanguage' }, { status: 400 })
 }
 ```
 
-**c) Add `transliterate` and `detect-language` handlers (before the `Invalid action` fallback ~line 179):**
+**c) Add handlers before `Invalid action` fallback (before line 181):**
 ```typescript
 if (action === 'transliterate') {
 	if (!text || !sourceLanguage || !targetLanguage) {
@@ -249,7 +210,7 @@ if (action === 'detect-language') {
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `npx vitest run tests/unit/api-ai.test.ts`
-Expected: All 7 tests PASS (3 existing + 4 new)
+Expected: All 7 tests PASS
 
 - [ ] **Step 6: Commit**
 
@@ -264,19 +225,14 @@ git commit -m "feat(api): add transliterate and detect-language actions to AI ro
 
 **Files:**
 - Create: `lib/ai-constants.ts`
-- Test: Not separately tested — consumed by Tasks 3-6
 
 **Interfaces:**
 - Consumes: Nothing (foundational)
 - Produces:
-  - `LANGUAGES: Array<{ code: string, name: string, script: string }>` (23 entries)
-  - `TTS_LANGUAGES: Array<{ code: string, name: string, script: string }>` (11 entries, subset of LANGUAGES)
-  - `SPEAKERS: Array<{ id: string, name: string, tone: string }>` (38 entries)
-  - `AI_ACTIONS: Array<AIActionDef>` — action definitions for the command palette
-  - `type AIActionDef = { id: string, label: string, icon: string, category: 'write' | 'translate' | 'script' | 'voice', requiresSelection: boolean, defaultInsert: 'accept' | 'below' | 'both', prompt?: string }`
-  - `type AIPreferences = { targetLanguage: string, ttsLanguage: string, ttsVoice: string }`
-  - `function loadAIPreferences(): AIPreferences`
-  - `function saveAIPreferences(prefs: Partial<AIPreferences>): void`
+  - `LANGUAGES: Language[]` (23 entries), `TTS_LANGUAGES: Language[]` (11 entries)
+  - `SPEAKERS: Speaker[]` (38 entries with tone metadata)
+  - `LEKHAN_BOT_ACTIONS: LekhanBotAction[]` — quick-action presets for the prompt bar
+  - `AIPreferences` type + `loadAIPreferences()` / `saveAIPreferences()`
 
 - [ ] **Step 1: Create `lib/ai-constants.ts`**
 
@@ -293,14 +249,13 @@ export interface Speaker {
 	tone: string
 }
 
-export interface AIActionDef {
+export interface LekhanBotAction {
 	id: string
 	label: string
 	icon: string
-	category: 'write' | 'translate' | 'script' | 'voice'
 	requiresSelection: boolean
 	defaultInsert: 'accept' | 'below' | 'both'
-	prompt?: string
+	buildPrompt: (text: string) => string
 }
 
 export interface AIPreferences {
@@ -379,20 +334,54 @@ export const SPEAKERS: Speaker[] = [
 	{ id: 'rupali', name: 'Rupali', tone: '' },
 ]
 
-export const AI_ACTIONS: AIActionDef[] = [
-	// Write
-	{ id: 'summarize', label: 'Summarize', icon: 'summarize', category: 'write', requiresSelection: true, defaultInsert: 'below', prompt: 'Summarize the following text' },
-	{ id: 'fix-grammar', label: 'Fix Grammar', icon: 'spellcheck', category: 'write', requiresSelection: true, defaultInsert: 'accept', prompt: 'Fix spelling and grammar in this text' },
-	{ id: 'improve-flow', label: 'Improve Flow', icon: 'edit_note', category: 'write', requiresSelection: true, defaultInsert: 'accept', prompt: 'Improve the writing style of this text' },
-	{ id: 'expand', label: 'Expand', icon: 'expand', category: 'write', requiresSelection: true, defaultInsert: 'below', prompt: 'Extend this text with more details' },
-	{ id: 'custom-prompt', label: 'Custom Prompt...', icon: 'chat', category: 'write', requiresSelection: false, defaultInsert: 'both' },
-	// Translate
-	{ id: 'translate', label: 'Translate to...', icon: 'translate', category: 'translate', requiresSelection: true, defaultInsert: 'below' },
-	// Script
-	{ id: 'transliterate', label: 'Transliterate to...', icon: 'language', category: 'script', requiresSelection: true, defaultInsert: 'accept' },
-	// Voice
-	{ id: 'read-aloud', label: 'Read Aloud', icon: 'volume_up', category: 'voice', requiresSelection: false, defaultInsert: 'both' },
+/** Quick-action presets shown above the prompt bar */
+export const LEKHAN_BOT_ACTIONS: LekhanBotAction[] = [
+	{
+		id: 'fix-grammar',
+		label: 'Fix Grammar',
+		icon: 'spellcheck',
+		requiresSelection: true,
+		defaultInsert: 'accept',
+		buildPrompt: (text) => `Fix spelling and grammar in this text. Return only the corrected text:\n\n"${text}"`,
+	},
+	{
+		id: 'improve-flow',
+		label: 'Rewrite',
+		icon: 'edit_note',
+		requiresSelection: true,
+		defaultInsert: 'accept',
+		buildPrompt: (text) => `Improve the writing style and flow of this text. Return only the improved text:\n\n"${text}"`,
+	},
+	{
+		id: 'summarize',
+		label: 'Summarize',
+		icon: 'summarize',
+		requiresSelection: true,
+		defaultInsert: 'below',
+		buildPrompt: (text) => `Summarize the following text concisely:\n\n"${text}"`,
+	},
+	{
+		id: 'expand',
+		label: 'Expand',
+		icon: 'expand',
+		requiresSelection: true,
+		defaultInsert: 'below',
+		buildPrompt: (text) => `Expand this text with more details and depth:\n\n"${text}"`,
+	},
+	{
+		id: 'make-shorter',
+		label: 'Make Shorter',
+		icon: 'compress',
+		requiresSelection: true,
+		defaultInsert: 'accept',
+		buildPrompt: (text) => `Make this text shorter and more concise while preserving the meaning:\n\n"${text}"`,
+	},
 ]
+
+export const LEKHAN_BOT_SYSTEM_PROMPT =
+	'You are Lekhan Bot, a helpful Indian writing assistant built into Lekhan, a document editor for Indian languages. ' +
+	'You support 23 Indian languages and scripts. Respond concisely. ' +
+	'When asked to fix, rewrite, or transform text, return only the result — no explanations unless asked.'
 
 const AI_PREFS_KEY = 'lekhan-ai-preferences'
 
@@ -406,20 +395,15 @@ export function loadAIPreferences(): AIPreferences {
 	if (typeof window === 'undefined') return DEFAULT_PREFS
 	try {
 		const stored = localStorage.getItem(AI_PREFS_KEY)
-		if (stored) {
-			return { ...DEFAULT_PREFS, ...JSON.parse(stored) }
-		}
-	} catch {
-		// ignore parse errors
-	}
+		if (stored) return { ...DEFAULT_PREFS, ...JSON.parse(stored) }
+	} catch { /* ignore */ }
 	return DEFAULT_PREFS
 }
 
 export function saveAIPreferences(prefs: Partial<AIPreferences>): void {
 	if (typeof window === 'undefined') return
 	const current = loadAIPreferences()
-	const updated = { ...current, ...prefs }
-	localStorage.setItem(AI_PREFS_KEY, JSON.stringify(updated))
+	localStorage.setItem(AI_PREFS_KEY, JSON.stringify({ ...current, ...prefs }))
 }
 ```
 
@@ -427,198 +411,337 @@ export function saveAIPreferences(prefs: Partial<AIPreferences>): void {
 
 ```bash
 git add lib/ai-constants.ts
-git commit -m "feat: add shared AI constants, types, and preference helpers"
+git commit -m "feat: add shared AI constants, types, Lekhan Bot actions, and preference helpers"
 ```
 
 ---
 
-### Task 3: AI Command Palette Component
+### Task 3: Unified `/` Slash Menu Extension
+
+The `/` slash menu shows **block commands only** (Heading, List, Code, Divider, etc.) plus an **"Ask Lekhan Bot"** entry. Typing `/ai` filters to the Lekhan Bot entry and selecting it opens the prompt bar.
 
 **Files:**
-- Create: `components/ai-command-palette.tsx`
-- Test: Manual testing (visual component — tested via integration in Task 6)
+- Create: `lib/slash-menu-extension.ts`
+- Create: `components/slash-menu.tsx`
+- Dependency: `npm install @tiptap/suggestion tippy.js` (if not present)
 
 **Interfaces:**
-- Consumes:
-  - `AI_ACTIONS`, `LANGUAGES`, `AIActionDef`, `loadAIPreferences` from `lib/ai-constants.ts` (Task 2)
+- Consumes: Nothing directly — standalone TipTap extension
 - Produces:
-  - `<AICommandPalette editor={editor} token={token} isOpen={boolean} position={{ x, y }} selectedText={string} onClose={() => void} onAction={(actionId, result, originalText) => void} />`
-  - The `onAction` callback passes the action result to the parent for diff preview rendering
+  - `SlashMenuExtension` — TipTap extension triggered by `/`
+  - `SlashMenuComponent` — React component for the dropdown
+  - `buildSlashMenuItems(onOpenLekhanBot: () => void): SlashMenuItem[]`
 
-- [ ] **Step 1: Create `components/ai-command-palette.tsx`**
+- [ ] **Step 1: Check and install dependencies**
+
+```bash
+cd /Users/harshdave/Desktop/projects/Lekhan && npm ls @tiptap/suggestion tippy.js 2>/dev/null || npm install @tiptap/suggestion tippy.js
+```
+
+- [ ] **Step 2: Create `lib/slash-menu-extension.ts`**
+
+```typescript
+import { Extension } from '@tiptap/core'
+import Suggestion, { type SuggestionOptions } from '@tiptap/suggestion'
+
+export interface SlashMenuItem {
+	id: string
+	label: string
+	icon: string
+	description?: string
+	action: (editor: any) => void
+}
+
+export const SlashMenuExtension = Extension.create({
+	name: 'slashMenu',
+
+	addOptions() {
+		return {
+			suggestion: {
+				char: '/',
+				command: ({
+					editor,
+					range,
+					props,
+				}: {
+					editor: any
+					range: any
+					props: SlashMenuItem
+				}) => {
+					editor.chain().focus().deleteRange(range).run()
+					props.action(editor)
+				},
+			} as Partial<SuggestionOptions>,
+		}
+	},
+
+	addProseMirrorPlugins() {
+		return [
+			Suggestion({
+				editor: this.editor,
+				...this.options.suggestion,
+			}),
+		]
+	},
+})
+
+export function buildSlashMenuItems(
+	onOpenLekhanBot: () => void,
+): SlashMenuItem[] {
+	return [
+		{
+			id: 'heading-1',
+			label: 'Heading 1',
+			icon: 'format_h1',
+			description: 'Large section heading',
+			action: (editor) => editor.chain().focus().toggleHeading({ level: 2 }).run(),
+		},
+		{
+			id: 'heading-2',
+			label: 'Heading 2',
+			icon: 'format_h2',
+			description: 'Medium section heading',
+			action: (editor) => editor.chain().focus().toggleHeading({ level: 3 }).run(),
+		},
+		{
+			id: 'heading-3',
+			label: 'Heading 3',
+			icon: 'format_h3',
+			description: 'Small section heading',
+			action: (editor) => editor.chain().focus().toggleHeading({ level: 4 }).run(),
+		},
+		{
+			id: 'bullet-list',
+			label: 'Bullet List',
+			icon: 'format_list_bulleted',
+			description: 'Unordered list',
+			action: (editor) => editor.chain().focus().toggleBulletList().run(),
+		},
+		{
+			id: 'numbered-list',
+			label: 'Numbered List',
+			icon: 'format_list_numbered',
+			description: 'Ordered list',
+			action: (editor) => editor.chain().focus().toggleOrderedList().run(),
+		},
+		{
+			id: 'task-list',
+			label: 'Task List',
+			icon: 'checklist',
+			description: 'Checklist with toggles',
+			action: (editor) => editor.chain().focus().toggleTaskList().run(),
+		},
+		{
+			id: 'code-block',
+			label: 'Code Block',
+			icon: 'code_blocks',
+			description: 'Fenced code block',
+			action: (editor) => editor.chain().focus().toggleCodeBlock().run(),
+		},
+		{
+			id: 'divider',
+			label: 'Divider',
+			icon: 'horizontal_rule',
+			description: 'Horizontal separator',
+			action: (editor) => editor.chain().focus().setHorizontalRule().run(),
+		},
+		{
+			id: 'ai',
+			label: 'Ask Lekhan Bot',
+			icon: 'auto_awesome',
+			description: 'AI writing assistant (⌘L)',
+			action: () => onOpenLekhanBot(),
+		},
+	]
+}
+```
+
+- [ ] **Step 3: Create `components/slash-menu.tsx`**
 
 ```typescript
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { createPortal } from 'react-dom'
-import { toast } from 'sonner'
-import {
-	AI_ACTIONS,
-	LANGUAGES,
-	loadAIPreferences,
-	type AIActionDef,
-} from '@/lib/ai-constants'
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
+import type { SlashMenuItem } from '@/lib/slash-menu-extension'
 
-interface AICommandPaletteProps {
-	editor: any
-	token: string
-	isOpen: boolean
-	position: { x: number, y: number }
-	selectedText: string
-	onClose: () => void
-	onAction: (actionId: string, result: string, originalText: string) => void
+interface SlashMenuComponentProps {
+	items: SlashMenuItem[]
+	command: (item: SlashMenuItem) => void
 }
 
-export default function AICommandPalette({
+export const SlashMenuComponent = forwardRef(
+	({ items, command }: SlashMenuComponentProps, ref) => {
+		const [selectedIndex, setSelectedIndex] = useState(0)
+		const containerRef = useRef<HTMLDivElement>(null)
+
+		useEffect(() => {
+			setSelectedIndex(0)
+		}, [items])
+
+		// Scroll selected item into view
+		useEffect(() => {
+			const container = containerRef.current
+			if (!container) return
+			const selected = container.querySelector(`[data-index="${selectedIndex}"]`)
+			if (selected) {
+				selected.scrollIntoView({ block: 'nearest' })
+			}
+		}, [selectedIndex])
+
+		useImperativeHandle(ref, () => ({
+			onKeyDown: ({ event }: { event: KeyboardEvent }) => {
+				if (event.key === 'ArrowUp') {
+					setSelectedIndex((selectedIndex + items.length - 1) % items.length)
+					return true
+				}
+				if (event.key === 'ArrowDown') {
+					setSelectedIndex((selectedIndex + 1) % items.length)
+					return true
+				}
+				if (event.key === 'Enter') {
+					const item = items[selectedIndex]
+					if (item) command(item)
+					return true
+				}
+				return false
+			},
+		}))
+
+		if (items.length === 0) return null
+
+		return (
+			<div
+				ref={containerRef}
+				className="z-[9999] w-64 bg-surface-container border border-black/10 dark:border-white/10 rounded-xl shadow-2xl overflow-hidden max-h-72 overflow-y-auto touch-scroll-container p-1"
+			>
+				{items.map((item, index) => (
+					<button
+						key={item.id}
+						data-index={index}
+						onClick={() => command(item)}
+						className={`w-full flex items-center gap-3 px-3 py-2 text-xs rounded-lg transition ${
+							index === selectedIndex
+								? 'bg-primary-container/20 text-on-surface'
+								: 'text-on-surface hover:bg-black/5 dark:hover:bg-white/5'
+						}`}
+					>
+						<span className={`material-symbols-outlined text-base ${
+							item.id === 'ai' ? 'text-primary' : 'text-on-surface-variant/60'
+						}`}>
+							{item.icon}
+						</span>
+						<div className="text-left">
+							<div className={item.id === 'ai' ? 'font-semibold text-primary' : ''}>
+								{item.label}
+							</div>
+							{item.description && (
+								<div className="text-[10px] text-on-surface-variant/50">
+									{item.description}
+								</div>
+							)}
+						</div>
+					</button>
+				))}
+			</div>
+		)
+	},
+)
+SlashMenuComponent.displayName = 'SlashMenuComponent'
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add lib/slash-menu-extension.ts components/slash-menu.tsx
+git commit -m "feat: add unified / slash menu with block commands and Lekhan Bot entry"
+```
+
+---
+
+### Task 4: Lekhan Bot Prompt Bar
+
+The main AI interaction surface — a hidden-by-default prompt bar at the bottom of the editor with quick-action presets.
+
+**Files:**
+- Create: `components/lekhan-bot-bar.tsx`
+
+**Interfaces:**
+- Consumes:
+  - `LEKHAN_BOT_ACTIONS`, `LANGUAGES`, `LEKHAN_BOT_SYSTEM_PROMPT`, `loadAIPreferences` from `lib/ai-constants.ts` (Task 2)
+- Produces:
+  - `<LekhanBotBar editor={editor} token={token} isVisible={boolean} onClose={() => void} onResult={(actionId, result, originalText) => void} />`
+  - `onResult` triggers the diff preview in the parent
+
+- [ ] **Step 1: Create `components/lekhan-bot-bar.tsx`**
+
+```typescript
+'use client'
+
+import { useState, useRef, useEffect } from 'react'
+import { toast } from 'sonner'
+import {
+	LEKHAN_BOT_ACTIONS,
+	LANGUAGES,
+	LEKHAN_BOT_SYSTEM_PROMPT,
+	loadAIPreferences,
+	type LekhanBotAction,
+} from '@/lib/ai-constants'
+
+interface LekhanBotBarProps {
+	editor: any
+	token: string
+	isVisible: boolean
+	onClose: () => void
+	onResult: (actionId: string, result: string, originalText: string) => void
+}
+
+export default function LekhanBotBar({
 	editor,
 	token,
-	isOpen,
-	position,
-	selectedText,
+	isVisible,
 	onClose,
-	onAction,
-}: AICommandPaletteProps) {
-	const [searchQuery, setSearchQuery] = useState('')
-	const [subMenu, setSubMenu] = useState<'translate' | 'transliterate' | null>(null)
-	const [customPrompt, setCustomPrompt] = useState('')
+	onResult,
+}: LekhanBotBarProps) {
+	const [prompt, setPrompt] = useState('')
 	const [isLoading, setIsLoading] = useState(false)
-	const paletteRef = useRef<HTMLDivElement>(null)
-	const searchRef = useRef<HTMLInputElement>(null)
+	const [showPresets, setShowPresets] = useState(true)
+	const [showTranslatePicker, setShowTranslatePicker] = useState(false)
+	const inputRef = useRef<HTMLInputElement>(null)
 
-	// Focus search input when palette opens
+	const getSelectedText = (): string => {
+		if (!editor) return ''
+		const { from, to } = editor.state.selection
+		return editor.state.doc.textBetween(from, to, ' ').trim()
+	}
+
+	// Focus and show presets when bar opens
 	useEffect(() => {
-		if (isOpen && searchRef.current) {
-			searchRef.current.focus()
+		if (isVisible) {
+			setShowPresets(true)
+			setShowTranslatePicker(false)
+			setTimeout(() => inputRef.current?.focus(), 100)
 		}
-		if (isOpen) {
-			setSearchQuery('')
-			setSubMenu(null)
-			setCustomPrompt('')
-		}
-	}, [isOpen])
+	}, [isVisible])
 
 	// Close on Escape
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
-			if (e.key === 'Escape') {
-				if (subMenu) {
-					setSubMenu(null)
-				} else {
-					onClose()
-				}
+			if (e.key === 'Escape' && isVisible) {
+				onClose()
 			}
 		}
-		if (isOpen) {
-			document.addEventListener('keydown', handleKeyDown)
-		}
+		document.addEventListener('keydown', handleKeyDown)
 		return () => document.removeEventListener('keydown', handleKeyDown)
-	}, [isOpen, subMenu, onClose])
+	}, [isVisible, onClose])
 
-	// Close on click outside
-	useEffect(() => {
-		const handleClickOutside = (e: MouseEvent) => {
-			if (paletteRef.current && !paletteRef.current.contains(e.target as Node)) {
-				onClose()
-			}
-		}
-		if (isOpen) {
-			document.addEventListener('mousedown', handleClickOutside)
-		}
-		return () => document.removeEventListener('mousedown', handleClickOutside)
-	}, [isOpen, onClose])
-
-	const filteredActions = AI_ACTIONS.filter(action =>
-		action.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-		action.category.toLowerCase().includes(searchQuery.toLowerCase())
-	)
-
-	const executeAction = useCallback(async (
-		action: AIActionDef,
-		extraParams?: Record<string, string>,
+	const callAI = async (
+		apiAction: string,
+		body: Record<string, string>,
+		actionId: string,
+		originalText: string,
 	) => {
-		const prefs = loadAIPreferences()
-		const text = selectedText
-
-		// Handle read-aloud separately (TTS doesn't produce text result)
-		if (action.id === 'read-aloud') {
-			setIsLoading(true)
-			try {
-				const ttsText = text || editor.getText().trim()
-				if (!ttsText) {
-					toast.error('Document is empty. Type something to read aloud!')
-					return
-				}
-				const res = await fetch('/api/ai', {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-						Authorization: `Bearer ${token}`,
-					},
-					body: JSON.stringify({
-						action: 'tts',
-						text: ttsText,
-						targetLanguage: prefs.ttsLanguage,
-						speaker: prefs.ttsVoice,
-					}),
-				})
-				if (!res.ok) {
-					const err = await res.json()
-					throw new Error(err.error || 'TTS failed')
-				}
-				const data = await res.json()
-				const url = `data:audio/wav;base64,${data.base64Audio}`
-				const audio = new Audio(url)
-				audio.play()
-				onClose()
-			} catch (err: unknown) {
-				const message = err instanceof Error ? err.message : String(err)
-				toast.error(`TTS failed: ${message}`)
-			} finally {
-				setIsLoading(false)
-			}
-			return
-		}
-
-		// Require selection for actions that need it
-		if (action.requiresSelection && !text) {
-			toast.error('Please select some text first')
-			return
-		}
-
 		setIsLoading(true)
 		try {
-			let apiAction: string
-			let body: Record<string, string>
-
-			if (action.id === 'translate') {
-				apiAction = 'translate'
-				body = {
-					action: apiAction,
-					text,
-					targetLanguage: extraParams?.targetLanguage || prefs.targetLanguage,
-				}
-			} else if (action.id === 'transliterate') {
-				apiAction = 'transliterate'
-				body = {
-					action: apiAction,
-					text,
-					sourceLanguage: extraParams?.sourceLanguage || 'auto',
-					targetLanguage: extraParams?.targetLanguage || prefs.targetLanguage,
-				}
-			} else if (action.id === 'custom-prompt') {
-				apiAction = 'chat'
-				const fullPrompt = text
-					? `Context: "${text}"\n\nPrompt: ${customPrompt}`
-					: customPrompt
-				body = { action: apiAction, prompt: fullPrompt }
-			} else {
-				// Write actions (summarize, fix-grammar, improve-flow, expand)
-				apiAction = 'chat'
-				const fullPrompt = `${action.prompt}:\n\n"${text}"`
-				body = { action: apiAction, prompt: fullPrompt }
-			}
-
 			const res = await fetch('/api/ai', {
 				method: 'POST',
 				headers: {
@@ -630,7 +753,7 @@ export default function AICommandPalette({
 
 			if (!res.ok) {
 				const err = await res.json()
-				throw new Error(err.error || 'AI request failed')
+				throw new Error(err.error || 'Request failed')
 			}
 
 			const data = await res.json()
@@ -638,222 +761,223 @@ export default function AICommandPalette({
 				|| data.transliteratedText
 				|| data.text
 				|| ''
-			onAction(action.id, result, text)
-			onClose()
+			onResult(actionId, result, originalText)
+			setPrompt('')
+			setShowPresets(true)
+			setShowTranslatePicker(false)
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err)
-			toast.error(`AI error: ${message}`)
+			toast.error(`Lekhan Bot: ${message}`)
 		} finally {
 			setIsLoading(false)
 		}
-	}, [selectedText, token, customPrompt, editor, onAction, onClose])
-
-	const handleActionClick = (action: AIActionDef) => {
-		if (action.id === 'translate') {
-			setSubMenu('translate')
-			return
-		}
-		if (action.id === 'transliterate') {
-			setSubMenu('transliterate')
-			return
-		}
-		if (action.id === 'custom-prompt') {
-			// Custom prompt input is always visible — don't execute on click
-			return
-		}
-		executeAction(action)
 	}
 
-	if (!isOpen) return null
-
-	const categories = ['write', 'translate', 'script', 'voice'] as const
-	const categoryLabels: Record<string, string> = {
-		write: 'Write',
-		translate: 'Translate',
-		script: 'Script',
-		voice: 'Voice',
+	const handlePresetAction = (action: LekhanBotAction) => {
+		const selectedText = getSelectedText()
+		if (action.requiresSelection && !selectedText) {
+			toast.error('Select some text first, then try again')
+			return
+		}
+		callAI(
+			'chat',
+			{
+				action: 'chat',
+				prompt: action.buildPrompt(selectedText),
+			},
+			action.id,
+			selectedText,
+		)
 	}
 
-	// Compute position with viewport bounds
-	const paletteWidth = 320
-	const clampedX = Math.min(
-		position.x,
-		window.innerWidth - paletteWidth - 16,
-	)
-	const clampedY = Math.min(position.y, window.innerHeight - 400)
+	const handleTranslate = (targetLanguage: string) => {
+		const selectedText = getSelectedText()
+		if (!selectedText) {
+			toast.error('Select some text to translate')
+			return
+		}
+		setShowTranslatePicker(false)
+		callAI(
+			'translate',
+			{ action: 'translate', text: selectedText, targetLanguage },
+			'translate',
+			selectedText,
+		)
+	}
 
-	return createPortal(
-		<div
-			ref={paletteRef}
-			className="fixed z-[9999] w-80 bg-surface-container border border-black/10 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 touch-scroll-container"
-			style={{ left: clampedX, top: clampedY }}
-		>
-			{/* Search Input */}
-			<div className="p-3 border-b border-black/5 dark:border-white/5">
-				{selectedText && (
-					<div className="text-[10px] text-on-surface-variant/60 mb-2 truncate">
-						Working with:{' '}
-						<span className="italic">
-							&quot;{selectedText.slice(0, 30)}
-							{selectedText.length > 30 ? '...' : ''}&quot;
-						</span>
-					</div>
-				)}
-				<div className="flex items-center gap-2 bg-black/5 dark:bg-white/5 rounded-xl px-3 py-2">
-					<span className="material-symbols-outlined text-on-surface-variant/50 text-sm">
-						search
-					</span>
-					<input
-						ref={searchRef}
-						type="text"
-						value={searchQuery}
-						onChange={(e) => setSearchQuery(e.target.value)}
-						placeholder="Search AI actions..."
-						className="flex-1 bg-transparent text-xs text-on-surface placeholder:text-on-surface-variant/40 outline-none"
-					/>
-				</div>
-			</div>
+	const handleReadAloud = () => {
+		const prefs = loadAIPreferences()
+		const text = getSelectedText() || editor?.getText().trim()
+		if (!text) {
+			toast.error('Document is empty')
+			return
+		}
+		setIsLoading(true)
+		fetch('/api/ai', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: `Bearer ${token}`,
+			},
+			body: JSON.stringify({
+				action: 'tts',
+				text: text.slice(0, 10000),
+				targetLanguage: prefs.ttsLanguage,
+				speaker: prefs.ttsVoice,
+			}),
+		})
+			.then(res => {
+				if (!res.ok) throw new Error('TTS failed')
+				return res.json()
+			})
+			.then(data => {
+				const audio = new Audio(`data:audio/wav;base64,${data.base64Audio}`)
+				audio.play()
+			})
+			.catch(err => {
+				const message = err instanceof Error ? err.message : String(err)
+				toast.error(`Read aloud failed: ${message}`)
+			})
+			.finally(() => setIsLoading(false))
+	}
 
-			{/* Loading overlay */}
-			{isLoading && (
-				<div className="px-4 py-3 flex items-center gap-2 text-xs text-on-surface-variant/70 border-b border-black/5 dark:border-white/5">
-					<span className="animate-spin h-3.5 w-3.5 border-2 border-primary-container border-t-transparent rounded-full" />
-					<span>✨ Generating...</span>
+	const handleSubmit = async (e: React.FormEvent) => {
+		e.preventDefault()
+		if (!prompt.trim() || isLoading) return
+
+		const selectedText = getSelectedText()
+		const fullPrompt = selectedText
+			? `Context: "${selectedText}"\n\nInstruction: ${prompt}`
+			: prompt
+
+		callAI(
+			'chat',
+			{ action: 'chat', prompt: fullPrompt },
+			'custom-prompt',
+			selectedText,
+		)
+	}
+
+	if (!isVisible) return null
+
+	const selectedText = getSelectedText()
+
+	return (
+		<div className="w-full max-w-5xl mx-auto px-[40px] md:px-[60px] pb-4 animate-in fade-in slide-in-from-bottom-2 duration-200">
+			{/* Presets row — visible when focused and not loading */}
+			{showPresets && !isLoading && !showTranslatePicker && (
+				<div className="flex flex-wrap items-center gap-1.5 mb-2">
+					{LEKHAN_BOT_ACTIONS.map(action => (
+						<button
+							key={action.id}
+							onClick={() => handlePresetAction(action)}
+							disabled={action.requiresSelection && !selectedText}
+							className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-xl border transition-all active:scale-95 ${
+								action.requiresSelection && !selectedText
+									? 'border-black/5 dark:border-white/5 text-on-surface-variant/30 cursor-not-allowed'
+									: 'border-black/10 dark:border-white/10 text-on-surface hover:bg-black/5 dark:hover:bg-white/5 hover:border-primary-container/30'
+							}`}
+						>
+							<span className="material-symbols-outlined text-sm">{action.icon}</span>
+							{action.label}
+						</button>
+					))}
+
+					{/* Translate button — opens language picker */}
+					<button
+						onClick={() => setShowTranslatePicker(true)}
+						disabled={!selectedText}
+						className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-xl border transition-all active:scale-95 ${
+							!selectedText
+								? 'border-black/5 dark:border-white/5 text-on-surface-variant/30 cursor-not-allowed'
+								: 'border-black/10 dark:border-white/10 text-on-surface hover:bg-black/5 dark:hover:bg-white/5 hover:border-primary-container/30'
+						}`}
+					>
+						<span className="material-symbols-outlined text-sm">translate</span>
+						Translate
+					</button>
+
+					{/* Read Aloud */}
+					<button
+						onClick={handleReadAloud}
+						className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-xl border border-black/10 dark:border-white/10 text-on-surface hover:bg-black/5 dark:hover:bg-white/5 hover:border-primary-container/30 transition-all active:scale-95"
+					>
+						<span className="material-symbols-outlined text-sm">volume_up</span>
+						Read Aloud
+					</button>
 				</div>
 			)}
 
-			{/* Sub-menu: Language/Script picker */}
-			{subMenu && !isLoading && (
-				<div className="max-h-64 overflow-y-auto touch-scroll-container p-2">
+			{/* Language picker for Translate */}
+			{showTranslatePicker && !isLoading && (
+				<div className="flex flex-wrap items-center gap-1 mb-2 max-h-28 overflow-y-auto touch-scroll-container">
 					<button
-						onClick={() => setSubMenu(null)}
-						className="flex items-center gap-1 text-xs text-on-surface-variant/60 hover:text-on-surface px-2 py-1 mb-1 transition"
+						onClick={() => setShowTranslatePicker(false)}
+						className="flex items-center gap-1 text-xs text-on-surface-variant/60 hover:text-on-surface px-2 py-1 mr-1 transition"
 					>
-						<span className="material-symbols-outlined text-sm">
-							arrow_back
-						</span>
+						<span className="material-symbols-outlined text-sm">arrow_back</span>
 						Back
 					</button>
-					<div className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50 px-2 py-1">
-						{subMenu === 'translate'
-							? 'Translate to'
-							: 'Transliterate to'}
-					</div>
 					{LANGUAGES.map(lang => (
 						<button
 							key={lang.code}
-							onClick={() => {
-								const action = AI_ACTIONS.find(
-									a => a.id === subMenu,
-								)!
-								executeAction(action, {
-									targetLanguage: lang.code,
-									sourceLanguage: 'auto',
-								})
-							}}
-							className="w-full flex items-center gap-2 px-3 py-2 text-xs text-on-surface hover:bg-black/5 dark:hover:bg-white/5 rounded-lg transition"
+							onClick={() => handleTranslate(lang.code)}
+							className="px-2.5 py-1 text-[11px] rounded-lg border border-black/10 dark:border-white/10 text-on-surface hover:bg-primary-container/10 hover:border-primary-container/30 transition"
 						>
-							<span className="text-on-surface-variant/50 text-[10px] w-12">
-								{lang.code}
-							</span>
-							<span>{lang.name}</span>
-							<span className="text-on-surface-variant/40 text-[10px] ml-auto">
-								{lang.script}
-							</span>
+							{lang.name}
 						</button>
 					))}
 				</div>
 			)}
 
-			{/* Main action list */}
-			{!subMenu && !isLoading && (
-				<div className="max-h-72 overflow-y-auto touch-scroll-container p-2">
-					{categories.map(cat => {
-						const actions = filteredActions.filter(
-							a => a.category === cat,
-						)
-						if (actions.length === 0) return null
-						return (
-							<div key={cat} className="mb-2">
-								<div className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50 px-2 py-1">
-									{categoryLabels[cat]}
-								</div>
-								{actions.map(action => {
-									const isDisabled =
-										action.requiresSelection && !selectedText
-									return (
-										<button
-											key={action.id}
-											onClick={() =>
-												!isDisabled &&
-												handleActionClick(action)
-											}
-											disabled={isDisabled}
-											className={`w-full flex items-center gap-3 px-3 py-2.5 text-xs rounded-xl transition ${
-												isDisabled
-													? 'text-on-surface-variant/30 cursor-not-allowed'
-													: 'text-on-surface hover:bg-black/5 dark:hover:bg-white/5'
-											}`}
-										>
-											<span
-												className={`material-symbols-outlined text-sm ${
-													isDisabled
-														? 'text-on-surface-variant/30'
-														: 'text-primary-container'
-												}`}
-											>
-												{action.icon}
-											</span>
-											<span>{action.label}</span>
-											{isDisabled && (
-												<span className="text-[10px] text-on-surface-variant/30 ml-auto">
-													Select text
-												</span>
-											)}
-										</button>
-									)
-								})}
-							</div>
-						)
-					})}
-
-					{/* Custom prompt input */}
-					{filteredActions.some(a => a.id === 'custom-prompt') && (
-						<form
-							onSubmit={(e) => {
-								e.preventDefault()
-								if (!customPrompt.trim()) return
-								const action = AI_ACTIONS.find(
-									a => a.id === 'custom-prompt',
-								)!
-								executeAction(action)
-							}}
-							className="mt-2 px-2"
-						>
-							<div className="flex gap-2">
-								<input
-									type="text"
-									value={customPrompt}
-									onChange={(e) =>
-										setCustomPrompt(e.target.value)
-									}
-									placeholder="Type a custom instruction..."
-									className="flex-1 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-on-surface placeholder:text-on-surface-variant/40 outline-none focus:ring-2 focus:ring-primary-container/50"
-								/>
-								<button
-									type="submit"
-									disabled={!customPrompt.trim()}
-									className="rounded-xl bg-primary-container text-on-primary-container px-3 py-2 text-xs font-semibold hover:brightness-110 transition disabled:opacity-50"
-								>
-									Go
-								</button>
-							</div>
-						</form>
-					)}
+			{/* Selection context hint */}
+			{selectedText && !isLoading && (
+				<div className="text-[10px] text-on-surface-variant/50 mb-1.5 truncate px-1">
+					Selected: &quot;{selectedText.slice(0, 60)}{selectedText.length > 60 ? '...' : ''}&quot;
 				</div>
 			)}
-		</div>,
-		document.body,
+
+			{/* Prompt input */}
+			<form
+				onSubmit={handleSubmit}
+				className="flex items-center gap-3 rounded-2xl border-2 border-primary-container/30 focus-within:border-primary-container/60 bg-surface-container/50 backdrop-blur-sm px-4 py-3 transition-all"
+			>
+				<span className="material-symbols-outlined text-primary-container/60 text-lg">
+					auto_awesome
+				</span>
+				<input
+					ref={inputRef}
+					type="text"
+					value={prompt}
+					onChange={(e) => setPrompt(e.target.value)}
+					onFocus={() => { setShowPresets(true); setShowTranslatePicker(false) }}
+					placeholder="Ask Lekhan Bot anything..."
+					disabled={isLoading}
+					className="flex-1 bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/40 outline-none disabled:opacity-50"
+				/>
+				{isLoading ? (
+					<span className="animate-spin h-5 w-5 border-2 border-primary-container border-t-transparent rounded-full" />
+				) : (
+					<>
+						<button
+							type="button"
+							onClick={onClose}
+							className="rounded-lg p-1.5 hover:bg-black/5 dark:hover:bg-white/5 text-on-surface-variant/50 transition"
+							title="Close (Esc)"
+						>
+							<span className="material-symbols-outlined text-base">close</span>
+						</button>
+						<button
+							type="submit"
+							disabled={!prompt.trim()}
+							className="rounded-xl bg-primary-container/20 hover:bg-primary-container/40 text-primary-container p-2 transition disabled:opacity-30 active:scale-95"
+						>
+							<span className="material-symbols-outlined text-lg">arrow_upward</span>
+						</button>
+					</>
+				)}
+			</form>
+		</div>
 	)
 }
 ```
@@ -861,24 +985,20 @@ export default function AICommandPalette({
 - [ ] **Step 2: Commit**
 
 ```bash
-git add components/ai-command-palette.tsx
-git commit -m "feat: add inline AI command palette component"
+git add components/lekhan-bot-bar.tsx
+git commit -m "feat: add Lekhan Bot prompt bar with quick-action presets"
 ```
 
 ---
 
-### Task 4: AI Diff Preview Component
+### Task 5: AI Diff Preview Component
 
 **Files:**
 - Create: `components/ai-diff-preview.tsx`
-- Test: Manual testing (visual component — tested via integration in Task 6)
 
 **Interfaces:**
-- Consumes:
-  - `AI_ACTIONS` from `lib/ai-constants.ts` (Task 2) — to look up `defaultInsert`
-- Produces:
-  - `<AIDiffPreview editor={editor} actionId={string} originalText={string} resultText={string} position={{ x, y }} onClose={() => void} />`
-  - Handles Accept, Insert Below, Copy, Discard internally via `editor` reference
+- Consumes: `LEKHAN_BOT_ACTIONS` from `lib/ai-constants.ts` (Task 2)
+- Produces: `<AIDiffPreview editor={editor} actionId={string} originalText={string} resultText={string} position={{ x, y }} onClose={() => void} />`
 
 - [ ] **Step 1: Create `components/ai-diff-preview.tsx`**
 
@@ -888,7 +1008,7 @@ git commit -m "feat: add inline AI command palette component"
 import { useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
-import { AI_ACTIONS } from '@/lib/ai-constants'
+import { LEKHAN_BOT_ACTIONS } from '@/lib/ai-constants'
 
 interface AIDiffPreviewProps {
 	editor: any
@@ -897,6 +1017,17 @@ interface AIDiffPreviewProps {
 	resultText: string
 	position: { x: number, y: number }
 	onClose: () => void
+}
+
+const ACTION_LABELS: Record<string, string> = {
+	'fix-grammar': 'Grammar Fix',
+	'improve-flow': 'Rewrite',
+	'summarize': 'Summary',
+	'expand': 'Expanded',
+	'make-shorter': 'Shortened',
+	'translate': 'Translation',
+	'transliterate': 'Transliteration',
+	'custom-prompt': 'Lekhan Bot',
 }
 
 export default function AIDiffPreview({
@@ -908,26 +1039,20 @@ export default function AIDiffPreview({
 	onClose,
 }: AIDiffPreviewProps) {
 	const cardRef = useRef<HTMLDivElement>(null)
-	const actionDef = AI_ACTIONS.find(a => a.id === actionId)
-	const actionLabel = actionDef?.label || 'AI Result'
+	const actionLabel = ACTION_LABELS[actionId] || 'Lekhan Bot'
+	const actionDef = LEKHAN_BOT_ACTIONS.find(a => a.id === actionId)
 	const defaultInsert = actionDef?.defaultInsert || 'both'
 
-	// Close on click outside
 	useEffect(() => {
 		const handleClickOutside = (e: MouseEvent) => {
-			if (
-				cardRef.current &&
-				!cardRef.current.contains(e.target as Node)
-			) {
+			if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
 				onClose()
 			}
 		}
 		document.addEventListener('mousedown', handleClickOutside)
-		return () =>
-			document.removeEventListener('mousedown', handleClickOutside)
+		return () => document.removeEventListener('mousedown', handleClickOutside)
 	}, [onClose])
 
-	// Close on Escape
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (e.key === 'Escape') onClose()
@@ -937,38 +1062,23 @@ export default function AIDiffPreview({
 	}, [onClose])
 
 	const handleAccept = () => {
-		// Replace the original text in the document
-		const { state } = editor
-		const { doc } = state
+		const { doc } = editor.state
 		const fullText = doc.textContent
 		const idx = fullText.indexOf(originalText)
 		if (idx !== -1) {
-			editor
-				.chain()
-				.focus()
-				.setTextSelection({
-					from: idx + 1,
-					to: idx + 1 + originalText.length,
-				})
-				.insertContent(resultText)
-				.run()
+			editor.chain().focus()
+				.setTextSelection({ from: idx + 1, to: idx + 1 + originalText.length })
+				.insertContent(resultText).run()
 		} else {
-			// Fallback: insert at current cursor
 			editor.chain().focus().insertContent(resultText).run()
 		}
 		onClose()
 	}
 
 	const handleInsertBelow = () => {
-		// Move cursor to end of selection and insert as new paragraph
-		const { state } = editor
-		const { to } = state.selection
-		editor
-			.chain()
-			.focus()
-			.setTextSelection(to)
-			.insertContent(`\n\n${resultText}`)
-			.run()
+		const { to } = editor.state.selection
+		editor.chain().focus().setTextSelection(to)
+			.insertContent(`\n\n${resultText}`).run()
 		onClose()
 	}
 
@@ -978,12 +1088,8 @@ export default function AIDiffPreview({
 		onClose()
 	}
 
-	// Clamp position within viewport
 	const cardWidth = 360
-	const clampedX = Math.min(
-		position.x,
-		window.innerWidth - cardWidth - 16,
-	)
+	const clampedX = Math.min(position.x, window.innerWidth - cardWidth - 16)
 	const clampedY = Math.min(position.y, window.innerHeight - 300)
 
 	return createPortal(
@@ -992,81 +1098,52 @@ export default function AIDiffPreview({
 			className="fixed z-[9998] w-[360px] bg-surface-container border border-black/10 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200"
 			style={{ left: clampedX, top: clampedY }}
 		>
-			{/* Header */}
 			<div className="flex items-center justify-between px-4 py-3 border-b border-black/5 dark:border-white/5">
 				<div className="flex items-center gap-2 text-xs font-semibold text-on-surface">
-					<span className="material-symbols-outlined text-primary-container text-sm">
-						auto_awesome
-					</span>
+					<span className="material-symbols-outlined text-primary text-sm">auto_awesome</span>
 					{actionLabel}
 				</div>
-				<button
-					onClick={onClose}
-					className="rounded-lg p-1 hover:bg-black/10 dark:hover:bg-white/10 text-on-surface-variant transition"
-				>
-					<span className="material-symbols-outlined text-sm">
-						close
-					</span>
+				<button onClick={onClose} className="rounded-lg p-1 hover:bg-black/10 dark:hover:bg-white/10 text-on-surface-variant transition">
+					<span className="material-symbols-outlined text-sm">close</span>
 				</button>
 			</div>
 
-			{/* Content */}
 			<div className="px-4 py-3 space-y-3 max-h-48 overflow-y-auto touch-scroll-container">
 				{originalText && (
 					<div>
-						<div className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50 mb-1">
-							Original
-						</div>
+						<div className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50 mb-1">Original</div>
 						<div className="text-xs text-on-surface-variant bg-black/5 dark:bg-white/5 rounded-lg p-2.5 whitespace-pre-wrap leading-relaxed max-h-20 overflow-y-auto">
 							{originalText}
 						</div>
 					</div>
 				)}
 				<div>
-					<div className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50 mb-1">
-						Result
-					</div>
+					<div className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/50 mb-1">Result</div>
 					<div className="text-xs text-on-surface bg-primary-container/10 border border-primary-container/20 rounded-lg p-2.5 whitespace-pre-wrap leading-relaxed max-h-20 overflow-y-auto">
 						{resultText}
 					</div>
 				</div>
 			</div>
 
-			{/* Actions */}
 			<div className="flex items-center gap-2 px-4 py-3 border-t border-black/5 dark:border-white/5">
-				<button
-					onClick={handleAccept}
-					className={`flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold transition-all active:scale-95 ${
-						defaultInsert === 'accept' || defaultInsert === 'both'
-							? 'bg-primary-container text-on-primary-container hover:brightness-110'
-							: 'bg-black/5 dark:bg-white/5 text-on-surface hover:bg-black/10 dark:hover:bg-white/10'
-					}`}
-				>
-					<span className="material-symbols-outlined text-sm">
-						check
-					</span>
+				<button onClick={handleAccept} className={`flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold transition-all active:scale-95 ${
+					defaultInsert === 'accept' || defaultInsert === 'both'
+						? 'bg-primary-container text-on-primary-container hover:brightness-110'
+						: 'bg-black/5 dark:bg-white/5 text-on-surface hover:bg-black/10 dark:hover:bg-white/10'
+				}`}>
+					<span className="material-symbols-outlined text-sm">check</span>
 					Accept
 				</button>
-				<button
-					onClick={handleInsertBelow}
-					className={`flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold transition-all active:scale-95 ${
-						defaultInsert === 'below'
-							? 'bg-primary-container text-on-primary-container hover:brightness-110'
-							: 'bg-black/5 dark:bg-white/5 text-on-surface hover:bg-black/10 dark:hover:bg-white/10'
-					}`}
-				>
-					<span className="material-symbols-outlined text-sm">
-						subdirectory_arrow_right
-					</span>
+				<button onClick={handleInsertBelow} className={`flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-semibold transition-all active:scale-95 ${
+					defaultInsert === 'below'
+						? 'bg-primary-container text-on-primary-container hover:brightness-110'
+						: 'bg-black/5 dark:bg-white/5 text-on-surface hover:bg-black/10 dark:hover:bg-white/10'
+				}`}>
+					<span className="material-symbols-outlined text-sm">subdirectory_arrow_right</span>
 					Insert Below
 				</button>
-				<button
-					onClick={handleCopy}
-					className="flex items-center gap-1 rounded-xl px-3 py-2 text-xs text-on-surface-variant bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-all active:scale-95"
-				>
-					<span className="material-symbols-outlined text-sm">
-						content_copy
-					</span>
+				<button onClick={handleCopy} className="flex items-center gap-1 rounded-xl px-3 py-2 text-xs text-on-surface-variant bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-all active:scale-95">
+					<span className="material-symbols-outlined text-sm">content_copy</span>
 				</button>
 			</div>
 		</div>,
@@ -1079,330 +1156,60 @@ export default function AIDiffPreview({
 
 ```bash
 git add components/ai-diff-preview.tsx
-git commit -m "feat: add inline AI diff preview card component"
+git commit -m "feat: add inline AI diff preview card"
 ```
 
 ---
 
-### Task 5: AI Settings Panel (Replaces AI Assistant Panel)
+### Task 6: AI Settings Panel (Replaces AI Assistant Panel)
 
 **Files:**
 - Create: `components/ai-settings-panel.tsx`
-- Delete: `components/ai-assistant-panel.tsx` (handled in Task 6 when we swap imports)
-- Test: Manual testing
 
 **Interfaces:**
-- Consumes:
-  - `LANGUAGES`, `TTS_LANGUAGES`, `SPEAKERS`, `loadAIPreferences`, `saveAIPreferences` from `lib/ai-constants.ts` (Task 2)
-  - `CustomSelect` from `components/ui/custom-select.tsx` (existing component)
-- Produces:
-  - `<AISettingsPanel isOpen={boolean} onClose={() => void} editor={any} token={string} />`
-  - Same prop interface as old `AIAssistantPanel` for drop-in replacement
+- Consumes: `LANGUAGES`, `TTS_LANGUAGES`, `SPEAKERS`, `loadAIPreferences`, `saveAIPreferences` from Task 2
+- Produces: `<AISettingsPanel isOpen={boolean} onClose={() => void} editor={any} token={string} />`
 
 - [ ] **Step 1: Create `components/ai-settings-panel.tsx`**
 
+Same implementation as the previous plan's Task 5 — a lightweight side panel with Document Intelligence (language detection), AI Preferences (translate target, TTS language, TTS voice dropdowns), and Keyboard Shortcuts reference card. Uses `CustomSelect` from `components/ui/custom-select.tsx`.
+
+Key details:
+- Header icon: `settings`, title: "Settings", subtitle: "AI PREFERENCES"
+- Document Intelligence: calls `detect-language` API on panel open
+- Preferences: three `CustomSelect` dropdowns persisted via `saveAIPreferences()`
+- Shortcuts card: `⌘L` — Open Lekhan Bot, `/` — Block commands, `Esc` — Dismiss
+
+Full code is identical to the component defined in the previous plan's Task 5 section, with one change — the shortcuts card shows `⌘L` instead of `⌘J`:
+
 ```typescript
-'use client'
-
-import { useState, useEffect, useCallback } from 'react'
-import { toast } from 'sonner'
-import { CustomSelect } from './ui/custom-select'
-import {
-	LANGUAGES,
-	TTS_LANGUAGES,
-	SPEAKERS,
-	loadAIPreferences,
-	saveAIPreferences,
-} from '@/lib/ai-constants'
-
-interface AISettingsPanelProps {
-	isOpen: boolean
-	onClose: () => void
-	editor: any
-	token: string
-}
-
-export default function AISettingsPanel({
-	isOpen,
-	onClose,
-	editor,
-	token,
-}: AISettingsPanelProps) {
-	const [prefs, setPrefs] = useState(loadAIPreferences)
-	const [detectedLang, setDetectedLang] = useState<{
-		languageCode: string
-		languageName: string
-		script: string
-	} | null>(null)
-	const [isDetecting, setIsDetecting] = useState(false)
-
-	// Reload prefs when panel opens
-	useEffect(() => {
-		if (isOpen) {
-			setPrefs(loadAIPreferences())
-		}
-	}, [isOpen])
-
-	// Auto-detect document language (debounced)
-	const detectLanguage = useCallback(async () => {
-		if (!editor || !token) return
-		const text = editor.getText().trim()
-		if (!text || text.length < 10) {
-			setDetectedLang(null)
-			return
-		}
-
-		setIsDetecting(true)
-		try {
-			const sample = text.slice(0, 500)
-			const res = await fetch('/api/ai', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${token}`,
-				},
-				body: JSON.stringify({
-					action: 'detect-language',
-					text: sample,
-				}),
-			})
-			if (res.ok) {
-				const data = await res.json()
-				setDetectedLang(data)
-			}
-		} catch {
-			// Silent fail — detection is best-effort
-		} finally {
-			setIsDetecting(false)
-		}
-	}, [editor, token])
-
-	// Run detection when panel opens
-	useEffect(() => {
-		if (isOpen) {
-			detectLanguage()
-		}
-	}, [isOpen, detectLanguage])
-
-	const handlePrefChange = (
-		key: keyof typeof prefs,
-		value: string,
-	) => {
-		const updated = { ...prefs, [key]: value }
-		setPrefs(updated)
-		saveAIPreferences({ [key]: value })
-		toast.success('Preference saved')
-	}
-
-	if (!isOpen) return null
-
-	// Group speakers: those with tone hints first
-	const speakersWithTone = SPEAKERS.filter(s => s.tone)
-	const speakersWithoutTone = SPEAKERS.filter(s => !s.tone)
-	const sortedSpeakers = [...speakersWithTone, ...speakersWithoutTone]
-
-	return (
-		<aside className="absolute right-0 top-0 bottom-0 w-80 bg-background border-l border-black/10 dark:border-white/10 p-6 flex flex-col z-[60] shadow-md backdrop-blur-xl animate-in slide-in-from-right duration-200">
-			{/* Header */}
-			<div className="flex items-center justify-between border-b border-black/10 dark:border-white/10 pb-4 mb-6">
-				<div className="flex items-center gap-sm">
-					<div className="w-8 h-8 rounded-lg bg-primary-container/20 flex items-center justify-center">
-						<span className="material-symbols-outlined text-primary-container">
-							settings
-						</span>
-					</div>
-					<div>
-						<h3 className="font-title-lg text-title-lg text-on-surface">
-							Settings
-						</h3>
-						<p className="text-[10px] text-primary-container/80 uppercase tracking-widest font-bold">
-							AI Preferences
-						</p>
-					</div>
-				</div>
-				<button
-					onClick={onClose}
-					className="rounded-lg p-1 hover:bg-black/10 dark:hover:bg-white/10 text-on-surface-variant hover:text-on-surface transition"
-				>
-					<span className="material-symbols-outlined text-lg">
-						close
-					</span>
-				</button>
-			</div>
-
-			<div className="flex-1 overflow-y-auto touch-scroll-container px-1.5 -mx-1.5 py-1 -my-1 space-y-6 text-left no-scrollbar">
-				{/* Document Intelligence */}
-				<div className="space-y-2">
-					<p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
-						Document Intelligence
-					</p>
-					<div className="rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-3">
-						{isDetecting ? (
-							<div className="flex items-center gap-2 text-xs text-on-surface-variant/70">
-								<span className="animate-spin h-3 w-3 border-2 border-primary-container border-t-transparent rounded-full" />
-								Detecting language...
-							</div>
-						) : detectedLang ? (
-							<div className="flex items-center gap-2">
-								<span className="material-symbols-outlined text-primary-container text-sm">
-									translate
-								</span>
-								<div>
-									<span className="text-xs font-semibold text-on-surface">
-										{detectedLang.languageName}
-									</span>
-									<span className="text-[10px] text-on-surface-variant/60 ml-1">
-										({detectedLang.script})
-									</span>
-								</div>
-							</div>
-						) : (
-							<span className="text-xs text-on-surface-variant/50">
-								Type at least 10 characters to detect language
-							</span>
-						)}
-					</div>
-				</div>
-
-				{/* AI Preferences */}
-				<div className="space-y-4">
-					<p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
-						AI Preferences
-					</p>
-
-					<div>
-						<label className="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60 mb-1.5">
-							Default Translate Target
-						</label>
-						<CustomSelect
-							value={prefs.targetLanguage}
-							onValueChange={(val) =>
-								handlePrefChange('targetLanguage', val)
-							}
-							options={LANGUAGES.map(lang => ({
-								label: `${lang.name} (${lang.script})`,
-								value: lang.code,
-							}))}
-							triggerClassName="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl p-2.5 h-[38px] text-xs text-on-surface focus:ring-2 focus:ring-primary-container/50 outline-none premium-transition"
-						/>
-					</div>
-
-					<div>
-						<label className="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60 mb-1.5">
-							Default TTS Language
-						</label>
-						<CustomSelect
-							value={prefs.ttsLanguage}
-							onValueChange={(val) =>
-								handlePrefChange('ttsLanguage', val)
-							}
-							options={TTS_LANGUAGES.map(lang => ({
-								label: lang.name,
-								value: lang.code,
-							}))}
-							triggerClassName="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl p-2.5 h-[38px] text-xs text-on-surface focus:ring-2 focus:ring-primary-container/50 outline-none premium-transition"
-						/>
-					</div>
-
-					<div>
-						<label className="block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60 mb-1.5">
-							Default Voice
-						</label>
-						<CustomSelect
-							value={prefs.ttsVoice}
-							onValueChange={(val) =>
-								handlePrefChange('ttsVoice', val)
-							}
-							options={sortedSpeakers.map(sp => ({
-								label: sp.tone
-									? `${sp.name} — ${sp.tone}`
-									: sp.name,
-								value: sp.id,
-							}))}
-							triggerClassName="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl p-2.5 h-[38px] text-xs text-on-surface focus:ring-2 focus:ring-primary-container/50 outline-none premium-transition"
-						/>
-					</div>
-				</div>
-
-				{/* Quick Reference */}
-				<div className="space-y-2">
-					<p className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">
-						Keyboard Shortcuts
-					</p>
-					<div className="rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-3 space-y-2">
-						<div className="flex justify-between text-xs">
-							<span className="text-on-surface-variant">
-								Open AI palette
-							</span>
-							<kbd className="bg-black/10 dark:bg-white/10 px-2 py-0.5 rounded text-[10px] font-mono">
-								⌘ J
-							</kbd>
-						</div>
-						<div className="flex justify-between text-xs">
-							<span className="text-on-surface-variant">
-								Slash command
-							</span>
-							<kbd className="bg-black/10 dark:bg-white/10 px-2 py-0.5 rounded text-[10px] font-mono">
-								/ai
-							</kbd>
-						</div>
-						<div className="flex justify-between text-xs">
-							<span className="text-on-surface-variant">
-								Dismiss
-							</span>
-							<kbd className="bg-black/10 dark:bg-white/10 px-2 py-0.5 rounded text-[10px] font-mono">
-								Esc
-							</kbd>
-						</div>
-					</div>
-				</div>
-			</div>
-
-			{/* Footer */}
-			<div className="mt-auto pt-6 text-left border-t border-black/5 dark:border-white/5">
-				<p className="text-[10px] text-on-surface-variant/50 leading-relaxed">
-					AI-generated content may be inaccurate or misleading.
-					Always review and verify important information.
-				</p>
-			</div>
-		</aside>
-	)
-}
+<kbd className="bg-black/10 dark:bg-white/10 px-2 py-0.5 rounded text-[10px] font-mono">⌘ L</kbd>
 ```
 
 - [ ] **Step 2: Commit**
 
 ```bash
 git add components/ai-settings-panel.tsx
-git commit -m "feat: add AI settings panel component (replaces old tabbed panel)"
+git commit -m "feat: add AI settings panel (replaces old tabbed panel)"
 ```
 
 ---
 
-### Task 6: Wire Everything into Editor Workspace + Update Bubble Menu
+### Task 7: Wire Everything — Editor Workspace + Bubble Menu
 
-This is the integration task — connect all new components, remove old ones, fix the header button label, add keyboard shortcut handling.
+Integration task — connect all new components, add keyboard shortcuts, configure the slash menu, update the bubble menu.
 
 **Files:**
-- Modify: `components/editor-workspace.tsx:27-28` (swap imports)
-- Modify: `components/editor-workspace.tsx:122` (add new state vars)
-- Modify: `components/editor-workspace.tsx:338-345` (rename header button)
-- Modify: `components/editor-workspace.tsx:497-499` (swap bubble menu, add palette + diff preview)
-- Modify: `components/editor-workspace.tsx:511` (swap AIAssistantPanel → AISettingsPanel)
-- Modify: `components/ai-bubble-menu.tsx` (full rewrite — remove Translate/Listen, add AI button)
-- Modify: `components/mobile-header-menu.tsx:119` (rename "AI Companion" to "Settings")
+- Modify: `components/editor-workspace.tsx` (imports, state, extensions, rendering)
+- Modify: `components/ai-bubble-menu.tsx` (full rewrite)
+- Modify: `components/mobile-header-menu.tsx:118-119` (rename button)
+- Delete: `components/ai-assistant-panel.tsx`
 
 **Interfaces:**
-- Consumes:
-  - `AICommandPalette` from Task 3
-  - `AIDiffPreview` from Task 4
-  - `AISettingsPanel` from Task 5
-  - Updated `AIBubbleMenu` (this task)
-- Produces: Fully wired editor with inline AI experience
+- Consumes: All components from Tasks 3–6
+- Produces: Fully wired editor with Lekhan Bot
 
 - [ ] **Step 1: Rewrite `components/ai-bubble-menu.tsx`**
-
-Replace the entire file content with:
 
 ```typescript
 'use client'
@@ -1412,50 +1219,29 @@ import { Bold, Italic, Underline } from 'lucide-react'
 
 interface AIBubbleMenuProps {
 	editor: any
-	onOpenAIPalette: () => void
+	onOpenLekhanBot: () => void
 }
 
-export default function AIBubbleMenu({
-	editor,
-	onOpenAIPalette,
-}: AIBubbleMenuProps) {
+export default function AIBubbleMenu({ editor, onOpenLekhanBot }: AIBubbleMenuProps) {
 	if (!editor) return null
 
 	return (
-		<BubbleMenu
-			editor={editor}
-			tippyOptions={{ duration: 100 }}
-			className="flex overflow-hidden rounded-lg border border-border bg-card/80 backdrop-blur-md shadow-xl p-1 z-50"
-		>
+		<BubbleMenu editor={editor} tippyOptions={{ duration: 100 }} className="flex overflow-hidden rounded-lg border border-border bg-card/80 backdrop-blur-md shadow-xl p-1 z-50">
 			<button
 				onClick={() => editor.chain().focus().toggleBold().run()}
-				className={`p-2 transition rounded-md ${
-					editor.isActive('bold')
-						? 'bg-primary/20 text-primary'
-						: 'hover:bg-muted text-muted-foreground'
-				}`}
+				className={`p-2 transition rounded-md ${editor.isActive('bold') ? 'bg-primary/20 text-primary' : 'hover:bg-muted text-muted-foreground'}`}
 			>
 				<Bold className="h-4 w-4" />
 			</button>
 			<button
 				onClick={() => editor.chain().focus().toggleItalic().run()}
-				className={`p-2 transition rounded-md ${
-					editor.isActive('italic')
-						? 'bg-primary/20 text-primary'
-						: 'hover:bg-muted text-muted-foreground'
-				}`}
+				className={`p-2 transition rounded-md ${editor.isActive('italic') ? 'bg-primary/20 text-primary' : 'hover:bg-muted text-muted-foreground'}`}
 			>
 				<Italic className="h-4 w-4" />
 			</button>
 			<button
-				onClick={() =>
-					editor.chain().focus().toggleUnderline().run()
-				}
-				className={`p-2 transition rounded-md ${
-					editor.isActive('underline')
-						? 'bg-primary/20 text-primary'
-						: 'hover:bg-muted text-muted-foreground'
-				}`}
+				onClick={() => editor.chain().focus().toggleUnderline().run()}
+				className={`p-2 transition rounded-md ${editor.isActive('underline') ? 'bg-primary/20 text-primary' : 'hover:bg-muted text-muted-foreground'}`}
 			>
 				<Underline className="h-4 w-4" />
 			</button>
@@ -1463,12 +1249,11 @@ export default function AIBubbleMenu({
 			<div className="w-px bg-border mx-1 my-1" />
 
 			<button
-				onClick={onOpenAIPalette}
+				onClick={onOpenLekhanBot}
 				className="flex items-center gap-1.5 p-2 px-3 text-xs font-semibold hover:bg-primary/10 text-primary transition rounded-md"
+				title="Lekhan Bot (⌘L)"
 			>
-				<span className="material-symbols-outlined text-sm">
-					auto_awesome
-				</span>
+				<span className="material-symbols-outlined text-sm">auto_awesome</span>
 				<span>AI</span>
 			</button>
 		</BubbleMenu>
@@ -1476,9 +1261,9 @@ export default function AIBubbleMenu({
 }
 ```
 
-- [ ] **Step 2: Update `components/editor-workspace.tsx` imports**
+- [ ] **Step 2: Update `components/editor-workspace.tsx` — imports**
 
-Replace lines 27-28:
+Replace:
 ```typescript
 import AIAssistantPanel from './ai-assistant-panel'
 import AIBubbleMenu from './ai-bubble-menu'
@@ -1487,22 +1272,104 @@ With:
 ```typescript
 import AISettingsPanel from './ai-settings-panel'
 import AIBubbleMenu from './ai-bubble-menu'
-import AICommandPalette from './ai-command-palette'
+import LekhanBotBar from './lekhan-bot-bar'
 import AIDiffPreview from './ai-diff-preview'
+import { SlashMenuExtension, buildSlashMenuItems } from '@/lib/slash-menu-extension'
+import { SlashMenuComponent } from './slash-menu'
 ```
 
-Also add `useCallback` to the React import on line 3 (it already imports `useEffect, useState`):
+Add `useCallback` to the React import if not already present.
+
+- [ ] **Step 3: Add slash menu to TipTap extensions**
+
+In the `getSharedExtensions()` function, this can't be done statically because we need the `onOpenLekhanBot` callback. Instead, move the slash menu extension into the `useEditor` call inside the component.
+
+In the `useEditor` extensions array (line ~225-241), add after `...getSharedExtensions()`:
+
 ```typescript
-import { useEffect, useState, useCallback } from 'react'
+SlashMenuExtension.configure({
+	suggestion: {
+		char: '/',
+		items: ({ query }: { query: string }) => {
+			const allItems = buildSlashMenuItems(handleOpenLekhanBot)
+			if (!query) return allItems
+			return allItems.filter(item =>
+				item.label.toLowerCase().includes(query.toLowerCase())
+			)
+		},
+		render: () => {
+			let component: any
+			let popup: any
+
+			return {
+				onStart: (props: any) => {
+					const { default: tippy } = require('tippy.js')
+					const container = document.createElement('div')
+					const root = require('react-dom/client').createRoot(container)
+					component = { root, container, ref: { current: null } }
+
+					const renderMenu = (items: any[], command: any) => {
+						root.render(
+							<SlashMenuComponent
+								ref={(r: any) => { component.ref.current = r }}
+								items={items}
+								command={command}
+							/>
+						)
+					}
+
+					renderMenu(props.items, props.command)
+
+					popup = tippy('body', {
+						getReferenceClientRect: props.clientRect,
+						appendTo: () => document.body,
+						content: container,
+						showOnCreate: true,
+						interactive: true,
+						trigger: 'manual',
+						placement: 'bottom-start',
+					})
+				},
+				onUpdate: (props: any) => {
+					if (!component) return
+					const renderMenu = (items: any[], command: any) => {
+						component.root.render(
+							<SlashMenuComponent
+								ref={(r: any) => { component.ref.current = r }}
+								items={items}
+								command={command}
+							/>
+						)
+					}
+					renderMenu(props.items, props.command)
+					popup?.[0]?.setProps({ getReferenceClientRect: props.clientRect })
+				},
+				onKeyDown: (props: any) => {
+					if (props.event.key === 'Escape') {
+						popup?.[0]?.hide()
+						return true
+					}
+					return component?.ref?.current?.onKeyDown(props) || false
+				},
+				onExit: () => {
+					popup?.[0]?.destroy()
+					component?.root?.unmount()
+				},
+			}
+		},
+	},
+}),
 ```
 
-- [ ] **Step 3: Add new state and helper functions to `components/editor-workspace.tsx`**
+> [!IMPORTANT]
+> The `require()` calls for `tippy.js` and `react-dom/client` are used here because the render lifecycle runs outside React's component tree. This is the standard TipTap suggestion extension pattern. An alternative is to use a React portal approach — the implementer should choose whichever integrates more cleanly with the existing codebase.
 
-After line 127 (`const [isLinkPromptOpen, setIsLinkPromptOpen] = useState(false)`), add:
+- [ ] **Step 4: Add state variables and handlers**
+
+After `const [isLinkPromptOpen, setIsLinkPromptOpen] = useState(false)` (line ~127), add:
 
 ```typescript
-const [isPaletteOpen, setIsPaletteOpen] = useState(false)
-const [palettePosition, setPalettePosition] = useState({ x: 0, y: 0 })
+const [isLekhanBotOpen, setIsLekhanBotOpen] = useState(false)
 const [diffPreview, setDiffPreview] = useState<{
 	actionId: string
 	originalText: string
@@ -1510,81 +1377,53 @@ const [diffPreview, setDiffPreview] = useState<{
 	position: { x: number, y: number }
 } | null>(null)
 
-const getSelectionInfo = useCallback(() => {
-	if (!editor) return { text: '', position: { x: 0, y: 0 } }
-	const { from, to } = editor.state.selection
-	const selectedText = editor.state.doc.textBetween(from, to, ' ').trim()
-	const coords = editor.view.coordsAtPos(to)
-	return {
-		text: selectedText,
-		position: { x: coords.left, y: coords.bottom + 8 },
-	}
-}, [editor])
-
-const handleOpenPalette = useCallback(() => {
+const handleOpenLekhanBot = useCallback(() => {
 	setDiffPreview(null)
-	const { position } = getSelectionInfo()
-	setPalettePosition(
-		position.x === 0 && position.y === 0
-			? { x: window.innerWidth / 2 - 160, y: window.innerHeight / 3 }
-			: position,
-	)
-	setIsPaletteOpen(true)
-}, [getSelectionInfo])
+	setIsLekhanBotOpen(true)
+}, [])
 
-const handleAIAction = useCallback((
+const handleLekhanBotResult = useCallback((
 	actionId: string,
 	result: string,
 	originalText: string,
 ) => {
-	const { position } = getSelectionInfo()
+	if (!editor) return
+	const { to } = editor.state.selection
+	const coords = editor.view.coordsAtPos(to)
 	setDiffPreview({
 		actionId,
 		originalText,
 		resultText: result,
-		position:
-			position.x === 0 && position.y === 0
-				? { x: window.innerWidth / 2 - 180, y: window.innerHeight / 3 }
-				: position,
+		position: {
+			x: coords.left,
+			y: coords.bottom + 8,
+		},
 	})
-}, [getSelectionInfo])
+}, [editor])
 ```
 
-- [ ] **Step 4: Add Cmd+J keyboard shortcut**
+- [ ] **Step 5: Add `Cmd+L` keyboard shortcut**
 
-Add this `useEffect` after the existing `handleBeforeUnload` effect (after line ~222):
+After the `handleBeforeUnload` useEffect (line ~222), add:
 
 ```typescript
 useEffect(() => {
 	const handleKeyDown = (e: KeyboardEvent) => {
-		if ((e.metaKey || e.ctrlKey) && e.key === 'j') {
+		if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
 			e.preventDefault()
-			handleOpenPalette()
+			handleOpenLekhanBot()
 		}
 	}
 	document.addEventListener('keydown', handleKeyDown)
 	return () => document.removeEventListener('keydown', handleKeyDown)
-}, [handleOpenPalette])
+}, [handleOpenLekhanBot])
 ```
 
-- [ ] **Step 5: Rename header button (lines ~338-345)**
+- [ ] **Step 6: Rename header button**
 
-Change the AI header button from `auto_awesome` / `AI Companion` to `settings` / `Settings`:
+Change lines 338-345 — update icon from `auto_awesome` to `settings`, text from `AI Companion` to `Settings`, title from `AI Assistant` to `Settings`.
 
-Replace:
-```typescript
-<span className="material-symbols-outlined text-primary-container text-lg">auto_awesome</span>
-<span className="hidden lg:inline">AI Companion</span>
-```
-With:
-```typescript
-<span className="material-symbols-outlined text-primary-container text-lg">settings</span>
-<span className="hidden lg:inline">Settings</span>
-```
-
-Also update the `title` prop on that button from `"AI Assistant"` to `"Settings"`.
-
-- [ ] **Step 6: Update bubble menu and add new components (lines ~497-511)**
+- [ ] **Step 7: Update rendering — bubble menu, Lekhan Bot bar, diff preview**
 
 Replace line ~498:
 ```typescript
@@ -1592,18 +1431,24 @@ Replace line ~498:
 ```
 With:
 ```typescript
-{!isViewer && <AIBubbleMenu editor={editor} onOpenAIPalette={handleOpenPalette} />}
+{!isViewer && <AIBubbleMenu editor={editor} onOpenLekhanBot={handleOpenLekhanBot} />}
+```
+
+After `</div>` closing the `editor-canvas` div (line ~507), add the Lekhan Bot bar:
+```typescript
 {!isViewer && (
-	<AICommandPalette
+	<LekhanBotBar
 		editor={editor}
 		token={token}
-		isOpen={isPaletteOpen}
-		position={palettePosition}
-		selectedText={getSelectionInfo().text}
-		onClose={() => setIsPaletteOpen(false)}
-		onAction={handleAIAction}
+		isVisible={isLekhanBotOpen}
+		onClose={() => setIsLekhanBotOpen(false)}
+		onResult={handleLekhanBotResult}
 	/>
 )}
+```
+
+After the `</main>` tag (line ~508), add the diff preview:
+```typescript
 {diffPreview && (
 	<AIDiffPreview
 		editor={editor}
@@ -1616,16 +1461,12 @@ With:
 )}
 ```
 
-Replace line ~511:
-```typescript
-<AIAssistantPanel isOpen={isAIPanelOpen} onClose={() => setIsAIPanelOpen(false)} editor={editor} token={token} />
-```
-With:
+Replace line ~511 (`<AIAssistantPanel ...>`) with:
 ```typescript
 <AISettingsPanel isOpen={isAIPanelOpen} onClose={() => setIsAIPanelOpen(false)} editor={editor} token={token} />
 ```
 
-- [ ] **Step 7: Update `components/mobile-header-menu.tsx`**
+- [ ] **Step 8: Update `components/mobile-header-menu.tsx`**
 
 Replace lines 118-119:
 ```typescript
@@ -1638,28 +1479,27 @@ With:
 				Settings
 ```
 
-- [ ] **Step 8: Delete old AI assistant panel**
+- [ ] **Step 9: Delete old panel**
 
 ```bash
 rm components/ai-assistant-panel.tsx
 ```
 
-- [ ] **Step 9: Verify the app compiles**
+- [ ] **Step 10: Verify build**
 
 Run: `npx next build`
-Expected: Build succeeds without errors
+Expected: Build succeeds
 
-If the build fails due to missing imports or type errors, fix them before proceeding.
-
-- [ ] **Step 10: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add -A
-git commit -m "feat: integrate AI command palette, diff preview, and settings panel
+git commit -m "feat: integrate Lekhan Bot, slash menu, diff preview, and settings panel
 
-- Replace old tabbed AI panel with inline command palette (Cmd+J, bubble menu)
-- Add diff preview for AI results with Accept/Insert Below/Copy/Discard
-- Replace AI side panel with lightweight Settings panel
+- Replace old tabbed AI panel with Lekhan Bot prompt bar (Cmd+L, /ai, bubble menu)
+- Add / slash menu for block commands (Heading, List, Code, etc.)
+- Add inline diff preview with Accept/Insert Below/Copy
+- Replace side panel with Settings panel for AI preferences
 - Simplify bubble menu to formatting + AI button
 - Rename header button from AI Companion to Settings
 - Delete old ai-assistant-panel.tsx"
@@ -1667,20 +1507,15 @@ git commit -m "feat: integrate AI command palette, diff preview, and settings pa
 
 ---
 
-### Task 7: Mobile Touch Scroll Fix
+### Task 8: Mobile Touch Scroll Fix
 
 **Files:**
-- Modify: `app/globals.css` (add touch scroll utility class)
-- Modify: `components/color-highlight-popover.tsx:49` (add scroll class to popover content)
-
-**Interfaces:**
-- Consumes: Nothing
-- Produces: `.touch-scroll-container` CSS class used by all floating/popup UIs
+- Modify: `app/globals.css`
+- Modify: `components/color-highlight-popover.tsx:49`
 
 - [ ] **Step 1: Add touch scroll CSS to `app/globals.css`**
 
-Add after the existing scrollbar styles (after the `::-webkit-scrollbar-thumb:hover` block near line ~260):
-
+After existing scrollbar styles (~line 260):
 ```css
 /* Mobile touch scroll for floating menus and popovers */
 .touch-scroll-container {
@@ -1697,68 +1532,50 @@ Add after the existing scrollbar styles (after the `::-webkit-scrollbar-thumb:ho
 }
 ```
 
-- [ ] **Step 2: Add touch scroll class to `components/color-highlight-popover.tsx`**
+- [ ] **Step 2: Add class to color-highlight-popover.tsx**
 
-On line 49, add `max-h-[70vh] touch-scroll-container` to the `DropdownMenu.Content` className:
+Add `max-h-[70vh] touch-scroll-container` to `DropdownMenu.Content` className on line 49.
 
-Replace:
-```typescript
-className="z-[9999] min-w-[12rem] bg-surface-container rounded-xl border border-black/10 dark:border-white/10 p-2 shadow-xl"
-```
-With:
-```typescript
-className="z-[9999] min-w-[12rem] max-h-[70vh] bg-surface-container rounded-xl border border-black/10 dark:border-white/10 p-2 shadow-xl touch-scroll-container"
-```
-
-- [ ] **Step 3: Verify no build errors**
-
-Run: `npx next build`
-Expected: Build succeeds
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add app/globals.css components/color-highlight-popover.tsx
-git commit -m "fix: add mobile touch scroll support to popup menus and floating UIs"
+git commit -m "fix: add mobile touch scroll support to popup menus"
 ```
 
 ---
 
-### Task 8: Run All Tests and Final Verification
-
-**Files:**
-- No new files — verification only
+### Task 9: Final Verification
 
 - [ ] **Step 1: Run unit tests**
 
 Run: `npx vitest run`
-Expected: All tests pass (including the 4 new tests from Task 1)
+Expected: All tests pass
 
 - [ ] **Step 2: Run build**
 
 Run: `npx next build`
-Expected: Build succeeds without errors or warnings
+Expected: Build succeeds
 
-- [ ] **Step 3: Manual smoke test checklist**
+- [ ] **Step 3: Manual smoke test**
 
-Run `npm run dev` and test in the browser:
+Run `npm run dev` and verify:
 
-1. Press `Cmd+J` → command palette appears ✓
-2. Select text → bubble menu shows `✨ AI` button → click → palette opens with selection context ✓
-3. Click "Summarize" with text selected → loading state → diff preview appears ✓
-4. Click "Accept" in diff preview → selected text is replaced ✓
-5. Click "Insert Below" in diff preview → text inserted as new paragraph ✓
-6. Click "Copy" in diff preview → clipboard updated ✓
-7. Click "Translate to..." → language picker appears with 23 languages → select Hindi → diff preview shows translation ✓
-8. Click "Transliterate to..." → script picker → select English → diff preview shows result ✓
-9. Click "Read Aloud" with no selection → full document is read ✓
-10. Header "Settings" button opens settings side panel with preferences ✓
-11. Changing preferences persists across page reload ✓
-12. Version History still works alongside Settings panel ✓
-13. Mobile: color picker popover scrolls on touch ✓
-14. Mobile: AI command palette scrolls on touch ✓
+1. Type `/` → slash menu appears with block commands + "Ask Lekhan Bot" ✓
+2. Type `/ai` → filters to "Ask Lekhan Bot" → select it → prompt bar opens ✓
+3. Press `Cmd+L` → Lekhan Bot prompt bar slides in at bottom ✓
+4. Select text → bubble menu shows `✨ AI` → click → prompt bar opens ✓
+5. Click "Fix Grammar" preset with text selected → loading → diff preview ✓
+6. Click "Translate" → language picker → select Hindi → diff preview ✓
+7. Click "Accept" in diff preview → text replaced ✓
+8. Click "Insert Below" → text inserted as new paragraph ✓
+9. Press `Esc` → prompt bar closes ✓
+10. Header "Settings" button → settings side panel opens ✓
+11. Preferences persist across reload ✓
+12. Version History still works ✓
+13. Mobile: popups scroll on touch ✓
 
-- [ ] **Step 4: Final commit if any fixes were needed**
+- [ ] **Step 4: Commit any fixes**
 
 ```bash
 git add -A
