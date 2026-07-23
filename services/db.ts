@@ -288,3 +288,48 @@ export async function removeDocumentMember (documentId: string, userId: string):
 
 	if (error) throw error
 }
+
+export async function fetchMentionableCollaborators (documentId: string): Promise<Array<{ id: string; email: string; full_name: string; avatar_url?: string }>> {
+	const { data: docData, error: docError } = await supabase
+		.from('documents')
+		.select('owner_id, profiles:owner_id (id, email, full_name, avatar_url)')
+		.eq('id', documentId)
+		.single()
+
+	if (docError) throw docError
+
+	const { data: memberData, error: memberError } = await supabase
+		.from('document_members')
+		.select('role, profiles:user_id (id, email, full_name, avatar_url)')
+		.eq('document_id', documentId)
+		.in('role', ['editor'])
+
+	if (memberError) throw memberError
+
+	const collaboratorsMap = new Map<string, { id: string; email: string; full_name: string; avatar_url?: string }>()
+
+	const ownerProfile = docData?.profiles as unknown as { id: string; email: string; full_name?: string; avatar_url?: string }
+	if (ownerProfile && ownerProfile.id) {
+		collaboratorsMap.set(ownerProfile.id, {
+			id: ownerProfile.id,
+			email: ownerProfile.email,
+			full_name: ownerProfile.full_name || ownerProfile.email,
+			avatar_url: ownerProfile.avatar_url,
+		})
+	}
+
+	for (const m of (memberData || [])) {
+		const profile = m.profiles as unknown as { id: string; email: string; full_name?: string; avatar_url?: string }
+		if (profile && profile.id && !collaboratorsMap.has(profile.id)) {
+			collaboratorsMap.set(profile.id, {
+				id: profile.id,
+				email: profile.email,
+				full_name: profile.full_name || profile.email,
+				avatar_url: profile.avatar_url,
+			})
+		}
+	}
+
+	return Array.from(collaboratorsMap.values())
+}
+
