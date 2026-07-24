@@ -4,10 +4,9 @@ import { useRouter } from 'next/navigation'
 
 import Link from 'next/link'
 import { DownloadCloud, Users, WifiOff, Lock } from 'lucide-react'
-import ThemeToggle from './theme-toggle'
-import { useEffect } from 'react'
-
+import PricingMatrix from './pricing-plans'
 import { GlobalHeaderSlot } from './layout/global-header-context'
+
 
 export default function LandingPage() {
 	const router = useRouter()
@@ -214,6 +213,15 @@ export default function LandingPage() {
 							</div>
 						</div>
 					</div>
+				</section>
+
+				{/* Pricing Section */}
+				<section id="pricing" className="px-6 md:px-10 py-24 md:py-32 max-w-[1400px] mx-auto relative z-10">
+					<div className="mb-16 text-center">
+						<h2 className="font-display-md text-3xl md:text-4xl font-bold text-on-surface mb-4">Simple, transparent pricing.</h2>
+						<p className="text-xl text-on-surface-variant max-w-2xl mx-auto">Choose the tier that matches your collaborative writing scale.</p>
+					</div>
+					<PricingMatrix />
 				</section>
 
 				{/* CTA Section */}
