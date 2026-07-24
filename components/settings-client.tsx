@@ -8,7 +8,9 @@ import { toast } from 'sonner'
 import ThemeToggle from './theme-toggle'
 import ProfileMenu from './profile-menu'
 import BYOKSettings from './byok-settings'
+import PricingMatrix from './pricing-plans'
 import { User, Shield, Users, CreditCard } from 'lucide-react'
+
 import { GlobalHeaderSlot } from './layout/global-header-context'
 
 export default function SettingsClient({ user, documents, setDocuments }: { 
@@ -302,9 +304,7 @@ export default function SettingsClient({ user, documents, setDocuments }: {
 								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
 									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Subscription & Billing Plans</h2>
 									<p className="text-sm text-on-surface-variant mb-6">Choose a plan that fits your team size and AI writing needs.</p>
-									<div id="pricing-matrix-container">
-										{/* PricingMatrix will render here */}
-									</div>
+									<PricingMatrix />
 								</section>
 							</div>
 						)}
