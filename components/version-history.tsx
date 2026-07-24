@@ -195,7 +195,8 @@ export default function VersionHistory({
 				</div>
 				<button
 					onClick={onClose}
-					className='rounded-lg p-1 hover:bg-white/10 text-on-surface-variant hover:text-on-surface transition'
+					className='w-8 h-8 rounded-lg flex items-center justify-center hover:bg-black/10 dark:hover:bg-white/10 text-on-surface-variant hover:text-on-surface transition shrink-0'
+					title="Close History"
 				>
 					<span className="material-symbols-outlined text-lg">close</span>
 				</button>

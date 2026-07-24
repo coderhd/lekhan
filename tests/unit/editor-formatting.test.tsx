@@ -33,7 +33,8 @@ vi.mock('@/lib/supabase', () => ({
 vi.mock('@/services/db', () => ({
 	fetchDocumentDetails: vi.fn().mockResolvedValue({ owner_id: 'test-user', is_public: false }),
 	fetchMemberRole: vi.fn().mockResolvedValue('owner'),
-	updateDocumentTitle: vi.fn().mockResolvedValue(true)
+	updateDocumentTitle: vi.fn().mockResolvedValue(true),
+	fetchMentionableCollaborators: vi.fn().mockResolvedValue([])
 }))
 
 // Mock useRouter

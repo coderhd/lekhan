@@ -54,7 +54,7 @@ export function CustomSelect({
 					<DropdownMenu.Content
 						align={align}
 						className={cn(
-							'z-[9999] min-w-[8rem] overflow-hidden rounded-xl border border-black/10 dark:border-white/10 bg-surface-container p-1 text-on-surface shadow-xl shadow-black/20 animate-in fade-in-80 zoom-in-95 backdrop-blur-xl',
+							'z-[9999] min-w-[8rem] max-h-[60vh] overflow-y-auto touch-scroll-container rounded-xl border border-black/10 dark:border-white/10 bg-surface-container p-1 text-on-surface shadow-xl shadow-black/20 animate-in fade-in-80 zoom-in-95 backdrop-blur-xl',
 							contentClassName
 						)}
 						style={{ minWidth: 'var(--radix-dropdown-menu-trigger-width)' }}

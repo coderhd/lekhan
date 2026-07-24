@@ -73,4 +73,91 @@ describe('API Route: /api/ai', () => {
 		const data = await response.json()
 		expect(data.error).toContain('Sarvam LLM Chat error')
 	})
+
+	it('should return transliterated text if action is transliterate', async () => {
+		const mockTransliterateResponse = { transliterated_text: 'namaste' }
+		;(global.fetch as any).mockResolvedValueOnce({
+			ok: true,
+			json: async () => mockTransliterateResponse,
+		})
+
+		const req = new NextRequest('http://localhost:3000/api/ai', {
+			method: 'POST',
+			headers: {
+				'Authorization': 'Bearer fake-token',
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({
+				action: 'transliterate',
+				text: 'नमस्ते',
+				sourceLanguage: 'hi-IN',
+				targetLanguage: 'en-IN',
+			}),
+		})
+
+		const response = await POST(req)
+		expect(response.status).toBe(200)
+
+		const data = await response.json()
+		expect(data.transliteratedText).toBe('namaste')
+	})
+
+	it('should return error if transliterate params are missing', async () => {
+		const req = new NextRequest('http://localhost:3000/api/ai', {
+			method: 'POST',
+			headers: {
+				'Authorization': 'Bearer fake-token',
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({ action: 'transliterate', text: 'नमस्ते' }),
+		})
+
+		const response = await POST(req)
+		expect(response.status).toBe(400)
+		const data = await response.json()
+		expect(data.error).toContain('Missing')
+	})
+
+	it('should return detected language if action is detect-language', async () => {
+		const mockDetectResponse = {
+			language_code: 'hi-IN',
+			script_code: 'Devanagari',
+		}
+		;(global.fetch as any).mockResolvedValueOnce({
+			ok: true,
+			json: async () => mockDetectResponse,
+		})
+
+		const req = new NextRequest('http://localhost:3000/api/ai', {
+			method: 'POST',
+			headers: {
+				'Authorization': 'Bearer fake-token',
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({ action: 'detect-language', text: 'नमस्ते दुनिया' }),
+		})
+
+		const response = await POST(req)
+		expect(response.status).toBe(200)
+		const data = await response.json()
+		expect(data.languageCode).toBe('hi-IN')
+		expect(data.languageName).toBe('Hindi')
+		expect(data.script).toBe('Devanagari')
+	})
+
+	it('should return error if detect-language text is missing', async () => {
+		const req = new NextRequest('http://localhost:3000/api/ai', {
+			method: 'POST',
+			headers: {
+				'Authorization': 'Bearer fake-token',
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({ action: 'detect-language' }),
+		})
+
+		const response = await POST(req)
+		expect(response.status).toBe(400)
+		const data = await response.json()
+		expect(data.error).toContain('Missing text')
+	})
 })

@@ -115,8 +115,8 @@ export default function MobileHeaderMenu({
 						}}
 						className={`flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${isAIPanelOpen ? 'text-primary' : 'text-on-surface'}`}
 					>
-						<span className="material-symbols-outlined text-[20px]">auto_awesome</span>
-						AI Companion
+						<span className="material-symbols-outlined text-[20px]">settings</span>
+						Settings
 					</button>
                     
 					<div className="border-t border-black/5 dark:border-white/5 my-1" />

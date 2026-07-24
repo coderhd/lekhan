@@ -249,8 +249,8 @@ export function SessionReauthProvider({ children }: { children: React.ReactNode 
 
 			{/* Reauthentication Modal Overlay */}
 			{isProtectedRoute && isLocked && (
-				<div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-md px-4 animate-in fade-in duration-300">
-					<div className="glass w-full max-w-md rounded-2xl p-6 md:p-8 flex flex-col gap-6 border border-white/10 shadow-2xl relative">
+				<div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-md px-4 animate-in fade-in duration-300">
+					<div className="bg-surface-container-low border border-black/10 dark:border-white/10 w-full max-w-md rounded-2xl p-6 md:p-8 flex flex-col gap-6 shadow-2xl relative">
 						
 						{/* Icon & Title */}
 						<div className="flex flex-col items-center text-center gap-3">
@@ -276,7 +276,7 @@ export function SessionReauthProvider({ children }: { children: React.ReactNode 
 								<label className="font-label-sm text-on-surface-variant text-[11px] font-bold uppercase tracking-wider ml-1">
 									Account
 								</label>
-								<div className="w-full bg-black/10 dark:bg-white/5 border border-white/5 rounded-lg px-4 py-3 text-sm text-on-surface/70 select-none">
+								<div className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-lg px-4 py-3 text-sm text-on-surface/70 select-none">
 									{userEmail}
 								</div>
 							</div>
@@ -291,7 +291,7 @@ export function SessionReauthProvider({ children }: { children: React.ReactNode 
 										value={password}
 										onChange={(e) => setPassword(e.target.value)}
 										required
-										className="w-full bg-black/15 dark:bg-black/40 border border-white/10 rounded-lg py-3 px-4 font-body-md text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all text-sm"
+										className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-lg py-3 px-4 font-body-md text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all text-sm"
 										placeholder="Enter your password"
 										autoFocus
 									/>
@@ -301,11 +301,11 @@ export function SessionReauthProvider({ children }: { children: React.ReactNode 
 							<button
 								type="submit"
 								disabled={verifying || !password}
-								className="mt-2 w-full bg-primary-container text-on-primary-fixed font-bold py-3 rounded-lg shadow-lg hover:bg-primary transition-all duration-300 disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+								className="mt-2 w-full bg-primary-container text-on-primary-container font-bold py-3 rounded-lg shadow-lg hover:brightness-110 active:scale-[0.99] transition-all duration-300 disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
 							>
 								{verifying ? (
 									<>
-										<span className="animate-spin rounded-full h-4 w-4 border-2 border-on-primary-fixed border-t-transparent"></span>
+										<span className="animate-spin rounded-full h-4 w-4 border-2 border-on-primary-container border-t-transparent"></span>
 										Verifying...
 									</>
 								) : (
@@ -318,10 +318,10 @@ export function SessionReauthProvider({ children }: { children: React.ReactNode 
 						</form>
 
 						{/* Sign out fallback */}
-						<div className="border-t border-white/5 pt-4 flex justify-center">
+						<div className="border-t border-black/10 dark:border-white/10 pt-4 flex justify-center">
 							<button
 								onClick={handleSignOut}
-								className="text-xs text-muted-foreground hover:text-error transition-colors flex items-center gap-1.5 font-medium"
+								className="text-xs text-on-surface-variant/60 hover:text-error transition-colors flex items-center gap-1.5 font-medium"
 							>
 								<LogOut className="w-3.5 h-3.5" />
 								Sign out of this account

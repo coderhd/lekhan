@@ -357,6 +357,9 @@ export default function EditorWorkspace({
 								popup?.[0]?.destroy()
 								component?.root?.unmount()
 							},
+						}
+					},
+				},
 			}),
 			Mention.configure({
 				HTMLAttributes: {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { readJsonWithLimit, PayloadTooLargeError } from '@/lib/request-limits'
+import { LEKHAN_BOT_SYSTEM_PROMPT, LANGUAGES } from '@/lib/ai-constants'
 
 const SARVAM_API_KEY = process.env.SARVAM_API_KEY || ''
 const SARVAM_API_URL = 'https://api.sarvam.ai'
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
 		}
 
 		let action: string, text: string | undefined, targetLanguage: string | undefined,
-			speaker: string | undefined, prompt: string | undefined
+			speaker: string | undefined, prompt: string | undefined, sourceLanguage: string | undefined
 		try {
 			const body = await readJsonWithLimit<{
 				action?: string
@@ -53,12 +54,14 @@ export async function POST(request: NextRequest) {
 				targetLanguage?: string
 				speaker?: string
 				prompt?: string
+				sourceLanguage?: string
 			}>(request, MAX_BODY_BYTES)
 			action = body.action ?? ''
 			text = body.text
 			targetLanguage = body.targetLanguage
 			speaker = body.speaker
 			prompt = body.prompt
+			sourceLanguage = body.sourceLanguage
 		} catch (err) {
 			if (err instanceof PayloadTooLargeError) {
 				return NextResponse.json({ error: 'Request payload too large' }, { status: 413 })
@@ -81,6 +84,9 @@ export async function POST(request: NextRequest) {
 		}
 		if (typeof speaker === 'string' && speaker.length > MAX_SHORT_FIELD_LENGTH) {
 			return NextResponse.json({ error: 'Invalid speaker' }, { status: 400 })
+		}
+		if (typeof sourceLanguage === 'string' && sourceLanguage.length > MAX_SHORT_FIELD_LENGTH) {
+			return NextResponse.json({ error: 'Invalid sourceLanguage' }, { status: 400 })
 		}
 
 		if (!SARVAM_API_KEY) {
@@ -161,7 +167,7 @@ export async function POST(request: NextRequest) {
 					messages: [
 						{
 							role: 'system',
-							content: 'You are a helpful writing assistant. Respond in English or Indian languages as requested.',
+							content: LEKHAN_BOT_SYSTEM_PROMPT,
 						},
 						{ role: 'user', content: prompt },
 					],
@@ -176,6 +182,61 @@ export async function POST(request: NextRequest) {
 			const data = await response.json()
 			const reply = data.choices?.[0]?.message?.content || ''
 			return NextResponse.json({ text: reply })
+		}
+
+		if (action === 'transliterate') {
+			if (!text || !sourceLanguage || !targetLanguage) {
+				return NextResponse.json({ error: 'Missing text, sourceLanguage, or targetLanguage for transliteration' }, { status: 400 })
+			}
+
+			const response = await fetch(`${SARVAM_API_URL}/transliterate`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'api-subscription-key': SARVAM_API_KEY,
+				},
+				body: JSON.stringify({
+					input: text,
+					source_language_code: sourceLanguage,
+					target_language_code: targetLanguage,
+				}),
+			})
+
+			if (!response.ok) {
+				const errorText = await response.text()
+				throw new Error(`Sarvam Transliteration error: ${errorText}`)
+			}
+
+			const data = await response.json()
+			return NextResponse.json({ transliteratedText: data.transliterated_text })
+		}
+
+		if (action === 'detect-language') {
+			if (!text) {
+				return NextResponse.json({ error: 'Missing text for language detection' }, { status: 400 })
+			}
+
+			const response = await fetch(`${SARVAM_API_URL}/text-lid`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'api-subscription-key': SARVAM_API_KEY,
+				},
+				body: JSON.stringify({ input: text.slice(0, 1000) }),
+			})
+
+			if (!response.ok) {
+				const errorText = await response.text()
+				throw new Error(`Sarvam Language Detection error: ${errorText}`)
+			}
+
+			const data = await response.json()
+			const matchedLang = LANGUAGES.find(l => l.code === data.language_code)
+			return NextResponse.json({
+				languageCode: data.language_code,
+				languageName: matchedLang?.name || data.language_name || data.language_code,
+				script: data.script_code || data.script,
+			})
 		}
 
 		return NextResponse.json({ error: `Invalid action: ${action}` }, { status: 400 })

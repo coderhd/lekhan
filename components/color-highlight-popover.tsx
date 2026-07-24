@@ -46,7 +46,7 @@ export function ColorHighlightPopover({ editor }: { editor: Editor | null }) {
 
 				<DropdownMenu.Portal>
 					<DropdownMenu.Content
-						className="z-[9999] min-w-[12rem] bg-surface-container rounded-xl border border-black/10 dark:border-white/10 p-2 shadow-xl"
+						className="z-[9999] min-w-[12rem] max-h-[70vh] touch-scroll-container bg-surface-container rounded-xl border border-black/10 dark:border-white/10 p-2 shadow-xl"
 						sideOffset={5}
 					>
 						<div className="text-xs font-semibold text-on-surface-variant mb-2 px-2 uppercase tracking-wider">Text Color</div>

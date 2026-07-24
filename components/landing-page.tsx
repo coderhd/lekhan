@@ -1,9 +1,12 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+
 
 import Link from 'next/link'
 import { DownloadCloud, Users, WifiOff, Lock } from 'lucide-react'
+import ThemeToggle from './theme-toggle'
 import PricingMatrix from './pricing-plans'
 import { GlobalHeaderSlot } from './layout/global-header-context'
 
