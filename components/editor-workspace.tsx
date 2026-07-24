@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useEditor, EditorContent, Editor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -17,6 +17,8 @@ import TaskItem from '@tiptap/extension-task-item'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
 import { EyeOff } from 'lucide-react'
+import tippy from 'tippy.js'
+import { createRoot } from 'react-dom/client'
 import { useEditorCollab } from '@/hooks/use-editor-collab'
 import SyncIndicator from './sync-indicator'
 import OfflineBanner from './offline-banner'
@@ -24,8 +26,12 @@ import { InlineEdit } from './inline-edit'
 import ShareModal from './share-modal'
 import VersionHistory from './version-history'
 import MobileHeaderMenu from './mobile-header-menu'
-import AIAssistantPanel from './ai-assistant-panel'
+import AISettingsPanel from './ai-settings-panel'
 import AIBubbleMenu from './ai-bubble-menu'
+import LekhanBotBar from './lekhan-bot-bar'
+import AIDiffPreview from './ai-diff-preview'
+import { SlashMenuExtension, buildSlashMenuItems } from '@/lib/slash-menu-extension'
+import { SlashMenuComponent } from './slash-menu'
 import ProfileMenu from './profile-menu'
 import ThemeToggle from './theme-toggle'
 import { ColorHighlightPopover } from './color-highlight-popover'
@@ -34,7 +40,10 @@ import GlobalLoader from './global-loader'
 import { CustomSelect } from './ui/custom-select'
 import { PromptDialog } from './ui/prompt-dialog'
 import * as Y from 'yjs'
-import { fetchDocumentDetails, fetchMemberRole, updateDocumentTitle } from '@/services/db'
+import Mention from '@tiptap/extension-mention'
+import MentionList, { MentionItem } from './mention-list'
+import { fetchDocumentDetails, fetchMemberRole, updateDocumentTitle, fetchMentionableCollaborators } from '@/services/db'
+
 
 
 interface EditorWorkspaceProps {
@@ -125,6 +134,42 @@ export default function EditorWorkspace({
 	const [isViewer, setIsViewer] = useState<boolean | null>(null)
 	const [theme, setTheme] = useState<'light' | 'dark'>('dark')
 	const [isLinkPromptOpen, setIsLinkPromptOpen] = useState(false)
+	const [isLekhanBotOpen, setIsLekhanBotOpen] = useState(false)
+	const [diffPreview, setDiffPreview] = useState<{
+		actionId: string
+		originalText: string
+		resultText: string
+		position: { x: number, y: number }
+	} | null>(null)
+	const [detectedLanguage, setDetectedLanguage] = useState<{
+		code: string
+		name: string
+		script: string
+	} | null>(null)
+	const [isDetectingLanguage, setIsDetectingLanguage] = useState(false)
+	const [mentionables, setMentionables] = useState<MentionItem[]>([])
+
+	useEffect(() => {
+		const loadMentionables = async () => {
+			try {
+				const collabs = await fetchMentionableCollaborators(documentId)
+				setMentionables(collabs.map(c => ({ id: c.id, name: c.full_name || c.email, email: c.email, avatarUrl: c.avatar_url })))
+			} catch (err) {
+				console.error('Error fetching mentionables:', err)
+			}
+		}
+		if (documentId) {
+			loadMentionables()
+		}
+	}, [documentId])
+
+	const handleOpenLekhanBot = useCallback(() => {
+		setDiffPreview(null)
+		setIsLekhanBotOpen(true)
+	}, [])
+
+
+
 
 	useEffect(() => {
 		if (typeof window !== 'undefined') {
@@ -238,7 +283,156 @@ export default function EditorWorkspace({
 					},
 				}),
 			] : []),
+			SlashMenuExtension.configure({
+				suggestion: {
+					char: '/',
+					items: ({ query }: { query: string }) => {
+						const allItems = buildSlashMenuItems(handleOpenLekhanBot)
+						if (!query) return allItems
+						// Exact id match takes priority — typing "/l" should
+						// resolve straight to "Ask Lekhan Bot" (consistent with
+						// the Cmd/Ctrl+L shortcut) rather than getting diluted
+						// by other items whose labels merely contain the
+						// letter "l" (e.g. "Bullet List", "Numbered List").
+						const exactIdMatch = allItems.find(item => item.id === query.toLowerCase())
+						if (exactIdMatch) return [exactIdMatch]
+						return allItems.filter(item =>
+							item.label.toLowerCase().includes(query.toLowerCase())
+						)
+					},
+					render: () => {
+						let component: any
+						let popup: any
+
+						return {
+							onStart: (props: any) => {
+								const container = document.createElement('div')
+								const root = createRoot(container)
+								component = { root, container, ref: { current: null } }
+
+								const renderMenu = (items: any[], command: any) => {
+									root.render(
+										<SlashMenuComponent
+											ref={(r: any) => { component.ref.current = r }}
+											items={items}
+											command={command}
+										/>
+									)
+								}
+
+								renderMenu(props.items, props.command)
+
+								popup = tippy('body', {
+									getReferenceClientRect: props.clientRect,
+									appendTo: () => document.body,
+									content: container,
+									showOnCreate: true,
+									interactive: true,
+									trigger: 'manual',
+									placement: 'bottom-start',
+								})
+							},
+							onUpdate: (props: any) => {
+								if (!component) return
+								const renderMenu = (items: any[], command: any) => {
+									component.root.render(
+										<SlashMenuComponent
+											ref={(r: any) => { component.ref.current = r }}
+											items={items}
+											command={command}
+										/>
+									)
+								}
+								renderMenu(props.items, props.command)
+								popup?.[0]?.setProps({ getReferenceClientRect: props.clientRect })
+							},
+							onKeyDown: (props: any) => {
+								if (props.event.key === 'Escape') {
+									popup?.[0]?.hide()
+									return true
+								}
+								return component?.ref?.current?.onKeyDown(props) || false
+							},
+							onExit: () => {
+								popup?.[0]?.destroy()
+								component?.root?.unmount()
+							},
+			}),
+			Mention.configure({
+				HTMLAttributes: {
+					class: 'mention',
+				},
+				suggestion: {
+					items: ({ query }: { query: string }) => {
+						if (!query) return mentionables
+						return mentionables.filter(item =>
+							item.name.toLowerCase().includes(query.toLowerCase()) ||
+							(item.email && item.email.toLowerCase().includes(query.toLowerCase()))
+						)
+					},
+					render: () => {
+						let component: any
+						let popup: any
+
+						return {
+							onStart: (props: any) => {
+								const container = document.createElement('div')
+								const root = createRoot(container)
+								component = { root, container, ref: { current: null } }
+
+								const renderMenu = (items: any[], command: any) => {
+									root.render(
+										<MentionList
+											ref={(r: any) => { component.ref.current = r }}
+											items={items}
+											command={command}
+										/>
+									)
+								}
+
+								renderMenu(props.items, props.command)
+
+								popup = tippy('body', {
+									getReferenceClientRect: props.clientRect,
+									appendTo: () => document.body,
+									content: container,
+									showOnCreate: true,
+									interactive: true,
+									trigger: 'manual',
+									placement: 'bottom-start',
+								})
+							},
+							onUpdate: (props: any) => {
+								if (!component) return
+								const renderMenu = (items: any[], command: any) => {
+									component.root.render(
+										<MentionList
+											ref={(r: any) => { component.ref.current = r }}
+											items={items}
+											command={command}
+										/>
+									)
+								}
+								renderMenu(props.items, props.command)
+								popup?.[0]?.setProps({ getReferenceClientRect: props.clientRect })
+							},
+							onKeyDown: (props: any) => {
+								if (props.event.key === 'Escape') {
+									popup?.[0]?.hide()
+									return true
+								}
+								return component?.ref?.current?.onKeyDown(props) || false
+							},
+							onExit: () => {
+								popup?.[0]?.destroy()
+								component?.root?.unmount()
+							},
+						}
+					},
+				},
+			}),
 		],
+
 		editorProps: {
 			attributes: {
 				class: 'prose dark:prose-invert max-w-none focus:outline-none min-h-[500px] text-on-surface break-words w-full',
@@ -247,6 +441,78 @@ export default function EditorWorkspace({
 		editable: !isViewer,
 		immediatelyRender: false,
 	}, [ydoc, provider])
+
+	const handleLekhanBotResult = useCallback((
+		actionId: string,
+		result: string,
+		originalText: string,
+	) => {
+		if (!editor) return
+		const { to } = editor.state.selection
+		const coords = editor.view.coordsAtPos(to)
+		setDiffPreview({
+			actionId,
+			originalText,
+			resultText: result,
+			position: {
+				x: coords.left,
+				y: coords.bottom + 8,
+			},
+		})
+	}, [editor])
+
+	// Document-level language detection (debounced on content change)
+	useEffect(() => {
+		if (!editor || isViewer) return
+
+		const detectDocumentLanguage = async () => {
+			const text = editor.getText().trim()
+			if (!text || text.length < 5) {
+				setDetectedLanguage(null)
+				return
+			}
+			setIsDetectingLanguage(true)
+			try {
+				const res = await fetch('/api/ai', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						Authorization: `Bearer ${token}`,
+					},
+					body: JSON.stringify({ action: 'detect-language', text: text.slice(0, 2000) }),
+				})
+				if (res.ok) {
+					const data = await res.json()
+					if (data.languageCode) {
+						setDetectedLanguage({
+							code: data.languageCode,
+							name: data.languageName || data.languageCode,
+							script: data.script || 'Latin',
+						})
+					}
+				}
+			} catch {
+				// Silent fallback
+			} finally {
+				setIsDetectingLanguage(false)
+			}
+		}
+
+		const timer = setTimeout(detectDocumentLanguage, 1200)
+		return () => clearTimeout(timer)
+	}, [editor, token, isViewer])
+
+	// Cmd/Ctrl+L opens the Lekhan Bot bar
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
+				e.preventDefault()
+				handleOpenLekhanBot()
+			}
+		}
+		document.addEventListener('keydown', handleKeyDown)
+		return () => document.removeEventListener('keydown', handleKeyDown)
+	}, [handleOpenLekhanBot])
 
 	useEffect(() => {
 		if (editor && isViewer !== null) {
@@ -338,10 +604,10 @@ export default function EditorWorkspace({
 						<button
 							onClick={() => { setIsAIPanelOpen(!isAIPanelOpen); setIsHistoryOpen(false); }}
 							className={`hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium ${isAIPanelOpen ? 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/30' : 'bg-surface-container-low'}`}
-							title="AI Assistant"
+							title="Settings"
 						>
-							<span className="material-symbols-outlined text-primary-container text-lg">auto_awesome</span>
-							<span className="hidden lg:inline">AI Companion</span>
+							<span className="material-symbols-outlined text-primary-container text-lg">settings</span>
+							<span className="hidden lg:inline">Settings</span>
 						</button>
 
 						<MobileHeaderMenu
@@ -482,7 +748,7 @@ export default function EditorWorkspace({
 
 			<div className="flex-1 flex overflow-hidden relative">
 				{/* Main Workspace (Expanded, Dark Continuous Canvas) */}
-				<main className={`flex-1 flex flex-col items-center bg-background relative scroll-smooth transition-all overflow-y-auto no-scrollbar py-8 ${isAIPanelOpen || isHistoryOpen ? 'lg:mr-80' : ''}`}>
+				<main className={`flex-1 flex flex-col items-center bg-background relative scroll-smooth transition-all overflow-y-auto no-scrollbar py-8 pb-36 ${isAIPanelOpen || isHistoryOpen ? 'lg:mr-80' : ''}`}>
 
 					<div className={`editor-canvas w-full max-w-5xl min-h-[calc(100vh-12rem)] px-[40px] py-[20px] md:px-[60px] md:py-[40px] transition-all duration-300 relative group`}>
 						{previewVersionName && (
@@ -495,7 +761,7 @@ export default function EditorWorkspace({
 						)}
 
 						<div className={previewDoc && previewEditor ? 'hidden' : 'block'}>
-							{!isViewer && <AIBubbleMenu editor={editor} token={token} />}
+							{!isViewer && <AIBubbleMenu editor={editor} onOpenLekhanBot={handleOpenLekhanBot} />}
 							<EditorContent key="live" editor={editor} />
 						</div>
 
@@ -507,8 +773,37 @@ export default function EditorWorkspace({
 					</div>
 				</main>
 
-				{/* Right Sidebar */}
-				<AIAssistantPanel isOpen={isAIPanelOpen} onClose={() => setIsAIPanelOpen(false)} editor={editor} token={token} />
+				{!isViewer && (
+					<LekhanBotBar
+						editor={editor}
+						token={token}
+						isVisible={isLekhanBotOpen}
+						onClose={() => setIsLekhanBotOpen(false)}
+						onResult={handleLekhanBotResult}
+						detectedLanguage={detectedLanguage}
+					/>
+				)}
+
+				{diffPreview && (
+					<AIDiffPreview
+						editor={editor}
+						actionId={diffPreview.actionId}
+						originalText={diffPreview.originalText}
+						resultText={diffPreview.resultText}
+						position={diffPreview.position}
+						onClose={() => setDiffPreview(null)}
+					/>
+				)}
+
+				<AISettingsPanel
+					isOpen={isAIPanelOpen}
+					onClose={() => setIsAIPanelOpen(false)}
+					editor={editor}
+					token={token}
+					detectedLanguage={detectedLanguage}
+					isDetecting={isDetectingLanguage}
+				/>
+
 
 				<VersionHistory
 					isOpen={isHistoryOpen}

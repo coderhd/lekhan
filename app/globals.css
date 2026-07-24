@@ -258,6 +258,20 @@ body {
 	background: rgba(128, 128, 128, 0.5);
 }
 
+/* Mobile touch scroll for floating menus and popovers */
+.touch-scroll-container {
+	-webkit-overflow-scrolling: touch;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	touch-action: pan-y;
+}
+
+@media (pointer: coarse) {
+	.touch-scroll-container {
+		scroll-behavior: smooth;
+	}
+}
+
 /* Custom Typography Overrides for Editor */
 .ProseMirror {
 	outline: none;
@@ -498,4 +512,15 @@ ul[data-type="taskList"] li>div {
 @keyframes blink {
 	0%, 100% { opacity: 1; }
 	50% { opacity: 0; }
+}
+
+.mention {
+	background-color: rgba(252, 163, 17, 0.15);
+	color: #fca311;
+	border: 1px solid rgba(252, 163, 17, 0.3);
+	border-radius: 0.375rem;
+	padding: 0.1rem 0.375rem;
+	font-weight: 500;
+	font-size: 0.875em;
+	box-decoration-break: clone;
 }
