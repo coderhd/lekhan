@@ -1,0 +1,101 @@
+const STORAGE_KEY = 'lekhan_sarvam_api_key'
+const LEGACY_STORAGE_KEY = 'lekhan_custom_api_key'
+const SALT = 'lekhan_byok_salt_v1'
+
+async function getDerivedKey(): Promise<CryptoKey> {
+	const encoder = new TextEncoder()
+	const keyMaterial = await window.crypto.subtle.importKey(
+		'raw',
+		encoder.encode(SALT),
+		{ name: 'PBKDF2' },
+		false,
+		['deriveKey']
+	)
+
+	return window.crypto.subtle.deriveKey(
+		{
+			name: 'PBKDF2',
+			salt: encoder.encode('lekhan_static_salt_2026'),
+			iterations: 100000,
+			hash: 'SHA-256',
+		},
+		keyMaterial,
+		{ name: 'AES-GCM', length: 256 },
+		false,
+		['encrypt', 'decrypt']
+	)
+}
+
+export async function encryptApiKey(plainText: string): Promise<string> {
+	if (!plainText) return ''
+	if (typeof window === 'undefined' || !window.crypto?.subtle) {
+		return plainText
+	}
+
+	try {
+		const key = await getDerivedKey()
+		const iv = window.crypto.getRandomValues(new Uint8Array(12))
+		const encoder = new TextEncoder()
+
+		const encryptedBuffer = await window.crypto.subtle.encrypt(
+			{ name: 'AES-GCM', iv },
+			key,
+			encoder.encode(plainText)
+		)
+
+		const ivHex = Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join('')
+		const encryptedHex = Array.from(new Uint8Array(encryptedBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
+
+		return `${ivHex}:${encryptedHex}`
+	} catch (err) {
+		console.error('Encryption failed:', err)
+		return plainText
+	}
+}
+
+export async function decryptApiKey(cipherText: string): Promise<string> {
+	if (!cipherText) return ''
+	if (!cipherText.includes(':')) return cipherText // fallback for legacy unencrypted
+	if (typeof window === 'undefined' || !window.crypto?.subtle) {
+		return cipherText
+	}
+
+	try {
+		const [ivHex, encryptedHex] = cipherText.split(':')
+		const iv = new Uint8Array(ivHex.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || [])
+		const encryptedBuffer = new Uint8Array(encryptedHex.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || [])
+
+		const key = await getDerivedKey()
+		const decryptedBuffer = await window.crypto.subtle.decrypt(
+			{ name: 'AES-GCM', iv },
+			key,
+			encryptedBuffer
+		)
+
+		const decoder = new TextDecoder()
+		return decoder.decode(decryptedBuffer)
+	} catch (err) {
+		console.error('Decryption failed:', err)
+		return ''
+	}
+}
+
+export async function saveEncryptedApiKey(plainKey: string): Promise<void> {
+	if (typeof window === 'undefined') return
+	const encrypted = await encryptApiKey(plainKey.trim())
+	localStorage.setItem(STORAGE_KEY, encrypted)
+	localStorage.removeItem(LEGACY_STORAGE_KEY)
+}
+
+export async function getDecryptedApiKey(): Promise<string> {
+	if (typeof window === 'undefined') return ''
+	const cipherText = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || ''
+	if (!cipherText) return ''
+	return decryptApiKey(cipherText)
+}
+
+export function clearApiKey(): void {
+	if (typeof window === 'undefined') return
+	localStorage.removeItem(STORAGE_KEY)
+	localStorage.removeItem(LEGACY_STORAGE_KEY)
+}
