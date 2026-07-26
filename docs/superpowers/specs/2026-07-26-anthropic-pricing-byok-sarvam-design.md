@@ -64,11 +64,17 @@
     - **Enterprise**: Badge `20+ users`. Price `"Custom"`. Feature header: `"All Team features, plus:"`.
 
 ### C. Refactored BYOK Settings (`components/byok-settings.tsx`)
-- Input validation for Sarvam key (`sarvam_...`).
+- Input validation for Sarvam key (`sk_...` prefix and non-empty key check).
+- Action button renamed to **"Connect"** (with disabled state when input is empty or invalid prefix).
+- Active key validation flow:
+  - Clicking **"Connect"** triggers a loading state (`"Connecting..."`).
+  - Calls validation endpoint (`/api/ai` with `validate-key` action or direct test call) to verify the key against Sarvam AI.
+  - Upon successful response, encrypts key via `lib/crypto.ts` and saves to `localStorage.setItem('lekhan_sarvam_api_key', encrypted)`.
+  - On error, displays a toast alert and aborts save.
 - Visual security indicators:
-  - Encryption Status Badge (`AES-256 Encrypted`).
-  - Explanatory tooltip/card explaining zero-knowledge client storage.
-- Save & Remove actions utilizing `lib/crypto.ts`.
+  - Encryption Status Badge (`🔒 AES-256-GCM Encrypted`).
+  - Explanatory card detailing zero-knowledge client-side encryption.
+- Disconnect / Remove key action.
 
 ### D. System-Wide Sarvam References Update
 - Update `components/ai-settings-panel.tsx`, `components/settings-client.tsx`, `app/page.tsx`, and `lib/ai-constants.ts` to refer strictly to **Sarvam AI** and remove all mentions of Gemini.
