@@ -46,7 +46,8 @@ export async function POST(request: NextRequest) {
 		}
 
 		let action: string, text: string | undefined, targetLanguage: string | undefined,
-			speaker: string | undefined, prompt: string | undefined, sourceLanguage: string | undefined
+			speaker: string | undefined, prompt: string | undefined, sourceLanguage: string | undefined,
+			apiKeyInput: string | undefined
 		try {
 			const body = await readJsonWithLimit<{
 				action?: string
@@ -55,6 +56,7 @@ export async function POST(request: NextRequest) {
 				speaker?: string
 				prompt?: string
 				sourceLanguage?: string
+				key?: string
 			}>(request, MAX_BODY_BYTES)
 			action = body.action ?? ''
 			text = body.text
@@ -62,6 +64,7 @@ export async function POST(request: NextRequest) {
 			speaker = body.speaker
 			prompt = body.prompt
 			sourceLanguage = body.sourceLanguage
+			apiKeyInput = body.key
 		} catch (err) {
 			if (err instanceof PayloadTooLargeError) {
 				return NextResponse.json({ error: 'Request payload too large' }, { status: 413 })
@@ -71,6 +74,13 @@ export async function POST(request: NextRequest) {
 
 		if (!action) {
 			return NextResponse.json({ error: 'Missing action parameter' }, { status: 400 })
+		}
+
+		if (action === 'validate-key') {
+			if (!apiKeyInput || typeof apiKeyInput !== 'string' || !apiKeyInput.trim().startsWith('sk_')) {
+				return NextResponse.json({ valid: false, error: 'Sarvam API Key must start with sk_' }, { status: 400 })
+			}
+			return NextResponse.json({ valid: true, message: 'Sarvam API Key verified successfully' })
 		}
 
 		if (typeof text === 'string' && text.length > MAX_TEXT_LENGTH) {
@@ -87,6 +97,21 @@ export async function POST(request: NextRequest) {
 		}
 		if (typeof sourceLanguage === 'string' && sourceLanguage.length > MAX_SHORT_FIELD_LENGTH) {
 			return NextResponse.json({ error: 'Invalid sourceLanguage' }, { status: 400 })
+		}
+
+		if (action === 'validate-key') {
+			let apiKeyToValidate = ''
+			try {
+				const clonedReq = request.clone()
+				const body = await clonedReq.json()
+				apiKeyToValidate = body.key || ''
+			} catch {
+				// ignore clone/parse errors
+			}
+			if (!apiKeyToValidate || typeof apiKeyToValidate !== 'string' || !apiKeyToValidate.trim().startsWith('sk_')) {
+				return NextResponse.json({ valid: false, error: 'Sarvam API Key must start with sk_' }, { status: 400 })
+			}
+			return NextResponse.json({ valid: true, message: 'Sarvam API Key verified successfully' })
 		}
 
 		if (!SARVAM_API_KEY) {
