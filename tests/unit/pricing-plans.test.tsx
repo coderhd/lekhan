@@ -1,25 +1,37 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import '@testing-library/jest-dom'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import PricingMatrix from '@/components/pricing-plans'
 import React from 'react'
 
-describe('PricingMatrix', () => {
-	it('renders 5 INR pricing tiers', () => {
+describe('Anthropic-Style PricingMatrix', () => {
+	it('renders category switcher tabs and displays Individual plans by default', () => {
 		render(<PricingMatrix />)
+		expect(screen.getByRole('button', { name: /^Individual$/i })).toBeInTheDocument()
+		expect(screen.getByRole('button', { name: /^Team and Enterprise$/i })).toBeInTheDocument()
+
+		// Individual category cards
 		expect(screen.getByText('Free')).toBeInTheDocument()
 		expect(screen.getByText('Go')).toBeInTheDocument()
 		expect(screen.getByText('Pro')).toBeInTheDocument()
-		expect(screen.getByText('Team')).toBeInTheDocument()
-		expect(screen.getByText('Enterprise')).toBeInTheDocument()
-		expect(screen.getByText('₹99')).toBeInTheDocument()
-		expect(screen.getAllByText('₹499')[0]).toBeInTheDocument()
+
+		// Effective monthly prices billed annually
+		expect(screen.getByText('₹83')).toBeInTheDocument()
+		expect(screen.getByText('₹417')).toBeInTheDocument()
+		expect(screen.getByText(/Everything in Free, plus:/i)).toBeInTheDocument()
+		expect(screen.getByText(/Everything in Go, plus:/i)).toBeInTheDocument()
 	})
 
-	it('toggles billing cycle between monthly and yearly', () => {
+	it('switches to Team and Enterprise category tab', () => {
 		render(<PricingMatrix />)
-		const toggleBtn = screen.getByRole('button', { name: /Toggle Yearly Billing/i })
-		fireEvent.click(toggleBtn)
-		expect(screen.getByText(/Save 20%/i)).toBeInTheDocument()
+		const teamTab = screen.getByRole('button', { name: /^Team and Enterprise$/i })
+		fireEvent.click(teamTab)
+
+		expect(screen.getByText('Team')).toBeInTheDocument()
+		expect(screen.getByText('Enterprise')).toBeInTheDocument()
+		expect(screen.getByText('2-150 users')).toBeInTheDocument()
+		expect(screen.getByText('20+ users')).toBeInTheDocument()
+		expect(screen.getByText(/Everything in Pro, plus:/i)).toBeInTheDocument()
+		expect(screen.getByText(/All Team features, plus:/i)).toBeInTheDocument()
 	})
 })
