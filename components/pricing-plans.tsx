@@ -126,15 +126,15 @@ export default function PricingMatrix({ currentPlan = 'free' }: { currentPlan?: 
 
 	return (
 		<div className="space-y-8 py-4 max-w-6xl mx-auto">
-			{/* Top Anthropic-Style Category Segmented Control */}
+			{/* Top Category Segmented Switcher */}
 			<div className="flex justify-center">
-				<div className="bg-black/5 dark:bg-white/10 p-1.5 rounded-2xl flex items-center gap-1 border border-black/10 dark:border-white/10">
+				<div className="bg-black/5 dark:bg-white/10 p-1 rounded-2xl flex items-center gap-1 border border-black/10 dark:border-white/10 shadow-sm">
 					<button
 						type="button"
 						onClick={() => setCategory('individual')}
-						className={`px-6 py-2.5 rounded-xl text-xs font-bold transition-all ${
+						className={`px-5 py-2 rounded-xl text-xs font-bold transition-all ${
 							category === 'individual'
-								? 'bg-surface text-on-surface shadow-md'
+								? 'bg-primary text-on-primary shadow-md'
 								: 'text-on-surface-variant hover:text-on-surface'
 						}`}
 					>
@@ -143,9 +143,9 @@ export default function PricingMatrix({ currentPlan = 'free' }: { currentPlan?: 
 					<button
 						type="button"
 						onClick={() => setCategory('team')}
-						className={`px-6 py-2.5 rounded-xl text-xs font-bold transition-all ${
+						className={`px-5 py-2 rounded-xl text-xs font-bold transition-all ${
 							category === 'team'
-								? 'bg-surface text-on-surface shadow-md'
+								? 'bg-primary text-on-primary shadow-md'
 								: 'text-on-surface-variant hover:text-on-surface'
 						}`}
 					>
@@ -161,13 +161,13 @@ export default function PricingMatrix({ currentPlan = 'free' }: { currentPlan?: 
 					type="button"
 					aria-label="Toggle Billing Cycle"
 					onClick={() => setIsYearly(!isYearly)}
-					className="relative w-12 h-6 rounded-full bg-black/10 dark:bg-white/10 p-1 transition-colors focus:outline-none"
+					className="relative w-12 h-6 rounded-full bg-black/15 dark:bg-white/15 border border-black/10 dark:border-white/10 shadow-inner p-0.5 transition-colors focus:outline-none"
 				>
-					<div className={`w-4 h-4 rounded-full bg-primary transition-transform ${isYearly ? 'translate-x-6' : 'translate-x-0'}`} />
+					<div className={`w-4 h-4 rounded-full bg-primary shadow-md border border-primary-container/20 transition-transform ${isYearly ? 'translate-x-6' : 'translate-x-0'}`} />
 				</button>
 				<div className="flex items-center gap-1.5">
 					<span className={`text-xs font-medium ${isYearly ? 'text-on-surface font-bold' : 'text-on-surface-variant'}`}>Yearly</span>
-					<span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+					<span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
 						2 months free
 					</span>
 				</div>
@@ -216,11 +216,14 @@ export default function PricingMatrix({ currentPlan = 'free' }: { currentPlan?: 
 										)}
 									</div>
 
-									{hasYearlyOption && isYearly && plan.yearlyTotal && (
-										<p className="text-[11px] text-on-surface-variant/70 mt-1 font-medium">
-											billed annually at ₹{plan.yearlyTotal.toLocaleString()}/yr
-										</p>
-									)}
+									{/* Reserved height wrapper prevents layout shift when toggling Monthly/Yearly */}
+									<div className="h-[20px] mt-1 flex items-center">
+										{hasYearlyOption && isYearly && plan.yearlyTotal ? (
+											<p className="text-[11px] text-on-surface-variant/70 font-medium leading-none">
+												billed annually at ₹{plan.yearlyTotal.toLocaleString()}/yr
+											</p>
+										) : null}
+									</div>
 								</div>
 
 								{/* CTA Button */}

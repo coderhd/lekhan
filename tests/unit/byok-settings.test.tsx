@@ -20,7 +20,7 @@ describe('BYOKSettings Component', () => {
 
 	it('renders Sarvam BYOK UI with Connect button disabled initially', () => {
 		render(<BYOKSettings />)
-		expect(screen.getByText(/Bring Your Own Sarvam API Key/i)).toBeInTheDocument()
+		expect(screen.getByText(/Sarvam AI Key \(BYOK\)/i)).toBeInTheDocument()
 		expect(screen.getByText(/AES-256-GCM Encrypted/i)).toBeInTheDocument()
 
 		const connectBtn = screen.getByRole('button', { name: /Connect/i })
