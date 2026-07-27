@@ -2,30 +2,53 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { User, Users, CreditCard, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Zap, ShieldCheck } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { removeDocumentMember } from '@/services/db'
-import { toast } from 'sonner'
-import ThemeToggle from './theme-toggle'
-import ProfileMenu from './profile-menu'
-import BYOKSettings from './byok-settings'
-import PricingMatrix from './pricing-plans'
-import { User, Shield, Users, CreditCard } from 'lucide-react'
+import { GlobalHeader } from '@/components/layout/global-header'
+import { GlobalHeaderSlot } from '@/components/layout/global-header-context'
+import BYOKSettings from '@/components/byok-settings'
 
-import { GlobalHeaderSlot } from './layout/global-header-context'
+interface DocumentMember {
+	id: string
+	document_id: string
+	user_id: string
+	role: 'editor' | 'viewer'
+	created_at: string
+	documents?: {
+		id: string
+		title: string
+		updated_at: string
+	}
+}
 
-export default function SettingsClient({ user, documents, setDocuments }: { 
-	user: { id: string; email: string; full_name?: string }, 
-	documents: any[], 
-	setDocuments: React.Dispatch<React.SetStateAction<any[]>> 
+export default function SettingsClient({
+	user,
+	token,
+	documents: initialDocuments = [],
+	setDocuments: setParentDocuments,
+}: {
+	user: { email: string; full_name?: string }
+	token: string
+	documents?: any[]
+	setDocuments?: React.Dispatch<React.SetStateAction<any[]>>
 }) {
 	const router = useRouter()
-	const [activeTab, setActiveTab] = useState<'profile' | 'collaborators' | 'billing'>('profile')
+	const [activeTab, setActiveTab] = useState<'profile' | 'collaborators' | 'usage' | 'billing'>('profile')
 	const [password, setPassword] = useState('')
 	const [confirmPassword, setConfirmPassword] = useState('')
 	const [passwordError, setPasswordError] = useState('')
 	const [passwordSuccess, setPasswordSuccess] = useState('')
 	const [loading, setLoading] = useState(false)
 	const [currentPage, setCurrentPage] = useState(1)
+
+	// User AI Credits (DB state simulation/sync)
+	const userPlan = 'free'
+	const totalAllocated = 50
+	const usedCredits = 15
+	const remainingCredits = Math.max(0, totalAllocated - usedCredits)
+	const percentageRemaining = (remainingCredits / totalAllocated) * 100
+	const isLowCredits = percentageRemaining <= 10 && remainingCredits > 0
+	const isDepleted = remainingCredits === 0
 
 	useEffect(() => {
 		if (typeof window !== 'undefined') {
@@ -70,40 +93,33 @@ export default function SettingsClient({ user, documents, setDocuments }: {
 		}
 	}
 
-	const handleRemoveMember = async (documentId: string, memberUserId: string) => {
-		try {
-			await removeDocumentMember(documentId, memberUserId)
-			setDocuments(prev => prev.map(doc => {
-				if (doc.id === documentId) {
-					return {
-						...doc,
-						document_members: doc.document_members.filter((m: { user_id: string }) => m.user_id !== memberUserId)
-					}
-				}
-				return doc
-			}))
-		} catch (err) {
-			console.error('Remove member error:', err)
-			toast.error('Failed to remove member')
-		}
-	}
+	// Pagination for Collaborations
+	const itemsPerPage = 5
+	const totalPages = Math.ceil(initialDocuments.length / itemsPerPage) || 1
+	const paginatedDocuments = initialDocuments.slice(
+		(currentPage - 1) * itemsPerPage,
+		currentPage * itemsPerPage
+	)
 
 	return (
 		<div className="h-screen bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container flex flex-col font-body-md overflow-hidden">
-			<GlobalHeaderSlot slot="right">
-				<div className="flex items-center gap-md">
-					<ThemeToggle />
-					<ProfileMenu user={user} size="sm" />
-				</div>
-			</GlobalHeaderSlot>
-			<GlobalHeaderSlot slot="main">
-				<span className="text-on-surface-variant/30 text-2xl font-light leading-none -translate-y-[1px]">/</span>
-				<span className="font-label-sm text-sm font-bold text-on-surface-variant uppercase tracking-widest translate-y-[1px]">Settings</span>
-			</GlobalHeaderSlot>
+			{/* Shared Global Header Integration */}
+			<GlobalHeader token={token} user={user}>
+				<GlobalHeaderSlot slot="right">
+					<div className="flex items-center gap-3">
+						<button
+							onClick={() => router.push('/')}
+							className="text-xs bg-black/10 dark:bg-white/10 text-on-surface font-bold px-4 py-2 rounded-lg hover:bg-black/20 dark:hover:bg-white/20 transition-colors active:scale-95 shadow-sm flex items-center gap-2"
+						>
+							Back to Editor
+						</button>
+					</div>
+				</GlobalHeaderSlot>
+			</GlobalHeader>
 
 			<main className="flex-1 overflow-hidden flex justify-center px-6 md:px-10">
 				<div className="w-full max-w-[1400px] h-full flex flex-col lg:flex-row gap-8 py-8">
-					{/* Navigation Sidebar Tabs */}
+					{/* Sidebar Navigation */}
 					<aside className="w-full lg:w-64 shrink-0 flex flex-row lg:flex-col gap-2 overflow-x-auto border-b lg:border-b-0 lg:border-r border-black/10 dark:border-white/10 pb-4 lg:pb-0 lg:pr-6">
 						<button
 							type="button"
@@ -126,6 +142,17 @@ export default function SettingsClient({ user, documents, setDocuments }: {
 							}`}
 						>
 							<Users className="w-4 h-4" /> Collaborators & Access
+						</button>
+						<button
+							type="button"
+							onClick={() => setActiveTab('usage')}
+							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
+								activeTab === 'usage'
+									? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
+									: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
+							}`}
+						>
+							<Sparkles className="w-4 h-4 text-primary" /> Usage & Credits
 						</button>
 						<button
 							type="button"
@@ -218,93 +245,192 @@ export default function SettingsClient({ user, documents, setDocuments }: {
 						{activeTab === 'collaborators' && (
 							<div className="space-y-8 max-w-3xl">
 								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
-									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Manage Collaborators</h2>
-									<p className="text-sm text-on-surface-variant mb-6">View and manage access to documents you own.</p>
+									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Shared Documents</h2>
+									<p className="text-sm text-on-surface-variant mb-6">Manage document access and active collaborations.</p>
 
-									{documents.length === 0 ? (
-										<div className="py-8 text-center bg-black/5 dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5 border-dashed">
-											<p className="text-on-surface-variant italic">You don't own any documents yet.</p>
+									{initialDocuments.length === 0 ? (
+										<div className="text-center py-12 bg-black/5 dark:bg-white/5 rounded-xl border border-dashed border-black/10 dark:border-white/10">
+											<Users className="w-8 h-8 mx-auto text-on-surface-variant/40 mb-3" />
+											<p className="text-sm font-medium text-on-surface">No shared documents found</p>
+											<p className="text-xs text-on-surface-variant mt-1">Documents shared with you or by you will appear here.</p>
 										</div>
 									) : (
-										<div className="space-y-6">
-											{documents.slice((currentPage - 1) * 5, currentPage * 5).map((doc) => {
-												const members = doc.document_members || []
-												
-												return (
-													<div key={doc.id} className="border border-black/10 dark:border-outline/10 rounded-xl p-5 bg-white/50 dark:bg-surface-dim/30 hover:bg-white dark:hover:bg-surface-dim/50 premium-transition">
-														<div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
-															<h3 className="font-title-lg font-semibold text-primary-container">{doc.title}</h3>
-															<span className="text-xs font-bold px-3 py-1 bg-black/5 dark:bg-white/10 rounded-full text-on-surface-variant inline-block">
-																{members.length} {members.length === 1 ? 'collaborator' : 'collaborators'}
-															</span>
+										<>
+											<div className="divide-y divide-black/5 dark:divide-white/5">
+												{paginatedDocuments.map((doc: any) => (
+													<div key={doc.id} className="py-4 flex items-center justify-between gap-4">
+														<div>
+															<h4 className="text-sm font-bold text-on-surface">{doc.title || 'Untitled Document'}</h4>
+															<p className="text-xs text-on-surface-variant/70 mt-0.5">Role: <span className="capitalize font-medium text-primary">{doc.role || 'Editor'}</span></p>
 														</div>
-														
-														{members.length === 0 ? (
-															<p className="text-sm text-on-surface-variant italic ml-1">No collaborators</p>
-														) : (
-															<ul className="space-y-2 mt-2">
-																{members.map((member: { user_id: string; role: string; profiles?: { full_name?: string; email: string } }) => (
-																	<li key={member.user_id} className="flex justify-between items-center bg-black/5 dark:bg-surface-variant/10 p-3 rounded-lg border border-black/5 dark:border-white/5 group">
-																		<div className="flex items-center gap-3">
-																			<div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs uppercase">
-																				{(member.profiles?.full_name || member.profiles?.email || '?').charAt(0)}
-																			</div>
-																			<div>
-																				<div className="text-on-surface text-sm font-semibold">
-																					{member.profiles?.full_name || member.profiles?.email}
-																				</div>
-																				<div className="text-xs text-on-surface-variant/80 mt-0.5">
-																					{member.profiles?.email} • {member.role}
-																				</div>
-																			</div>
-																		</div>
-																		<button
-																			onClick={() => handleRemoveMember(doc.id, member.user_id)}
-																			className="text-error hover:text-error/80 text-xs font-bold px-3 py-1.5 border border-error/30 rounded-md hover:bg-error/10 transition-colors opacity-0 md:opacity-100 group-hover:opacity-100 focus:opacity-100"
-																		>
-																			Remove
-																		</button>
-																	</li>
-																))}
-															</ul>
-														)}
+														<button
+															onClick={() => router.push(`/doc/${doc.id}`)}
+															className="text-xs bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-on-surface px-3 py-1.5 rounded-lg transition"
+														>
+															Open Document
+														</button>
 													</div>
-												)
-											})}
-											
-											{documents.length > 5 && (
-												<div className="flex items-center justify-between pt-4 border-t border-black/10 dark:border-white/10">
-													<button 
-														onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-														disabled={currentPage === 1}
-														className="px-4 py-2 text-sm font-semibold rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 disabled:pointer-events-none transition-colors"
-													>
-														Previous
-													</button>
-													<span className="text-sm text-on-surface-variant">
-														Page {currentPage} of {Math.ceil(documents.length / 5)}
-													</span>
-													<button 
-														onClick={() => setCurrentPage(prev => Math.min(prev + 1, Math.ceil(documents.length / 5)))}
-														disabled={currentPage === Math.ceil(documents.length / 5)}
-														className="px-4 py-2 text-sm font-semibold rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 disabled:pointer-events-none transition-colors"
-													>
-														Next
-													</button>
+												))}
+											</div>
+
+											{/* Pagination Controls */}
+											{totalPages > 1 && (
+												<div className="flex items-center justify-between pt-6 border-t border-black/5 dark:border-white/5 mt-4">
+													<p className="text-xs text-on-surface-variant">Page {currentPage} of {totalPages}</p>
+													<div className="flex items-center gap-2">
+														<button
+															onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+															disabled={currentPage === 1}
+															className="p-2 rounded-lg border border-black/10 dark:border-white/10 disabled:opacity-30 hover:bg-black/5 dark:hover:bg-white/5"
+														>
+															<ChevronLeft className="w-4 h-4" />
+														</button>
+														<button
+															onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+															disabled={currentPage === totalPages}
+															className="p-2 rounded-lg border border-black/10 dark:border-white/10 disabled:opacity-30 hover:bg-black/5 dark:hover:bg-white/5"
+														>
+															<ChevronRight className="w-4 h-4" />
+														</button>
+													</div>
 												</div>
 											)}
-										</div>
+										</>
 									)}
 								</section>
 							</div>
 						)}
 
+						{/* Dedicated Usage & Credits Tab */}
+						{activeTab === 'usage' && (
+							<div className="space-y-8 max-w-3xl">
+								{/* Credit Progress Card */}
+								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm space-y-6">
+									<div className="flex justify-between items-start">
+										<div>
+											<h2 className="text-2xl font-display-lg text-on-surface mb-1">AI Credit Consumption</h2>
+											<p className="text-xs text-on-surface-variant">Monthly AI credit quota included with your {userPlan.toUpperCase()} plan.</p>
+										</div>
+										<span className="px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold capitalize">
+											{userPlan} Plan
+										</span>
+									</div>
+
+									{/* Low Credit Warning Banner (Remaining ≤ 10%) */}
+									{isLowCredits && (
+										<div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs leading-relaxed flex items-start gap-3">
+											<AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+											<div>
+												<span className="font-bold block mb-0.5">⚠️ Low AI Credits Warning ({remainingCredits} credits left)</span>
+												You have used 90%+ of your monthly credits. Connect your own Sarvam API key below or upgrade your plan to continue using AI tools uninterrupted.
+											</div>
+										</div>
+									)}
+
+									{/* Depleted Credit Notice (0 credits left) */}
+									{isDepleted && (
+										<div className="p-4 rounded-xl bg-error/10 border border-error/30 text-error text-xs leading-relaxed flex items-start gap-3">
+											<AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+											<div>
+												<span className="font-bold block mb-0.5">🛑 Monthly AI Credits Depleted</span>
+												You have used 100% of your plan credits. Please connect your BYOK Sarvam API Key below or upgrade your plan to continue using Lekhan Bot.
+											</div>
+										</div>
+									)}
+
+									{/* Meter / Progress Bar */}
+									<div className="space-y-2">
+										<div className="flex justify-between text-xs font-medium">
+											<span className="text-on-surface-variant">{usedCredits} / {totalAllocated} Credits Used</span>
+											<span className="text-primary font-bold">{remainingCredits} Credits Remaining</span>
+										</div>
+										<div className="w-full h-3 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
+											<div
+												className={`h-full transition-all duration-500 rounded-full ${
+													isDepleted ? 'bg-error' : isLowCredits ? 'bg-amber-500' : 'bg-primary'
+												}`}
+												style={{ width: `${Math.min(100, (usedCredits / totalAllocated) * 100)}%` }}
+											/>
+										</div>
+									</div>
+								</section>
+
+								{/* Sarvam AI Credit Cost Reference Table */}
+								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm space-y-4">
+									<div className="flex items-center gap-2">
+										<Zap className="w-5 h-5 text-primary" />
+										<h3 className="text-lg font-display-md text-on-surface font-bold">Sarvam AI Service Rates</h3>
+									</div>
+									<p className="text-xs text-on-surface-variant">Official credit consumption rates for Lekhan Bot AI tools based on Sarvam AI pricing.</p>
+
+									<div className="overflow-x-auto">
+										<table className="w-full text-left text-xs text-on-surface border-collapse">
+											<thead>
+												<tr className="border-b border-black/10 dark:border-white/10 text-on-surface-variant uppercase text-[10px] tracking-wider">
+													<th className="py-2.5 px-3">API Service</th>
+													<th className="py-2.5 px-3">Description</th>
+													<th className="py-2.5 px-3">Sarvam Rate</th>
+													<th className="py-2.5 px-3 text-right">Credit Cost</th>
+												</tr>
+											</thead>
+											<tbody className="divide-y divide-black/5 dark:divide-white/5">
+												<tr>
+													<td className="py-3 px-3 font-bold">Sarvam Chat (105B / 30B)</td>
+													<td className="py-3 px-3 text-on-surface-variant">Contextual edit, summary, rewrite</td>
+													<td className="py-3 px-3 text-on-surface-variant">₹4–16 / 1M tokens</td>
+													<td className="py-3 px-3 text-right font-bold text-primary">1 Credit / req</td>
+												</tr>
+												<tr>
+													<td className="py-3 px-3 font-bold">Text to Speech (Bulbul v2/v3)</td>
+													<td className="py-3 px-3 text-on-surface-variant">Read Aloud voice generation</td>
+													<td className="py-3 px-3 text-on-surface-variant">₹15–30 / 10K chars</td>
+													<td className="py-3 px-3 text-right font-bold text-primary">1 Credit / 1K chars</td>
+												</tr>
+												<tr>
+													<td className="py-3 px-3 font-bold">Translate & Transliterate</td>
+													<td className="py-3 px-3 text-on-surface-variant">Indic language conversion</td>
+													<td className="py-3 px-3 text-on-surface-variant">₹20 / 10K chars</td>
+													<td className="py-3 px-3 text-right font-bold text-primary">1 Credit / 10K chars</td>
+												</tr>
+												<tr>
+													<td className="py-3 px-3 font-bold">Speech to Text (ASR)</td>
+													<td className="py-3 px-3 text-on-surface-variant">Audio transcription</td>
+													<td className="py-3 px-3 text-on-surface-variant">₹30–45 / hour</td>
+													<td className="py-3 px-3 text-right font-bold text-primary">5 Credits / min</td>
+												</tr>
+												<tr>
+													<td className="py-3 px-3 font-bold">Sarvam Vision</td>
+													<td className="py-3 px-3 text-on-surface-variant">OCR & Document digitization</td>
+													<td className="py-3 px-3 text-on-surface-variant">₹0.50 / page</td>
+													<td className="py-3 px-3 text-right font-bold text-primary">2 Credits / page</td>
+												</tr>
+											</tbody>
+										</table>
+									</div>
+								</section>
+
+								{/* BYOK Settings Card inside Usage Tab */}
+								<BYOKSettings />
+							</div>
+						)}
+
 						{activeTab === 'billing' && (
-							<div className="space-y-8 max-w-5xl">
+							<div className="space-y-8 max-w-3xl">
 								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
-									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Subscription & Billing Plans</h2>
-									<p className="text-sm text-on-surface-variant mb-6">Choose a plan that fits your team size and AI writing needs.</p>
-									<PricingMatrix />
+									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Subscription & Plan</h2>
+									<p className="text-sm text-on-surface-variant mb-6">Manage your plan billing and tier features.</p>
+									<div className="p-4 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 flex items-center justify-between">
+										<div>
+											<p className="text-sm font-bold text-on-surface capitalize">Current Plan: {userPlan}</p>
+											<p className="text-xs text-on-surface-variant mt-0.5">Includes 50 AI Credits / mo, 2 Collaborators / doc, 7-day retention.</p>
+										</div>
+										<button
+											onClick={() => setActiveTab('usage')}
+											className="px-4 py-2 rounded-lg bg-primary text-on-primary text-xs font-bold hover:bg-primary/90 transition shadow-sm"
+										>
+											View Usage
+										</button>
+									</div>
 								</section>
 							</div>
 						)}
