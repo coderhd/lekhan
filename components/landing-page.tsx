@@ -224,7 +224,7 @@ export default function LandingPage() {
 						<h2 className="font-display-md text-3xl md:text-4xl font-bold text-on-surface mb-4">Simple, transparent pricing.</h2>
 						<p className="text-xl text-on-surface-variant max-w-2xl mx-auto">Choose the tier that matches your collaborative writing scale.</p>
 					</div>
-					<PricingMatrix />
+					<PricingMatrix isLandingPage={true} />
 				</section>
 
 				{/* CTA Section */}

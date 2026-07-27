@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Check, Shield, Sparkles, Building2, Users } from 'lucide-react'
 import { toast } from 'sonner'
+import { useRouter } from 'next/navigation'
 
 export interface PricingPlan {
 	id: string
@@ -28,9 +29,9 @@ export const INDIVIDUAL_PLANS: PricingPlan[] = [
 		buttonText: 'Current Plan',
 		features: [
 			'5 Documents maximum',
+			'2 Collaborators max / document',
 			'Mentions (View-only)',
-			'Standard Sarvam AI assistance',
-			'BYOK Sarvam API key encryption',
+			'50 Sarvam AI Credits / mo + BYOK',
 			'Local-first offline sync',
 		],
 	},
@@ -45,9 +46,9 @@ export const INDIVIDUAL_PLANS: PricingPlan[] = [
 		buttonText: 'Get Go plan',
 		features: [
 			'Unlimited Documents',
+			'10 Collaborators max / document',
 			'Full Mentions support (Owners & Editors)',
 			'500 Sarvam AI Credits / mo + BYOK',
-			'Export to Markdown & PDF',
 			'14-day Version History',
 		],
 	},
@@ -63,8 +64,8 @@ export const INDIVIDUAL_PLANS: PricingPlan[] = [
 		buttonText: 'Get Pro plan',
 		features: [
 			'2,500 Sarvam AI Credits / mo + BYOK',
+			'25 Collaborators max / document',
 			'Priority Sync & Processing server',
-			'25 Editors max / document',
 			'90-day Version History',
 			'Priority Email Support',
 		],
@@ -86,7 +87,7 @@ export const TEAM_ENTERPRISE_PLANS: PricingPlan[] = [
 		features: [
 			'Centralized Team Billing & Admin controls',
 			'3,500 Sarvam AI Credits / seat / mo',
-			'50 Editors max / document',
+			'50 Collaborators max / document',
 			'Shared Team Templates & Workspaces',
 			'1-Year Version History',
 		],
@@ -104,17 +105,28 @@ export const TEAM_ENTERPRISE_PLANS: PricingPlan[] = [
 			'Custom SLA & Enterprise Security',
 			'SSO / SAML authentication',
 			'Dedicated Account Manager',
-			'Unlimited Version History & Editors',
+			'Unlimited Version History & Collaborators',
 		],
 	},
 ]
 
-export default function PricingMatrix({ currentPlan = 'free' }: { currentPlan?: string }) {
+export default function PricingMatrix({
+	currentPlan = 'free',
+	isLandingPage = false,
+}: {
+	currentPlan?: string
+	isLandingPage?: boolean
+}) {
+	const router = useRouter()
 	const [category, setCategory] = useState<'individual' | 'team'>('individual')
 	const [isYearly, setIsYearly] = useState(true)
 
 	const handleUpgrade = (plan: PricingPlan) => {
-		if (plan.id === currentPlan) return
+		if (isLandingPage && plan.id === 'free') {
+			router.push('/signup')
+			return
+		}
+		if (!isLandingPage && plan.id === currentPlan) return
 		if (plan.id === 'enterprise') {
 			toast.info('Thank you for your interest! Our enterprise team will reach out shortly.')
 			return
@@ -176,9 +188,10 @@ export default function PricingMatrix({ currentPlan = 'free' }: { currentPlan?: 
 			{/* Pricing Grid */}
 			<div className={`grid gap-6 ${category === 'individual' ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 md:grid-cols-2 max-w-4xl mx-auto'}`}>
 				{plansToDisplay.map((plan) => {
-					const isCurrent = plan.id === currentPlan
+					const isCurrent = !isLandingPage && plan.id === currentPlan
 					const hasYearlyOption = typeof plan.priceMonthly === 'number' && plan.priceMonthly > 0
 					const displayedPrice = hasYearlyOption && isYearly ? plan.priceYearlyEffective : plan.priceMonthly
+					const buttonLabel = isLandingPage && plan.id === 'free' ? 'Get started' : isCurrent ? 'Current Plan' : plan.buttonText
 
 					return (
 						<div
@@ -239,7 +252,7 @@ export default function PricingMatrix({ currentPlan = 'free' }: { currentPlan?: 
 											: 'bg-black/10 dark:bg-white/10 text-on-surface hover:bg-black/20 dark:hover:bg-white/20'
 									}`}
 								>
-									{isCurrent ? 'Current Plan' : plan.buttonText}
+									{buttonLabel}
 								</button>
 
 								{/* Cumulative Features Header */}
@@ -250,11 +263,13 @@ export default function PricingMatrix({ currentPlan = 'free' }: { currentPlan?: 
 								)}
 
 								{/* Feature List */}
-								<ul className="space-y-2 text-xs text-on-surface-variant">
+								<ul className="space-y-2 text-xs text-on-surface-variant border-t border-black/5 dark:border-white/5 pt-4">
 									{plan.features.map((feat, i) => (
-										<li key={i} className="flex items-start gap-2.5">
-											<Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-											<span className="leading-tight">{feat}</span>
+										<li key={i} className="flex items-start justify-between gap-2.5">
+											<div className="flex items-start gap-2.5">
+												<Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+												<span className="leading-tight">{feat}</span>
+											</div>
 										</li>
 									))}
 								</ul>
