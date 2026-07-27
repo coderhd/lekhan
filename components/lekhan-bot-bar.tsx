@@ -367,7 +367,7 @@ export default function LekhanBotBar({
 						<span className="animate-spin h-5 w-5 border-2 border-primary-container border-t-transparent rounded-full" />
 					) : (
 						<>
-							<span className="text-[10px] font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full border border-primary/20 shrink-0 whitespace-nowrap">85 Credits left</span>
+							<span className="hidden sm:inline-flex text-[10px] font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full border border-primary/20 shrink-0 whitespace-nowrap">85 Credits left</span>
 							<button
 								type="button"
 								onClick={onClose}

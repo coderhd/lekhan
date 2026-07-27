@@ -8,6 +8,7 @@ interface ProfileMenuProps {
 		full_name?: string
 	}
 	size?: 'sm' | 'md'
+	creditsRemaining?: number
 }
 
 function getInitials(nameOrEmail: string) {
@@ -22,7 +23,7 @@ function getInitials(nameOrEmail: string) {
 	return nameOrEmail.charAt(0).toUpperCase()
 }
 
-export default function ProfileMenu({ user, size = 'md' }: ProfileMenuProps) {
+export default function ProfileMenu({ user, size = 'md', creditsRemaining = 85 }: ProfileMenuProps) {
 	const router = useRouter()
 	const [isOpen, setIsOpen] = useState(false)
 	const menuRef = useRef<HTMLDivElement>(null)
@@ -48,8 +49,8 @@ export default function ProfileMenu({ user, size = 'md' }: ProfileMenuProps) {
 	}, [isOpen])
 
 	const triggerClasses = size === 'sm' 
-		? "w-8 h-8 rounded-full border border-primary/30 bg-primary/10 flex items-center justify-center text-primary font-bold shadow-sm hover:bg-primary/20 transition-colors"
-		: "w-10 h-10 rounded-full border-2 border-primary-container/30 bg-primary/10 flex items-center justify-center text-primary font-bold overflow-hidden cursor-pointer hover:border-primary-container premium-transition hover:scale-110 active:scale-95 select-none"
+		? 'w-8 h-8 rounded-full border border-primary/30 bg-primary/10 flex items-center justify-center text-primary font-bold shadow-sm hover:bg-primary/20 transition-colors'
+		: 'w-10 h-10 rounded-full border-2 border-primary-container/30 bg-primary/10 flex items-center justify-center text-primary font-bold overflow-hidden cursor-pointer hover:border-primary-container premium-transition hover:scale-110 active:scale-95 select-none'
 
 	return (
 		<div className="relative flex items-center" ref={menuRef}>
@@ -61,10 +62,18 @@ export default function ProfileMenu({ user, size = 'md' }: ProfileMenuProps) {
 			</button>
 
 			{isOpen && (
-				<div className="absolute top-full right-0 mt-2 w-56 bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden py-2 z-50 animate-dropdown-in origin-top-right">
-					<div className="px-4 py-3 border-b border-black/5 dark:border-white/5 mb-1">
-						<p className="font-semibold text-on-surface truncate">{displayName}</p>
-						<p className="text-xs text-on-surface-variant truncate">{user.email}</p>
+				<div className="absolute top-full right-0 mt-2 w-60 bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden py-2 z-50 animate-dropdown-in origin-top-right">
+					<div className="px-4 py-3 border-b border-black/5 dark:border-white/5 mb-1 space-y-2">
+						<div>
+							<p className="font-semibold text-on-surface truncate">{displayName}</p>
+							<p className="text-xs text-on-surface-variant truncate">{user.email}</p>
+						</div>
+						<div className="flex items-center justify-between text-xs pt-2 border-t border-black/5 dark:border-white/5">
+							<span className="text-on-surface-variant font-medium">AI Credits</span>
+							<span className="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+								{creditsRemaining} Left
+							</span>
+						</div>
 					</div>
 					<button onClick={() => router.push('/settings')} className="w-full flex items-center gap-md px-4 py-2 hover:bg-black/5 dark:hover:bg-white/5 text-on-surface premium-transition text-left">
 						<span className="material-symbols-outlined text-xl">settings</span>
