@@ -72,7 +72,7 @@ export default function AIDiffPreview({
 			// Bottom threshold accounting for docking BotBar (~110px from bottom)
 			const botBarTopThreshold = window.innerHeight - 110
 
-			let finalX = Math.max(16, Math.min(position.x, window.innerWidth - cardWidth - 16))
+			const finalX = Math.max(16, Math.min(position.x, window.innerWidth - cardWidth - 16))
 			let finalY = position.y
 
 			// If position.y + cardHeight overlaps the bot bar or overflows bottom viewport

@@ -27,11 +27,10 @@ export default function VersionHistory({
 	onClose,
 	documentId,
 	ydoc,
-	token,
 	isViewer = false,
 	plan = 'free',
-	onPreviewVersion = () => {},
-	onRestoreVersion = () => {},
+	onPreviewVersion = () => { },
+	onRestoreVersion = () => { },
 }: VersionHistoryProps) {
 	const [versions, setVersions] = useState<DocumentVersion[]>([])
 	const [newVersionName, setNewVersionName] = useState('')
@@ -72,7 +71,7 @@ export default function VersionHistory({
 		try {
 			const versionId = crypto.randomUUID()
 			const update = Y.encodeStateAsUpdate(ydoc)
-			const blob = new Blob([update], { type: 'application/octet-stream' })
+			const blob = new Blob([update.buffer as ArrayBuffer], { type: 'application/octet-stream' })
 
 			const { error: storageError } = await supabase.storage
 				.from('documents')
@@ -257,11 +256,10 @@ export default function VersionHistory({
 						return (
 							<div
 								key={ver.id}
-								className={`p-3.5 rounded-xl border transition-all space-y-2 ${
-									isPreviewing
-										? 'bg-primary-container/15 border-primary-container shadow-md'
-										: 'bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/5 hover:border-black/20 dark:hover:border-white/20'
-								}`}
+								className={`p-3.5 rounded-xl border transition-all space-y-2 ${isPreviewing
+									? 'bg-primary-container/15 border-primary-container shadow-md'
+									: 'bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/5 hover:border-black/20 dark:hover:border-white/20'
+									}`}
 							>
 								<div className="flex items-center justify-between">
 									<h4 className="text-xs font-bold text-on-surface truncate">{ver.version_name}</h4>
@@ -273,11 +271,10 @@ export default function VersionHistory({
 								<div className="flex items-center gap-2 pt-1">
 									<button
 										onClick={() => handlePreview(ver)}
-										className={`flex-1 py-1.5 rounded-lg text-[11px] font-medium transition ${
-											isPreviewing
-												? 'bg-primary-container text-on-primary-container font-bold'
-												: 'bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-on-surface'
-										}`}
+										className={`flex-1 py-1.5 rounded-lg text-[11px] font-medium transition ${isPreviewing
+											? 'bg-primary-container text-on-primary-container font-bold'
+											: 'bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-on-surface'
+											}`}
 									>
 										{isPreviewing ? 'Previewing' : 'Preview'}
 									</button>
@@ -299,13 +296,13 @@ export default function VersionHistory({
 
 			{/* Confirm Restore Dialog */}
 			<ConfirmDialog
-				isOpen={!!versionToRestore}
+				open={!!versionToRestore}
+				onOpenChange={(open) => { if (!open) setVersionToRestore(null) }}
 				title="Restore Version"
 				description={`Are you sure you want to restore "${versionToRestore?.version_name}"? Unsaved changes in the current document will be replaced.`}
 				confirmText="Restore"
 				cancelText="Cancel"
 				onConfirm={executeRestore}
-				onCancel={() => setVersionToRestore(null)}
 			/>
 		</aside>
 	)

@@ -16,7 +16,6 @@ import PricingMatrix from '@/components/pricing-plans'
 
 export default function SettingsClient({
 	user,
-	token,
 	documents: initialDocuments = [],
 	setDocuments: setParentDocuments,
 }: {
@@ -139,44 +138,40 @@ export default function SettingsClient({
 						<button
 							type="button"
 							onClick={() => setActiveTab('profile')}
-							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
-								activeTab === 'profile'
-									? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
-									: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
-							}`}
+							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'profile'
+								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
+								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
+								}`}
 						>
 							<User className="w-4 h-4" /> Profile & Security
 						</button>
 						<button
 							type="button"
 							onClick={() => setActiveTab('collaborators')}
-							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
-								activeTab === 'collaborators'
-									? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
-									: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
-							}`}
+							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'collaborators'
+								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
+								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
+								}`}
 						>
 							<Users className="w-4 h-4" /> Collaborators & Access
 						</button>
 						<button
 							type="button"
 							onClick={() => setActiveTab('usage')}
-							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
-								activeTab === 'usage'
-									? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
-									: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
-							}`}
+							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'usage'
+								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
+								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
+								}`}
 						>
 							<Sparkles className="w-4 h-4" /> Usage & Credits
 						</button>
 						<button
 							type="button"
 							onClick={() => setActiveTab('billing')}
-							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${
-								activeTab === 'billing'
-									? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
-									: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
-							}`}
+							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'billing'
+								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
+								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
+								}`}
 						>
 							<CreditCard className="w-4 h-4" /> Billing & Subscription
 						</button>
@@ -389,9 +384,8 @@ export default function SettingsClient({
 										</div>
 										<div className="w-full h-3 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
 											<div
-												className={`h-full transition-all duration-500 rounded-full ${
-													isDepleted ? 'bg-error' : isLowCredits ? 'bg-amber-500' : 'bg-primary'
-												}`}
+												className={`h-full transition-all duration-500 rounded-full ${isDepleted ? 'bg-error' : isLowCredits ? 'bg-amber-500' : 'bg-primary'
+													}`}
 												style={{ width: `${Math.min(100, (aiCredits.usedCredits / aiCredits.totalAllocated) * 100)}%` }}
 											/>
 										</div>

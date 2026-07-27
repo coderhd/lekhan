@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
 		if (!user) {
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 		}
+		const userId = user.id
 
 		let action: string, text: string | undefined, targetLanguage: string | undefined,
 			speaker: string | undefined, prompt: string | undefined, sourceLanguage: string | undefined,
@@ -138,7 +139,7 @@ export async function POST(request: NextRequest) {
 			const { data: profile } = await supabaseAdmin
 				.from('profiles')
 				.select('plan, used_credits')
-				.eq('id', user.id)
+				.eq('id', userId)
 				.single()
 
 			const plan = (profile?.plan || 'free').toLowerCase()
@@ -160,7 +161,7 @@ export async function POST(request: NextRequest) {
 					await supabaseAdmin
 						.from('profiles')
 						.update({ used_credits: currentUsedCredits + cost })
-						.eq('id', user.id)
+						.eq('id', userId)
 				} catch (err) {
 					console.error('[Credit Deduction Error]', err)
 				}

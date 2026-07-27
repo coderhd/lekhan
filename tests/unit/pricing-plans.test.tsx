@@ -1,8 +1,12 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import '@testing-library/jest-dom'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import PricingMatrix from '@/components/pricing-plans'
 import React from 'react'
+
+vi.mock('next/navigation', () => ({
+	useRouter: () => ({ push: vi.fn() }),
+}))
 
 describe('Anthropic-Style PricingMatrix', () => {
 	it('renders category switcher tabs and displays Individual plans by default', () => {

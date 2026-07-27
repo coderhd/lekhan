@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, Shield, Sparkles, Building2, Users } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 
@@ -26,6 +26,7 @@ export const INDIVIDUAL_PLANS: PricingPlan[] = [
 		name: 'Free',
 		tagline: 'Smart collaborative note-taking for individuals.',
 		priceMonthly: 0,
+		cumulativeHeader: 'Generous features for everyone',
 		buttonText: 'Current Plan',
 		features: [
 			'5 Documents maximum',
@@ -144,22 +145,20 @@ export default function PricingMatrix({
 					<button
 						type="button"
 						onClick={() => setCategory('individual')}
-						className={`px-5 py-2 rounded-xl text-xs font-bold transition-all ${
-							category === 'individual'
-								? 'bg-primary text-on-primary shadow-md'
-								: 'text-on-surface-variant hover:text-on-surface'
-						}`}
+						className={`px-5 py-2 rounded-xl text-xs font-bold transition-all ${category === 'individual'
+							? 'bg-primary text-on-primary shadow-md'
+							: 'text-on-surface-variant hover:text-on-surface'
+							}`}
 					>
 						Individual
 					</button>
 					<button
 						type="button"
 						onClick={() => setCategory('team')}
-						className={`px-5 py-2 rounded-xl text-xs font-bold transition-all ${
-							category === 'team'
-								? 'bg-primary text-on-primary shadow-md'
-								: 'text-on-surface-variant hover:text-on-surface'
-						}`}
+						className={`px-5 py-2 rounded-xl text-xs font-bold transition-all ${category === 'team'
+							? 'bg-primary text-on-primary shadow-md'
+							: 'text-on-surface-variant hover:text-on-surface'
+							}`}
 					>
 						Team and Enterprise
 					</button>
@@ -196,13 +195,12 @@ export default function PricingMatrix({
 					return (
 						<div
 							key={plan.id}
-							className={`relative flex flex-col justify-between p-6 md:p-8 rounded-3xl border transition-all ${
-								plan.popular
-									? 'bg-primary/5 dark:bg-primary-container/10 border-primary shadow-xl scale-[1.02]'
-									: 'bg-white/5 dark:bg-surface-container-low border-black/10 dark:border-white/10'
-							}`}
+							className={`relative p-6 md:p-8 rounded-3xl border transition-all ${plan.popular
+								? 'bg-primary/5 dark:bg-primary-container/10 border-primary shadow-xl scale-[1.02]'
+								: 'bg-white/5 dark:bg-surface-container-low border-black/10 dark:border-white/10'
+								}`}
 						>
-							<div>
+							<div className="flex flex-col h-full">
 								{/* Header & Badges */}
 								<div className="flex justify-between items-start mb-4">
 									<div>
@@ -244,13 +242,12 @@ export default function PricingMatrix({
 									type="button"
 									onClick={() => handleUpgrade(plan)}
 									disabled={isCurrent}
-									className={`w-full py-3 rounded-xl text-xs font-bold transition-all mb-8 shadow-sm ${
-										isCurrent
-											? 'bg-black/10 dark:bg-white/10 text-on-surface-variant cursor-default'
-											: plan.popular
+									className={`w-full py-3 rounded-xl text-xs font-bold transition-all mb-8 shadow-sm ${isCurrent
+										? 'bg-black/10 dark:bg-white/10 text-on-surface-variant cursor-default'
+										: plan.popular
 											? 'bg-primary text-on-primary hover:bg-primary/90 shadow-md'
 											: 'bg-black/10 dark:bg-white/10 text-on-surface hover:bg-black/20 dark:hover:bg-white/20'
-									}`}
+										}`}
 								>
 									{buttonLabel}
 								</button>
