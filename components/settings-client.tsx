@@ -2,24 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Users, CreditCard, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Zap, ShieldCheck } from 'lucide-react'
+import { User, Users, CreditCard, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Zap } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { GlobalHeader } from '@/components/layout/global-header'
 import { GlobalHeaderSlot } from '@/components/layout/global-header-context'
 import BYOKSettings from '@/components/byok-settings'
-
-interface DocumentMember {
-	id: string
-	document_id: string
-	user_id: string
-	role: 'editor' | 'viewer'
-	created_at: string
-	documents?: {
-		id: string
-		title: string
-		updated_at: string
-	}
-}
+import PricingMatrix from '@/components/pricing-plans'
 
 export default function SettingsClient({
 	user,
@@ -28,7 +15,7 @@ export default function SettingsClient({
 	setDocuments: setParentDocuments,
 }: {
 	user: { email: string; full_name?: string }
-	token: string
+	token?: string
 	documents?: any[]
 	setDocuments?: React.Dispatch<React.SetStateAction<any[]>>
 }) {
@@ -103,19 +90,17 @@ export default function SettingsClient({
 
 	return (
 		<div className="h-screen bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container flex flex-col font-body-md overflow-hidden">
-			{/* Shared Global Header Integration */}
-			<GlobalHeader token={token} user={user}>
-				<GlobalHeaderSlot slot="right">
-					<div className="flex items-center gap-3">
-						<button
-							onClick={() => router.push('/')}
-							className="text-xs bg-black/10 dark:bg-white/10 text-on-surface font-bold px-4 py-2 rounded-lg hover:bg-black/20 dark:hover:bg-white/20 transition-colors active:scale-95 shadow-sm flex items-center gap-2"
-						>
-							Back to Editor
-						</button>
-					</div>
-				</GlobalHeaderSlot>
-			</GlobalHeader>
+			{/* Project Back to Editor Action into Header */}
+			<GlobalHeaderSlot slot="right">
+				<div className="flex items-center gap-3">
+					<button
+						onClick={() => router.push('/')}
+						className="text-xs bg-black/10 dark:bg-white/10 text-on-surface font-bold px-4 py-2 rounded-lg hover:bg-black/20 dark:hover:bg-white/20 transition-colors active:scale-95 shadow-sm flex items-center gap-2"
+					>
+						Back to Editor
+					</button>
+				</div>
+			</GlobalHeaderSlot>
 
 			<main className="flex-1 overflow-hidden flex justify-center px-6 md:px-10">
 				<div className="w-full max-w-[1400px] h-full flex flex-col lg:flex-row gap-8 py-8">
@@ -152,7 +137,7 @@ export default function SettingsClient({
 									: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
 							}`}
 						>
-							<Sparkles className="w-4 h-4 text-primary" /> Usage & Credits
+							<Sparkles className="w-4 h-4" /> Usage & Credits
 						</button>
 						<button
 							type="button"
@@ -236,9 +221,6 @@ export default function SettingsClient({
 										</button>
 									</form>
 								</section>
-
-								{/* BYOK Section */}
-								<BYOKSettings />
 							</div>
 						)}
 
@@ -359,9 +341,11 @@ export default function SettingsClient({
 								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm space-y-4">
 									<div className="flex items-center gap-2">
 										<Zap className="w-5 h-5 text-primary" />
-										<h3 className="text-lg font-display-md text-on-surface font-bold">Sarvam AI Service Rates</h3>
+										<h3 className="text-lg font-display-md text-on-surface font-bold">Sarvam AI Credit Consumption Rates</h3>
 									</div>
-									<p className="text-xs text-on-surface-variant">Official credit consumption rates for Lekhan Bot AI tools based on Sarvam AI pricing.</p>
+									<p className="text-xs text-on-surface-variant">
+										Credit consumption rates for Lekhan Bot operations. Additional usage when using your own API key is charged directly based on official Sarvam API rates. Lekhan plays no role in BYOK billing or pricing.
+									</p>
 
 									<div className="overflow-x-auto">
 										<table className="w-full text-left text-xs text-on-surface border-collapse">
@@ -369,7 +353,6 @@ export default function SettingsClient({
 												<tr className="border-b border-black/10 dark:border-white/10 text-on-surface-variant uppercase text-[10px] tracking-wider">
 													<th className="py-2.5 px-3">API Service</th>
 													<th className="py-2.5 px-3">Description</th>
-													<th className="py-2.5 px-3">Sarvam Rate</th>
 													<th className="py-2.5 px-3 text-right">Credit Cost</th>
 												</tr>
 											</thead>
@@ -377,31 +360,26 @@ export default function SettingsClient({
 												<tr>
 													<td className="py-3 px-3 font-bold">Sarvam Chat (105B / 30B)</td>
 													<td className="py-3 px-3 text-on-surface-variant">Contextual edit, summary, rewrite</td>
-													<td className="py-3 px-3 text-on-surface-variant">₹4–16 / 1M tokens</td>
 													<td className="py-3 px-3 text-right font-bold text-primary">1 Credit / req</td>
 												</tr>
 												<tr>
 													<td className="py-3 px-3 font-bold">Text to Speech (Bulbul v2/v3)</td>
 													<td className="py-3 px-3 text-on-surface-variant">Read Aloud voice generation</td>
-													<td className="py-3 px-3 text-on-surface-variant">₹15–30 / 10K chars</td>
 													<td className="py-3 px-3 text-right font-bold text-primary">1 Credit / 1K chars</td>
 												</tr>
 												<tr>
 													<td className="py-3 px-3 font-bold">Translate & Transliterate</td>
 													<td className="py-3 px-3 text-on-surface-variant">Indic language conversion</td>
-													<td className="py-3 px-3 text-on-surface-variant">₹20 / 10K chars</td>
 													<td className="py-3 px-3 text-right font-bold text-primary">1 Credit / 10K chars</td>
 												</tr>
 												<tr>
 													<td className="py-3 px-3 font-bold">Speech to Text (ASR)</td>
 													<td className="py-3 px-3 text-on-surface-variant">Audio transcription</td>
-													<td className="py-3 px-3 text-on-surface-variant">₹30–45 / hour</td>
 													<td className="py-3 px-3 text-right font-bold text-primary">5 Credits / min</td>
 												</tr>
 												<tr>
 													<td className="py-3 px-3 font-bold">Sarvam Vision</td>
 													<td className="py-3 px-3 text-on-surface-variant">OCR & Document digitization</td>
-													<td className="py-3 px-3 text-on-surface-variant">₹0.50 / page</td>
 													<td className="py-3 px-3 text-right font-bold text-primary">2 Credits / page</td>
 												</tr>
 											</tbody>
@@ -414,23 +392,13 @@ export default function SettingsClient({
 							</div>
 						)}
 
+						{/* Full Pricing & Subscription Matrix inside Billing Tab */}
 						{activeTab === 'billing' && (
-							<div className="space-y-8 max-w-3xl">
+							<div className="space-y-8 max-w-5xl">
 								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
 									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Subscription & Plan</h2>
-									<p className="text-sm text-on-surface-variant mb-6">Manage your plan billing and tier features.</p>
-									<div className="p-4 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 flex items-center justify-between">
-										<div>
-											<p className="text-sm font-bold text-on-surface capitalize">Current Plan: {userPlan}</p>
-											<p className="text-xs text-on-surface-variant mt-0.5">Includes 50 AI Credits / mo, 2 Collaborators / doc, 7-day retention.</p>
-										</div>
-										<button
-											onClick={() => setActiveTab('usage')}
-											className="px-4 py-2 rounded-lg bg-primary text-on-primary text-xs font-bold hover:bg-primary/90 transition shadow-sm"
-										>
-											View Usage
-										</button>
-									</div>
+									<p className="text-sm text-on-surface-variant mb-6">Manage your plan billing and compare plan tiers.</p>
+									<PricingMatrix currentPlan={userPlan} />
 								</section>
 							</div>
 						)}

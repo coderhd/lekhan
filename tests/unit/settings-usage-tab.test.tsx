@@ -31,7 +31,7 @@ describe('Settings Usage & Credits Tab', () => {
 		expect(usageTab).toBeInTheDocument()
 
 		fireEvent.click(usageTab)
-		expect(screen.getByText(/AI Credit Consumption/i)).toBeInTheDocument()
-		expect(screen.getByText(/Sarvam AI Service Rates/i)).toBeInTheDocument()
+		expect(screen.getByText(/^AI Credit Consumption$/i)).toBeInTheDocument()
+		expect(screen.getByText(/Sarvam AI Credit Consumption Rates/i)).toBeInTheDocument()
 	})
 })
