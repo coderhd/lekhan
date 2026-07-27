@@ -34,17 +34,25 @@
      - AI Settings Panel (`components/ai-settings-panel.tsx`)
      - Settings Usage Tab (`components/settings-client.tsx`)
 
-3. **Plan Differentiators Enforcement**:
+3. **Plan Differentiators & Retention Enforcement**:
    - **Document Creation Limit**:
      - Free: 5 Documents max. Blocks new document creation if limit reached.
    - **Collaborator Limit per Document**:
-     - Free: 2 Collaborators max
-     - Go: 10 Collaborators max
-     - Pro: 25 Collaborators max
-     - Team: 50 Collaborators max
+     - Free: 2 Collaborators max / document
+     - Go: 10 Collaborators max / document
+     - Pro: 25 Collaborators max / document
+     - Team: 50 Collaborators max / document
+   - **Plan-Based Version History Retention & Dynamic Reassurance**:
+     - Retention windows: Free (7 days), Go (14 days), Pro (90 days), Team (365 days), Enterprise (Unlimited).
+     - Local browser IndexedDB history and Cloud sync cleanup align with active plan retention period.
+     - Dynamic reassurance note in `components/version-history.tsx` based on user's active plan:
+       - Free: `"🔒 7-day cloud & local version history included in Free plan."`
+       - Go: `"🔒 14-day cloud & local version history included in Go plan."`
+       - Pro: `"🔒 90-day cloud & local version history included in Pro plan."`
+       - Team: `"🔒 1-year cloud & local version history included in Team plan."`
    - **Pricing Matrix Updates (`components/pricing-plans.tsx` & `components/landing-page.tsx`)**:
      - On Landing Page, Free plan CTA displays **"Get started"** instead of "Current Plan".
-     - Features lists include explicit collaborator limits and are aligned with horizontal dividers.
+     - Feature lists include explicit collaborator limits and are aligned with horizontal dividers.
 
 ---
 
