@@ -22,10 +22,15 @@ export async function POST(request: NextRequest) {
 
 	const token = authHeader.replace('Bearer ', '')
 
+	const supabaseKey =
+		process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+		process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+		''
+
 	// Validate user session with Supabase
 	const supabase = createClient(
 		process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-		process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '',
+		supabaseKey,
 		{
 			auth: {
 				persistSession: false,
@@ -33,6 +38,7 @@ export async function POST(request: NextRequest) {
 			},
 			global: {
 				headers: {
+					apikey: supabaseKey,
 					Authorization: `Bearer ${token}`,
 				},
 			},

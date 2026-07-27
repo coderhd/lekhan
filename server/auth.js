@@ -1,9 +1,14 @@
 const { createClient } = require('@supabase/supabase-js')
 
 function getSupabaseClient(token) {
+	const apiKey =
+		process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+		process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+		''
+
 	return createClient(
 		process.env.NEXT_PUBLIC_SUPABASE_URL,
-		process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+		apiKey,
 		{
 			auth: {
 				persistSession: false,
@@ -11,6 +16,7 @@ function getSupabaseClient(token) {
 			},
 			global: {
 				headers: {
+					apikey: apiKey,
 					Authorization: `Bearer ${token}`,
 				},
 			},
@@ -20,10 +26,18 @@ function getSupabaseClient(token) {
 
 async function verifyUserRole(supabase, documentId, token) {
 	if (token === 'anonymous') {
+		const apiKey =
+			process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+			process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+			''
+
 		const anonClient = createClient(
 			process.env.NEXT_PUBLIC_SUPABASE_URL,
-			process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
-			{ auth: { persistSession: false, autoRefreshToken: false } }
+			apiKey,
+			{
+				auth: { persistSession: false, autoRefreshToken: false },
+				global: { headers: { apikey: apiKey } },
+			}
 		)
 		const { data: doc } = await anonClient
 			.from('documents')

@@ -16,10 +16,15 @@ export async function POST(request: NextRequest) {
 
 	const token = authHeader.replace('Bearer ', '')
 
+	const supabaseKey =
+		process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+		process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+		''
+
 	// Initialize Supabase with the client's JWT to respect RLS
 	const supabaseClient = createClient(
 		process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-		process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '',
+		supabaseKey,
 		{
 			auth: {
 				persistSession: false,
@@ -27,20 +32,27 @@ export async function POST(request: NextRequest) {
 			},
 			global: {
 				headers: {
+					apikey: supabaseKey,
 					Authorization: `Bearer ${token}`,
 				},
 			},
 		}
 	)
 
+	const serviceRoleKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 	// Admin client for storage uploads (bypassing public write limits)
 	const supabaseAdmin = createClient(
 		process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-		process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+		serviceRoleKey,
 		{
 			auth: {
 				persistSession: false,
 				autoRefreshToken: false,
+			},
+			global: {
+				headers: {
+					apikey: serviceRoleKey,
+				},
 			},
 		}
 	)
