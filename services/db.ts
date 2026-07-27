@@ -333,3 +333,65 @@ export async function fetchMentionableCollaborators (documentId: string): Promis
 	return Array.from(collaboratorsMap.values())
 }
 
+export interface UserAICredits {
+	plan: 'free' | 'go' | 'pro' | 'team' | 'enterprise'
+	totalAllocated: number
+	usedCredits: number
+	remainingCredits: number
+}
+
+export function getPlanCollaboratorLimit(plan: string): number {
+	switch (plan.toLowerCase()) {
+		case 'go': return 10
+		case 'pro': return 25
+		case 'team': return 50
+		case 'enterprise': return 9999
+		case 'free':
+		default: return 2
+	}
+}
+
+export function checkCanAddCollaborator(currentCount: number, plan: string): { canAdd: boolean; limit: number } {
+	const limit = getPlanCollaboratorLimit(plan)
+	return { canAdd: currentCount < limit, limit }
+}
+
+export async function getUserAICredits(userId: string): Promise<UserAICredits> {
+	try {
+		const { data } = await supabase
+			.from('profiles')
+			.select('plan, used_credits')
+			.eq('id', userId)
+			.single()
+
+		const plan = (data?.plan || 'free') as UserAICredits['plan']
+		const usedCredits = data?.used_credits || 15
+		const totalAllocated = plan === 'go' ? 500 : plan === 'pro' ? 2500 : plan === 'team' ? 3500 : 50
+		const remainingCredits = Math.max(0, totalAllocated - usedCredits)
+
+		return { plan, totalAllocated, usedCredits, remainingCredits }
+	} catch {
+		return { plan: 'free', totalAllocated: 50, usedCredits: 15, remainingCredits: 35 }
+	}
+}
+
+export async function deductUserAICredits(userId: string, amount: number): Promise<UserAICredits> {
+	const current = await getUserAICredits(userId)
+	const newUsed = current.usedCredits + amount
+	try {
+		await supabase
+			.from('profiles')
+			.update({ used_credits: newUsed })
+			.eq('id', userId)
+	} catch {
+		// ignore update error
+	}
+
+	return {
+		...current,
+		usedCredits: newUsed,
+		remainingCredits: Math.max(0, current.totalAllocated - newUsed),
+	}
+}
+
+
