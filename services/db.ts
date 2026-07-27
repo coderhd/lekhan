@@ -32,6 +32,14 @@ export async function fetchSharedDocuments (userId: string): Promise<MemberDocum
 }
 
 export async function createDocument (ownerId: string): Promise<DocumentItem> {
+	const userCredits = await getUserAICredits(ownerId)
+	const ownedDocs = await fetchOwnedDocuments(ownerId)
+	const maxDocs = getPlanMaxDocuments(userCredits.plan)
+
+	if (ownedDocs.length >= maxDocs) {
+		throw new Error(`Maximum document limit (${maxDocs}) reached for your ${userCredits.plan.toUpperCase()} plan. Please upgrade to Go or Pro for unlimited documents.`)
+	}
+
 	const { data, error } = await supabase
 		.from('documents')
 		.insert({
@@ -115,6 +123,25 @@ export async function fetchPendingInvitations (email: string): Promise<DocumentI
 }
 
 export async function acceptInvitation (invite: DocumentInvitation, userId: string): Promise<void> {
+	try {
+		const docDetails = await fetchDocumentDetails(invite.document_id)
+		const ownerCredits = await getUserAICredits(docDetails.owner_id)
+		const allowedLimit = getPlanCollaboratorLimit(ownerCredits.plan)
+
+		const { count: memberCount } = await supabase
+			.from('document_members')
+			.select('*', { count: 'exact', head: true })
+			.eq('document_id', invite.document_id)
+
+		if ((memberCount || 0) >= allowedLimit) {
+			throw new Error(`Collaborator limit reached for this document's owner (${ownerCredits.plan.toUpperCase()} plan, max ${allowedLimit}).`)
+		}
+	} catch (e: any) {
+		if (e.message && e.message.includes('Collaborator limit reached')) {
+			throw e
+		}
+	}
+
 	const { error: memberError } = await supabase
 		.from('document_members')
 		.insert({
@@ -155,6 +182,33 @@ export async function createInvitation (
 	role: 'editor' | 'viewer',
 	token: string
 ): Promise<void> {
+	try {
+		const docDetails = await fetchDocumentDetails(documentId)
+		const ownerCredits = await getUserAICredits(docDetails.owner_id)
+		const allowedLimit = getPlanCollaboratorLimit(ownerCredits.plan)
+
+		const { count: memberCount } = await supabase
+			.from('document_members')
+			.select('*', { count: 'exact', head: true })
+			.eq('document_id', documentId)
+
+		const { count: inviteCount } = await supabase
+			.from('document_invitations')
+			.select('*', { count: 'exact', head: true })
+			.eq('document_id', documentId)
+			.eq('status', 'pending')
+
+		const totalCount = (memberCount || 0) + (inviteCount || 0)
+
+		if (totalCount >= allowedLimit) {
+			throw new Error(`Collaborator limit reached for document owner's ${ownerCredits.plan.toUpperCase()} plan (max ${allowedLimit}). Upgrade plan to add more collaborators.`)
+		}
+	} catch (e: any) {
+		if (e.message && e.message.includes('Collaborator limit reached')) {
+			throw e
+		}
+	}
+
 	const { error } = await supabase
 		.from('document_invitations')
 		.insert({
@@ -338,6 +392,17 @@ export interface UserAICredits {
 	totalAllocated: number
 	usedCredits: number
 	remainingCredits: number
+}
+
+export function getPlanMaxDocuments(plan: string): number {
+	switch (plan.toLowerCase()) {
+		case 'free': return 5
+		case 'go':
+		case 'pro':
+		case 'team':
+		case 'enterprise':
+		default: return Infinity
+	}
 }
 
 export function getPlanCollaboratorLimit(plan: string): number {

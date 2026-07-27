@@ -6,9 +6,16 @@ vi.mock('@/lib/supabase', () => ({
 	},
 }))
 
-import { checkCanAddCollaborator, getPlanCollaboratorLimit } from '@/services/db'
+import { checkCanAddCollaborator, getPlanCollaboratorLimit, getPlanMaxDocuments } from '@/services/db'
 
 describe('Plan Limit Enforcement Helpers', () => {
+	it('returns correct document limit per plan tier', () => {
+		expect(getPlanMaxDocuments('free')).toBe(5)
+		expect(getPlanMaxDocuments('go')).toBe(Infinity)
+		expect(getPlanMaxDocuments('pro')).toBe(Infinity)
+		expect(getPlanMaxDocuments('team')).toBe(Infinity)
+	})
+
 	it('returns correct collaborator limit per plan tier', () => {
 		expect(getPlanCollaboratorLimit('free')).toBe(2)
 		expect(getPlanCollaboratorLimit('go')).toBe(10)

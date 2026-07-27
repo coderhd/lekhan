@@ -3,7 +3,8 @@ const WebSocket = require('ws')
 const Y = require('yjs')
 const { setupWSConnection, docs } = require('y-websocket/bin/utils')
 const { createClient } = require('@supabase/supabase-js')
-const { getSupabaseClient, verifyUserRole } = require('./auth')
+const { getSupabaseClient, verifyUserRole, getDocumentOwnerPlanLimit } = require('./auth')
+
 const { appendUpdate, getPendingUpdates, clearUpdates } = require('./wal')
 
 const port = process.env.PORT || 8080
@@ -169,7 +170,18 @@ server.on('upgrade', async (request, socket, head) => {
 			return
 		}
 
-		console.log(`[Connection] User role: ${role} on doc ${documentId}`)
+		// Enforce concurrent collaborator limit based on document owner plan
+		const activeConns = docs.get(documentId)?.conns.size || 0
+		const maxConcurrent = await getDocumentOwnerPlanLimit(supabaseAdmin, documentId)
+
+		if (activeConns >= maxConcurrent) {
+			console.log(`[Connection] Rejected: Document ${documentId} reached max active connections (${maxConcurrent}) for owner plan`)
+			socket.write('HTTP/1.1 403 Forbidden\r\nX-Reason: Concurrent collaborator limit reached\r\n\r\n')
+			socket.destroy()
+			return
+		}
+
+		console.log(`[Connection] User role: ${role} on doc ${documentId} (${activeConns + 1}/${maxConcurrent} active)`)
 
 		wss.handleUpgrade(request, socket, head, (ws) => {
 			ws.isViewer = role === 'viewer'

@@ -77,4 +77,34 @@ async function verifyUserRole(supabase, documentId, token) {
 	return member ? member.role : null
 }
 
-module.exports = { getSupabaseClient, verifyUserRole }
+async function getDocumentOwnerPlanLimit(supabaseAdmin, documentId) {
+	try {
+		const { data: doc } = await supabaseAdmin
+			.from('documents')
+			.select('owner_id')
+			.eq('id', documentId)
+			.single()
+
+		if (!doc || !doc.owner_id) return 2
+
+		const { data: profile } = await supabaseAdmin
+			.from('profiles')
+			.select('plan')
+			.eq('id', doc.owner_id)
+			.single()
+
+		const plan = (profile && profile.plan ? profile.plan : 'free').toLowerCase()
+		switch (plan) {
+			case 'go': return 10
+			case 'pro': return 25
+			case 'team': return 50
+			case 'enterprise': return 9999
+			case 'free':
+			default: return 2
+		}
+	} catch {
+		return 2
+	}
+}
+
+module.exports = { getSupabaseClient, verifyUserRole, getDocumentOwnerPlanLimit }
