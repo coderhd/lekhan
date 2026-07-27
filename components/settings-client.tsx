@@ -2,8 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Users, CreditCard, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Zap } from 'lucide-react'
+import { User, Users, CreditCard, Sparkles, AlertTriangle, Zap } from 'lucide-react'
+import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
+import {
+	getUserAICredits,
+	removeDocumentMember,
+	fetchOwnedDocumentsWithMembers,
+	type UserAICredits,
+} from '@/services/db'
 import BYOKSettings from '@/components/byok-settings'
 import PricingMatrix from '@/components/pricing-plans'
 
@@ -13,7 +20,7 @@ export default function SettingsClient({
 	documents: initialDocuments = [],
 	setDocuments: setParentDocuments,
 }: {
-	user: { email: string; full_name?: string }
+	user: { id?: string; email: string; full_name?: string }
 	token?: string
 	documents?: any[]
 	setDocuments?: React.Dispatch<React.SetStateAction<any[]>>
@@ -27,18 +34,38 @@ export default function SettingsClient({
 	const [loading, setLoading] = useState(false)
 	const [currentPage, setCurrentPage] = useState(1)
 
-	// User AI Credits (DB state simulation/sync)
-	const userPlan = 'free'
-	const totalAllocated = 50
-	const usedCredits = 15
-	const remainingCredits = Math.max(0, totalAllocated - usedCredits)
-	const percentageRemaining = (remainingCredits / totalAllocated) * 100
-	const isLowCredits = percentageRemaining <= 10 && remainingCredits > 0
-	const isDepleted = remainingCredits === 0
+	// Documents State for Collaborators tab
+	const [documentsState, setDocumentsState] = useState<any[]>(initialDocuments)
+
+	useEffect(() => {
+		setDocumentsState(initialDocuments)
+	}, [initialDocuments])
+
+	// Real DB AI Credits
+	const [aiCredits, setAiCredits] = useState<UserAICredits>({
+		plan: 'free',
+		totalAllocated: 50,
+		usedCredits: 0,
+		remainingCredits: 50,
+	})
+
+	useEffect(() => {
+		const loadCredits = async () => {
+			if (user?.id) {
+				const creds = await getUserAICredits(user.id)
+				setAiCredits(creds)
+			}
+		}
+		loadCredits()
+	}, [user?.id])
+
+	const percentageRemaining = (aiCredits.remainingCredits / aiCredits.totalAllocated) * 100
+	const isLowCredits = percentageRemaining <= 10 && aiCredits.remainingCredits > 0
+	const isDepleted = aiCredits.remainingCredits === 0
 
 	useEffect(() => {
 		if (typeof window !== 'undefined') {
-			const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' || 'dark'
+			const savedTheme = (localStorage.getItem('theme') as 'light' | 'dark') || 'dark'
 			if (savedTheme === 'dark') {
 				document.documentElement.classList.add('dark')
 			} else {
@@ -65,7 +92,7 @@ export default function SettingsClient({
 		try {
 			const { error } = await supabase.auth.updateUser({ password })
 			if (error) throw error
-			
+
 			setPasswordSuccess('Password updated successfully. Please re-authenticate.')
 			setTimeout(async () => {
 				await supabase.auth.signOut()
@@ -79,18 +106,32 @@ export default function SettingsClient({
 		}
 	}
 
+	const handleRemoveMember = async (documentId: string, memberUserId: string) => {
+		try {
+			await removeDocumentMember(documentId, memberUserId)
+			if (user?.id) {
+				const updatedDocs = await fetchOwnedDocumentsWithMembers(user.id)
+				if (setParentDocuments) {
+					setParentDocuments(updatedDocs)
+				}
+				setDocumentsState(updatedDocs)
+			}
+			toast.success('Collaborator removed successfully')
+		} catch {
+			toast.error('Failed to remove collaborator')
+		}
+	}
+
 	// Pagination for Collaborations
 	const itemsPerPage = 5
-	const totalPages = Math.ceil(initialDocuments.length / itemsPerPage) || 1
-	const paginatedDocuments = initialDocuments.slice(
+	const totalPages = Math.ceil(documentsState.length / itemsPerPage) || 1
+	const paginatedDocuments = documentsState.slice(
 		(currentPage - 1) * itemsPerPage,
 		currentPage * itemsPerPage
 	)
 
 	return (
 		<div className="h-screen bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container flex flex-col font-body-md overflow-hidden">
-
-
 			<main className="flex-1 overflow-hidden flex justify-center px-6 md:px-10">
 				<div className="w-full max-w-[1400px] h-full flex flex-col lg:flex-row gap-8 py-8">
 					{/* Sidebar Navigation */}
@@ -187,7 +228,7 @@ export default function SettingsClient({
 												required
 											/>
 										</div>
-										
+
 										{passwordError && (
 											<div className="p-3 bg-error-container/20 border border-error/50 rounded-lg text-error text-sm font-medium flex items-center gap-2 mt-4">
 												<span className="material-symbols-outlined text-[18px]">error</span>
@@ -216,57 +257,88 @@ export default function SettingsClient({
 						{activeTab === 'collaborators' && (
 							<div className="space-y-8 max-w-3xl">
 								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
-									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Shared Documents</h2>
-									<p className="text-sm text-on-surface-variant mb-6">Manage document access and active collaborations.</p>
+									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Manage Collaborators</h2>
+									<p className="text-sm text-on-surface-variant mb-6">View and manage access to documents you own.</p>
 
-									{initialDocuments.length === 0 ? (
-										<div className="text-center py-12 bg-black/5 dark:bg-white/5 rounded-xl border border-dashed border-black/10 dark:border-white/10">
-											<Users className="w-8 h-8 mx-auto text-on-surface-variant/40 mb-3" />
-											<p className="text-sm font-medium text-on-surface">No shared documents found</p>
-											<p className="text-xs text-on-surface-variant mt-1">Documents shared with you or by you will appear here.</p>
+									{documentsState.length === 0 ? (
+										<div className="py-8 text-center bg-black/5 dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5 border-dashed">
+											<p className="text-on-surface-variant italic text-sm">You don't own any documents yet.</p>
 										</div>
 									) : (
-										<>
-											<div className="divide-y divide-black/5 dark:divide-white/5">
-												{paginatedDocuments.map((doc: any) => (
-													<div key={doc.id} className="py-4 flex items-center justify-between gap-4">
-														<div>
-															<h4 className="text-sm font-bold text-on-surface">{doc.title || 'Untitled Document'}</h4>
-															<p className="text-xs text-on-surface-variant/70 mt-0.5">Role: <span className="capitalize font-medium text-primary">{doc.role || 'Editor'}</span></p>
-														</div>
-														<button
-															onClick={() => router.push(`/doc/${doc.id}`)}
-															className="text-xs bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-on-surface px-3 py-1.5 rounded-lg transition"
-														>
-															Open Document
-														</button>
-													</div>
-												))}
-											</div>
+										<div className="space-y-6">
+											{paginatedDocuments.map((doc: any) => {
+												const members = doc.document_members || []
 
-											{/* Pagination Controls */}
-											{totalPages > 1 && (
-												<div className="flex items-center justify-between pt-6 border-t border-black/5 dark:border-white/5 mt-4">
-													<p className="text-xs text-on-surface-variant">Page {currentPage} of {totalPages}</p>
-													<div className="flex items-center gap-2">
-														<button
-															onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-															disabled={currentPage === 1}
-															className="p-2 rounded-lg border border-black/10 dark:border-white/10 disabled:opacity-30 hover:bg-black/5 dark:hover:bg-white/5"
-														>
-															<ChevronLeft className="w-4 h-4" />
-														</button>
-														<button
-															onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-															disabled={currentPage === totalPages}
-															className="p-2 rounded-lg border border-black/10 dark:border-white/10 disabled:opacity-30 hover:bg-black/5 dark:hover:bg-white/5"
-														>
-															<ChevronRight className="w-4 h-4" />
-														</button>
+												return (
+													<div
+														key={doc.id}
+														className="border border-black/10 dark:border-outline/10 rounded-xl p-5 bg-white/50 dark:bg-surface-dim/30 hover:bg-white dark:hover:bg-surface-dim/50 transition-all shadow-sm"
+													>
+														<div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
+															<h3 className="font-title-lg font-semibold text-primary-container">{doc.title || 'Untitled Document'}</h3>
+															<span className="text-xs font-bold px-3 py-1 bg-black/5 dark:bg-white/10 rounded-full text-on-surface-variant inline-block w-fit">
+																{members.length} {members.length === 1 ? 'collaborator' : 'collaborators'}
+															</span>
+														</div>
+
+														{members.length === 0 ? (
+															<p className="text-xs text-on-surface-variant italic ml-1">No collaborators added yet.</p>
+														) : (
+															<ul className="space-y-2 mt-2">
+																{members.map((member: { user_id: string; role: string; profiles?: { full_name?: string; email: string } }) => (
+																	<li
+																		key={member.user_id}
+																		className="flex justify-between items-center bg-black/5 dark:bg-surface-variant/10 p-3 rounded-lg border border-black/5 dark:border-white/5 group"
+																	>
+																		<div className="flex items-center gap-3">
+																			<div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs uppercase shrink-0">
+																				{(member.profiles?.full_name || member.profiles?.email || '?').charAt(0)}
+																			</div>
+																			<div className="min-w-0">
+																				<div className="text-on-surface text-xs font-semibold truncate">
+																					{member.profiles?.full_name || member.profiles?.email}
+																				</div>
+																				<div className="text-[11px] text-on-surface-variant/80 mt-0.5 truncate">
+																					{member.profiles?.email} • <span className="capitalize font-medium text-primary">{member.role}</span>
+																				</div>
+																			</div>
+																		</div>
+																		<button
+																			onClick={() => handleRemoveMember(doc.id, member.user_id)}
+																			className="text-error hover:text-error/80 text-xs font-bold px-3 py-1.5 border border-error/30 rounded-md hover:bg-error/10 transition-colors shrink-0"
+																		>
+																			Remove
+																		</button>
+																	</li>
+																))}
+															</ul>
+														)}
 													</div>
+												)
+											})}
+
+											{totalPages > 1 && (
+												<div className="flex items-center justify-between pt-4 border-t border-black/10 dark:border-white/10">
+													<button
+														onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+														disabled={currentPage === 1}
+														className="px-4 py-2 text-xs font-semibold rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 disabled:pointer-events-none transition-colors"
+													>
+														Previous
+													</button>
+													<span className="text-xs text-on-surface-variant">
+														Page {currentPage} of {totalPages}
+													</span>
+													<button
+														onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+														disabled={currentPage === totalPages}
+														className="px-4 py-2 text-xs font-semibold rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 disabled:pointer-events-none transition-colors"
+													>
+														Next
+													</button>
 												</div>
 											)}
-										</>
+										</div>
 									)}
 								</section>
 							</div>
@@ -280,10 +352,10 @@ export default function SettingsClient({
 									<div className="flex justify-between items-start">
 										<div>
 											<h2 className="text-2xl font-display-lg text-on-surface mb-1">AI Credit Consumption</h2>
-											<p className="text-xs text-on-surface-variant">Monthly AI credit quota included with your {userPlan.toUpperCase()} plan.</p>
+											<p className="text-xs text-on-surface-variant">Monthly AI credit quota included with your {aiCredits.plan.toUpperCase()} plan.</p>
 										</div>
 										<span className="px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold capitalize">
-											{userPlan} Plan
+											{aiCredits.plan} Plan
 										</span>
 									</div>
 
@@ -292,7 +364,7 @@ export default function SettingsClient({
 										<div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs leading-relaxed flex items-start gap-3">
 											<AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
 											<div>
-												<span className="font-bold block mb-0.5">⚠️ Low AI Credits Warning ({remainingCredits} credits left)</span>
+												<span className="font-bold block mb-0.5">⚠️ Low AI Credits Warning ({aiCredits.remainingCredits} credits left)</span>
 												You have used 90%+ of your monthly credits. Connect your own Sarvam API key below or upgrade your plan to continue using AI tools uninterrupted.
 											</div>
 										</div>
@@ -312,15 +384,15 @@ export default function SettingsClient({
 									{/* Meter / Progress Bar */}
 									<div className="space-y-2">
 										<div className="flex justify-between text-xs font-medium">
-											<span className="text-on-surface-variant">{usedCredits} / {totalAllocated} Credits Used</span>
-											<span className="text-primary font-bold">{remainingCredits} Credits Remaining</span>
+											<span className="text-on-surface-variant">{aiCredits.usedCredits} / {aiCredits.totalAllocated} Credits Used</span>
+											<span className="text-primary font-bold">{aiCredits.remainingCredits} Credits Remaining</span>
 										</div>
 										<div className="w-full h-3 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
 											<div
 												className={`h-full transition-all duration-500 rounded-full ${
 													isDepleted ? 'bg-error' : isLowCredits ? 'bg-amber-500' : 'bg-primary'
 												}`}
-												style={{ width: `${Math.min(100, (usedCredits / totalAllocated) * 100)}%` }}
+												style={{ width: `${Math.min(100, (aiCredits.usedCredits / aiCredits.totalAllocated) * 100)}%` }}
 											/>
 										</div>
 									</div>
@@ -387,7 +459,7 @@ export default function SettingsClient({
 								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
 									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Subscription & Plan</h2>
 									<p className="text-sm text-on-surface-variant mb-6">Manage your plan billing and compare plan tiers.</p>
-									<PricingMatrix currentPlan={userPlan} />
+									<PricingMatrix currentPlan={aiCredits.plan} />
 								</section>
 							</div>
 						)}

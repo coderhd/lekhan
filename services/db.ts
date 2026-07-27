@@ -365,13 +365,13 @@ export async function getUserAICredits(userId: string): Promise<UserAICredits> {
 			.single()
 
 		const plan = (data?.plan || 'free') as UserAICredits['plan']
-		const usedCredits = data?.used_credits || 15
+		const usedCredits = typeof data?.used_credits === 'number' ? data.used_credits : 0
 		const totalAllocated = plan === 'go' ? 500 : plan === 'pro' ? 2500 : plan === 'team' ? 3500 : 50
 		const remainingCredits = Math.max(0, totalAllocated - usedCredits)
 
 		return { plan, totalAllocated, usedCredits, remainingCredits }
 	} catch {
-		return { plan: 'free', totalAllocated: 50, usedCredits: 15, remainingCredits: 35 }
+		return { plan: 'free', totalAllocated: 50, usedCredits: 0, remainingCredits: 50 }
 	}
 }
 

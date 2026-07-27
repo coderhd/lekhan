@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 
 interface ProfileMenuProps {
 	user: {
+		id?: string
 		email: string
 		full_name?: string
 	}
@@ -23,13 +24,32 @@ function getInitials(nameOrEmail: string) {
 	return nameOrEmail.charAt(0).toUpperCase()
 }
 
-export default function ProfileMenu({ user, size = 'md', creditsRemaining = 85 }: ProfileMenuProps) {
+import { getUserAICredits } from '@/services/db'
+
+export default function ProfileMenu({ user, size = 'md', creditsRemaining }: ProfileMenuProps) {
 	const router = useRouter()
 	const [isOpen, setIsOpen] = useState(false)
+	const [fetchedCredits, setFetchedCredits] = useState<number | null>(null)
 	const menuRef = useRef<HTMLDivElement>(null)
 
 	const displayName = user.full_name || user.email.split('@')[0]
 	const initials = getInitials(user.full_name || user.email)
+
+	useEffect(() => {
+		const loadCredits = async () => {
+			if (user.id) {
+				try {
+					const creds = await getUserAICredits(user.id)
+					setFetchedCredits(creds.remainingCredits)
+				} catch {
+					// Fallback
+				}
+			}
+		}
+		loadCredits()
+	}, [user.id])
+
+	const displayCredits = creditsRemaining ?? fetchedCredits ?? 50
 
 	const handleSignOut = async () => {
 		await supabase.auth.signOut()
@@ -71,7 +91,7 @@ export default function ProfileMenu({ user, size = 'md', creditsRemaining = 85 }
 						<div className="flex items-center justify-between text-xs pt-2 border-t border-black/5 dark:border-white/5">
 							<span className="text-on-surface-variant font-medium">AI Credits</span>
 							<span className="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
-								{creditsRemaining} Left
+								{displayCredits} Left
 							</span>
 						</div>
 					</div>

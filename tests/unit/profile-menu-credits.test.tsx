@@ -23,6 +23,6 @@ describe('ProfileMenu Credit Badge', () => {
 		fireEvent.click(avatarBtn)
 
 		expect(screen.getByText(/AI Credits/i)).toBeInTheDocument()
-		expect(screen.getByText(/85 Left/i)).toBeInTheDocument()
+		expect(screen.getByText(/50 Left/i)).toBeInTheDocument()
 	})
 })

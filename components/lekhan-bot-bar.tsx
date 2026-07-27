@@ -10,6 +10,9 @@ import {
 	type LekhanBotAction,
 } from '@/lib/ai-constants'
 
+import { getUserAICredits } from '@/services/db'
+import { supabase } from '@/lib/supabase'
+
 interface LekhanBotBarProps {
 	editor: any
 	token: string
@@ -17,6 +20,7 @@ interface LekhanBotBarProps {
 	onClose: () => void
 	onResult: (actionId: string, result: string, originalText: string) => void
 	detectedLanguage?: { code: string; name: string; script: string } | null
+	creditsRemaining?: number
 }
 
 export default function LekhanBotBar({
@@ -26,6 +30,7 @@ export default function LekhanBotBar({
 	onClose,
 	onResult,
 	detectedLanguage,
+	creditsRemaining,
 }: LekhanBotBarProps) {
 	const [prompt, setPrompt] = useState('')
 	const [isLoading, setIsLoading] = useState(false)
@@ -33,6 +38,7 @@ export default function LekhanBotBar({
 	const [showTranslatePicker, setShowTranslatePicker] = useState(false)
 	const [showTransliteratePicker, setShowTransliteratePicker] = useState(false)
 	const [mounted, setMounted] = useState(false)
+	const [fetchedCredits, setFetchedCredits] = useState<number | null>(null)
 	const inputRef = useRef<HTMLInputElement>(null)
 
 	useEffect(() => {
@@ -45,15 +51,30 @@ export default function LekhanBotBar({
 		return editor.state.doc.textBetween(from, to, ' ').trim()
 	}
 
-	// Focus and show presets when bar opens
+	// Focus, show presets and fetch credits when bar opens
 	useEffect(() => {
 		if (isVisible) {
 			setShowPresets(true)
 			setShowTranslatePicker(false)
 			setShowTransliteratePicker(false)
 			setTimeout(() => inputRef.current?.focus(), 100)
+
+			const loadCredits = async () => {
+				try {
+					const { data: { user } } = await supabase.auth.getUser()
+					if (user?.id) {
+						const creds = await getUserAICredits(user.id)
+						setFetchedCredits(creds.remainingCredits)
+					}
+				} catch {
+					// Fallback
+				}
+			}
+			loadCredits()
 		}
 	}, [isVisible])
+
+	const displayCredits = creditsRemaining ?? fetchedCredits ?? 50
 
 	// Close on Escape
 	useEffect(() => {
@@ -367,7 +388,7 @@ export default function LekhanBotBar({
 						<span className="animate-spin h-5 w-5 border-2 border-primary-container border-t-transparent rounded-full" />
 					) : (
 						<>
-							<span className="hidden sm:inline-flex text-[10px] font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full border border-primary/20 shrink-0 whitespace-nowrap">85 Credits left</span>
+							<span className="hidden sm:inline-flex text-[10px] font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full border border-primary/20 shrink-0 whitespace-nowrap">{displayCredits} Credits left</span>
 							<button
 								type="button"
 								onClick={onClose}
