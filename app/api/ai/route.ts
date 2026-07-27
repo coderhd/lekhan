@@ -6,9 +6,7 @@ import { LEKHAN_BOT_SYSTEM_PROMPT, LANGUAGES } from '@/lib/ai-constants'
 const SARVAM_API_KEY = process.env.SARVAM_API_KEY || ''
 const SARVAM_API_URL = 'https://api.sarvam.ai'
 
-// This endpoint only ever needs to carry writing-assistant-sized text, never
-// arbitrary payloads — caps are deliberately tight, both to bound memory and
-// to bound what gets forwarded (and billed) to Sarvam.
+// Endpoint limits
 const MAX_BODY_BYTES = 200 * 1024 // 200KB
 const MAX_TEXT_LENGTH = 10_000 // translate / tts input
 const MAX_PROMPT_LENGTH = 6_000 // chat prompt
@@ -22,6 +20,7 @@ export async function POST(request: NextRequest) {
 
 	const token = authHeader.replace('Bearer ', '')
 
+	const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 	const supabaseKey =
 		process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
 		process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
@@ -29,13 +28,10 @@ export async function POST(request: NextRequest) {
 
 	// Validate user session with Supabase
 	const supabase = createClient(
-		process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+		supabaseUrl,
 		supabaseKey,
 		{
-			auth: {
-				persistSession: false,
-				autoRefreshToken: false,
-			},
+			auth: { persistSession: false, autoRefreshToken: false },
 			global: {
 				headers: {
 					apikey: supabaseKey,
@@ -105,23 +101,55 @@ export async function POST(request: NextRequest) {
 			return NextResponse.json({ error: 'Invalid sourceLanguage' }, { status: 400 })
 		}
 
-		if (action === 'validate-key') {
-			let apiKeyToValidate = ''
-			try {
-				const clonedReq = request.clone()
-				const body = await clonedReq.json()
-				apiKeyToValidate = body.key || ''
-			} catch {
-				// ignore clone/parse errors
-			}
-			if (!apiKeyToValidate || typeof apiKeyToValidate !== 'string' || !apiKeyToValidate.trim().startsWith('sk_')) {
-				return NextResponse.json({ valid: false, error: 'Sarvam API Key must start with sk_' }, { status: 400 })
-			}
-			return NextResponse.json({ valid: true, message: 'Sarvam API Key verified successfully' })
+		// Use custom BYOK key if provided, otherwise fallback to system key
+		const hasValidByokKey = typeof apiKeyInput === 'string' && apiKeyInput.trim().startsWith('sk_')
+		const effectiveApiKey = hasValidByokKey ? apiKeyInput!.trim() : SARVAM_API_KEY
+
+		if (!effectiveApiKey) {
+			return NextResponse.json({ error: 'Sarvam AI API key is not configured' }, { status: 500 })
 		}
 
-		if (!SARVAM_API_KEY) {
-			return NextResponse.json({ error: 'Sarvam AI API key is not configured' }, { status: 500 })
+		const isCreditConsumingAction = ['chat', 'translate', 'tts', 'transliterate'].includes(action)
+
+		const serviceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseKey
+		const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
+			auth: { persistSession: false, autoRefreshToken: false },
+			global: { headers: { apikey: serviceKey } },
+		})
+
+		let currentUsedCredits = 0
+
+		if (isCreditConsumingAction) {
+			const { data: profile } = await supabaseAdmin
+				.from('profiles')
+				.select('plan, used_credits')
+				.eq('id', user.id)
+				.single()
+
+			const plan = (profile?.plan || 'free').toLowerCase()
+			currentUsedCredits = profile?.used_credits ?? 0
+			const totalCredits = plan === 'go' ? 500 : plan === 'pro' ? 2500 : plan === 'team' ? 3500 : 50
+			const remainingCredits = Math.max(0, totalCredits - currentUsedCredits)
+
+			if (remainingCredits <= 0 && !hasValidByokKey) {
+				return NextResponse.json(
+					{ error: 'AI credit limit reached. Please add your own Sarvam API key in settings or upgrade your plan to continue.' },
+					{ status: 402 }
+				)
+			}
+		}
+
+		async function deductCreditIfPlatformQuota() {
+			if (isCreditConsumingAction && !hasValidByokKey) {
+				try {
+					await supabaseAdmin
+						.from('profiles')
+						.update({ used_credits: currentUsedCredits + 1 })
+						.eq('id', user.id)
+				} catch (err) {
+					console.error('[Credit Deduction Error]', err)
+				}
+			}
 		}
 
 		if (action === 'translate') {
@@ -133,7 +161,7 @@ export async function POST(request: NextRequest) {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
-					'api-subscription-key': SARVAM_API_KEY,
+					'api-subscription-key': effectiveApiKey,
 				},
 				body: JSON.stringify({
 					input: text,
@@ -147,6 +175,7 @@ export async function POST(request: NextRequest) {
 				throw new Error(`Sarvam Translation error: ${errorText}`)
 			}
 
+			await deductCreditIfPlatformQuota()
 			const data = await response.json()
 			return NextResponse.json({ translatedText: data.translated_text })
 		}
@@ -160,7 +189,7 @@ export async function POST(request: NextRequest) {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
-					'api-subscription-key': SARVAM_API_KEY,
+					'api-subscription-key': effectiveApiKey,
 				},
 				body: JSON.stringify({
 					inputs: [text],
@@ -177,8 +206,8 @@ export async function POST(request: NextRequest) {
 				throw new Error(`Sarvam TTS error: ${errorText}`)
 			}
 
+			await deductCreditIfPlatformQuota()
 			const data = await response.json()
-			// Sarvam returns JSON containing an array of base64-encoded WAVs
 			return NextResponse.json({ base64Audio: data.audios?.[0] || data.base64_audio || data.audio })
 		}
 
@@ -191,7 +220,7 @@ export async function POST(request: NextRequest) {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
-					'api-subscription-key': SARVAM_API_KEY,
+					'api-subscription-key': effectiveApiKey,
 				},
 				body: JSON.stringify({
 					model: 'sarvam-105b',
@@ -210,6 +239,7 @@ export async function POST(request: NextRequest) {
 				throw new Error(`Sarvam LLM Chat error: ${errorText}`)
 			}
 
+			await deductCreditIfPlatformQuota()
 			const data = await response.json()
 			const reply = data.choices?.[0]?.message?.content || ''
 			return NextResponse.json({ text: reply })
@@ -224,7 +254,7 @@ export async function POST(request: NextRequest) {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
-					'api-subscription-key': SARVAM_API_KEY,
+					'api-subscription-key': effectiveApiKey,
 				},
 				body: JSON.stringify({
 					input: text,
@@ -238,6 +268,7 @@ export async function POST(request: NextRequest) {
 				throw new Error(`Sarvam Transliteration error: ${errorText}`)
 			}
 
+			await deductCreditIfPlatformQuota()
 			const data = await response.json()
 			return NextResponse.json({ transliteratedText: data.transliterated_text })
 		}
@@ -251,7 +282,7 @@ export async function POST(request: NextRequest) {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
-					'api-subscription-key': SARVAM_API_KEY,
+					'api-subscription-key': effectiveApiKey,
 				},
 				body: JSON.stringify({ input: text.slice(0, 1000) }),
 			})

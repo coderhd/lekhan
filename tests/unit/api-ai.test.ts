@@ -11,6 +11,12 @@ vi.mock('@supabase/supabase-js', () => ({
 		auth: {
 			getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'test-user', email: 'test@example.com' } }, error: null }),
 		},
+		from: vi.fn(() => ({
+			select: vi.fn().mockReturnThis(),
+			eq: vi.fn().mockReturnThis(),
+			single: vi.fn().mockResolvedValue({ data: { plan: 'free', used_credits: 0 }, error: null }),
+			update: vi.fn().mockReturnThis(),
+		})),
 	})),
 }))
 
