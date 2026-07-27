@@ -524,3 +524,15 @@ ul[data-type="taskList"] li>div {
 	font-size: 0.875em;
 	box-decoration-break: clone;
 }
+
+.ai-active-selection {
+	background-color: rgba(252, 163, 17, 0.25) !important;
+	border-bottom: 2px solid rgba(252, 163, 17, 0.8) !important;
+	border-radius: 2px;
+	padding: 0 1px;
+}
+
+.dark .ai-active-selection {
+	background-color: rgba(252, 163, 17, 0.3) !important;
+	border-bottom: 2px solid rgba(252, 163, 17, 0.9) !important;
+}

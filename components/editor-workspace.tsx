@@ -73,8 +73,11 @@ const CustomDocument = Document.extend({
 	content: 'heading block*',
 })
 
+import { PersistentSelection } from '@/lib/persistent-selection'
+
 const getSharedExtensions = () => [
 	CustomDocument,
+	PersistentSelection,
 	StarterKit.configure({
 		history: false,
 		document: false,
