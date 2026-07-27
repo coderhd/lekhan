@@ -358,11 +358,15 @@ export function checkCanAddCollaborator(currentCount: number, plan: string): { c
 
 export async function getUserAICredits(userId: string): Promise<UserAICredits> {
 	try {
-		const { data } = await supabase
+		const { data, error } = await supabase
 			.from('profiles')
 			.select('plan, used_credits')
 			.eq('id', userId)
 			.single()
+
+		if (error || !data) {
+			return { plan: 'free', totalAllocated: 50, usedCredits: 0, remainingCredits: 50 }
+		}
 
 		const plan = (data?.plan || 'free') as UserAICredits['plan']
 		const usedCredits = typeof data?.used_credits === 'number' ? data.used_credits : 0
