@@ -14,11 +14,12 @@ interface VersionHistoryProps {
 	isOpen: boolean
 	onClose: () => void
 	documentId: string
-	ydoc: Y.Doc
-	token: string
-	isViewer: boolean
-	onPreviewVersion: (tempDoc: Y.Doc | null, versionName?: string) => void
-	onRestoreVersion: (tempDoc: Y.Doc) => void
+	ydoc?: Y.Doc
+	token?: string
+	isViewer?: boolean
+	plan?: string
+	onPreviewVersion?: (tempDoc: Y.Doc | null, versionName?: string) => void
+	onRestoreVersion?: (tempDoc: Y.Doc) => void
 }
 
 export default function VersionHistory({
@@ -27,9 +28,10 @@ export default function VersionHistory({
 	documentId,
 	ydoc,
 	token,
-	isViewer,
-	onPreviewVersion,
-	onRestoreVersion,
+	isViewer = false,
+	plan = 'free',
+	onPreviewVersion = () => {},
+	onRestoreVersion = () => {},
 }: VersionHistoryProps) {
 	const [versions, setVersions] = useState<DocumentVersion[]>([])
 	const [newVersionName, setNewVersionName] = useState('')
@@ -52,54 +54,56 @@ export default function VersionHistory({
 	useEffect(() => {
 		if (isOpen) {
 			loadVersions()
+		} else {
+			setActivePreviewId(null)
+			onPreviewVersion(null)
 		}
 	}, [isOpen, documentId])
 
 	const handleSaveVersion = async (e: React.FormEvent) => {
 		e.preventDefault()
-		if (!newVersionName.trim() || saving) {
+		if (isViewer) {
+			toast.error('Viewers cannot create checkpoints')
 			return
 		}
+		if (!newVersionName.trim() || !ydoc) return
+
 		setSaving(true)
-
 		try {
-			// 1. Encode ydoc to base64
-			const stateUpdate = Y.encodeStateAsUpdate(ydoc)
-			const base64State = Buffer.from(stateUpdate).toString('base64')
+			const versionId = crypto.randomUUID()
+			const update = Y.encodeStateAsUpdate(ydoc)
+			const blob = new Blob([update], { type: 'application/octet-stream' })
 
-			// 2. Call Next.js API route
-			const res = await fetch('/api/version', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${token}`,
-				},
-				body: JSON.stringify({
-					documentId,
-					versionName: newVersionName,
-					base64State,
-				}),
-			})
+			const { error: storageError } = await supabase.storage
+				.from('documents')
+				.upload(`${documentId}/versions/${versionId}.bin`, blob)
 
-			if (!res.ok) {
-				const errData = await res.json()
-				throw new Error(errData.error || 'Failed to save version')
-			}
+			if (storageError) throw storageError
 
+			const { error: dbError } = await supabase
+				.from('document_versions')
+				.insert({
+					id: versionId,
+					document_id: documentId,
+					version_name: newVersionName.trim(),
+					storage_path: `${documentId}/versions/${versionId}.bin`,
+				})
+
+			if (dbError) throw dbError
+
+			toast.success('Version checkpoint saved!')
 			setNewVersionName('')
-			toast.success('Version saved successfully!')
 			loadVersions()
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err)
-			toast.error(`Failed to save: ${message}`)
+			toast.error(`Failed to save checkpoint: ${message}`)
 		} finally {
 			setSaving(false)
 		}
 	}
 
-	const handleSelectVersion = async (version: DocumentVersion) => {
+	const handlePreview = async (version: DocumentVersion) => {
 		if (activePreviewId === version.id) {
-			// Toggle off preview
 			setActivePreviewId(null)
 			onPreviewVersion(null)
 			return
@@ -107,7 +111,6 @@ export default function VersionHistory({
 
 		setLoading(true)
 		try {
-			// Download binary from Supabase Storage
 			const { data, error } = await supabase.storage
 				.from('documents')
 				.download(`${documentId}/versions/${version.id}.bin`)
@@ -119,7 +122,6 @@ export default function VersionHistory({
 			const buffer = await data.arrayBuffer()
 			const uint8Array = new Uint8Array(buffer)
 
-			// Load into a temporary ydoc
 			const tempDoc = new Y.Doc()
 			Y.applyUpdate(tempDoc, uint8Array)
 
@@ -147,7 +149,6 @@ export default function VersionHistory({
 
 		setLoading(true)
 		try {
-			// 1. Download snapshot state
 			const { data, error } = await supabase.storage
 				.from('documents')
 				.download(`${documentId}/versions/${version.id}.bin`)
@@ -164,7 +165,6 @@ export default function VersionHistory({
 
 			onRestoreVersion(targetDoc)
 
-			// 3. Clear preview
 			setActivePreviewId(null)
 			onPreviewVersion(null)
 			toast.success('Document restored successfully!')
@@ -181,9 +181,20 @@ export default function VersionHistory({
 		return null
 	}
 
+	const getRetentionLabel = (planTier: string) => {
+		switch (planTier.toLowerCase()) {
+			case 'go': return '14-day cloud & local version history included in Go plan.'
+			case 'pro': return '90-day cloud & local version history included in Pro plan.'
+			case 'team': return '1-year cloud & local version history included in Team plan.'
+			case 'enterprise': return 'Unlimited version history retention active.'
+			case 'free':
+			default: return '7-day cloud & local version history included in Free plan.'
+		}
+	}
+
 	return (
 		<aside className='absolute right-0 top-0 bottom-0 w-80 bg-background border-l border-white/10 p-6 flex flex-col z-[60] shadow-md backdrop-blur-xl animate-in slide-in-from-right duration-200'>
-			<div className='flex items-center justify-between border-b border-white/10 pb-4 mb-6'>
+			<div className='flex items-center justify-between border-b border-white/10 pb-4 mb-4'>
 				<div className='flex items-center gap-sm'>
 					<div className='w-8 h-8 rounded-lg bg-primary-container/20 flex items-center justify-center'>
 						<span className="material-symbols-outlined text-primary-container">history</span>
@@ -200,6 +211,12 @@ export default function VersionHistory({
 				>
 					<span className="material-symbols-outlined text-lg">close</span>
 				</button>
+			</div>
+
+			{/* Dynamic Plan Retention Reassurance Note */}
+			<div className="mb-4 p-2.5 rounded-xl bg-primary/10 border border-primary/20 text-[11px] text-primary font-medium flex items-center gap-2">
+				<span className="shrink-0">🔒</span>
+				<span>{getRetentionLabel(plan)}</span>
 			</div>
 
 			{/* Save Version Form */}
@@ -224,63 +241,71 @@ export default function VersionHistory({
 				</form>
 			)}
 
-			{/* Timeline list */}
+			{/* Version Timeline */}
 			<div className='flex-1 overflow-y-auto space-y-4 pr-1.5 no-scrollbar'>
 				{loading ? (
 					<div className="py-8">
-						<GlobalLoader fullScreen={false} size="sm" />
+						<GlobalLoader />
 					</div>
 				) : versions.length === 0 ? (
-					<div className="flex flex-col items-center justify-center pt-24 pb-10 text-center opacity-0 animate-fade-in-up stagger-2">
-						<img src="/undraw_no-data_ig65.svg" alt="No versions" className="w-32 h-32 mb-4 opacity-90 drop-shadow-sm" />
-						<p className='text-xs text-on-surface-variant font-medium'>No versions captured yet.</p>
+					<div className="text-center py-8 text-on-surface-variant text-xs font-medium">
+						No checkpoints saved yet.
 					</div>
 				) : (
-					versions.map((v) => (
-						<div
-							key={v.id}
-							className={`rounded-xl border p-4 transition text-left cursor-pointer ${activePreviewId === v.id ? 'bg-primary-container/10 dark:bg-primary-container/20 border-primary-container/50' : 'bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10 hover:border-black/20 dark:hover:border-white/20'}`}
-							onClick={() => handleSelectVersion(v)}
-						>
-							<div className='flex justify-between items-start gap-2'>
-								<h4 className='font-bold text-sm text-on-surface truncate max-w-[150px]'>
-									{v.version_name}
-								</h4>
-								{activePreviewId === v.id && (
-									<span className='rounded bg-primary-container/20 border border-primary-container/30 px-1.5 py-0.5 text-[8px] font-bold text-primary-container uppercase tracking-wider'>
-										Active
+					versions.map((ver) => {
+						const isPreviewing = activePreviewId === ver.id
+						return (
+							<div
+								key={ver.id}
+								className={`p-3.5 rounded-xl border transition-all space-y-2 ${
+									isPreviewing
+										? 'bg-primary-container/15 border-primary-container shadow-md'
+										: 'bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/5 hover:border-black/20 dark:hover:border-white/20'
+								}`}
+							>
+								<div className="flex items-center justify-between">
+									<h4 className="text-xs font-bold text-on-surface truncate">{ver.version_name}</h4>
+									<span className="text-[10px] text-on-surface-variant/70 shrink-0">
+										{new Date(ver.created_at).toLocaleDateString()}
 									</span>
-								)}
-							</div>
-							<p className='text-[10px] text-on-surface-variant/70 mt-1'>
-								By: {v.profiles?.full_name || v.profiles?.email}
-							</p>
-							<p className='text-[10px] text-on-surface-variant/50'>
-								{new Date(v.created_at).toLocaleString()}
-							</p>
+								</div>
 
-							{activePreviewId === v.id && !isViewer && (
-								<button
-									onClick={(e) => {
-										e.stopPropagation()
-										handleRestore(v)
-									}}
-									className='mt-3 w-full rounded-xl bg-primary-container text-on-primary-container font-semibold py-2 text-xs hover:brightness-110 transition-all'
-								>
-									Restore this version
-								</button>
-							)}
-						</div>
-					))
+								<div className="flex items-center gap-2 pt-1">
+									<button
+										onClick={() => handlePreview(ver)}
+										className={`flex-1 py-1.5 rounded-lg text-[11px] font-medium transition ${
+											isPreviewing
+												? 'bg-primary-container text-on-primary-container font-bold'
+												: 'bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-on-surface'
+										}`}
+									>
+										{isPreviewing ? 'Previewing' : 'Preview'}
+									</button>
+
+									{!isViewer && (
+										<button
+											onClick={() => handleRestore(ver)}
+											className="px-3 py-1.5 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-on-surface text-[11px] font-medium transition"
+										>
+											Restore
+										</button>
+									)}
+								</div>
+							</div>
+						)
+					})
 				)}
 			</div>
+
+			{/* Confirm Restore Dialog */}
 			<ConfirmDialog
-				open={!!versionToRestore}
-				onOpenChange={(open) => !open && setVersionToRestore(null)}
+				isOpen={!!versionToRestore}
 				title="Restore Version"
-				description={`Are you sure you want to restore the document to "${versionToRestore?.version_name}"?`}
-				onConfirm={executeRestore}
+				description={`Are you sure you want to restore "${versionToRestore?.version_name}"? Unsaved changes in the current document will be replaced.`}
 				confirmText="Restore"
+				cancelText="Cancel"
+				onConfirm={executeRestore}
+				onCancel={() => setVersionToRestore(null)}
 			/>
 		</aside>
 	)
