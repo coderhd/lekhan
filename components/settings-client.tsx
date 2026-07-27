@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { User, Users, CreditCard, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Zap } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { GlobalHeaderSlot } from '@/components/layout/global-header-context'
 import BYOKSettings from '@/components/byok-settings'
 import PricingMatrix from '@/components/pricing-plans'
 
@@ -90,17 +89,7 @@ export default function SettingsClient({
 
 	return (
 		<div className="h-screen bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container flex flex-col font-body-md overflow-hidden">
-			{/* Project Back to Editor Action into Header */}
-			<GlobalHeaderSlot slot="right">
-				<div className="flex items-center gap-3">
-					<button
-						onClick={() => router.push('/')}
-						className="text-xs bg-black/10 dark:bg-white/10 text-on-surface font-bold px-4 py-2 rounded-lg hover:bg-black/20 dark:hover:bg-white/20 transition-colors active:scale-95 shadow-sm flex items-center gap-2"
-					>
-						Back to Editor
-					</button>
-				</div>
-			</GlobalHeaderSlot>
+
 
 			<main className="flex-1 overflow-hidden flex justify-center px-6 md:px-10">
 				<div className="w-full max-w-[1400px] h-full flex flex-col lg:flex-row gap-8 py-8">
