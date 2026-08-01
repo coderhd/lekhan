@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useEditor, EditorContent, Editor } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
+import { StarterKit } from '@tiptap/starter-kit'
 import { Collaboration } from '@tiptap/extension-collaboration'
 import { CollaborationCursor } from '@tiptap/extension-collaboration-cursor'
 import { FontFamily } from '@tiptap/extension-font-family'
@@ -96,6 +96,8 @@ const getSharedExtensions = () => [
 	StarterKit.configure({
 		document: false,
 		codeBlock: false,
+		link: false,
+		underline: false,
 	}),
 	CodeBlockLowlight.configure({
 		lowlight,
