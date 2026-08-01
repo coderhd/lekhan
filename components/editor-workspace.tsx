@@ -515,6 +515,30 @@ export default function EditorWorkspace({
 			attributes: {
 				class: 'prose dark:prose-invert max-w-none focus:outline-none min-h-[500px] text-on-surface break-words w-full',
 			},
+			handlePaste: (_view, event) => {
+				const plainText = event.clipboardData?.getData('text/plain')
+				const htmlText = event.clipboardData?.getData('text/html')
+
+				if (!plainText || !editor || editor.isActive('codeBlock')) {
+					return false
+				}
+
+				const isVsCodeCodeBlock = Boolean(htmlText && (htmlText.includes('<pre') || htmlText.includes('<code')))
+				const hasMarkdownIndicators = /^#+\s|^\s*[-*+]\s|^\s*\d+\.\s|```|^\s*>\s|\*\*.+\*\*|__.+__|\[.+\]\(.+\)|\|.+\|/m.test(plainText)
+
+				if (isVsCodeCodeBlock || (hasMarkdownIndicators && (!htmlText || isVsCodeCodeBlock))) {
+					const parser = (editor as any).storage?.markdown?.parser
+					if (parser) {
+						const parsedHtml = parser.parse(plainText)
+						if (parsedHtml) {
+							event.preventDefault()
+							editor.commands.insertContent(parsedHtml)
+							return true
+						}
+					}
+				}
+				return false
+			},
 		},
 		editable: !isViewer,
 		immediatelyRender: false,
