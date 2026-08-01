@@ -1,12 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-	turbopack: {
-		resolveAlias: {
-			fs: './lib/empty.js',
-			path: './lib/empty.js',
-			crypto: './lib/empty.js',
-		},
-	},
+	turbopack: {},
 	webpack: (config, { isServer }) => {
 		if (!isServer) {
 			config.resolve.fallback = {
@@ -14,8 +8,6 @@ const nextConfig = {
 				fs: false,
 				path: false,
 				crypto: false,
-				stream: false,
-				util: false,
 			}
 		}
 		return config
