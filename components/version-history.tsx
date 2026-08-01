@@ -79,6 +79,8 @@ export default function VersionHistory({
 
 			if (storageError) throw storageError
 
+			const { data: { user } } = await supabase.auth.getUser()
+
 			const { error: dbError } = await supabase
 				.from('document_versions')
 				.insert({
@@ -86,6 +88,7 @@ export default function VersionHistory({
 					document_id: documentId,
 					version_name: newVersionName.trim(),
 					storage_path: `${documentId}/versions/${versionId}.bin`,
+					...(user?.id ? { created_by: user.id } : {}),
 				})
 
 			if (dbError) throw dbError

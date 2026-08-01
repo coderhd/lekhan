@@ -88,9 +88,10 @@ const CustomDocument = Document.extend({
 	content: 'heading block*',
 })
 
+import { AnyExtension } from '@tiptap/core'
 import { PersistentSelection } from '@/lib/persistent-selection'
 
-const getSharedExtensions = () => [
+const getSharedExtensions = (): AnyExtension[] => [
 	CustomDocument,
 	PersistentSelection,
 	StarterKit.configure({
