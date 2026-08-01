@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEditor, EditorContent, Editor } from '@tiptap/react'
 import { StarterKit } from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
-import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
+import { CollaborationCursor } from '@/lib/collaboration-cursor'
 import { FontFamily } from '@tiptap/extension-font-family'
 import { TextStyle } from '@tiptap/extension-text-style'
 import { Color } from '@tiptap/extension-color'
@@ -350,7 +350,7 @@ export default function EditorWorkspace({
 					document: ydoc,
 				}),
 			] : []),
-			...(provider ? [
+			...(ydoc && provider ? [
 				CollaborationCursor.configure({
 					provider: provider,
 					user: {

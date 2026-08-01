@@ -123,7 +123,6 @@ export function useEditorCollab (
 				return
 			}
 			doc = new Y.Doc()
-			setYdoc(doc)
 
 			// 1. Initialize IndexedDB local persistence
 			indexeddbProvider = new IndexeddbPersistence(documentId, doc)
@@ -137,6 +136,8 @@ export function useEditorCollab (
 				params: { token, documentId },
 				connect: true,
 			})
+
+			setYdoc(doc)
 			setProvider(wsProvider)
 
 			// 3. Track connection status

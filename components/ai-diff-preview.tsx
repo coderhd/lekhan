@@ -162,22 +162,20 @@ export default function AIDiffPreview({
 			<div className="flex items-center gap-2 px-4 py-3 border-t border-black/5 dark:border-white/5 shrink-0 bg-surface-container">
 				<button
 					onClick={handleAccept}
-					className={`flex items-center gap-1 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all active:scale-95 ${
-						defaultInsert === 'accept' || defaultInsert === 'both'
+					className={`flex items-center gap-1 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all active:scale-95 ${defaultInsert === 'accept' || defaultInsert === 'both'
 							? 'bg-primary-container text-on-primary-container hover:brightness-110 shadow-sm'
 							: 'bg-black/5 dark:bg-white/5 text-on-surface hover:bg-black/10 dark:hover:bg-white/10'
-					}`}
+						}`}
 				>
 					<span className="material-symbols-outlined text-sm">check</span>
 					Accept
 				</button>
 				<button
 					onClick={handleInsertBelow}
-					className={`flex items-center gap-1 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all active:scale-95 ${
-						defaultInsert === 'below'
+					className={`flex items-center gap-1 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all active:scale-95 ${defaultInsert === 'below'
 							? 'bg-primary-container text-on-primary-container hover:brightness-110 shadow-sm'
 							: 'bg-black/5 dark:bg-white/5 text-on-surface hover:bg-black/10 dark:hover:bg-white/10'
-					}`}
+						}`}
 				>
 					<span className="material-symbols-outlined text-sm">subdirectory_arrow_right</span>
 					Insert Below

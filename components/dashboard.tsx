@@ -218,34 +218,34 @@ export default function Dashboard({ user }: DashboardProps) {
 	return (
 		<div className="min-h-screen bg-background text-on-surface">
 			<GlobalHeaderSlot slot="right">
-					<div className="flex items-center gap-md">
-						<ThemeToggle />
-						<div className="relative" ref={notificationsRef}>
-							<button
-								onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-								className="p-2 flex items-center justify-center rounded-lg hover:bg-black/5 dark:hover:bg-white/10 premium-transition text-on-surface-variant hover:text-on-surface relative hover:scale-110 active:scale-90"
-							>
-								<span className="material-symbols-outlined leading-none">notifications</span>
-								{pendingInvitesCount > 0 && (
-									<span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-error animate-pulse" />
-								)}
-							</button>
-
-							{/* Notification Dropdown */}
-							{isNotificationsOpen && (
-								<>
-									<div className="absolute top-full right-0 mt-2 w-80 bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 animate-dropdown-in origin-top-right">
-										<div className="px-4 py-3 border-b border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/5">
-											<p className="font-semibold text-on-surface">Notifications</p>
-										</div>
-										<Invitations userEmail={user.email} userId={user.id} onRefresh={fetchDocuments} variant="dropdown" />
-									</div>
-								</>
+				<div className="flex items-center gap-md">
+					<ThemeToggle />
+					<div className="relative" ref={notificationsRef}>
+						<button
+							onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+							className="p-2 flex items-center justify-center rounded-lg hover:bg-black/5 dark:hover:bg-white/10 premium-transition text-on-surface-variant hover:text-on-surface relative hover:scale-110 active:scale-90"
+						>
+							<span className="material-symbols-outlined leading-none">notifications</span>
+							{pendingInvitesCount > 0 && (
+								<span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-error animate-pulse" />
 							)}
-						</div>
+						</button>
 
-						<ProfileMenu user={user} size="md" />
+						{/* Notification Dropdown */}
+						{isNotificationsOpen && (
+							<>
+								<div className="absolute top-full right-0 mt-2 w-80 bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 animate-dropdown-in origin-top-right">
+									<div className="px-4 py-3 border-b border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/5">
+										<p className="font-semibold text-on-surface">Notifications</p>
+									</div>
+									<Invitations userEmail={user.email} userId={user.id} onRefresh={fetchDocuments} variant="dropdown" />
+								</div>
+							</>
+						)}
 					</div>
+
+					<ProfileMenu user={user} size="md" />
+				</div>
 			</GlobalHeaderSlot>
 			<GlobalHeaderSlot slot="main">
 				<div className="hidden md:flex flex-1 max-w-xl mx-xl">

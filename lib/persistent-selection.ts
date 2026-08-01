@@ -11,8 +11,11 @@ export const PersistentSelection = Extension.create({
 				key: new PluginKey('persistentSelection'),
 				props: {
 					decorations(state) {
+						if (!state || !state.doc || !state.selection) {
+							return DecorationSet.empty
+						}
 						const { selection, doc } = state
-						if (selection && !selection.empty) {
+						if (!selection.empty) {
 							const { from, to } = selection
 							return DecorationSet.create(doc, [
 								Decoration.inline(from, to, {

@@ -250,11 +250,11 @@ export default function LekhanBotBar({
 		<div className="fixed bottom-6 inset-x-0 mx-auto w-full max-w-4xl z-50 px-4 animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-200 ease-out origin-bottom pointer-events-auto">
 			{/* Unified Popout Container Card */}
 			<div className="flex flex-col rounded-3xl border-2 border-primary-container/40 focus-within:border-primary-container bg-surface-container-high dark:bg-surface-container-high backdrop-blur-2xl shadow-2xl overflow-hidden">
-				
+
 				{/* Top Popout Options Section */}
 				{(showPresets || showTranslatePicker || showTransliteratePicker || selectedText) && !isLoading && (
 					<div className="p-3.5 border-b border-black/10 dark:border-white/10 bg-surface-container/60 dark:bg-surface-container/60 flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150 origin-bottom">
-						
+
 						{/* Selection context hint badge */}
 						{selectedText && (
 							<div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-primary-container/10 border border-primary-container/25 text-xs text-on-surface">
@@ -273,8 +273,8 @@ export default function LekhanBotBar({
 										onClick={() => handlePresetAction(action)}
 										disabled={action.requiresSelection && !selectedText}
 										className={`flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-xl border transition-all active:scale-95 ${action.requiresSelection && !selectedText
-												? 'border-black/5 dark:border-white/5 text-on-surface-variant/30 bg-black/5 dark:bg-white/5 cursor-not-allowed'
-												: 'border-black/10 dark:border-white/10 text-on-surface bg-surface-container-low dark:bg-surface-container-low hover:bg-primary-container/15 hover:border-primary-container/40 shadow-sm'
+											? 'border-black/5 dark:border-white/5 text-on-surface-variant/30 bg-black/5 dark:bg-white/5 cursor-not-allowed'
+											: 'border-black/10 dark:border-white/10 text-on-surface bg-surface-container-low dark:bg-surface-container-low hover:bg-primary-container/15 hover:border-primary-container/40 shadow-sm'
 											}`}
 									>
 										<span className="material-symbols-outlined text-base text-primary-container">{action.icon}</span>
@@ -287,8 +287,8 @@ export default function LekhanBotBar({
 									onClick={() => setShowTranslatePicker(true)}
 									disabled={!selectedText}
 									className={`flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-xl border transition-all active:scale-95 ${!selectedText
-											? 'border-black/5 dark:border-white/5 text-on-surface-variant/30 bg-black/5 dark:bg-white/5 cursor-not-allowed'
-											: 'border-black/10 dark:border-white/10 text-on-surface bg-surface-container-low dark:bg-surface-container-low hover:bg-primary-container/15 hover:border-primary-container/40 shadow-sm'
+										? 'border-black/5 dark:border-white/5 text-on-surface-variant/30 bg-black/5 dark:bg-white/5 cursor-not-allowed'
+										: 'border-black/10 dark:border-white/10 text-on-surface bg-surface-container-low dark:bg-surface-container-low hover:bg-primary-container/15 hover:border-primary-container/40 shadow-sm'
 										}`}
 								>
 									<span className="material-symbols-outlined text-base text-primary-container">translate</span>
@@ -300,8 +300,8 @@ export default function LekhanBotBar({
 									onClick={() => setShowTransliteratePicker(true)}
 									disabled={!selectedText}
 									className={`flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-xl border transition-all active:scale-95 ${!selectedText
-											? 'border-black/5 dark:border-white/5 text-on-surface-variant/30 bg-black/5 dark:bg-white/5 cursor-not-allowed'
-											: 'border-black/10 dark:border-white/10 text-on-surface bg-surface-container-low dark:bg-surface-container-low hover:bg-primary-container/15 hover:border-primary-container/40 shadow-sm'
+										? 'border-black/5 dark:border-white/5 text-on-surface-variant/30 bg-black/5 dark:bg-white/5 cursor-not-allowed'
+										: 'border-black/10 dark:border-white/10 text-on-surface bg-surface-container-low dark:bg-surface-container-low hover:bg-primary-container/15 hover:border-primary-container/40 shadow-sm'
 										}`}
 								>
 									<span className="material-symbols-outlined text-base text-primary-container">language</span>
