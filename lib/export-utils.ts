@@ -1,9 +1,10 @@
-import htmlToDocx from 'html-to-docx'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 
 export async function exportToDocx(editorHtml: string, title: string): Promise<void> {
 	try {
+		const htmlToDocxModule = await import('html-to-docx')
+		const htmlToDocx = htmlToDocxModule.default || htmlToDocxModule
 		const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title || 'Document'}</title></head><body>${editorHtml}</body></html>`
 		const fileBuffer = await htmlToDocx(fullHtml, null, {
 			title: title || 'Document',
