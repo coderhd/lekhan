@@ -897,7 +897,6 @@ export default function EditorWorkspace({
 					{!isViewer && editor && (
 						<div className="sticky top-2 z-30 flex items-center justify-center gap-2 mb-2">
 							<TableToolbar editor={editor} />
-							<CodeBlockLanguageSelect editor={editor} />
 						</div>
 					)}
 
@@ -915,6 +914,7 @@ export default function EditorWorkspace({
 
 						<div className={previewDoc && previewEditor ? 'hidden' : 'block'}>
 							{!isViewer && <AIBubbleMenu editor={editor} onOpenLekhanBot={handleOpenLekhanBot} />}
+							{!isViewer && <CodeBlockLanguageSelect editor={editor} />}
 							<EditorContent key="live" editor={editor} />
 						</div>
 

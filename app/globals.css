@@ -387,9 +387,10 @@ body {
 }
 
 .ProseMirror pre {
+	position: relative;
 	background-color: rgba(0, 0, 0, 0.04);
 	color: hsl(var(--on-surface));
-	padding: 1rem;
+	padding: 2.25rem 1rem 1rem 1rem;
 	border-radius: 0.5rem;
 	overflow-x: auto;
 	margin-top: 1rem;
