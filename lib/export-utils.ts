@@ -1,20 +1,49 @@
+import { Document as DocxDocument, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 
 export async function exportToDocx(editorHtml: string, title: string): Promise<void> {
 	try {
-		const htmlToDocxModule = await import('html-to-docx')
-		const htmlToDocx = htmlToDocxModule.default || htmlToDocxModule
-		const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title || 'Document'}</title></head><body>${editorHtml}</body></html>`
-		const fileBuffer = await htmlToDocx(fullHtml, null, {
-			title: title || 'Document',
-			margin: { top: 720, right: 720, bottom: 720, left: 720 },
-		})
-		const blob = fileBuffer instanceof Blob
-			? fileBuffer
-			: new Blob([new Uint8Array(fileBuffer as unknown as ArrayBuffer)], {
-				type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+		const tempDiv = document.createElement('div')
+		tempDiv.innerHTML = editorHtml
+		const elements = Array.from(tempDiv.children)
+
+		const docxParagraphs: Paragraph[] = []
+
+		if (elements.length === 0 && tempDiv.textContent) {
+			docxParagraphs.push(new Paragraph({ children: [new TextRun(tempDiv.textContent)] }))
+		} else {
+			elements.forEach((el) => {
+				const text = el.textContent || ''
+				const tagName = el.tagName.toLowerCase()
+
+				if (tagName === 'h1') {
+					docxParagraphs.push(new Paragraph({ text, heading: HeadingLevel.HEADING_1 }))
+				} else if (tagName === 'h2') {
+					docxParagraphs.push(new Paragraph({ text, heading: HeadingLevel.HEADING_2 }))
+				} else if (tagName === 'h3') {
+					docxParagraphs.push(new Paragraph({ text, heading: HeadingLevel.HEADING_3 }))
+				} else if (tagName === 'ul' || tagName === 'ol') {
+					const items = Array.from(el.querySelectorAll('li'))
+					items.forEach((item) => {
+						docxParagraphs.push(new Paragraph({ text: item.textContent || '', bullet: { level: 0 } }))
+					})
+				} else {
+					docxParagraphs.push(new Paragraph({ children: [new TextRun(text)] }))
+				}
 			})
+		}
+
+		const doc = new DocxDocument({
+			sections: [
+				{
+					properties: {},
+					children: docxParagraphs.length > 0 ? docxParagraphs : [new Paragraph({ text: title || 'Document' })],
+				},
+			],
+		})
+
+		const blob = await Packer.toBlob(doc)
 		const url = URL.createObjectURL(blob)
 		const link = document.createElement('a')
 		link.href = url
