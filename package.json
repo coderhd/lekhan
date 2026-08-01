@@ -7,7 +7,7 @@
 		"build": "next build",
 		"start": "next start",
 		"server": "node --env-file=.env.local server/index.js",
-		"test": "vitest",
+		"test": "NODE_OPTIONS='--max-old-space-size=4096' vitest run",
 		"lint": "eslint .",
 		"lint:fix": "eslint . --fix"
 	},
