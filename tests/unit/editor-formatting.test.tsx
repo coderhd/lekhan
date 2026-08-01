@@ -34,7 +34,8 @@ vi.mock('@/services/db', () => ({
 	fetchDocumentDetails: vi.fn().mockResolvedValue({ owner_id: 'test-user', is_public: false }),
 	fetchMemberRole: vi.fn().mockResolvedValue('owner'),
 	updateDocumentTitle: vi.fn().mockResolvedValue(true),
-	fetchMentionableCollaborators: vi.fn().mockResolvedValue([])
+	fetchMentionableCollaborators: vi.fn().mockResolvedValue([]),
+	getUserAICredits: vi.fn().mockResolvedValue({ tier: 'free', total_credits: 50, credits_used: 0 }),
 }))
 
 // Mock useRouter
