@@ -524,15 +524,19 @@ export default function EditorWorkspace({
 				}
 
 				const isVsCodeCodeBlock = Boolean(htmlText && (htmlText.includes('<pre') || htmlText.includes('<code')))
-				const hasMarkdownIndicators = /^#+\s|^\s*[-*+]\s|^\s*\d+\.\s|```|^\s*>\s|\*\*.+\*\*|__.+__|\[.+\]\(.+\)|\|.+\|/m.test(plainText)
+				const hasMarkdownIndicators = /^#+\s|^\s*[-*+]\s|^\s*\d+\.\s|```|^\s*>\s|\*\*.+\*\*|__.+__|\[.+\]\(.+\)|\|.+\||^---$/m.test(plainText)
 
-				if (isVsCodeCodeBlock || (hasMarkdownIndicators && (!htmlText || isVsCodeCodeBlock))) {
+				if (isVsCodeCodeBlock || hasMarkdownIndicators) {
 					const parser = (editor as any).storage?.markdown?.parser
 					if (parser) {
 						const parsedHtml = parser.parse(plainText)
 						if (parsedHtml) {
 							event.preventDefault()
-							editor.commands.insertContent(parsedHtml)
+							if (editor.isEmpty || editor.getText().trim() === '') {
+								editor.commands.setContent(parsedHtml)
+							} else {
+								editor.commands.insertContent(parsedHtml)
+							}
 							return true
 						}
 					}
