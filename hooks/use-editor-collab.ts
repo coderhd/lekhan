@@ -197,6 +197,7 @@ export function useEditorCollab (
 			setProvider(null)
 			setIsConnected(false)
 			setIsSynced(false)
+			setIsLocalSynced(false)
 			setConnectionState('connecting')
 		}
 	}, [documentId, token, user.name, user.color])

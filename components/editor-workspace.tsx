@@ -186,20 +186,27 @@ export default function EditorWorkspace({
 	const [mentionables, setMentionables] = useState<MentionItem[]>([])
 	const [userPlan, setUserPlan] = useState<'free' | 'go' | 'pro' | 'team' | 'enterprise'>('free')
 	const [isExporting, setIsExporting] = useState(false)
+	const [isExportOpen, setIsExportOpen] = useState(false)
 	const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false)
 
 	useEffect(() => {
+		let isCurrent = true
 		const checkPlan = async () => {
 			if (currentUser?.id) {
 				try {
 					const credits = await getUserAICredits(currentUser.id)
-					setUserPlan(credits.plan)
+					if (isCurrent) {
+						setUserPlan(credits.plan)
+					}
 				} catch (err) {
 					console.error('Error fetching plan:', err)
 				}
 			}
 		}
 		checkPlan()
+		return () => {
+			isCurrent = false
+		}
 	}, [currentUser?.id])
 
 	const handleExport = async (type: 'docx' | 'pdf') => {
@@ -213,7 +220,7 @@ export default function EditorWorkspace({
 			if (type === 'docx') {
 				await exportToDocx(editor.getHTML(), title)
 			} else if (type === 'pdf') {
-				const editorEl = document.querySelector('.ProseMirror') as HTMLElement
+				const editorEl = editor.view.dom as HTMLElement
 				if (editorEl) {
 					await exportToPdf(editorEl, title)
 				}
@@ -222,6 +229,7 @@ export default function EditorWorkspace({
 			console.error('Export error:', err)
 		} finally {
 			setIsExporting(false)
+			setIsExportOpen(false)
 		}
 	}
 
@@ -529,7 +537,16 @@ export default function EditorWorkspace({
 				const isVsCodeCodeBlock = Boolean(htmlText && (htmlText.includes('<pre') || htmlText.includes('<code')))
 				const hasMarkdownIndicators = /^#+\s|^\s*[-*+]\s|^\s*\d+\.\s|```|^\s*>\s|\*\*.+\*\*|__.+__|\[.+\]\(.+\)|\|.+\||^---$/m.test(plainText)
 
-				if (isVsCodeCodeBlock || hasMarkdownIndicators) {
+				if (isVsCodeCodeBlock) {
+					event.preventDefault()
+					editor.commands.insertContent({
+						type: 'codeBlock',
+						content: [{ type: 'text', text: plainText }],
+					})
+					return true
+				}
+
+				if (hasMarkdownIndicators) {
 					const parser = (editor as any).storage?.markdown?.parser
 					if (parser) {
 						const parsedHtml = parser.parse(plainText)
@@ -739,10 +756,17 @@ export default function EditorWorkspace({
 
 						{!isViewer && (
 							<div className="flex items-center gap-sm">
-								<div className="relative group">
+								<div className="relative">
 									<button
+										type="button"
 										disabled={isExporting}
-										className="bg-surface-container-low border border-black/10 dark:border-white/10 text-on-surface px-2.5 h-8 rounded-lg font-medium text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-all flex items-center gap-1.5 shadow-sm"
+										onClick={() => setIsExportOpen(prev => !prev)}
+										onKeyDown={(e) => {
+											if (e.key === 'Escape') setIsExportOpen(false)
+										}}
+										aria-haspopup="menu"
+										aria-expanded={isExportOpen}
+										className="bg-surface-container-low border border-black/10 dark:border-white/10 text-on-surface px-2.5 h-8 rounded-lg font-medium text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50 disabled:pointer-events-none"
 										title="Export Document"
 									>
 										<Download className="w-3.5 h-3.5 text-primary" />
@@ -754,24 +778,32 @@ export default function EditorWorkspace({
 										)}
 									</button>
 
-									<div className="absolute top-full right-0 pt-1.5 w-44 hidden group-hover:block z-50 animate-in fade-in zoom-in-95">
-										<div className="bg-surface-container rounded-xl border border-black/10 dark:border-white/10 p-1 shadow-xl flex flex-col gap-0.5 text-xs">
-											<button
-												onClick={() => handleExport('docx')}
-												className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full"
-											>
-												<FileSpreadsheet className="w-4 h-4 text-blue-500" />
-												<span>Download as DOCX</span>
-											</button>
-											<button
-												onClick={() => handleExport('pdf')}
-												className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full"
-											>
-												<FileText className="w-4 h-4 text-red-500" />
-												<span>Download as PDF</span>
-											</button>
+									{isExportOpen && (
+										<div className="absolute top-full right-0 pt-1.5 w-44 z-50 animate-in fade-in zoom-in-95" role="menu">
+											<div className="bg-surface-container rounded-xl border border-black/10 dark:border-white/10 p-1 shadow-xl flex flex-col gap-0.5 text-xs">
+												<button
+													type="button"
+													disabled={isExporting}
+													onClick={() => handleExport('docx')}
+													className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full disabled:opacity-50 disabled:pointer-events-none"
+													role="menuitem"
+												>
+													<FileSpreadsheet className="w-4 h-4 text-blue-500" />
+													<span>Download as DOCX</span>
+												</button>
+												<button
+													type="button"
+													disabled={isExporting}
+													onClick={() => handleExport('pdf')}
+													className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full disabled:opacity-50 disabled:pointer-events-none"
+													role="menuitem"
+												>
+													<FileText className="w-4 h-4 text-red-500" />
+													<span>Download as PDF</span>
+												</button>
+											</div>
 										</div>
-									</div>
+									)}
 								</div>
 
 								<button

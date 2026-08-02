@@ -36,23 +36,23 @@ export const PersistentSelection = Extension.create<PersistentSelectionOptions>(
 	addCommands() {
 		return {
 			setBotActive: (active: boolean) => ({ editor, tr, dispatch }) => {
-				this.storage.isBotActive = active
-				if (active) {
-					const { selection } = editor.state
-					if (!selection.empty) {
-						this.storage.activeRange = { from: selection.from, to: selection.to }
-					}
-				} else {
-					this.storage.activeRange = null
-				}
 				if (dispatch) {
+					this.storage.isBotActive = active
+					if (active) {
+						const { selection } = editor.state
+						if (!selection.empty) {
+							this.storage.activeRange = { from: selection.from, to: selection.to }
+						}
+					} else {
+						this.storage.activeRange = null
+					}
 					tr.setMeta(persistentSelectionPluginKey, { isBotActive: active, range: this.storage.activeRange })
 				}
 				return true
 			},
 			updatePersistentSelection: (range: { from: number; to: number } | null) => ({ tr, dispatch }) => {
-				this.storage.activeRange = range
 				if (dispatch) {
+					this.storage.activeRange = range
 					tr.setMeta(persistentSelectionPluginKey, { range })
 				}
 				return true
@@ -93,6 +93,14 @@ export const PersistentSelection = Extension.create<PersistentSelectionOptions>(
 						if (!this.storage.isBotActive) {
 							this.storage.activeRange = null
 							return { range: null }
+						}
+
+						if (this.storage.isBotActive && tr.docChanged && value?.range) {
+							const newFrom = tr.mapping.map(value.range.from)
+							const newTo = tr.mapping.map(value.range.to, -1)
+							const remappedRange = { from: newFrom, to: newTo }
+							this.storage.activeRange = remappedRange
+							return { range: remappedRange }
 						}
 
 						return value

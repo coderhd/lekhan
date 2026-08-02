@@ -42,10 +42,11 @@ describe('Table content persistence with Yjs', () => {
 		// Move cursor to end and insert table
 		editor1.commands.focus('end')
 		editor1.commands.insertTable({ rows: 2, cols: 2, withHeaderRow: true })
+		editor1.commands.insertContent('Persistent Cell Text')
 
 		// Type text into table cells
 		const html1 = editor1.getHTML()
-		expect(html1).toContain('<table')
+		expect(html1).toContain('Persistent Cell Text')
 
 		// Encode Yjs binary state (simulating saving to Supabase or IndexedDB)
 		const stateUpdate = Y.encodeStateAsUpdate(ydoc1)
@@ -74,7 +75,7 @@ describe('Table content persistence with Yjs', () => {
 		})
 
 		const html2 = editor2.getHTML()
-		expect(html2).toContain('<table')
+		expect(html2).toContain('Persistent Cell Text')
 
 		editor1.destroy()
 		editor2.destroy()

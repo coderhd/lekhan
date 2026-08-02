@@ -69,6 +69,11 @@ export default function VersionHistory({
 
 		setSaving(true)
 		try {
+			const { data: { user }, error: userError } = await supabase.auth.getUser()
+			if (userError || !user?.id) {
+				throw new Error('Authentication required to save version checkpoint')
+			}
+
 			const versionId = crypto.randomUUID()
 			const update = Y.encodeStateAsUpdate(ydoc)
 			const blob = new Blob([update.buffer as ArrayBuffer], { type: 'application/octet-stream' })
@@ -79,8 +84,6 @@ export default function VersionHistory({
 
 			if (storageError) throw storageError
 
-			const { data: { user } } = await supabase.auth.getUser()
-
 			const { error: dbError } = await supabase
 				.from('document_versions')
 				.insert({
@@ -88,7 +91,7 @@ export default function VersionHistory({
 					document_id: documentId,
 					version_name: newVersionName.trim(),
 					storage_path: `${documentId}/versions/${versionId}.bin`,
-					...(user?.id ? { created_by: user.id } : {}),
+					created_by: user.id,
 				})
 
 			if (dbError) throw dbError

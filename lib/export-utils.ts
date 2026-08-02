@@ -1,4 +1,4 @@
-import { Document as DocxDocument, Packer, Paragraph, TextRun, HeadingLevel } from 'docx'
+import { Document as DocxDocument, Packer, Paragraph, TextRun, HeadingLevel, Table as DocxTable, TableRow as DocxTableRow, TableCell as DocxTableCell } from 'docx'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 
@@ -8,28 +8,49 @@ export async function exportToDocx(editorHtml: string, title: string): Promise<v
 		tempDiv.innerHTML = editorHtml
 		const elements = Array.from(tempDiv.children)
 
-		const docxParagraphs: Paragraph[] = []
+		const docxChildren: (Paragraph | DocxTable)[] = []
 
 		if (elements.length === 0 && tempDiv.textContent) {
-			docxParagraphs.push(new Paragraph({ children: [new TextRun(tempDiv.textContent)] }))
+			docxChildren.push(new Paragraph({ children: [new TextRun(tempDiv.textContent)] }))
 		} else {
 			elements.forEach((el) => {
 				const text = el.textContent || ''
 				const tagName = el.tagName.toLowerCase()
 
 				if (tagName === 'h1') {
-					docxParagraphs.push(new Paragraph({ text, heading: HeadingLevel.HEADING_1 }))
+					docxChildren.push(new Paragraph({ text, heading: HeadingLevel.HEADING_1 }))
 				} else if (tagName === 'h2') {
-					docxParagraphs.push(new Paragraph({ text, heading: HeadingLevel.HEADING_2 }))
+					docxChildren.push(new Paragraph({ text, heading: HeadingLevel.HEADING_2 }))
 				} else if (tagName === 'h3') {
-					docxParagraphs.push(new Paragraph({ text, heading: HeadingLevel.HEADING_3 }))
+					docxChildren.push(new Paragraph({ text, heading: HeadingLevel.HEADING_3 }))
 				} else if (tagName === 'ul' || tagName === 'ol') {
 					const items = Array.from(el.querySelectorAll('li'))
 					items.forEach((item) => {
-						docxParagraphs.push(new Paragraph({ text: item.textContent || '', bullet: { level: 0 } }))
+						docxChildren.push(new Paragraph({ text: item.textContent || '', bullet: { level: 0 } }))
+					})
+				} else if (tagName === 'table') {
+					const trElements = Array.from(el.querySelectorAll('tr'))
+					const rows: DocxTableRow[] = trElements.map((tr) => {
+						const cellElements = Array.from(tr.querySelectorAll('th, td'))
+						const cells: DocxTableCell[] = cellElements.map((cell) => {
+							return new DocxTableCell({
+								children: [new Paragraph({ children: [new TextRun(cell.textContent || '')] })],
+							})
+						})
+						return new DocxTableRow({ children: cells })
+					})
+					if (rows.length > 0) {
+						docxChildren.push(new DocxTable({ rows }))
+					}
+				} else if (tagName === 'pre' || tagName === 'code') {
+					const lines = text.split('\n')
+					lines.forEach((line) => {
+						docxChildren.push(new Paragraph({
+							children: [new TextRun({ text: line, font: 'Courier New' })],
+						}))
 					})
 				} else {
-					docxParagraphs.push(new Paragraph({ children: [new TextRun(text)] }))
+					docxChildren.push(new Paragraph({ children: [new TextRun(text)] }))
 				}
 			})
 		}
@@ -38,7 +59,7 @@ export async function exportToDocx(editorHtml: string, title: string): Promise<v
 			sections: [
 				{
 					properties: {},
-					children: docxParagraphs.length > 0 ? docxParagraphs : [new Paragraph({ text: title || 'Document' })],
+					children: docxChildren.length > 0 ? docxChildren : [new Paragraph({ text: title || 'Document' })],
 				},
 			],
 		})
@@ -81,7 +102,7 @@ export async function exportToPdf(editorElement: HTMLElement, title: string): Pr
 		pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
 		heightLeft -= pageHeight
 
-		while (heightLeft >= 0) {
+		while (heightLeft > 0) {
 			position = heightLeft - imgHeight
 			pdf.addPage()
 			pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)

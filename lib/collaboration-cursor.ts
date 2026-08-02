@@ -38,15 +38,27 @@ export const CollaborationCursor = Extension.create<CollaborationCursorOptions>(
 	addStorage() {
 		return {
 			users: [],
+			awarenessListener: null as (() => void) | null,
+			awarenessInstance: null as any,
+		}
+	},
+
+	onDestroy() {
+		if (this.storage.awarenessInstance && this.storage.awarenessListener) {
+			this.storage.awarenessInstance.off('update', this.storage.awarenessListener)
+			this.storage.awarenessListener = null
+			this.storage.awarenessInstance = null
 		}
 	},
 
 	addCommands() {
 		return {
-			updateUser: (attributes: Record<string, any>) => () => {
-				this.options.user = attributes
-				if (this.options.provider?.awareness) {
-					this.options.provider.awareness.setLocalStateField('user', this.options.user)
+			updateUser: (attributes: Record<string, any>) => ({ dispatch }: { dispatch?: boolean }) => {
+				if (dispatch) {
+					this.options.user = attributes
+					if (this.options.provider?.awareness) {
+						this.options.provider.awareness.setLocalStateField('user', this.options.user)
+					}
 				}
 				return true
 			},
@@ -77,9 +89,12 @@ export const CollaborationCursor = Extension.create<CollaborationCursorOptions>(
 
 		this.storage.users = getAwarenessUsers()
 
-		awareness.on('update', () => {
+		const updateListener = () => {
 			this.storage.users = getAwarenessUsers()
-		})
+		}
+		this.storage.awarenessListener = updateListener
+		this.storage.awarenessInstance = awareness
+		awareness.on('update', updateListener)
 
 		return [
 			yCursorPlugin(
