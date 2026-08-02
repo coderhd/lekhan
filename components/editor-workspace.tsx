@@ -99,6 +99,7 @@ const getSharedExtensions = (): AnyExtension[] => [
 		codeBlock: false,
 		link: false,
 		underline: false,
+		undoRedo: false,
 	}),
 	CodeBlockLowlight.configure({
 		lowlight,

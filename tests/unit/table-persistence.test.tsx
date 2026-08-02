@@ -21,7 +21,7 @@ describe('Table content persistence with Yjs', () => {
 		const editor1 = new Editor({
 			extensions: [
 				CustomDocument,
-				StarterKit.configure({ document: false }),
+				StarterKit.configure({ document: false, undoRedo: false }),
 				Table.configure({ resizable: true }),
 				TableRow,
 				TableHeader,
@@ -57,7 +57,7 @@ describe('Table content persistence with Yjs', () => {
 		const editor2 = new Editor({
 			extensions: [
 				CustomDocument,
-				StarterKit.configure({ document: false }),
+				StarterKit.configure({ document: false, undoRedo: false }),
 				Table.configure({ resizable: true }),
 				TableRow,
 				TableHeader,
