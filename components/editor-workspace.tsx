@@ -3,19 +3,19 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useEditor, EditorContent, Editor } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
+import { StarterKit } from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
-import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
-import FontFamily from '@tiptap/extension-font-family'
-import TextStyle from '@tiptap/extension-text-style'
-import Color from '@tiptap/extension-color'
-import Highlight from '@tiptap/extension-highlight'
-import TextAlign from '@tiptap/extension-text-align'
-import Underline from '@tiptap/extension-underline'
-import TaskList from '@tiptap/extension-task-list'
-import TaskItem from '@tiptap/extension-task-item'
-import Image from '@tiptap/extension-image'
-import Link from '@tiptap/extension-link'
+import { CollaborationCursor } from '@/lib/collaboration-cursor'
+import { FontFamily } from '@tiptap/extension-font-family'
+import { TextStyle } from '@tiptap/extension-text-style'
+import { Color } from '@tiptap/extension-color'
+import { Highlight } from '@tiptap/extension-highlight'
+import { TextAlign } from '@tiptap/extension-text-align'
+import { Underline } from '@tiptap/extension-underline'
+import { TaskList } from '@tiptap/extension-task-list'
+import { TaskItem } from '@tiptap/extension-task-item'
+import { Image } from '@tiptap/extension-image'
+import { Link } from '@tiptap/extension-link'
 import { EyeOff } from 'lucide-react'
 import tippy from 'tippy.js'
 import { createRoot } from 'react-dom/client'
@@ -40,11 +40,29 @@ import GlobalLoader from './global-loader'
 import { CustomSelect } from './ui/custom-select'
 import { PromptDialog } from './ui/prompt-dialog'
 import * as Y from 'yjs'
-import Mention from '@tiptap/extension-mention'
+import { Mention } from '@tiptap/extension-mention'
 import MentionList, { MentionItem } from './mention-list'
-import { fetchDocumentDetails, fetchMemberRole, updateDocumentTitle, fetchMentionableCollaborators } from '@/services/db'
+import { fetchDocumentDetails, fetchMemberRole, updateDocumentTitle, fetchMentionableCollaborators, getUserAICredits } from '@/services/db'
 
+import { Table } from '@tiptap/extension-table'
+import { TableRow } from '@tiptap/extension-table-row'
+import { TableHeader } from '@tiptap/extension-table-header'
+import { TableCell } from '@tiptap/extension-table-cell'
+import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
+import { createLowlight, common } from 'lowlight'
+import { Markdown } from 'tiptap-markdown'
+import { TableToolbar } from './table-toolbar'
+import { CodeBlockLanguageSelect } from './code-block-language-select'
+import { DragContextMenu } from './drag-context-menu'
+import { exportToDocx, exportToPdf } from '@/lib/export-utils'
+import PricingPlans from './pricing-plans'
+import { Download, Sparkles, FileText, FileSpreadsheet } from 'lucide-react'
+import * as Dialog from '@radix-ui/react-dialog'
 
+const lowlight = createLowlight(common)
+
+import { Document } from '@tiptap/extension-document'
+import { Placeholder } from '@tiptap/extension-placeholder'
 
 interface EditorWorkspaceProps {
 	documentId: string
@@ -66,21 +84,36 @@ const CURSOR_COLORS = [
 	'#ef4444', // red
 ]
 
-import Document from '@tiptap/extension-document'
-import Placeholder from '@tiptap/extension-placeholder'
-
 const CustomDocument = Document.extend({
 	content: 'heading block*',
 })
 
+import { AnyExtension } from '@tiptap/core'
 import { PersistentSelection } from '@/lib/persistent-selection'
 
-const getSharedExtensions = () => [
+const getSharedExtensions = (): AnyExtension[] => [
 	CustomDocument,
 	PersistentSelection,
 	StarterKit.configure({
-		history: false,
 		document: false,
+		codeBlock: false,
+		link: false,
+		underline: false,
+		undoRedo: false,
+	}),
+	CodeBlockLowlight.configure({
+		lowlight,
+	}),
+	Table.configure({
+		resizable: true,
+	}),
+	TableRow,
+	TableHeader,
+	TableCell,
+	Markdown.configure({
+		html: true,
+		transformPastedText: true,
+		transformCopiedText: true,
 	}),
 	Placeholder.configure({
 		placeholder: ({ node }) => {
@@ -151,6 +184,55 @@ export default function EditorWorkspace({
 	} | null>(null)
 	const [isDetectingLanguage, setIsDetectingLanguage] = useState(false)
 	const [mentionables, setMentionables] = useState<MentionItem[]>([])
+	const [userPlan, setUserPlan] = useState<'free' | 'go' | 'pro' | 'team' | 'enterprise'>('free')
+	const [isExporting, setIsExporting] = useState(false)
+	const [isExportOpen, setIsExportOpen] = useState(false)
+	const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false)
+
+	useEffect(() => {
+		let isCurrent = true
+		const checkPlan = async () => {
+			if (currentUser?.id) {
+				try {
+					const credits = await getUserAICredits(currentUser.id)
+					if (isCurrent) {
+						setUserPlan(credits.plan)
+					}
+				} catch (err) {
+					console.error('Error fetching plan:', err)
+				}
+			}
+		}
+		checkPlan()
+		return () => {
+			isCurrent = false
+		}
+	}, [currentUser?.id])
+
+	const handleExport = async (type: 'docx' | 'pdf') => {
+		if (userPlan === 'free') {
+			setIsUpgradeModalOpen(true)
+			return
+		}
+		if (!editor) return
+		setIsExporting(true)
+		try {
+			if (type === 'docx') {
+				await exportToDocx(editor.getHTML(), title)
+			} else if (type === 'pdf') {
+				const editorEl = editor.view.dom as HTMLElement
+				if (editorEl) {
+					await exportToPdf(editorEl, title)
+				}
+			}
+		} catch (err) {
+			console.error('Export error:', err)
+		} finally {
+			setIsExporting(false)
+			setIsExportOpen(false)
+		}
+	}
+
 
 	useEffect(() => {
 		const loadMentionables = async () => {
@@ -253,6 +335,7 @@ export default function EditorWorkspace({
 		activeUsers,
 		hasUnsyncedChanges,
 		provider,
+		isLocalSynced,
 	} = useEditorCollab(documentId, token, collabUser)
 
 	useEffect(() => {
@@ -277,7 +360,7 @@ export default function EditorWorkspace({
 					document: ydoc,
 				}),
 			] : []),
-			...(provider ? [
+			...(ydoc && provider ? [
 				CollaborationCursor.configure({
 					provider: provider,
 					user: {
@@ -443,6 +526,43 @@ export default function EditorWorkspace({
 			attributes: {
 				class: 'prose dark:prose-invert max-w-none focus:outline-none min-h-[500px] text-on-surface break-words w-full',
 			},
+			handlePaste: (_view, event) => {
+				const plainText = event.clipboardData?.getData('text/plain')
+				const htmlText = event.clipboardData?.getData('text/html')
+
+				if (!plainText || !editor || editor.isActive('codeBlock')) {
+					return false
+				}
+
+				const isVsCodeCodeBlock = Boolean(htmlText && (htmlText.includes('<pre') || htmlText.includes('<code')))
+				const hasMarkdownIndicators = /^#+\s|^\s*[-*+]\s|^\s*\d+\.\s|```|^\s*>\s|\*\*.+\*\*|__.+__|\[.+\]\(.+\)|\|.+\||^---$/m.test(plainText)
+
+				if (isVsCodeCodeBlock) {
+					event.preventDefault()
+					editor.commands.insertContent({
+						type: 'codeBlock',
+						content: [{ type: 'text', text: plainText }],
+					})
+					return true
+				}
+
+				if (hasMarkdownIndicators) {
+					const parser = (editor as any).storage?.markdown?.parser
+					if (parser) {
+						const parsedHtml = parser.parse(plainText)
+						if (parsedHtml) {
+							event.preventDefault()
+							if (editor.isEmpty || editor.getText().trim() === '') {
+								editor.commands.setContent(parsedHtml)
+							} else {
+								editor.commands.insertContent(parsedHtml)
+							}
+							return true
+						}
+					}
+				}
+				return false
+			},
 		},
 		editable: !isViewer,
 		immediatelyRender: false,
@@ -526,12 +646,18 @@ export default function EditorWorkspace({
 		}
 	}, [editor, isViewer])
 
+	useEffect(() => {
+		if (editor) {
+			editor.commands.setBotActive(isLekhanBotOpen)
+		}
+	}, [editor, isLekhanBotOpen])
+
 	const handleSaveTitle = async (newTitle: string) => {
 		setTitle(newTitle)
 		await updateDocumentTitle(documentId, newTitle)
 	}
 
-	if (!ydoc || !editor || isViewer === null) {
+	if (!ydoc || !editor || isViewer === null || !isLocalSynced) {
 		return <GlobalLoader text="Loading workspace..." />
 	}
 
@@ -629,13 +755,65 @@ export default function EditorWorkspace({
 						/>
 
 						{!isViewer && (
-							<button
-								onClick={() => setIsShareOpen(true)}
-								className="bg-primary-container text-on-primary-container px-2 lg:px-4 h-8 rounded-lg font-bold text-sm hover:brightness-110 active:scale-95 transition-all shadow-sm flex items-center justify-center gap-xs"
-							>
-								<span className="material-symbols-outlined text-lg">share</span>
-								<span className="hidden lg:inline">Share</span>
-							</button>
+							<div className="flex items-center gap-sm">
+								<div className="relative">
+									<button
+										type="button"
+										disabled={isExporting}
+										onClick={() => setIsExportOpen(prev => !prev)}
+										onKeyDown={(e) => {
+											if (e.key === 'Escape') setIsExportOpen(false)
+										}}
+										aria-haspopup="menu"
+										aria-expanded={isExportOpen}
+										className="bg-surface-container-low border border-black/10 dark:border-white/10 text-on-surface px-2.5 h-8 rounded-lg font-medium text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50 disabled:pointer-events-none"
+										title="Export Document"
+									>
+										<Download className="w-3.5 h-3.5 text-primary" />
+										<span className="hidden lg:inline font-bold">Export</span>
+										{userPlan === 'free' && (
+											<span className="text-[10px] bg-primary/20 text-primary px-1 rounded font-semibold">
+												PRO
+											</span>
+										)}
+									</button>
+
+									{isExportOpen && (
+										<div className="absolute top-full right-0 pt-1.5 w-44 z-50 animate-in fade-in zoom-in-95" role="menu">
+											<div className="bg-surface-container rounded-xl border border-black/10 dark:border-white/10 p-1 shadow-xl flex flex-col gap-0.5 text-xs">
+												<button
+													type="button"
+													disabled={isExporting}
+													onClick={() => handleExport('docx')}
+													className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full disabled:opacity-50 disabled:pointer-events-none"
+													role="menuitem"
+												>
+													<FileSpreadsheet className="w-4 h-4 text-blue-500" />
+													<span>Download as DOCX</span>
+												</button>
+												<button
+													type="button"
+													disabled={isExporting}
+													onClick={() => handleExport('pdf')}
+													className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full disabled:opacity-50 disabled:pointer-events-none"
+													role="menuitem"
+												>
+													<FileText className="w-4 h-4 text-red-500" />
+													<span>Download as PDF</span>
+												</button>
+											</div>
+										</div>
+									)}
+								</div>
+
+								<button
+									onClick={() => setIsShareOpen(true)}
+									className="bg-primary-container text-on-primary-container px-2 lg:px-4 h-8 rounded-lg font-bold text-sm hover:brightness-110 active:scale-95 transition-all shadow-sm flex items-center justify-center gap-xs"
+								>
+									<span className="material-symbols-outlined text-lg">share</span>
+									<span className="hidden lg:inline">Share</span>
+								</button>
+							</div>
 						)}
 
 						<div className="hidden md:block">
@@ -736,6 +914,13 @@ export default function EditorWorkspace({
 							<span className="material-symbols-outlined text-[18px]">link</span>
 						</button>
 						<ImageUploadButton onUpload={(url) => editor?.chain().focus().setImage({ src: url }).run()} />
+						<button
+							onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+							className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('table') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}
+							title="Insert Table"
+						>
+							<span className="material-symbols-outlined text-[18px]">table</span>
+						</button>
 					</div>
 					<div className="flex shrink-0 items-center gap-xs px-md h-6">
 						<ColorHighlightPopover editor={editor} />
@@ -756,7 +941,15 @@ export default function EditorWorkspace({
 				{/* Main Workspace (Expanded, Dark Continuous Canvas) */}
 				<main className={`flex-1 flex flex-col items-center bg-background relative scroll-smooth transition-all overflow-y-auto no-scrollbar py-8 pb-36 ${isAIPanelOpen || isHistoryOpen ? 'lg:mr-80' : ''}`}>
 
+					{!isViewer && editor && (
+						<div className="sticky top-2 z-30 flex items-center justify-center gap-2 mb-2">
+							<TableToolbar editor={editor} />
+						</div>
+					)}
+
 					<div className={`editor-canvas w-full max-w-5xl min-h-[calc(100vh-12rem)] px-[40px] py-[20px] md:px-[60px] md:py-[40px] transition-all duration-300 relative group`}>
+						{!isViewer && editor && <DragContextMenu editor={editor} />}
+
 						{previewVersionName && (
 							<div className='absolute top-4 left-4 flex items-center justify-between bg-primary/20 border border-primary/50 px-4 py-2 rounded-lg text-xs text-primary font-semibold backdrop-blur-md z-10'>
 								<span>Previewing checkpoint: <span className='text-on-surface'>"{previewVersionName}"</span> (Read-Only)</span>
@@ -768,6 +961,7 @@ export default function EditorWorkspace({
 
 						<div className={previewDoc && previewEditor ? 'hidden' : 'block'}>
 							{!isViewer && <AIBubbleMenu editor={editor} onOpenLekhanBot={handleOpenLekhanBot} />}
+							{!isViewer && <CodeBlockLanguageSelect editor={editor} />}
 							<EditorContent key="live" editor={editor} />
 						</div>
 
@@ -862,6 +1056,28 @@ export default function EditorWorkspace({
 				}}
 				defaultValue={editor?.getAttributes('link').href || ''}
 			/>
+
+			<Dialog.Root open={isUpgradeModalOpen} onOpenChange={setIsUpgradeModalOpen}>
+				<Dialog.Portal>
+					<Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] animate-in fade-in" />
+					<Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-surface-container max-w-4xl w-[92vw] max-h-[90vh] overflow-y-auto rounded-2xl border border-black/10 dark:border-white/10 p-6 shadow-2xl z-[100000] animate-in zoom-in-95">
+						<div className="flex items-center justify-between mb-2">
+							<div className="flex items-center gap-2">
+								<Sparkles className="w-5 h-5 text-primary" />
+								<h3 className="text-lg font-bold text-on-surface">Upgrade to Premium</h3>
+							</div>
+							<Dialog.Close className="text-on-surface-variant hover:text-on-surface p-1 rounded-lg">
+								<span className="material-symbols-outlined text-lg">close</span>
+							</Dialog.Close>
+						</div>
+						<p className="text-sm text-on-surface-variant mb-6">
+							Exporting documents as DOCX or PDF is a premium feature available on Go, Pro, Team, and Enterprise plans. Upgrade today to unlock document exports, unlimited documents, and higher AI limits!
+						</p>
+						<PricingPlans currentPlan={userPlan} />
+					</Dialog.Content>
+				</Dialog.Portal>
+			</Dialog.Root>
 		</div>
 	)
 }
+

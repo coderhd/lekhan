@@ -15,7 +15,8 @@ vi.mock('@/hooks/use-editor-collab', () => ({
 			isOffline: false,
 			activeUsers: [],
 			hasUnsyncedChanges: false,
-			provider: null
+			provider: null,
+			isLocalSynced: true
 		}
 	}
 }))
@@ -34,7 +35,8 @@ vi.mock('@/services/db', () => ({
 	fetchDocumentDetails: vi.fn().mockResolvedValue({ owner_id: 'test-user', is_public: false }),
 	fetchMemberRole: vi.fn().mockResolvedValue('owner'),
 	updateDocumentTitle: vi.fn().mockResolvedValue(true),
-	fetchMentionableCollaborators: vi.fn().mockResolvedValue([])
+	fetchMentionableCollaborators: vi.fn().mockResolvedValue([]),
+	getUserAICredits: vi.fn().mockResolvedValue({ plan: 'free', totalAllocated: 50, usedCredits: 0, remainingCredits: 50 }),
 }))
 
 // Mock useRouter

@@ -8,7 +8,7 @@ import GlobalLoader from '@/components/global-loader'
 import EditorWorkspace from '@/components/editor-workspace'
 import { toast } from 'sonner'
 
-export default function DocumentPage ({
+export default function DocumentPage({
 	params: paramsPromise,
 }: {
 	params: Promise<{ id: string }>
@@ -26,7 +26,7 @@ export default function DocumentPage ({
 				// 1. Get current session and token
 				const { data: { session } } = await supabase.auth.getSession()
 				const { error: userError } = await supabase.auth.getUser()
-				
+
 				// If there is an auth error that is NOT just a missing session, it means the token expired or is invalid
 				if (userError && userError.name !== 'AuthSessionMissingError') {
 					console.error('Session error (token expired):', userError)

@@ -21,7 +21,7 @@ describe('VersionHistory Retention Reassurance', () => {
 				documentId="doc1"
 				isOpen={true}
 				onClose={() => {}}
-				onSelectVersion={() => {}}
+				onPreviewVersion={() => {}}
 				plan="free"
 			/>
 		)

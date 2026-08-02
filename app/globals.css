@@ -387,9 +387,10 @@ body {
 }
 
 .ProseMirror pre {
+	position: relative;
 	background-color: rgba(0, 0, 0, 0.04);
 	color: hsl(var(--on-surface));
-	padding: 1rem;
+	padding: 2.25rem 1rem 1rem 1rem;
 	border-radius: 0.5rem;
 	overflow-x: auto;
 	margin-top: 1rem;
@@ -535,4 +536,134 @@ ul[data-type="taskList"] li>div {
 .dark .ai-active-selection {
 	background-color: rgba(252, 163, 17, 0.3) !important;
 	border-bottom: 2px solid rgba(252, 163, 17, 0.9) !important;
+}
+
+/* Tiptap Table Styles */
+.ProseMirror table {
+	border-collapse: collapse;
+	table-layout: fixed;
+	width: 100%;
+	margin: 1rem 0;
+	overflow: hidden;
+}
+
+.ProseMirror table td,
+.ProseMirror table th {
+	min-width: 1em;
+	border: 1px solid rgba(0, 0, 0, 0.15);
+	padding: 8px 12px;
+	vertical-align: top;
+	box-sizing: border-box;
+	position: relative;
+}
+
+.dark .ProseMirror table td,
+.dark .ProseMirror table th {
+	border-color: rgba(255, 255, 255, 0.15);
+}
+
+.ProseMirror table th {
+	font-weight: bold;
+	text-align: left;
+	background-color: rgba(0, 0, 0, 0.04);
+}
+
+.dark .ProseMirror table th {
+	background-color: rgba(255, 255, 255, 0.06);
+}
+
+.ProseMirror table .selectedCell:after {
+	z-index: 2;
+	position: absolute;
+	content: "";
+	left: 0; right: 0; top: 0; bottom: 0;
+	background: rgba(252, 163, 17, 0.2);
+	pointer-events: none;
+}
+
+.ProseMirror table .column-resize-handle {
+	position: absolute;
+	right: -2px;
+	top: 0;
+	bottom: -0.5px;
+	width: 4px;
+	background-color: #fca311;
+	pointer-events: none;
+}
+
+.tableWrapper {
+	overflow-x: auto;
+}
+
+/* Lowlight Syntax Highlighting Token Styles */
+.hljs-comment,
+.hljs-quote {
+	color: #6a737d;
+	font-style: italic;
+}
+
+.dark .hljs-comment,
+.dark .hljs-quote {
+	color: #8b949e;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-subst {
+	color: #d73a49;
+	font-weight: 600;
+}
+
+.dark .hljs-keyword,
+.dark .hljs-selector-tag,
+.dark .hljs-subst {
+	color: #ff7b72;
+}
+
+.hljs-string,
+.hljs-title,
+.hljs-section,
+.hljs-attribute,
+.hljs-literal,
+.hljs-template-tag,
+.hljs-template-variable,
+.hljs-type,
+.hljs-addition {
+	color: #032f62;
+}
+
+.dark .hljs-string,
+.dark .hljs-title,
+.dark .hljs-section,
+.dark .hljs-attribute,
+.dark .hljs-literal,
+.dark .hljs-template-tag,
+.dark .hljs-template-variable,
+.dark .hljs-type,
+.dark .hljs-addition {
+	color: #a5d6ff;
+}
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link {
+	color: #005cc5;
+}
+
+.dark .hljs-number,
+.dark .hljs-symbol,
+.dark .hljs-bullet,
+.dark .hljs-link {
+	color: #79c0ff;
+}
+
+.hljs-function,
+.hljs-name {
+	color: #6f42c1;
+}
+
+.dark .hljs-function,
+.dark .hljs-name {
+	color: #d2a8ff;
 }

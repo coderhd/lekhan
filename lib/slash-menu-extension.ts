@@ -89,10 +89,17 @@ export function buildSlashMenuItems(
 			action: (editor) => editor.chain().focus().toggleTaskList().run(),
 		},
 		{
+			id: 'table',
+			label: 'Table',
+			icon: 'table',
+			description: 'Insert a 3x3 table',
+			action: (editor) => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
+		},
+		{
 			id: 'code-block',
 			label: 'Code Block',
 			icon: 'code_blocks',
-			description: 'Fenced code block',
+			description: 'Fenced syntax-highlighted code block',
 			action: (editor) => editor.chain().focus().toggleCodeBlock().run(),
 		},
 		{
