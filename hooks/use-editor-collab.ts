@@ -30,6 +30,7 @@ export function useEditorCollab (
 	const [isDirty, setIsDirty] = useState(false)
 	const [provider, setProvider] = useState<WebsocketProvider | null>(null)
 	const [connectionState, setConnectionState] = useState<ConnectionState>('connecting')
+	const [isLocalSynced, setIsLocalSynced] = useState(false)
 
 	useEffect(() => {
 		if (typeof window === 'undefined') {
@@ -127,7 +128,7 @@ export function useEditorCollab (
 			// 1. Initialize IndexedDB local persistence
 			indexeddbProvider = new IndexeddbPersistence(documentId, doc)
 			indexeddbProvider.on('synced', () => {
-				// Initial sync completed
+				setIsLocalSynced(true)
 			})
 
 			// 2. Initialize WebSocket remote provider
@@ -209,5 +210,6 @@ export function useEditorCollab (
 		activeUsers,
 		hasUnsyncedChanges: isDirty && (!isConnected || !isSynced),
 		provider,
+		isLocalSynced,
 	}
 }

@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-	turbopack: {},
+	turbopack: {
+		root: process.cwd(),
+	},
 	webpack: (config, { isServer }) => {
 		if (!isServer) {
 			config.resolve.fallback = {

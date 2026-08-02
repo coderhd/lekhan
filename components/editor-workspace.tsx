@@ -326,6 +326,7 @@ export default function EditorWorkspace({
 		activeUsers,
 		hasUnsyncedChanges,
 		provider,
+		isLocalSynced,
 	} = useEditorCollab(documentId, token, collabUser)
 
 	useEffect(() => {
@@ -627,12 +628,18 @@ export default function EditorWorkspace({
 		}
 	}, [editor, isViewer])
 
+	useEffect(() => {
+		if (editor) {
+			editor.commands.setBotActive(isLekhanBotOpen)
+		}
+	}, [editor, isLekhanBotOpen])
+
 	const handleSaveTitle = async (newTitle: string) => {
 		setTitle(newTitle)
 		await updateDocumentTitle(documentId, newTitle)
 	}
 
-	if (!ydoc || !editor || isViewer === null) {
+	if (!ydoc || !editor || isViewer === null || !isLocalSynced) {
 		return <GlobalLoader text="Loading workspace..." />
 	}
 
@@ -874,6 +881,13 @@ export default function EditorWorkspace({
 							<span className="material-symbols-outlined text-[18px]">link</span>
 						</button>
 						<ImageUploadButton onUpload={(url) => editor?.chain().focus().setImage({ src: url }).run()} />
+						<button
+							onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+							className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('table') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}
+							title="Insert Table"
+						>
+							<span className="material-symbols-outlined text-[18px]">table</span>
+						</button>
 					</div>
 					<div className="flex shrink-0 items-center gap-xs px-md h-6">
 						<ColorHighlightPopover editor={editor} />
