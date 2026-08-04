@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useEditor, EditorContent, Editor } from '@tiptap/react'
 import { StarterKit } from '@tiptap/starter-kit'
@@ -90,6 +90,7 @@ const CustomDocument = Document.extend({
 
 import { AnyExtension } from '@tiptap/core'
 import { PersistentSelection } from '@/lib/persistent-selection'
+import { decideMarkdownPaste } from '@/lib/markdown-paste'
 
 const getSharedExtensions = (): AnyExtension[] => [
 	CustomDocument,
@@ -527,46 +528,62 @@ export default function EditorWorkspace({
 				class: 'prose dark:prose-invert max-w-none focus:outline-none min-h-[500px] text-on-surface break-words w-full',
 			},
 			handlePaste: (_view, event) => {
+				// Use the live editor instance. useEditor may recreate the editor
+				// when [ydoc, provider] deps change (async collab setup), so the
+				// closure's `editor` binding can be a stale, destroyed instance
+				// whose storage (markdown parser) is empty.
+				const currentEditor = editorRef.current ?? editor
+				if (!currentEditor) return false
+
 				const plainText = event.clipboardData?.getData('text/plain')
 				const htmlText = event.clipboardData?.getData('text/html')
 
-				if (!plainText || !editor || editor.isActive('codeBlock')) {
+				if (!plainText || currentEditor.isActive('codeBlock')) {
 					return false
 				}
 
-				const isVsCodeCodeBlock = Boolean(htmlText && (htmlText.includes('<pre') || htmlText.includes('<code')))
-				const hasMarkdownIndicators = /^#+\s|^\s*[-*+]\s|^\s*\d+\.\s|```|^\s*>\s|\*\*.+\*\*|__.+__|\[.+\]\(.+\)|\|.+\||^---$/m.test(plainText)
+				const kind = decideMarkdownPaste(plainText, htmlText)
 
-				if (isVsCodeCodeBlock) {
+				if (kind === 'markdown') {
+					const parser = (currentEditor as any).storage?.markdown?.parser
+					if (parser) {
+						const parsedHtml = parser.parse(plainText)
+						if (parsedHtml) {
+							event.preventDefault()
+							if (currentEditor.isEmpty || currentEditor.getText().trim() === '') {
+								currentEditor.commands.setContent(parsedHtml)
+							} else {
+								currentEditor.commands.insertContent(parsedHtml)
+							}
+							return true
+						}
+					}
+					return false
+				}
+
+				if (kind === 'codeBlock') {
 					event.preventDefault()
-					editor.commands.insertContent({
+					currentEditor.commands.insertContent({
 						type: 'codeBlock',
 						content: [{ type: 'text', text: plainText }],
 					})
 					return true
 				}
 
-				if (hasMarkdownIndicators) {
-					const parser = (editor as any).storage?.markdown?.parser
-					if (parser) {
-						const parsedHtml = parser.parse(plainText)
-						if (parsedHtml) {
-							event.preventDefault()
-							if (editor.isEmpty || editor.getText().trim() === '') {
-								editor.commands.setContent(parsedHtml)
-							} else {
-								editor.commands.insertContent(parsedHtml)
-							}
-							return true
-						}
-					}
-				}
 				return false
 			},
 		},
 		editable: !isViewer,
 		immediatelyRender: false,
 	}, [ydoc, provider])
+
+	// Tiptap's useEditor can recreate the editor instance when the
+	// [ydoc, provider] deps change (async collab setup). editorProps closures
+	// like handlePaste can therefore capture a stale, destroyed editor whose
+	// extension storage (e.g. markdown parser) is empty. Keep a ref to the
+	// live editor so paste always reads the current instance.
+	const editorRef = useRef<Editor | null>(null)
+	editorRef.current = editor
 
 	const handleLekhanBotResult = useCallback((
 		actionId: string,
