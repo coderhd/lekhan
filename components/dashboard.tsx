@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { DocumentItem, MemberDocumentItem } from '@/types'
+import { supabase } from '@/lib/supabase'
 import { fetchOwnedDocuments, fetchSharedDocuments, createDocument, deleteDocument, updateDocumentTitle, fetchPendingInvitations } from '@/services/db'
 import Invitations from './invitations'
 import ProfileMenu from './profile-menu'
@@ -30,6 +31,7 @@ export default function Dashboard({ user }: DashboardProps) {
 	const [sharedDocs, setSharedDocs] = useState<MemberDocumentItem[]>([])
 	const [pendingInvitesCount, setPendingInvitesCount] = useState(0)
 	const [loading, setLoading] = useState(true)
+	const [fetchError, setFetchError] = useState(false)
 	const [searchQuery, setSearchQuery] = useState('')
 	const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
 	const [editingTitleId, setEditingTitleId] = useState<string | null>(null)
@@ -96,7 +98,8 @@ export default function Dashboard({ user }: DashboardProps) {
 
 	// Removed infinite scroll listener in favor of Load More buttons
 
-	const fetchDocuments = async () => {
+	const fetchDocuments = useCallback(async () => {
+		setFetchError(false)
 		try {
 			const [owned, shared, invites] = await Promise.all([
 				fetchOwnedDocuments(user.id),
@@ -108,14 +111,28 @@ export default function Dashboard({ user }: DashboardProps) {
 			setPendingInvitesCount(invites.length)
 		} catch (err) {
 			console.error('Error fetching documents:', err)
+			setFetchError(true)
 		} finally {
 			setLoading(false)
 		}
-	}
+	}, [user.id, user.email])
 
 	useEffect(() => {
 		fetchDocuments()
-	}, [user.id])
+	}, [fetchDocuments])
+
+	// Refetch documents when a fresh session is established. The inactivity
+	// lock re-authenticates via signInWithPassword (same user.id), so the
+	// [user.id] effect never re-runs; without this, the dashboard stays blank
+	// until a full page reload.
+	useEffect(() => {
+		const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+			if (event === 'SIGNED_IN') {
+				fetchDocuments()
+			}
+		})
+		return () => subscription.unsubscribe()
+	}, [fetchDocuments])
 
 	const handleCreateDocument = async () => {
 		try {
@@ -269,6 +286,18 @@ export default function Dashboard({ user }: DashboardProps) {
 					{loading ? (
 						<div className="flex justify-center items-center min-h-[calc(100vh-6rem)]">
 							<GlobalLoader fullScreen={false} text="Loading dashboard..." />
+						</div>
+					) : fetchError ? (
+						<div className="flex flex-col items-center justify-center py-20 text-center min-h-[60vh]">
+							<span className="material-symbols-outlined text-[48px] text-error mb-4">error</span>
+							<h3 className="text-2xl font-bold text-on-surface mb-2">Couldn't load your documents</h3>
+							<p className="text-on-surface-variant max-w-md mb-8">
+								Something went wrong while fetching your documents. Please try again.
+							</p>
+							<button onClick={fetchDocuments} className="flex items-center gap-sm bg-primary text-on-primary font-bold px-xl py-3 rounded-lg hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 premium-transition">
+								<span className="material-symbols-outlined">refresh</span>
+								Try Again
+							</button>
 						</div>
 					) : filteredMyDocs.length === 0 && filteredSharedDocs.length === 0 && pendingInvitesCount === 0 ? (
 						myDocs.length === 0 && sharedDocs.length === 0 ? (
