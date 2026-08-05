@@ -62,6 +62,13 @@ describe('decideMarkdownPaste', () => {
 		expect(decideMarkdownPaste(plain, html)).toBe('markdown')
 	})
 
+	it('classifies mismatched table rows inside <pre> HTML as a code block', () => {
+		const plain = '| Name | Role | Country |\n| --- | --- |\n| Alice | Writer |'
+		const html = "<meta charset='utf-8'><div><pre>" + plain + '</pre></div>'
+
+		expect(decideMarkdownPaste(plain, html)).toBe('codeBlock')
+	})
+
 	it('classifies ATX headings indented up to three spaces as markdown, not a code block', () => {
 		expect(decideMarkdownPaste('   # Indented heading', undefined)).toBe('markdown')
 		expect(decideMarkdownPaste('  ## Two-space heading', '<pre>  ## Two-space heading</pre>')).toBe('markdown')

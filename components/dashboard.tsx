@@ -42,6 +42,7 @@ export default function Dashboard({ user }: DashboardProps) {
 
 	const myDocsScrollRef = useRef<HTMLDivElement>(null)
 	const sharedDocsScrollRef = useRef<HTMLDivElement>(null)
+	const fetchRequestIdRef = useRef(0)
 	const [myDocsScrollState, setMyDocsScrollState] = useState({ left: false, right: false })
 	const [sharedDocsScrollState, setSharedDocsScrollState] = useState({ left: false, right: false })
 
@@ -99,6 +100,8 @@ export default function Dashboard({ user }: DashboardProps) {
 	// Removed infinite scroll listener in favor of Load More buttons
 
 	const fetchDocuments = useCallback(async () => {
+		const requestId = ++fetchRequestIdRef.current
+		setLoading(true)
 		setFetchError(false)
 		try {
 			const [owned, shared, invites] = await Promise.all([
@@ -106,14 +109,18 @@ export default function Dashboard({ user }: DashboardProps) {
 				fetchSharedDocuments(user.id),
 				fetchPendingInvitations(user.email)
 			])
+			if (requestId !== fetchRequestIdRef.current) return
 			setMyDocs(owned)
 			setSharedDocs(shared)
 			setPendingInvitesCount(invites.length)
 		} catch (err) {
+			if (requestId !== fetchRequestIdRef.current) return
 			console.error('Error fetching documents:', err)
 			setFetchError(true)
 		} finally {
-			setLoading(false)
+			if (requestId === fetchRequestIdRef.current) {
+				setLoading(false)
+			}
 		}
 	}, [user.id, user.email])
 

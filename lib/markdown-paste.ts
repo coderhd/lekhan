@@ -7,14 +7,32 @@ const MARKDOWN_INDICATOR_REGEX = /^ {0,3}#+\s|^\s*[-*+]\s|^\s*\d+\.\s|```|^\s*>\
 const TABLE_DELIMITER_REGEX = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/
 
 /**
+ * Counts the cells in a table row after normalizing whitespace and stripping
+ * outer pipes, e.g. `| Name | Role |` -> 2.
+ */
+function countCells(row: string): number {
+	return row
+		.trim()
+		.replace(/^\|/, '')
+		.replace(/\|$/, '')
+		.split('|')
+		.map((cell) => cell.trim())
+		.filter((cell) => cell.length > 0).length
+}
+
+/**
  * Returns true when the text contains a pipe-delimited header row immediately
- * followed by a valid table delimiter row — the GFM requirement for a table.
+ * followed by a valid table delimiter row with the same number of cells — the
+ * GFM requirement for a table. Mismatched rows (e.g. header with 3 cells over
+ * a delimiter row with 2) are not tables.
  */
 function hasValidTable(plainText: string): boolean {
 	const lines = plainText.split('\n')
 	for (let i = 0; i < lines.length - 1; i++) {
 		if (lines[i].includes('|') && TABLE_DELIMITER_REGEX.test(lines[i + 1])) {
-			return true
+			if (countCells(lines[i]) === countCells(lines[i + 1])) {
+				return true
+			}
 		}
 	}
 	return false
