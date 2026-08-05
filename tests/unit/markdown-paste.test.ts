@@ -47,6 +47,25 @@ describe('decideMarkdownPaste', () => {
 		expect(decideMarkdownPaste('', '<pre>hi</pre>')).toBe('default')
 		expect(decideMarkdownPaste(undefined, undefined)).toBe('default')
 	})
+
+	it('classifies pipe-operator code with <pre> HTML as a code block, not a markdown table', () => {
+		const plain = 'const permissions = read | write | execute'
+		const html = "<meta charset='utf-8'><div><pre>" + plain + '</pre></div>'
+
+		expect(decideMarkdownPaste(plain, html)).toBe('codeBlock')
+	})
+
+	it('classifies a valid GFM table with a delimiter row as markdown', () => {
+		const plain = '| Name | Role |\n| --- | --- |\n| Alice | Writer |'
+		const html = "<meta charset='utf-8'><div><pre>" + plain + '</pre></div>'
+
+		expect(decideMarkdownPaste(plain, html)).toBe('markdown')
+	})
+
+	it('classifies ATX headings indented up to three spaces as markdown, not a code block', () => {
+		expect(decideMarkdownPaste('   # Indented heading', undefined)).toBe('markdown')
+		expect(decideMarkdownPaste('  ## Two-space heading', '<pre>  ## Two-space heading</pre>')).toBe('markdown')
+	})
 })
 
 describe('pasting markdown into a live editor', () => {
@@ -104,6 +123,28 @@ describe('pasting markdown into a live editor', () => {
 		expect(out).toContain('<pre><code>')
 		expect(out).toContain('const x = 1')
 		expect(out).not.toContain('<ul')
+		editor.destroy()
+	})
+
+	it('inserts pipe-operator code with <pre> HTML as a code block, not a markdown table', () => {
+		const editor = buildEditor()
+		const plain = 'const permissions = read | write | execute'
+		const html = "<meta charset='utf-8'><div><pre>" + plain + '</pre></div>'
+
+		const kind = decideMarkdownPaste(plain, html)
+		expect(kind).toBe('codeBlock')
+
+		if (kind === 'codeBlock') {
+			editor.commands.insertContent({
+				type: 'codeBlock',
+				content: [{ type: 'text', text: plain }],
+			})
+		}
+
+		const out = editor.getHTML()
+		expect(out).toContain('<pre><code>')
+		expect(out).toContain('const permissions = read | write | execute')
+		expect(out).not.toContain('<table')
 		editor.destroy()
 	})
 })

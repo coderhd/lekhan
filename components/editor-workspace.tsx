@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useEditor, EditorContent, Editor } from '@tiptap/react'
 import { StarterKit } from '@tiptap/starter-kit'
@@ -583,7 +583,20 @@ export default function EditorWorkspace({
 	// extension storage (e.g. markdown parser) is empty. Keep a ref to the
 	// live editor so paste always reads the current instance.
 	const editorRef = useRef<Editor | null>(null)
-	editorRef.current = editor
+
+	// Keep the ref in sync after commit instead of mutating it during render.
+	// handlePaste reads editorRef.current inside a user event (post-commit), so
+	// the live editor is always the committed one. Cleanup only clears the ref
+	// when it still references the same editor instance, so a newer assignment
+	// (e.g. editor recreated by useEditor dep changes) is never clobbered.
+	useLayoutEffect(() => {
+		editorRef.current = editor
+		return () => {
+			if (editorRef.current === editor) {
+				editorRef.current = null
+			}
+		}
+	}, [editor])
 
 	const handleLekhanBotResult = useCallback((
 		actionId: string,
