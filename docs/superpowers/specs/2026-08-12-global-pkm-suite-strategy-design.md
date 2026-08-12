@@ -72,6 +72,7 @@ Notion = the **team brain** (structured, collaborative, all-in-one; costs: slow,
 - **AI provider registry** (Section 6): free-key on-ramp presets + BYOK cloud + BYOL local; one credits ledger; `app/api/ai` becomes a thin provider-agnostic router.
 - Real billing: Stripe (global) + Razorpay (India); webhooks; plan tiers table; reuse existing enforcement plumbing. Retire the doc cap.
 - USD headline pricing + INR regional pricing (Section 7).
+- **Docs site live at launch** (`docs.lekhan.app`, Section 12) — getting started, core concepts, AI setup guides.
 
 ### H1 — PKM Depth ("The Second Brain")
 - Graph view + backlink pane (Obsidian-grade, real-time via the link index).
@@ -81,6 +82,7 @@ Notion = the **team brain** (structured, collaborative, all-in-one; costs: slow,
 - Templates; community marketplace later.
 - Desktop app (Tauri) + mobile PWA (offline-first apps are table stakes).
 - **Plugins API v1** (Section 8) + open-core release.
+- Full docs: tutorial library, plugin/API reference, localized docs following i18n releases (Section 12).
 
 ### H2 — Notion-Grade Structure ("The Workspace")
 - Databases as typed views: table/board/calendar/gallery over `properties`.
@@ -208,6 +210,20 @@ The line is where *running on our infra* begins. Everything on a user's device i
 - Nothing from H0 ships unless it is global-ready (i18n, billing, provider registry).
 
 ## 11. Future Specs Required
-- H0: schema migration + graph index service design; provider registry + free-key on-ramp design; billing/Stripe/Razorpay design; i18n framework design.
+- H0: schema migration + graph index service design; provider registry + free-key on-ramp design; billing/Stripe/Razorpay design; i18n framework design; docs site (Fumadocs) setup design.
 - H1: plugin API + sandboxing design; graph view UX; publish design; desktop/mobile app plan.
 - Each spec → its own implementation plan (writing-plans).
+
+---
+
+## 12. Documentation & Community (`docs.lekhan.app`)
+
+- **Platform:** Fumadocs (open-source Next.js docs framework — matches the existing stack; Tailwind, MDX) served on `docs.lekhan.app`. Mintlify is the managed alternative if self-hosting is undesirable. Recommendation: Fumadocs, because docs live **in the open-core repo as markdown** — versioned with releases, PR-based community contributions, zero platform lock-in. Docs subdomain keeps the marketing site (`lekhan.app`) separate from help content.
+- **Structure:**
+  - *Getting Started* — quickstart, core concepts (pages, workspaces, backlinks, graph, tags), markdown import/export.
+  - *Guides* — daily notes, quick capture, knowledge workflows, collaboration.
+  - *AI* — free-key on-ramp walkthrough, BYOK setup, **BYOL guides (Ollama/LM Studio)** — where the "your AI never leaves your machine" story gets told.
+  - *Troubleshooting + FAQ + Changelog*.
+  - *Developer* (H1+, with plugins v1) — plugin SDK reference, sandboxing guide.
+- **Timeline:** H0 — basic docs live **at global launch** (getting started + concepts + AI setup; a launch requirement, not a nicety). H1 — full tutorial library + plugin/API reference; localized docs follow i18n releases.
+- **Why it matters:** Obsidian's help docs are its #1 organic acquisition channel (rank for "backlinks", "graph view", "markdown notes"). Guides target high-intent PKM keywords and compound with the open-core community flywheel; documentation is a trust artifact for a privacy-first product.
