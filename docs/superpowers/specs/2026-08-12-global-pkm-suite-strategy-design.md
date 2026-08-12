@@ -68,6 +68,7 @@ Notion = the **team brain** (structured, collaborative, all-in-one; costs: slow,
 - Workspaces + nested pages + tags + backlinks/mentions (`[[page]]`).
 - Global search (index-native, keyboard-first).
 - Markdown import/export (full round-trip — escape hatch is a growth channel).
+- **Obsidian importer** (Section 13) — markdown + conventions: wikilinks, frontmatter, vault zip/folder, attachments.
 - i18n framework (UI in en/hi/zh/es/de...; Indic language support becomes a feature, not the identity).
 - **AI provider registry** (Section 6): free-key on-ramp presets + BYOK cloud + BYOL local; one credits ledger; `app/api/ai` becomes a thin provider-agnostic router.
 - Real billing: Stripe (global) + Razorpay (India); webhooks; plan tiers table; reuse existing enforcement plumbing. Retire the doc cap.
@@ -82,7 +83,8 @@ Notion = the **team brain** (structured, collaborative, all-in-one; costs: slow,
 - Templates; community marketplace later.
 - Desktop app (Tauri) + mobile PWA (offline-first apps are table stakes).
 - **Plugins API v1** (Section 8) + open-core release.
-- Full docs: tutorial library, plugin/API reference, localized docs following i18n releases (Section 12).
+- **Notion importer** (Section 13) — native export zip (HTML + CSV), block mapping, database CSVs → pages with properties.
+- Full docs: tutorial library, plugin/API reference, **migration guides**, localized docs following i18n releases (Section 12).
 
 ### H2 — Notion-Grade Structure ("The Workspace")
 - Databases as typed views: table/board/calendar/gallery over `properties`.
@@ -210,8 +212,8 @@ The line is where *running on our infra* begins. Everything on a user's device i
 - Nothing from H0 ships unless it is global-ready (i18n, billing, provider registry).
 
 ## 11. Future Specs Required
-- H0: schema migration + graph index service design; provider registry + free-key on-ramp design; billing/Stripe/Razorpay design; i18n framework design; docs site (Fumadocs) setup design.
-- H1: plugin API + sandboxing design; graph view UX; publish design; desktop/mobile app plan.
+- H0: schema migration + graph index service design; provider registry + free-key on-ramp design; billing/Stripe/Razorpay design; i18n framework design; docs site (Fumadocs) setup design; import pipeline + Obsidian importer design.
+- H1: plugin API + sandboxing design; graph view UX; publish design; desktop/mobile app plan; Notion importer design.
 - Each spec → its own implementation plan (writing-plans).
 
 ---
@@ -227,3 +229,26 @@ The line is where *running on our infra* begins. Everything on a user's device i
   - *Developer* (H1+, with plugins v1) — plugin SDK reference, sandboxing guide.
 - **Timeline:** H0 — basic docs live **at global launch** (getting started + concepts + AI setup; a launch requirement, not a nicety). H1 — full tutorial library + plugin/API reference; localized docs follow i18n releases.
 - **Why it matters:** Obsidian's help docs are its #1 organic acquisition channel (rank for "backlinks", "graph view", "markdown notes"). Guides target high-intent PKM keywords and compound with the open-core community flywheel; documentation is a trust artifact for a privacy-first product.
+
+---
+
+## 13. Migration & Lock-in Reversal
+
+**Strategic framing:** "Your data stays, the tool changes" — the anti-lock-in play. Obsidian's own pitch to Notion users works against Notion (markdown portability); we extend it to Obsidian by adding collaboration + AI on top of the same data. Migration guides in docs (Section 12) are an SEO engine targeting "import from Notion" / "move from Obsidian" searches.
+
+**One import pipeline, multiple importers:**
+`importer (obsidian / notion / markdown) → normalize to intermediate representation (pages + blocks + properties + links) → write into the graph`. Future importers (Evernote, Apple Notes) plug into the same pipeline; community importers possible via the plugin API later.
+
+**Obsidian importer (H0 — markdown + conventions):**
+- Zip upload or folder picker (File System Access API).
+- Preserve: folder hierarchy → nested pages; `[[wikilinks]]` → link index entries; frontmatter → `properties JSONB`; `#tags`; attachments (`![[...]]`); callouts, code blocks, embeds.
+- Deferred: Canvas files (→ board view in H2), graph-layout metadata.
+
+**Notion importer (H1):**
+- Native export zip (HTML per page + CSVs for databases).
+- Map Notion blocks → Tiptap nodes (headings, lists, to-dos, toggles, callouts, tables, images, code, math); database CSVs → pages with `properties` (data lands ready for typed views in H2).
+- Deferred with degradation notice: embeds, comments, guest permissions.
+
+**Import experience is a product feature, not a utility:**
+- Import report: "X pages · Y links resolved · Z blocks degraded" — honest fidelity expectations, no silent data loss.
+- Migration guides end with the pricing comparison — the capture funnel for Notion refugees and Obsidian users who want collab + AI without losing their vault.
