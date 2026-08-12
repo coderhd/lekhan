@@ -13,7 +13,7 @@
 - **Real-time collaboration**: Tiptap v3 + y-prosemirror, collaboration cursors, role-based permissions (owner/editor/viewer), invites.
 - **Offline support**: open, edit, close documents fully offline; conflict resolution on reconnect.
 - **Version history**, markdown paste handling, export (PDF/DOCX/HTML).
-- **AI foundations**: Lekhan Bot (`lekhan-bot-bar.tsx`), provider-agnostic BYOK with AES-256-GCM client-side encryption (`lib/crypto.ts`), credits ledger (`profiles.plan`, `used_credits`).
+- **AI foundations**: Lekhan Bot (`lekhan-bot-bar.tsx`), Sarvam-first BYOK with AES-256-GCM client-side encryption (`lib/crypto.ts`), credits ledger (`profiles.plan`, `used_credits`).
 - **Testing discipline**: Vitest unit + Playwright E2E suites.
 
 ### 1.2 Gaps vs. Notion and Obsidian
