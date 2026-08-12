@@ -69,7 +69,7 @@ Notion = the **team brain** (structured, collaborative, all-in-one; costs: slow,
 - Global search (index-native, keyboard-first).
 - Markdown import/export (full round-trip — escape hatch is a growth channel).
 - i18n framework (UI in en/hi/zh/es/de...; Indic language support becomes a feature, not the identity).
-- **AI provider registry** (Section 6): managed OpenRouter free models + BYOK cloud + BYOL local; one credits ledger; `app/api/ai` becomes a thin provider-agnostic router.
+- **AI provider registry** (Section 6): free-key on-ramp presets + BYOK cloud + BYOL local; one credits ledger; `app/api/ai` becomes a thin provider-agnostic router.
 - Real billing: Stripe (global) + Razorpay (India); webhooks; plan tiers table; reuse existing enforcement plumbing. Retire the doc cap.
 - USD headline pricing + INR regional pricing (Section 7).
 
@@ -105,14 +105,14 @@ Notion = the **team brain** (structured, collaborative, all-in-one; costs: slow,
 |---|---|---|---|
 | Storage | Local-first + optional cloud sync | Cloud | Local files |
 | Collaboration | Real-time, built-in | Real-time | None native |
-| AI | Provider registry: free managed / BYOK / BYOL | Notion AI (paid add-on) | Plugins |
+| AI | Provider registry: free-key presets / BYOK / BYOL | Notion AI (paid add-on) | Plugins |
 | Privacy | Local-first + BYOL total-privacy path | Cloud | Local, but paid sync |
 | Extensibility | Sandboxed plugin API (open-core) | Limited API | Unsandboxed plugins |
 | Price | Below Notion, above Obsidian, AI credits included | $10/mo + $8 AI | Sync $4-8/mo + Publish $8/mo |
 
-**Wedge vs Obsidian:** working AI in ~10 seconds with zero setup for non-technical users (managed free models), with a one-click path up to BYOK/BYOL for privacy.
+**Wedge vs Obsidian:** working AI in ~2 minutes for non-technical users (guided free-key on-ramp with deep links), with a one-click path up to BYOK/BYOL for privacy.
 **Wedge vs Notion:** local-first speed, offline, ownership, and lower price with AI included.
-**Cost safety:** Lekhan never incurs AI costs for free users (free models are $0-subsidized on OpenRouter; BYOK/BYOL run on user keys/machines).
+**Cost safety:** Lekhan never incurs AI costs for free users (per-user free-tier keys; BYOK/BYOL run on user keys/machines).
 
 ---
 
@@ -121,23 +121,24 @@ Notion = the **team brain** (structured, collaborative, all-in-one; costs: slow,
 ### 6.1 Provider registry (config-driven, Pi/opencode/Hermes-style)
 - Users add providers: cloud BYOK (Anthropic, OpenAI, Gemini, Sarvam, others), local endpoints (**BYOL**: Ollama, LM Studio, llama.cpp, anything OpenAI-compatible), custom URLs.
 - Model routing per request; provider dropdown in bot panel + settings; AES-256 encrypted-key storage (`lib/crypto.ts`) generalizes to N providers.
-- `app/api/ai` becomes a thin provider-agnostic router. Free-tier managed calls may proxy through our server; BYOK/BYOL calls go direct — user keys never touch our servers.
+- `app/api/ai` becomes a thin provider-agnostic router. All inference goes direct from the client to the chosen provider (or to the user's local endpoint) — Lekhan never proxies AI traffic, never hosts an inference key.
 
-### 6.2 Free-tier AI access (three paths, all cost-safe)
+### 6.2 Free-tier AI access (free-key on-ramp, all cost-safe)
 | Access path | Who | Cost to Lekhan |
 |---|---|---|
-| **Zero-config AI** (managed): OpenRouter free-model catalogue (`https://openrouter.ai/openrouter/free`) via our key, rate-limited (~20 req/min per key, 50 req/day per IP) | Non-technical users | $0 (models are free on OpenRouter) |
+| **Free-key on-ramp** (guided BYOK): curated free-tier provider presets — OpenRouter free models, Gemini API free tier, Groq, Mistral (instant issuance, no card). First AI use opens a "Connect AI" wizard: deep links to issue a key, paste into the existing BYOK flow, encrypted locally (`crypto.ts`). Each user runs on their own provider quota — **rate limits are theirs, not ours** | Non-technical users | $0 (user's own key/quota) |
 | **BYOK** (cloud): Anthropic/OpenAI/Gemini/Sarvam + custom | Power users with keys | $0 (direct client-side calls) |
 | **BYOL** (local): Ollama/LM Studio/llama.cpp | Privacy-first users | $0 (runs on their machine) |
 
-- Router: free tier → managed OpenRouter free models (our key, server-side; rotate keys if rate-limited) · paid tiers → bundled credits for premium models · always fall back to BYOK/BYOL if configured.
+- Router: free tier → on-ramp presets (per-user keys) · paid tiers → bundled credits for premium models · always fall back to BYOK/BYOL if configured. **No Lekhan-hosted inference anywhere.**
+- **Managed Lekhan-key path: dropped from H0** — zero cost, zero rate-limit ops, zero key-ban management. Revisit only if onboarding analytics show the key-step is a hard bounce point; even then it would be a tightly-limited "instant try" (e.g., a capped managed free-model path).
 - Local LLM detection (ping Ollama/LM Studio from the browser) is new work in H0.
 - UI copy must label free models as "free models may change/be slower" to avoid entitlement claims.
-- Explore free endpoint providers with higher limits, or rotate between them (decision recorded; OpenRouter is the initial integration).
+- Preset list curation is ongoing work (provider availability changes); initial integration: OpenRouter free models.
 
 ### 6.3 Credits ledger
 - Provider-agnostic credits: one ledger across Sarvam/Anthropic/OpenAI/Gemini + free local.
-- **No bundled AI on Free tier by default** — the three free paths above exist instead. Bundled credits are a convenience of paid plans, never a gate.
+- **No bundled AI on Free tier by default** — the on-ramp paths above exist instead. Bundled credits are a convenience of paid plans, never a gate.
 - Unit economics guaranteed: subscription revenue is the only AI cost-bearing line.
 
 ---
@@ -153,7 +154,7 @@ Notion = the **team brain** (structured, collaborative, all-in-one; costs: slow,
 
 | Tier | Price (USD / INR) | Unlocks |
 |---|---|---|
-| **Free** | $0 / ₹0 | Unlimited local pages (doc cap retired), PKM core (backlinks, graph, tags, search), markdown, zero-config AI via managed free models + BYOK + BYOL, 2 editors/doc, 7-day history, no bundled credits |
+| **Free** | $0 / ₹0 | Unlimited local pages (doc cap retired), PKM core (backlinks, graph, tags, search), markdown, AI via guided free-key on-ramp (free-tier provider presets) + BYOK + BYOL, 2 editors/doc, 7-day history, no bundled credits |
 | **Plus** | $6/mo / ₹499/mo | Cloud sync (unlimited), 10 collaborators, 90-day history, 5,000 credits/mo, templates |
 | **Pro** | $12/mo / ₹999/mo | 25 collaborators, 1-year history, 30,000 credits/mo, priority sync/processing, public sites |
 | **Team** | $10/seat/mo / ₹799/seat/mo | Admin, pooled credits, shared templates, guest access, 2-150 seats |
@@ -176,7 +177,7 @@ Notion = the **team brain** (structured, collaborative, all-in-one; costs: slow,
 | Local-first sync engine (Yjs/WAL) | Real-time collab server infra |
 | PKM core: graph, backlinks, tags, search | AI router + credits ledger |
 | Markdown import/export, provider registry | Team admin, SSO, billing |
-| Plugin SDK + API | Publish hosting, managed OpenRouter path |
+| Plugin SDK + API | Publish hosting |
 
 The line is where *running on our infra* begins. Everything on a user's device is open. The moat is the managed layer (Obsidian's sync model, plus collab + AI convenience).
 
@@ -194,10 +195,10 @@ The line is where *running on our infra* begins. Everything on a user's device i
 | Risk | Mitigation |
 |---|---|
 | Approach B delays global launch | Progressive migration keeps current app shippable; launch H0 scope disciplined |
-| OpenRouter free models rate-limited/congested | Label free models clearly; rotate keys/endpoints; premium via paid credits; explore higher-limit free endpoints |
+| OpenRouter free models rate-limited/congested | Per-user keys make limits the user's concern, not ours; label free models clearly; premium via paid credits; rotate preset list as availability changes |
 | Scope creep (Notion-parity expectations) | YAGNI guardrails: databases, block refs, plugins, SSO all explicitly deferred to H2 |
 | Forking risk from open-core | Moat is managed sync + collab + AI convenience, not the editor |
-| Free tier abuse | No bundled AI credits on Free; managed free path is rate-limited |
+| Free tier abuse | No bundled AI credits on Free; no Lekhan-hosted inference; per-user keys and provider rate limits bound abuse |
 
 ---
 
@@ -207,6 +208,6 @@ The line is where *running on our infra* begins. Everything on a user's device i
 - Nothing from H0 ships unless it is global-ready (i18n, billing, provider registry).
 
 ## 11. Future Specs Required
-- H0: schema migration + graph index service design; provider registry + OpenRouter integration design; billing/Stripe/Razorpay design; i18n framework design.
+- H0: schema migration + graph index service design; provider registry + free-key on-ramp design; billing/Stripe/Razorpay design; i18n framework design.
 - H1: plugin API + sandboxing design; graph view UX; publish design; desktop/mobile app plan.
 - Each spec → its own implementation plan (writing-plans).
