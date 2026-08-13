@@ -101,21 +101,42 @@ export async function POST(request: NextRequest) {
 			return NextResponse.json({ error: 'Document snapshot exceeds maximum allowed size' }, { status: 413 })
 		}
 
-		// 1. Verify user role: only owners and editors can create versions
-		const { data: doc } = await supabaseClient
-			.from('documents')
+		// 1. Verify user role: only owners and editors can create versions.
+		// Pages are the primary entity; legacy documents fall back for
+		// unmapped ids (rollback path).
+		const { data: page } = await supabaseClient
+			.from('pages')
 			.select('owner_id')
 			.eq('id', documentId)
-			.single()
+			.maybeSingle()
 
-		const isOwner = doc && doc.owner_id === user.id
+		let isOwner = !!(page && page.owner_id === user.id)
 		let isEditor = false
 
-		if (!isOwner) {
+		if (!page) {
+			const { data: doc } = await supabaseClient
+				.from('documents')
+				.select('owner_id')
+				.eq('id', documentId)
+				.maybeSingle()
+
+			isOwner = !!(doc && doc.owner_id === user.id)
+
+			if (!isOwner && doc) {
+				const { data: member } = await supabaseClient
+					.from('document_members')
+					.select('role')
+					.eq('document_id', documentId)
+					.eq('user_id', user.id)
+					.single()
+
+				isEditor = !!(member && member.role === 'editor')
+			}
+		} else if (!isOwner) {
 			const { data: member } = await supabaseClient
-				.from('document_members')
+				.from('page_members')
 				.select('role')
-				.eq('document_id', documentId)
+				.eq('page_id', documentId)
 				.eq('user_id', user.id)
 				.single()
 
@@ -126,14 +147,22 @@ export async function POST(request: NextRequest) {
 			return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 })
 		}
 
-		// 2. Create the document_versions record
+		// 2. Create the document_versions record (page_id for pages)
 		const { data: version, error: dbError } = await supabaseClient
 			.from('document_versions')
-			.insert({
-				document_id: documentId,
-				version_name: versionName,
-				created_by: user.id,
-			})
+			.insert(
+				page
+					? {
+						page_id: documentId,
+						version_name: versionName,
+						created_by: user.id,
+					}
+					: {
+						document_id: documentId,
+						version_name: versionName,
+						created_by: user.id,
+					}
+			)
 			.select()
 			.single()
 

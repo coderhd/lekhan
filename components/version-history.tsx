@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { DocumentVersion } from '@/types'
-import { fetchVersions } from '@/services/db'
+import { fetchVersionsForEntity } from '@/services/graph'
 
 import GlobalLoader from '@/components/global-loader'
 
@@ -41,7 +41,7 @@ export default function VersionHistory({
 
 	const loadVersions = async () => {
 		try {
-			const data = await fetchVersions(documentId)
+			const data = await fetchVersionsForEntity(documentId)
 			setVersions(data)
 		} catch (err) {
 			console.error('Error fetching versions:', err)
@@ -88,7 +88,7 @@ export default function VersionHistory({
 				.from('document_versions')
 				.insert({
 					id: versionId,
-					document_id: documentId,
+					page_id: documentId,
 					version_name: newVersionName.trim(),
 					storage_path: `${documentId}/versions/${versionId}.bin`,
 					created_by: user.id,
@@ -305,7 +305,7 @@ export default function VersionHistory({
 				open={!!versionToRestore}
 				onOpenChange={(open) => { if (!open) setVersionToRestore(null) }}
 				title="Restore Version"
-				description={`Are you sure you want to restore "${versionToRestore?.version_name}"? Unsaved changes in the current document will be replaced.`}
+				description={`Are you sure you want to restore "${versionToRestore?.version_name}"? Unsaved changes in the current page will be replaced.`}
 				confirmText="Restore"
 				cancelText="Cancel"
 				onConfirm={executeRestore}
