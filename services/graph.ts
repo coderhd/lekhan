@@ -115,7 +115,7 @@ export async function fetchPageBacklinks (pageId: string): Promise<Backlink[]> {
 	if (error) {
 		throw error
 	}
-	return ((data as Array<{ from_page_id: string; pages: { title: string } | null; from_title?: string }>) || [])
+	return ((data as unknown as Array<{ from_page_id: string; pages: { title: string } | null; from_title?: string }>) || [])
 		.filter(row => row.pages || row.from_title)
 		.map(row => ({
 			from_page_id: row.from_page_id,
