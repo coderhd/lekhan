@@ -42,7 +42,8 @@ import { PromptDialog } from './ui/prompt-dialog'
 import * as Y from 'yjs'
 import { Mention } from '@tiptap/extension-mention'
 import MentionList, { MentionItem } from './mention-list'
-import { fetchDocumentDetails, fetchMemberRole, updateDocumentTitle, fetchMentionableCollaborators, getUserAICredits } from '@/services/db'
+import { fetchPageDetails, fetchPageMemberRole, updatePageTitle, fetchMentionablePageCollaborators } from '@/services/graph'
+import { getUserAICredits } from '@/services/db'
 
 import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
@@ -65,7 +66,7 @@ import { Document } from '@tiptap/extension-document'
 import { Placeholder } from '@tiptap/extension-placeholder'
 
 interface EditorWorkspaceProps {
-	documentId: string
+	pageId: string
 	initialTitle: string
 	token: string
 	currentUser: {
@@ -155,7 +156,7 @@ function getInitials(nameOrEmail: string) {
 }
 
 export default function EditorWorkspace({
-	documentId,
+	pageId,
 	initialTitle,
 	token,
 	currentUser,
@@ -238,16 +239,16 @@ export default function EditorWorkspace({
 	useEffect(() => {
 		const loadMentionables = async () => {
 			try {
-				const collabs = await fetchMentionableCollaborators(documentId)
+				const collabs = await fetchMentionablePageCollaborators(pageId)
 				setMentionables(collabs.map(c => ({ id: c.id, name: c.full_name || c.email, email: c.email, avatarUrl: c.avatar_url })))
 			} catch (err) {
 				console.error('Error fetching mentionables:', err)
 			}
 		}
-		if (documentId) {
+		if (pageId) {
 			loadMentionables()
 		}
-	}, [documentId])
+	}, [pageId])
 
 	const handleOpenLekhanBot = useCallback(() => {
 		setDiffPreview(null)
@@ -284,14 +285,14 @@ export default function EditorWorkspace({
 	useEffect(() => {
 		const checkRole = async () => {
 			try {
-				const doc = await fetchDocumentDetails(documentId)
-				if (doc && doc.owner_id === currentUser.id) {
+				const page = await fetchPageDetails(pageId)
+				if (page && page.owner_id === currentUser.id) {
 					setIsViewer(false)
 					return
 				}
 
-				const role = await fetchMemberRole(documentId, currentUser.id)
-				if (role === 'editor') {
+				const role = await fetchPageMemberRole(pageId, currentUser.id)
+				if (role === 'editor' || role === 'owner') {
 					setIsViewer(false)
 				} else {
 					setIsViewer(true)
@@ -302,7 +303,7 @@ export default function EditorWorkspace({
 			}
 		}
 		checkRole()
-	}, [documentId, currentUser.id])
+	}, [pageId, currentUser.id])
 
 	const previewEditor = useEditor({
 		extensions: [
@@ -337,7 +338,7 @@ export default function EditorWorkspace({
 		hasUnsyncedChanges,
 		provider,
 		isLocalSynced,
-	} = useEditorCollab(documentId, token, collabUser)
+	} = useEditorCollab(pageId, token, collabUser)
 
 	useEffect(() => {
 		const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -684,7 +685,7 @@ export default function EditorWorkspace({
 
 	const handleSaveTitle = async (newTitle: string) => {
 		setTitle(newTitle)
-		await updateDocumentTitle(documentId, newTitle)
+		await updatePageTitle(pageId, newTitle)
 	}
 
 	if (!ydoc || !editor || isViewer === null || !isLocalSynced) {
@@ -1038,7 +1039,7 @@ export default function EditorWorkspace({
 				<VersionHistory
 					isOpen={isHistoryOpen}
 					onClose={() => setIsHistoryOpen(false)}
-					documentId={documentId}
+					documentId={pageId}
 					ydoc={ydoc}
 					token={token}
 					isViewer={isViewer}
@@ -1066,7 +1067,7 @@ export default function EditorWorkspace({
 			<ShareModal
 				isOpen={isShareOpen}
 				onClose={() => setIsShareOpen(false)}
-				documentId={documentId}
+				documentId={pageId}
 				documentTitle={title}
 				userId={currentUser.id}
 			/>

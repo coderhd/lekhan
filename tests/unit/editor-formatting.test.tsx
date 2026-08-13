@@ -30,12 +30,11 @@ vi.mock('@/lib/supabase', () => ({
 	}
 }))
 
-// Mock fetch Document calls
-vi.mock('@/services/db', () => ({
-	fetchDocumentDetails: vi.fn().mockResolvedValue({ owner_id: 'test-user', is_public: false }),
-	fetchMemberRole: vi.fn().mockResolvedValue('owner'),
-	updateDocumentTitle: vi.fn().mockResolvedValue(true),
-	fetchMentionableCollaborators: vi.fn().mockResolvedValue([]),
+vi.mock('@/services/graph', () => ({
+	fetchPageDetails: vi.fn().mockResolvedValue({ owner_id: 'test-user', is_public: false }),
+	fetchPageMemberRole: vi.fn().mockResolvedValue('owner'),
+	updatePageTitle: vi.fn().mockResolvedValue(true),
+	fetchMentionablePageCollaborators: vi.fn().mockResolvedValue([]),
 	getUserAICredits: vi.fn().mockResolvedValue({ plan: 'free', totalAllocated: 50, usedCredits: 0, remainingCredits: 50 }),
 }))
 
@@ -52,8 +51,8 @@ describe('EditorWorkspace Formatting', () => {
 		
 		render(
 			<EditorWorkspace 
-				documentId="doc-1" 
-				initialTitle="Test Doc" 
+pageId="page-1" 
+			initialTitle="Test Doc"
 				token="token-1" 
 				currentUser={mockUser} 
 			/>
