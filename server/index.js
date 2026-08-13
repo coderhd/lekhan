@@ -6,6 +6,7 @@ const { createClient } = require('@supabase/supabase-js')
 const { getSupabaseClient, verifyUserRole, getDocumentOwnerPlanLimit } = require('./auth')
 
 const { appendUpdate, getPendingUpdates, clearUpdates } = require('./wal')
+const { indexPage } = require('./graph-index')
 
 const port = process.env.PORT || 8080
 
@@ -52,19 +53,36 @@ async function saveDocumentState (documentId, ydoc) {
 			throw uploadError
 		}
 
-		// 3. Extract text content and update searchable_text in DB
-		// Tiptap collaborative document typically stores text under a 'default' text type
+		// 3. Extract text content; update pages first, fall back to legacy documents
 		const textContent = ydoc.getText('default').toString()
-		const { error: dbError } = await supabaseAdmin
-			.from('documents')
-			.update({
-				searchable_text: textContent,
-				updated_at: new Date().toISOString(),
-			})
+		const { data: pageRow } = await supabaseAdmin
+			.from('pages')
+			.select('id')
 			.eq('id', documentId)
+			.maybeSingle()
 
-		if (dbError) {
-			throw dbError
+		if (pageRow) {
+			await supabaseAdmin
+				.from('pages')
+				.update({
+					searchable_text: textContent,
+					updated_at: new Date().toISOString(),
+				})
+				.eq('id', documentId)
+
+			await indexPage(supabaseAdmin, documentId, textContent)
+		} else {
+			const { error: dbError } = await supabaseAdmin
+				.from('documents')
+				.update({
+					searchable_text: textContent,
+					updated_at: new Date().toISOString(),
+				})
+				.eq('id', documentId)
+
+			if (dbError) {
+				throw dbError
+			}
 		}
 
 		// 4. Clear pending local WAL logs now that Supabase is synced
