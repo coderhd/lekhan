@@ -267,7 +267,7 @@ export default function SettingsClient({
 							<div className="space-y-8 max-w-3xl">
 								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
 									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Manage Collaborators</h2>
-									<p className="text-sm text-on-surface-variant mb-6">View and manage access to documents you own.</p>
+									<p className="text-sm text-on-surface-variant mb-6">View and manage access to pages you own.</p>
 
 									{pagesState.length === 0 ? (
 										<div className="py-8 text-center bg-black/5 dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5 border-dashed">
@@ -312,24 +312,26 @@ export default function SettingsClient({
 															</div>
 														</div>
 													</div>
-													<div className="flex items-center gap-2 shrink-0">
-														<CustomSelect
-															value={member.role as 'editor' | 'viewer'}
-															onValueChange={(val) => handleRoleChange(doc.id, member.user_id, val as 'editor' | 'viewer')}
-															options={[
-																{ label: 'Editor', value: 'editor' },
-																{ label: 'Viewer', value: 'viewer' },
-															]}
-															triggerClassName="h-7 w-[100px] bg-transparent border border-black/10 dark:border-white/10 rounded-lg text-[10px] font-medium text-on-surface px-2 focus:ring-0"
-															contentClassName="w-[100px]"
-														/>
-														<button
-															onClick={() => handleRemoveMember(doc.id, member.user_id)}
-															className="text-error hover:text-error/80 text-xs font-bold px-3 py-1.5 border border-error/30 rounded-md hover:bg-error/10 transition-colors shrink-0"
-														>
-															Remove
-														</button>
-													</div>
+													{member.role !== 'owner' && (
+														<div className="flex items-center gap-2 shrink-0">
+															<CustomSelect
+																value={member.role as 'editor' | 'viewer'}
+																onValueChange={(val) => handleRoleChange(doc.id, member.user_id, val as 'editor' | 'viewer')}
+																options={[
+																	{ label: 'Editor', value: 'editor' },
+																	{ label: 'Viewer', value: 'viewer' },
+																]}
+																triggerClassName="h-7 w-[100px] bg-transparent border border-black/10 dark:border-white/10 rounded-lg text-[10px] font-medium text-on-surface px-2 focus:ring-0"
+																contentClassName="w-[100px]"
+															/>
+															<button
+																onClick={() => handleRemoveMember(doc.id, member.user_id)}
+																className="text-error hover:text-error/80 text-xs font-bold px-3 py-1.5 border border-error/30 rounded-md hover:bg-error/10 transition-colors shrink-0"
+															>
+																Remove
+															</button>
+														</div>
+													)}
 												</li>
 																))}
 															</ul>
