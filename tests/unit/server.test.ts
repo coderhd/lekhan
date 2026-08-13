@@ -224,7 +224,7 @@ describe('Server Pages Cutover & Graph Index Integration', () => {
 						select: vi.fn().mockReturnValue({
 							eq: vi.fn().mockReturnValue({
 								maybeSingle: vi.fn().mockResolvedValue({
-									data: { type: 'page', owner_id: 'user-123', is_public: false },
+									data: { type: 'page', owner_id: 'user-123', is_public: false, source_document_id: 'doc-legacy' },
 									error: null,
 								}),
 							}),
@@ -237,6 +237,17 @@ describe('Server Pages Cutover & Graph Index Integration', () => {
 							eq: vi.fn().mockReturnValue({
 								eq: vi.fn().mockReturnValue({
 									single: vi.fn().mockResolvedValue({ data: null, error: null }),
+								}),
+							}),
+						}),
+					}
+				}
+				if (table === 'document_members') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({
+								eq: vi.fn().mockReturnValue({
+									single: vi.fn().mockResolvedValue({ data: { role: 'editor' }, error: null }),
 								}),
 							}),
 						}),
