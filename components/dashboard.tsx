@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { DocumentItem, MemberDocumentItem } from '@/types'
+import { MemberPageItem, Page } from '@/types'
 import { supabase } from '@/lib/supabase'
-import { fetchOwnedDocuments, fetchSharedDocuments, createDocument, deleteDocument, updateDocumentTitle, fetchPendingInvitations } from '@/services/db'
+import { ensureWorkspace, fetchWorkspacePages, fetchSharedPages, createPage, deletePage, updatePageTitle, fetchPendingPageInvitations } from '@/services/graph'
 import Invitations from './invitations'
 import ProfileMenu from './profile-menu'
 import ThemeToggle from './theme-toggle'
@@ -27,8 +27,8 @@ import { GlobalHeaderSlot } from './layout/global-header-context'
 
 export default function Dashboard({ user }: DashboardProps) {
 	const router = useRouter()
-	const [myDocs, setMyDocs] = useState<DocumentItem[]>([])
-	const [sharedDocs, setSharedDocs] = useState<MemberDocumentItem[]>([])
+	const [myPages, setMyPages] = useState<Page[]>([])
+	const [sharedPages, setSharedPages] = useState<MemberPageItem[]>([])
 	const [pendingInvitesCount, setPendingInvitesCount] = useState(0)
 	const [loading, setLoading] = useState(true)
 	const [fetchError, setFetchError] = useState(false)
@@ -40,11 +40,11 @@ export default function Dashboard({ user }: DashboardProps) {
 	const [filterDate, setFilterDate] = useState('all')
 	const [sortBy, setSortBy] = useState('newest')
 
-	const myDocsScrollRef = useRef<HTMLDivElement>(null)
-	const sharedDocsScrollRef = useRef<HTMLDivElement>(null)
+	const myPagesScrollRef = useRef<HTMLDivElement>(null)
+	const sharedPagesScrollRef = useRef<HTMLDivElement>(null)
 	const fetchRequestIdRef = useRef(0)
-	const [myDocsScrollState, setMyDocsScrollState] = useState({ left: false, right: false })
-	const [sharedDocsScrollState, setSharedDocsScrollState] = useState({ left: false, right: false })
+	const [myPagesScrollState, setMyPagesScrollState] = useState({ left: false, right: false })
+	const [sharedPagesScrollState, setSharedPagesScrollState] = useState({ left: false, right: false })
 
 	const scrollContainer = (ref: React.RefObject<HTMLDivElement>, direction: 'left' | 'right') => {
 		if (ref.current) {
@@ -99,23 +99,24 @@ export default function Dashboard({ user }: DashboardProps) {
 
 	// Removed infinite scroll listener in favor of Load More buttons
 
-	const fetchDocuments = useCallback(async () => {
+	const fetchPages = useCallback(async () => {
 		const requestId = ++fetchRequestIdRef.current
 		setLoading(true)
 		setFetchError(false)
 		try {
+			const workspace = await ensureWorkspace(user.id)
 			const [owned, shared, invites] = await Promise.all([
-				fetchOwnedDocuments(user.id),
-				fetchSharedDocuments(user.id),
-				fetchPendingInvitations(user.email)
+				fetchWorkspacePages(workspace.id),
+				fetchSharedPages(user.id),
+				fetchPendingPageInvitations(user.email)
 			])
 			if (requestId !== fetchRequestIdRef.current) return
-			setMyDocs(owned)
-			setSharedDocs(shared)
+			setMyPages(owned)
+			setSharedPages(shared)
 			setPendingInvitesCount(invites.length)
 		} catch (err) {
 			if (requestId !== fetchRequestIdRef.current) return
-			console.error('Error fetching documents:', err)
+			console.error('Error fetching pages:', err)
 			setFetchError(true)
 		} finally {
 			if (requestId === fetchRequestIdRef.current) {
@@ -125,29 +126,30 @@ export default function Dashboard({ user }: DashboardProps) {
 	}, [user.id, user.email])
 
 	useEffect(() => {
-		fetchDocuments()
-	}, [fetchDocuments])
+		fetchPages()
+	}, [fetchPages])
 
-	// Refetch documents when a fresh session is established. The inactivity
+	// Refetch pages when a fresh session is established. The inactivity
 	// lock re-authenticates via signInWithPassword (same user.id), so the
 	// [user.id] effect never re-runs; without this, the dashboard stays blank
 	// until a full page reload.
 	useEffect(() => {
 		const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
 			if (event === 'SIGNED_IN') {
-				fetchDocuments()
+				fetchPages()
 			}
 		})
 		return () => subscription.unsubscribe()
-	}, [fetchDocuments])
+	}, [fetchPages])
 
-	const handleCreateDocument = async () => {
+	const handleCreatePage = async () => {
 		try {
-			const doc = await createDocument(user.id)
-			router.push(`/doc/${doc.id}`)
+			const workspace = await ensureWorkspace(user.id)
+			const page = await createPage(workspace.id, user.id)
+			router.push(`/page/${page.id}`)
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err)
-			toast.error(`Failed to create document: ${message}`)
+			toast.error(`Failed to create page: ${message}`)
 		}
 	}
 
@@ -162,12 +164,12 @@ export default function Dashboard({ user }: DashboardProps) {
 	const executeDelete = async () => {
 		if (!documentToDelete) return
 		try {
-			await deleteDocument(documentToDelete)
-			setMyDocs(prev => prev.filter(doc => doc.id !== documentToDelete))
-			toast.success('Document deleted successfully')
+			await deletePage(documentToDelete)
+			setMyPages(prev => prev.filter(page => page.id !== documentToDelete))
+			toast.success('Page deleted successfully')
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err)
-			toast.error(`Failed to delete document: ${message}`)
+			toast.error(`Failed to delete page: ${message}`)
 		} finally {
 			setDocumentToDelete(null)
 		}
@@ -175,12 +177,12 @@ export default function Dashboard({ user }: DashboardProps) {
 
 	const handleRenameSubmit = async (id: string, newTitle: string) => {
 		try {
-			await updateDocumentTitle(id, newTitle)
-			setMyDocs(prev => prev.map(doc => doc.id === id ? { ...doc, title: newTitle } : doc))
+			await updatePageTitle(id, newTitle)
+			setMyPages(prev => prev.map(page => page.id === id ? { ...page, title: newTitle } : page))
 			setEditingTitleId(null)
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err)
-			toast.error(`Failed to rename document: ${message}`)
+			toast.error(`Failed to rename page: ${message}`)
 		}
 	}
 
@@ -201,43 +203,43 @@ export default function Dashboard({ user }: DashboardProps) {
 		const dateLimit = getDateLimit()
 		return docs
 			.filter(doc => {
-				const docDate = new Date(doc[dateField] || (doc.documents && doc.documents[dateField]))
+				const docDate = new Date(doc[dateField] || (doc.documents?.[dateField] ?? doc.pages?.[dateField]))
 				return docDate >= dateLimit
 			})
 			.filter(doc => {
-				const title = doc[titleField] || (doc.documents && doc.documents[titleField]) || ''
+				const title = doc[titleField] || (doc.documents?.[titleField] ?? doc.pages?.[titleField]) || ''
 				return title.toLowerCase().includes(searchQuery.toLowerCase())
 			})
 			.sort((a, b) => {
 				if (sortBy === 'newest') {
-					const dateA = new Date(a[dateField] || (a.documents && a.documents[dateField])).getTime()
-					const dateB = new Date(b[dateField] || (b.documents && b.documents[dateField])).getTime()
+					const dateA = new Date(a[dateField] || (a.documents?.[dateField] ?? a.pages?.[dateField])).getTime()
+					const dateB = new Date(b[dateField] || (b.documents?.[dateField] ?? b.pages?.[dateField])).getTime()
 					return dateB - dateA
 				}
 				if (sortBy === 'oldest') {
-					const dateA = new Date(a[dateField] || (a.documents && a.documents[dateField])).getTime()
-					const dateB = new Date(b[dateField] || (b.documents && b.documents[dateField])).getTime()
+					const dateA = new Date(a[dateField] || (a.documents?.[dateField] ?? a.pages?.[dateField])).getTime()
+					const dateB = new Date(b[dateField] || (b.documents?.[dateField] ?? b.pages?.[dateField])).getTime()
 					return dateA - dateB
 				}
 				if (sortBy === 'alphabetical') {
-					const titleA = (a[titleField] || (a.documents && a.documents[titleField]) || '').toLowerCase()
-					const titleB = (b[titleField] || (b.documents && b.documents[titleField]) || '').toLowerCase()
+					const titleA = (a[titleField] || (a.documents?.[titleField] ?? a.pages?.[titleField]) || '').toLowerCase()
+					const titleB = (b[titleField] || (b.documents?.[titleField] ?? b.pages?.[titleField]) || '').toLowerCase()
 					return titleA.localeCompare(titleB)
 				}
 				return 0
 			})
 	}, [getDateLimit, searchQuery, sortBy])
 
-	const filteredMyDocs = useMemo(() => applyFiltersAndSort(myDocs, 'updated_at', 'title') as DocumentItem[], [applyFiltersAndSort, myDocs])
-	const filteredSharedDocs = useMemo(() => applyFiltersAndSort(sharedDocs, 'updated_at', 'title') as MemberDocumentItem[], [applyFiltersAndSort, sharedDocs])
+	const filteredMyPages = useMemo(() => applyFiltersAndSort(myPages, 'updated_at', 'title') as Page[], [applyFiltersAndSort, myPages])
+	const filteredSharedPages = useMemo(() => applyFiltersAndSort(sharedPages, 'updated_at', 'title') as MemberPageItem[], [applyFiltersAndSort, sharedPages])
 
 	useEffect(() => {
-		if (myDocsScrollRef.current) handleScrollCheck(myDocsScrollRef.current, setMyDocsScrollState)
-	}, [filteredMyDocs])
+		if (myPagesScrollRef.current) handleScrollCheck(myPagesScrollRef.current, setMyPagesScrollState)
+	}, [filteredMyPages])
 
 	useEffect(() => {
-		if (sharedDocsScrollRef.current) handleScrollCheck(sharedDocsScrollRef.current, setSharedDocsScrollState)
-	}, [filteredSharedDocs])
+		if (sharedPagesScrollRef.current) handleScrollCheck(sharedPagesScrollRef.current, setSharedPagesScrollState)
+	}, [filteredSharedPages])
 
 	return (
 		<div className="min-h-screen bg-background text-on-surface">
@@ -262,7 +264,7 @@ export default function Dashboard({ user }: DashboardProps) {
 									<div className="px-4 py-3 border-b border-black/5 dark:border-white/5 bg-black/5 dark:bg-white/5">
 										<p className="font-semibold text-on-surface">Notifications</p>
 									</div>
-									<Invitations userEmail={user.email} userId={user.id} onRefresh={fetchDocuments} variant="dropdown" />
+									<Invitations userEmail={user.email} userId={user.id} onRefresh={fetchPages} variant="dropdown" />
 								</div>
 							</>
 						)}
@@ -297,24 +299,24 @@ export default function Dashboard({ user }: DashboardProps) {
 					) : fetchError ? (
 						<div className="flex flex-col items-center justify-center py-20 text-center min-h-[60vh]">
 							<span className="material-symbols-outlined text-[48px] text-error mb-4">error</span>
-							<h3 className="text-2xl font-bold text-on-surface mb-2">Couldn't load your documents</h3>
+							<h3 className="text-2xl font-bold text-on-surface mb-2">Couldn't load your pages</h3>
 							<p className="text-on-surface-variant max-w-md mb-8">
-								Something went wrong while fetching your documents. Please try again.
+								Something went wrong while fetching your pages. Please try again.
 							</p>
-							<button onClick={fetchDocuments} className="flex items-center gap-sm bg-primary text-on-primary font-bold px-xl py-3 rounded-lg hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 premium-transition">
+							<button onClick={fetchPages} className="flex items-center gap-sm bg-primary text-on-primary font-bold px-xl py-3 rounded-lg hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 premium-transition">
 								<span className="material-symbols-outlined">refresh</span>
 								Try Again
 							</button>
 						</div>
-					) : filteredMyDocs.length === 0 && filteredSharedDocs.length === 0 && pendingInvitesCount === 0 ? (
-						myDocs.length === 0 && sharedDocs.length === 0 ? (
+					) : filteredMyPages.length === 0 && filteredSharedPages.length === 0 && pendingInvitesCount === 0 ? (
+						myPages.length === 0 && sharedPages.length === 0 ? (
 							<div className="flex flex-col items-center justify-center py-20 text-center opacity-0 animate-fade-in-up stagger-2 min-h-[60vh]">
-								<img src="/undraw_team-assignment_lzot.svg" alt="No documents" className="w-80 h-80 md:w-96 md:h-96 mb-8 opacity-90 drop-shadow-sm" />
+								<img src="/undraw_team-assignment_lzot.svg" alt="No pages" className="w-80 h-80 md:w-96 md:h-96 mb-8 opacity-90 drop-shadow-sm" />
 								<h3 className="text-2xl font-bold text-on-surface mb-2">Welcome to Lekhan!</h3>
 								<p className="text-on-surface-variant max-w-md mb-8">
-									You haven't created any documents yet. Create your first document to start collaborating with your team!
+									You haven't created any pages yet. Create your first page to start collaborating with your team!
 								</p>
-								<button onClick={handleCreateDocument} className="flex items-center gap-sm bg-primary text-on-primary font-bold px-xl py-3 rounded-lg hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 premium-transition">
+								<button onClick={handleCreatePage} className="flex items-center gap-sm bg-primary text-on-primary font-bold px-xl py-3 rounded-lg hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 premium-transition">
 									<span className="material-symbols-outlined">add</span>
 									Create
 								</button>
@@ -324,7 +326,7 @@ export default function Dashboard({ user }: DashboardProps) {
 								<img src="/undraw_no-data_ig65.svg" alt="No results" className="w-64 h-64 mb-8 opacity-90 drop-shadow-sm -ml-8" />
 								<h3 className="text-2xl font-bold text-on-surface mb-2">No results found</h3>
 								<p className="text-on-surface-variant max-w-md mb-8">
-									No documents match your current search or filter criteria.
+									No pages match your current search or filter criteria.
 								</p>
 							</div>
 						)
@@ -344,18 +346,18 @@ export default function Dashboard({ user }: DashboardProps) {
 								</div>
 							</div>
 
-							{pendingInvitesCount > 0 && myDocs.length === 0 && sharedDocs.length === 0 && (
-								<Invitations userEmail={user.email} userId={user.id} onRefresh={fetchDocuments} variant="default" />
+							{pendingInvitesCount > 0 && myPages.length === 0 && sharedPages.length === 0 && (
+								<Invitations userEmail={user.email} userId={user.id} onRefresh={fetchPages} variant="default" />
 							)}
-							{/* My Documents */}
+							{/* My Pages */}
 							<section>
 								<div className="flex items-center justify-between mb-lg border-b border-white/10 pb-4 opacity-0 animate-fade-in-up stagger-1">
 									<div className="flex items-center gap-sm">
 										<span className="material-symbols-outlined text-primary-container">folder</span>
-										<h2 className="font-headline-md text-title-lg md:text-headline-md text-on-surface">Documents</h2>
+										<h2 className="font-headline-md text-title-lg md:text-headline-md text-on-surface">Pages</h2>
 									</div>
 									<div className="flex items-center gap-sm">
-										{(myDocs.length > 0 || sharedDocs.length > 0) && (
+										{(myPages.length > 0 || sharedPages.length > 0) && (
 											<DropdownMenu.Root modal={false}>
 												<DropdownMenu.Trigger asChild>
 													<button className="flex items-center gap-2 h-10 px-3 rounded-lg border border-black/10 dark:border-white/10 bg-surface-container-low hover:bg-black/5 dark:hover:bg-white/5 transition-colors text-sm font-medium">
@@ -403,42 +405,42 @@ export default function Dashboard({ user }: DashboardProps) {
 												</DropdownMenu.Portal>
 											</DropdownMenu.Root>
 										)}
-										<button onClick={handleCreateDocument} className="hidden md:flex items-center gap-sm bg-primary text-on-primary font-bold px-lg py-2 rounded-lg hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 premium-transition ml-2">
+										<button onClick={handleCreatePage} className="hidden md:flex items-center gap-sm bg-primary text-on-primary font-bold px-lg py-2 rounded-lg hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 premium-transition ml-2">
 											<span className="material-symbols-outlined">add</span>
 											New
 										</button>
 									</div>
 								</div>
 
-								{filteredMyDocs.length === 0 ? (
+								{filteredMyPages.length === 0 ? (
 									<div className="flex flex-col items-center justify-center py-12 text-center opacity-0 animate-fade-in-up stagger-2">
-										<img src="/undraw_no-data_ig65.svg" alt="No documents" className="w-48 h-48 mb-6 opacity-90 drop-shadow-sm -ml-8" />
-										<h3 className="text-lg font-bold text-on-surface mb-2">No owned documents yet</h3>
+										<img src="/undraw_no-data_ig65.svg" alt="No pages" className="w-48 h-48 mb-6 opacity-90 drop-shadow-sm -ml-8" />
+										<h3 className="text-lg font-bold text-on-surface mb-2">No pages yet</h3>
 										<p className="text-sm text-on-surface-variant max-w-md">
-											{myDocs.length === 0
-												? "You haven't created any documents. Use the New button to start collaborating!"
-												: "No documents match your search query."}
+											{myPages.length === 0
+												? "You haven't created any pages. Use the New button to start collaborating!"
+												: "No pages match your search query."}
 										</p>
 									</div>
 								) : (
 									<div className="relative group/carousel">
-										{myDocsScrollState.left && (
+										{myPagesScrollState.left && (
 											<button
-												onClick={() => scrollContainer(myDocsScrollRef, 'left')}
+												onClick={() => scrollContainer(myPagesScrollRef, 'left')}
 												className="absolute left-0 top-1/2 -translate-y-1/2 -ml-5 z-10 w-10 h-10 rounded-full bg-surface shadow-lg border border-black/10 dark:border-white/10 flex items-center justify-center opacity-0 group-hover/carousel:opacity-100 transition-opacity hover:scale-110 text-on-surface"
 											>
 												<span className="material-symbols-outlined">chevron_left</span>
 											</button>
 										)}
 										<div
-											ref={myDocsScrollRef}
-											onScroll={(e) => handleScrollCheck(e.currentTarget, setMyDocsScrollState)}
+											ref={myPagesScrollRef}
+											onScroll={(e) => handleScrollCheck(e.currentTarget, setMyPagesScrollState)}
 											className="flex overflow-x-auto hide-scrollbar gap-gutter pb-lg snap-x"
 										>
-											{filteredMyDocs.map((doc) => (
+											{filteredMyPages.map((page) => (
 												<div
-													key={doc.id}
-													onClick={() => router.push(`/doc/${doc.id}`)}
+													key={page.id}
+													onClick={() => router.push(`/page/${page.id}`)}
 													className="min-w-[260px] w-[260px] sm:min-w-[280px] sm:w-[280px] shrink-0 snap-start bg-white dark:bg-surface border border-black/10 dark:border-white/10 rounded-2xl overflow-hidden group/card opacity-0 animate-fade-in-up stagger-2 premium-transition hover:shadow-xl hover:-translate-y-1 cursor-pointer flex flex-col relative"
 												>
 													{/* Header Block */}
@@ -455,20 +457,20 @@ export default function Dashboard({ user }: DashboardProps) {
 																<button
 																	onClick={(e) => {
 																		e.stopPropagation()
-																		setActiveActionMenuId(activeActionMenuId === doc.id ? null : doc.id)
+																		setActiveActionMenuId(activeActionMenuId === page.id ? null : page.id)
 																	}}
 																	className="w-7 h-7 rounded-full bg-white/80 dark:bg-black/40 backdrop-blur border border-black/5 dark:border-white/10 text-on-surface flex items-center justify-center opacity-0 group-hover/card:opacity-100 hover:bg-white dark:hover:bg-black/60 shadow-sm transition-all"
 																>
 																	<span className="material-symbols-outlined text-[16px]">more_vert</span>
 																</button>
-																{activeActionMenuId === doc.id && (
+																{activeActionMenuId === page.id && (
 																	<div className="absolute right-0 mt-1 w-32 bg-surface border border-black/10 dark:border-white/10 rounded-lg shadow-xl transition-all z-50 flex flex-col overflow-hidden">
-																		<button onClick={(e) => handleStartRename(doc.id, e)} className="px-3 py-2 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">
+																		<button onClick={(e) => handleStartRename(page.id, e)} className="px-3 py-2 text-left text-xs hover:bg-black/5 dark:hover:bg-white/5 flex items-center gap-2">
 																			<span className="material-symbols-outlined text-[14px]">edit</span> Rename
 																		</button>
 																		<button onClick={(e) => {
 																			setActiveActionMenuId(null);
-																			handleDeleteDocument(doc.id, e);
+																			handleDeleteDocument(page.id, e);
 																		}} className="px-3 py-2 text-left text-xs hover:bg-error/10 text-error flex items-center gap-2">
 																			<span className="material-symbols-outlined text-[14px]">delete</span> Delete
 																		</button>
@@ -481,9 +483,9 @@ export default function Dashboard({ user }: DashboardProps) {
 													{/* Card Body */}
 													<div className="p-4 flex flex-col flex-1 bg-surface-container-lowest">
 														<InlineEdit
-															initialValue={doc.title}
-															isEditingProp={editingTitleId === doc.id}
-															onSave={(newTitle) => handleRenameSubmit(doc.id, newTitle)}
+															initialValue={page.title}
+															isEditingProp={editingTitleId === page.id}
+															onSave={(newTitle) => handleRenameSubmit(page.id, newTitle)}
 															onCancelEdit={() => setEditingTitleId(null)}
 															containerClassName="w-full flex-1 min-w-0 mb-2"
 															textClassName="font-title-md font-bold text-on-surface group-hover/card:text-primary premium-transition truncate w-full px-0 py-0 hover:bg-transparent"
@@ -493,16 +495,16 @@ export default function Dashboard({ user }: DashboardProps) {
 														<div className="flex items-center justify-between mt-auto">
 															<p className="text-on-surface-variant font-label-sm flex items-center gap-1">
 																<span className="material-symbols-outlined text-[14px]">schedule</span>
-																{new Date(doc.updated_at).toLocaleDateString()}
+																{new Date(page.updated_at).toLocaleDateString()}
 															</p>
 														</div>
 													</div>
 												</div>
 											))}
 										</div>
-										{myDocsScrollState.right && filteredMyDocs.length > 0 && (
+										{myPagesScrollState.right && filteredMyPages.length > 0 && (
 											<button
-												onClick={() => scrollContainer(myDocsScrollRef, 'right')}
+												onClick={() => scrollContainer(myPagesScrollRef, 'right')}
 												className="absolute right-0 top-1/2 -translate-y-1/2 -mr-5 z-10 w-10 h-10 rounded-full bg-surface shadow-lg border border-black/10 dark:border-white/10 flex items-center justify-center opacity-0 group-hover/carousel:opacity-100 transition-opacity hover:scale-110 text-on-surface"
 											>
 												<span className="material-symbols-outlined">chevron_right</span>
@@ -521,35 +523,35 @@ export default function Dashboard({ user }: DashboardProps) {
 									</div>
 								</div>
 
-								{filteredSharedDocs.length === 0 ? (
+								{filteredSharedPages.length === 0 ? (
 									<div className="flex flex-col items-center justify-center py-12 opacity-0 animate-fade-in-up stagger-3 text-center">
-										<img src="/undraw_no-data_ig65.svg" alt="No shared documents" className="w-48 h-48 mb-6 opacity-90 drop-shadow-sm -ml-8" />
-										<h3 className="text-lg font-bold text-on-surface mb-2">No shared documents yet</h3>
+										<img src="/undraw_no-data_ig65.svg" alt="No shared pages" className="w-48 h-48 mb-6 opacity-90 drop-shadow-sm -ml-8" />
+										<h3 className="text-lg font-bold text-on-surface mb-2">No shared pages yet</h3>
 										<p className="text-sm text-on-surface-variant max-w-md">
-											{sharedDocs.length === 0
-												? "Documents appear here when you're invited to collaborate."
-												: "No shared documents match your search query."}
+											{sharedPages.length === 0
+												? "Pages appear here when you're invited to collaborate."
+												: "No shared pages match your search query."}
 										</p>
 									</div>
 								) : (
 									<div className="relative group/carousel">
-										{sharedDocsScrollState.left && (
+										{sharedPagesScrollState.left && (
 											<button
-												onClick={() => scrollContainer(sharedDocsScrollRef, 'left')}
+												onClick={() => scrollContainer(sharedPagesScrollRef, 'left')}
 												className="absolute left-0 top-1/2 -translate-y-1/2 -ml-5 z-10 w-10 h-10 rounded-full bg-surface shadow-lg border border-black/10 dark:border-white/10 flex items-center justify-center opacity-0 group-hover/carousel:opacity-100 transition-opacity hover:scale-110 text-on-surface"
 											>
 												<span className="material-symbols-outlined">chevron_left</span>
 											</button>
 										)}
 										<div
-											ref={sharedDocsScrollRef}
-											onScroll={(e) => handleScrollCheck(e.currentTarget, setSharedDocsScrollState)}
+											ref={sharedPagesScrollRef}
+											onScroll={(e) => handleScrollCheck(e.currentTarget, setSharedPagesScrollState)}
 											className="flex overflow-x-auto hide-scrollbar gap-gutter pb-lg snap-x"
 										>
-											{filteredSharedDocs.map((item) => (
+											{filteredSharedPages.map((item) => (
 												<div
-													key={item.documents.id}
-													onClick={() => router.push(`/doc/${item.documents.id}`)}
+													key={item.pages.id}
+													onClick={() => router.push(`/page/${item.pages.id}`)}
 													className="min-w-[260px] w-[260px] sm:min-w-[280px] sm:w-[280px] shrink-0 snap-start bg-white dark:bg-surface border border-black/10 dark:border-white/10 rounded-2xl overflow-hidden group/card opacity-0 animate-fade-in-up stagger-3 premium-transition hover:shadow-xl hover:-translate-y-1 cursor-pointer flex flex-col relative"
 												>
 													<div className="relative h-32 w-full bg-gradient-to-br from-tertiary/10 to-transparent border-b border-black/5 dark:border-white/5 flex flex-col items-center justify-center overflow-hidden">
@@ -561,11 +563,11 @@ export default function Dashboard({ user }: DashboardProps) {
 													</div>
 
 													<div className="p-4 flex flex-col flex-1 bg-surface-container-lowest">
-														<h4 className="font-title-md font-bold text-on-surface group-hover/card:text-tertiary premium-transition truncate mb-2">{item.documents.title}</h4>
+														<h4 className="font-title-md font-bold text-on-surface group-hover/card:text-tertiary premium-transition truncate mb-2">{item.pages.title}</h4>
 														<div className="flex items-center justify-between mt-auto">
 															<p className="text-on-surface-variant font-label-sm flex items-center gap-1">
 																<span className="material-symbols-outlined text-[14px]">schedule</span>
-																{new Date(item.documents.updated_at).toLocaleDateString()}
+																{new Date(item.pages.updated_at).toLocaleDateString()}
 															</p>
 															<span className="text-[9px] font-bold text-on-surface-variant/70 uppercase tracking-wider bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-md border border-black/5 dark:border-white/5">{item.role}</span>
 														</div>
@@ -573,9 +575,9 @@ export default function Dashboard({ user }: DashboardProps) {
 												</div>
 											))}
 										</div>
-										{sharedDocsScrollState.right && filteredSharedDocs.length > 0 && (
+										{sharedPagesScrollState.right && filteredSharedPages.length > 0 && (
 											<button
-												onClick={() => scrollContainer(sharedDocsScrollRef, 'right')}
+												onClick={() => scrollContainer(sharedPagesScrollRef, 'right')}
 												className="absolute right-0 top-1/2 -translate-y-1/2 -mr-5 z-10 w-10 h-10 rounded-full bg-surface shadow-lg border border-black/10 dark:border-white/10 flex items-center justify-center opacity-0 group-hover/carousel:opacity-100 transition-opacity hover:scale-110 text-on-surface"
 											>
 												<span className="material-symbols-outlined">chevron_right</span>
@@ -590,15 +592,15 @@ export default function Dashboard({ user }: DashboardProps) {
 			</main>
 
 			{/* FAB for mobile */}
-			<button onClick={handleCreateDocument} className="md:hidden fixed bottom-8 right-8 z-[100] w-14 h-14 shimmer-btn animate-shimmer text-on-primary-container rounded-full shadow-2xl flex items-center justify-center active:scale-90 premium-transition">
+			<button onClick={handleCreatePage} className="md:hidden fixed bottom-8 right-8 z-[100] w-14 h-14 shimmer-btn animate-shimmer text-on-primary-container rounded-full shadow-2xl flex items-center justify-center active:scale-90 premium-transition">
 				<span className="material-symbols-outlined text-3xl">add</span>
 			</button>
 
 			<ConfirmDialog
 				open={!!documentToDelete}
 				onOpenChange={(open) => !open && setDocumentToDelete(null)}
-				title="Delete Document"
-				description="Are you sure you want to delete this document? This action cannot be undone."
+				title="Delete Page"
+				description="Are you sure you want to delete this page? This action cannot be undone."
 				onConfirm={executeDelete}
 				confirmText="Delete"
 			/>
