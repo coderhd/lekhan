@@ -170,6 +170,7 @@ export default function EditorWorkspace({
 	const [previewDoc, setPreviewDoc] = useState<Y.Doc | null>(null)
 	const [previewVersionName, setPreviewVersionName] = useState<string | null>(null)
 	const [isViewer, setIsViewer] = useState<boolean | null>(null)
+	const [ownerId, setOwnerId] = useState<string | null>(null)
 	const [theme, setTheme] = useState<'light' | 'dark'>('dark')
 	const [isLinkPromptOpen, setIsLinkPromptOpen] = useState(false)
 	const [isLekhanBotOpen, setIsLekhanBotOpen] = useState(false)
@@ -286,6 +287,7 @@ export default function EditorWorkspace({
 		const checkRole = async () => {
 			try {
 				const page = await fetchPageDetails(pageId)
+				setOwnerId(page.owner_id)
 				if (page && page.owner_id === currentUser.id) {
 					setIsViewer(false)
 					return
@@ -1070,6 +1072,7 @@ export default function EditorWorkspace({
 				documentId={pageId}
 				documentTitle={title}
 				userId={currentUser.id}
+				isOwner={isViewer === false && currentUser.id === (ownerId ?? '')}
 			/>
 
 			<PromptDialog

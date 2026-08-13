@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react'
 import { X, Copy, Mail, Globe, Lock } from 'lucide-react'
 import { toast } from 'sonner'
-import { fetchDocumentDetails, createInvitation, updateDocumentPublicStatus, fetchPastCollaborators } from '@/services/db'
+import { fetchPageDetails, updatePagePublicStatus, createPageInvitation, fetchPageMembers, removePageMember, updatePageMemberRole } from '@/services/graph'
+import { fetchPastCollaborators } from '@/services/db'
+import { PageMember } from '@/types'
 import { CustomSelect } from './ui/custom-select'
 
 interface ShareModalProps {
@@ -12,6 +14,7 @@ interface ShareModalProps {
 	documentId: string
 	documentTitle: string
 	userId: string
+	isOwner: boolean
 }
 
 export default function ShareModal({
@@ -20,6 +23,7 @@ export default function ShareModal({
 	documentId,
 	documentTitle,
 	userId,
+	isOwner,
 }: ShareModalProps) {
 	const [email, setEmail] = useState('')
 	const [role, setRole] = useState<'editor' | 'viewer'>('editor')
@@ -27,6 +31,8 @@ export default function ShareModal({
 	const [loading, setLoading] = useState(false)
 	const [inviteLink, setInviteLink] = useState<string | null>(null)
 	const [pastCollaborators, setPastCollaborators] = useState<{email: string; full_name: string}[]>([])
+	const [members, setMembers] = useState<PageMember[]>([])
+	const [membersLoading, setMembersLoading] = useState(false)
 
 	useEffect(() => {
 		if (isOpen) {
@@ -37,7 +43,7 @@ export default function ShareModal({
 
 	const fetchDocPublicState = async () => {
 		try {
-			const data = await fetchDocumentDetails(documentId)
+			const data = await fetchPageDetails(documentId)
 			setIsPublic(data.is_public)
 		} catch (err) {
 			console.error('Error fetching doc public state:', err)
@@ -53,6 +59,46 @@ export default function ShareModal({
 		}
 	}
 
+	const loadMembers = async () => {
+		setMembersLoading(true)
+		try {
+			const data = await fetchPageMembers(documentId)
+			setMembers(data)
+		} catch (err) {
+			console.error('Error fetching page members:', err)
+		} finally {
+			setMembersLoading(false)
+		}
+	}
+
+	useEffect(() => {
+		if (isOpen) {
+			loadMembers()
+		}
+	}, [isOpen, documentId])
+
+	const handleRemoveMember = async (member: PageMember) => {
+		try {
+			await removePageMember(documentId, member.user_id)
+			setMembers(prev => prev.filter(m => m.user_id !== member.user_id))
+			toast.success('Member removed')
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err)
+			toast.error(`Failed to remove member: ${message}`)
+		}
+	}
+
+	const handleRoleChange = async (member: PageMember, role: 'editor' | 'viewer') => {
+		try {
+			await updatePageMemberRole(documentId, member.user_id, role)
+			setMembers(prev => prev.map(m => m.user_id === member.user_id ? { ...m, role } : m))
+			toast.success('Role updated')
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err)
+			toast.error(`Failed to update role: ${message}`)
+		}
+	}
+
 	const handleInvite = async (e: React.FormEvent) => {
 		e.preventDefault()
 		setLoading(true)
@@ -60,7 +106,7 @@ export default function ShareModal({
 
 		try {
 			const token = crypto.randomUUID()
-			await createInvitation(documentId, userId, email, role, token)
+			await createPageInvitation(documentId, userId, email, role, token)
 
 			// Generate the direct link
 			const generatedLink = `${window.location.origin}/invite/${token}`
@@ -80,7 +126,7 @@ export default function ShareModal({
 		setIsPublic(nextState)
 
 		try {
-			await updateDocumentPublicStatus(documentId, nextState)
+			await updatePagePublicStatus(documentId, nextState)
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err)
 			setIsPublic(!nextState)
@@ -109,7 +155,7 @@ export default function ShareModal({
 		<div className='fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4'>
 			<div className='w-full max-w-lg bg-surface-container-low border border-white/10 rounded-2xl p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200'>
 				<div className='flex items-center justify-between border-b border-white/10 pb-4 mb-6'>
-					<h3 className='text-lg font-bold text-on-surface'>Share Document</h3>
+					<h3 className='text-lg font-bold text-on-surface'>Share Page</h3>
 					<button
 						onClick={onClose}
 						className='rounded-lg p-1.5 text-on-surface-variant hover:bg-white/10 hover:text-on-surface transition'
@@ -148,13 +194,13 @@ export default function ShareModal({
 						<div className='mt-4 pt-4 border-t border-black/10 dark:border-white/10 flex items-center gap-2'>
 							<input
 								type='text'
-								value={`${typeof window !== 'undefined' ? window.location.origin : ''}/doc/${documentId}`}
+								value={`${typeof window !== 'undefined' ? window.location.origin : ''}/page/${documentId}`}
 								readOnly
 								className='flex-1 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl p-2.5 text-xs text-on-surface outline-none cursor-text selection:bg-primary-container/30'
 							/>
 							<button
 								onClick={() => {
-									navigator.clipboard.writeText(`${typeof window !== 'undefined' ? window.location.origin : ''}/doc/${documentId}`);
+									navigator.clipboard.writeText(`${typeof window !== 'undefined' ? window.location.origin : ''}/page/${documentId}`);
 									toast.success('Public link copied to clipboard!');
 								}}
 								className='rounded-xl bg-surface-container-high border border-black/10 dark:border-white/10 p-2.5 text-on-surface hover:bg-black/5 dark:hover:bg-white/5 transition'
@@ -163,6 +209,67 @@ export default function ShareModal({
 								<Copy className='h-4 w-4' />
 							</button>
 						</div>
+					)}
+				</div>
+
+				{/* 1.5 Members */}
+				<div className='mb-6'>
+					<p className='text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60 mb-2'>
+						Members ({members.length})
+					</p>
+					{membersLoading ? (
+						<p className='text-xs text-on-surface-variant/60 py-2'>Loading members...</p>
+					) : members.length === 0 ? (
+						<p className='text-xs text-on-surface-variant/60 py-2'>No collaborators added yet.</p>
+					) : (
+						<ul className='space-y-2 max-h-48 overflow-y-auto pr-1'>
+							{members.map((member) => (
+								<li
+									key={member.user_id}
+									className='flex items-center justify-between bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl px-3 py-2'
+								>
+									<div className='flex items-center gap-2 min-w-0'>
+										<div className='w-7 h-7 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs uppercase shrink-0'>
+											{(member.profiles?.full_name || member.profiles?.email || '?').charAt(0)}
+										</div>
+										<div className='min-w-0'>
+											<div className='text-xs font-semibold text-on-surface truncate'>
+												{member.profiles?.full_name || member.profiles?.email}
+											</div>
+											<div className='text-[10px] text-on-surface-variant/70 truncate'>
+												{member.profiles?.email}
+											</div>
+										</div>
+									</div>
+									<div className='flex items-center gap-2 shrink-0'>
+										{isOwner && member.role !== 'owner' ? (
+											<CustomSelect
+												value={member.role as 'editor' | 'viewer'}
+												onValueChange={(val) => handleRoleChange(member, val as 'editor' | 'viewer')}
+												options={[
+													{ label: 'Editor', value: 'editor' },
+													{ label: 'Viewer', value: 'viewer' },
+												]}
+												triggerClassName='h-7 w-[100px] bg-transparent border border-black/10 dark:border-white/10 rounded-lg text-[10px] font-medium text-on-surface px-2 focus:ring-0'
+												contentClassName='w-[100px]'
+											/>
+										) : (
+											<span className='text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/70 capitalize'>
+												{member.role === 'owner' ? 'Owner' : member.role}
+											</span>
+										)}
+										{isOwner && member.role !== 'owner' && (
+											<button
+												onClick={() => handleRemoveMember(member)}
+												className='text-error hover:text-error/80 text-xs font-bold px-2 py-1 border border-error/30 rounded-md hover:bg-error/10 transition-colors'
+											>
+												Remove
+											</button>
+										)}
+									</div>
+								</li>
+							))}
+						</ul>
 					)}
 				</div>
 
