@@ -213,6 +213,108 @@ describe('Server Pages Cutover & Graph Index Integration', () => {
 		expect(role).toBe('editor')
 	})
 
+	it('verifyUserRole honors live document_members grants on mapped pages after migration', async () => {
+		let pagesLookupCalls = 0
+		const pagesMaybeSingle = vi.fn(async () => {
+			pagesLookupCalls += 1
+			if (pagesLookupCalls === 1) {
+				return { data: { type: 'page', owner_id: 'user-123', is_public: false }, error: null }
+			}
+			return { data: { source_document_id: 'doc-legacy' }, error: null }
+		})
+		const mockSupabase = {
+			auth: {
+				getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'user-456' } }, error: null }),
+			},
+			from: vi.fn().mockImplementation((table: string) => {
+				if (table === 'pages') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({ maybeSingle: pagesMaybeSingle }),
+						}),
+					}
+				}
+				if (table === 'page_members') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({
+								eq: vi.fn().mockReturnValue({
+									single: vi.fn().mockResolvedValue({ data: null, error: null }),
+								}),
+							}),
+						}),
+					}
+				}
+				if (table === 'document_members') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({
+								eq: vi.fn().mockReturnValue({
+									single: vi.fn().mockResolvedValue({ data: { role: 'editor' }, error: null }),
+								}),
+							}),
+						}),
+					}
+				}
+				return {}
+			}),
+		} as any
+
+		const role = await auth.verifyUserRole(mockSupabase, 'page-1', 'token-1')
+		expect(role).toBe('editor')
+	})
+
+	it('verifyUserRole denies a mapped page after the document_members grant is revoked', async () => {
+		let pagesLookupCalls = 0
+		const pagesMaybeSingle = vi.fn(async () => {
+			pagesLookupCalls += 1
+			if (pagesLookupCalls === 1) {
+				return { data: { type: 'page', owner_id: 'user-123', is_public: false }, error: null }
+			}
+			return { data: { source_document_id: 'doc-legacy' }, error: null }
+		})
+		const mockSupabase = {
+			auth: {
+				getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'user-456' } }, error: null }),
+			},
+			from: vi.fn().mockImplementation((table: string) => {
+				if (table === 'pages') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({ maybeSingle: pagesMaybeSingle }),
+						}),
+					}
+				}
+				if (table === 'page_members') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({
+								eq: vi.fn().mockReturnValue({
+									single: vi.fn().mockResolvedValue({ data: null, error: null }),
+								}),
+							}),
+						}),
+					}
+				}
+				if (table === 'document_members') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({
+								eq: vi.fn().mockReturnValue({
+									single: vi.fn().mockResolvedValue({ data: null, error: null }),
+								}),
+							}),
+						}),
+					}
+				}
+				return {}
+			}),
+		} as any
+
+		const role = await auth.verifyUserRole(mockSupabase, 'page-1', 'token-1')
+		expect(role).toBeNull()
+	})
+
 	it('getDocumentOwnerPlanLimit reads the owner plan via pages', async () => {
 		const mockAdmin = {
 			from: vi.fn().mockImplementation((table: string) => {
@@ -246,8 +348,6 @@ describe('Server Pages Cutover & Graph Index Integration', () => {
 	})
 
 	it('indexPage writes links, tags and searchable_text via the admin client', async () => {
-		const insertedLinks: any[] = []
-		const insertedTags: any[] = []
 		let pageSelectCalls = 0
 		const workspacePagesData = [{ id: 'priya-page', title: 'Priya' }]
 
@@ -268,44 +368,28 @@ describe('Server Pages Cutover & Graph Index Integration', () => {
 				if (table === 'pages') {
 					return {
 						select: vi.fn().mockReturnValue({ eq: makePageEq }),
-						update: vi.fn().mockReturnValue({
-							eq: vi.fn().mockResolvedValue({ data: null, error: null }),
-						}),
-					}
-				}
-				if (table === 'page_links') {
-					return {
-						delete: vi.fn().mockReturnValue({
-							eq: vi.fn().mockResolvedValue({ data: null, error: null }),
-						}),
-						insert: vi.fn().mockImplementation(async (rows: any[]) => {
-							insertedLinks.push(...rows)
-							return { data: null, error: null }
-						}),
-					}
-				}
-				if (table === 'page_tags') {
-					return {
-						delete: vi.fn().mockReturnValue({
-							eq: vi.fn().mockResolvedValue({ data: null, error: null }),
-						}),
-						insert: vi.fn().mockImplementation(async (rows: any[]) => {
-							insertedTags.push(...rows)
-							return { data: null, error: null }
-						}),
 					}
 				}
 				return {}
 			}),
+			rpc: vi.fn().mockResolvedValue({ data: { links: 1, tags: 1 }, error: null }),
 		} as any
 
 		const result = await graphIndex.indexPage(admin, 'page-1', 'Meeting [[Priya]] #work')
 		expect(result).toEqual({ links: 1, tags: 1 })
-		expect(insertedLinks).toEqual([
-			{ workspace_id: 'ws-1', from_page_id: 'page-1', to_page_id: 'priya-page', to_title: 'Priya' },
-		])
-		expect(insertedTags).toEqual([{ page_id: 'page-1', tag: 'work' }])
+		expect(admin.rpc).toHaveBeenCalledTimes(1)
+		expect(admin.rpc).toHaveBeenCalledWith('sync_page_graph', {
+			p_page_id: 'page-1',
+			p_workspace_id: 'ws-1',
+			p_searchable_text: 'Meeting [[Priya]] #work',
+			p_links: [
+				{ workspace_id: 'ws-1', from_page_id: 'page-1', to_page_id: 'priya-page', to_title: 'Priya' },
+			],
+			p_tags: [{ page_id: 'page-1', tag: 'work' }],
+		})
 		expect(admin.from).toHaveBeenCalledWith('pages')
+		expect(admin.from).not.toHaveBeenCalledWith('page_links')
+		expect(admin.from).not.toHaveBeenCalledWith('page_tags')
 	})
 
 	it('verifyUserRole returns viewer for anonymous access to a public page', async () => {

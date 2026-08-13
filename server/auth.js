@@ -80,7 +80,30 @@ async function verifyUserRole(supabase, entityId, token) {
 			.eq('page_id', entityId)
 			.eq('user_id', user.id)
 			.single()
-		return member ? member.role : null
+		if (member) {
+			return member.role
+		}
+
+		// Temporary authority during legacy cutover: mapped pages inherit live
+		// document_members grants (the one-time backfill goes stale after later
+		// grants/revocations made through the legacy app). The page RLS helper
+		// (can_access_page) already evaluates the same authority.
+		const { data: page } = await supabase
+			.from('pages')
+			.select('source_document_id')
+			.eq('id', entityId)
+			.maybeSingle()
+		if (page && page.source_document_id) {
+			const { data: legacyMember } = await supabase
+				.from('document_members')
+				.select('role')
+				.eq('document_id', page.source_document_id)
+				.eq('user_id', user.id)
+				.single()
+			return legacyMember ? legacyMember.role : null
+		}
+
+		return null
 	}
 
 	const { data: member } = await supabase

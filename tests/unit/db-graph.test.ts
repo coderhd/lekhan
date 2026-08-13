@@ -100,9 +100,10 @@ describe('Graph Service', () => {
 		expect(mockBuilder.eq).toHaveBeenCalledWith('id', 'p-1')
 	})
 
-	it('deletePage deletes the page', async () => {
+	it('deletePage deletes the page and its mapped legacy documents row', async () => {
 		await deletePage('p-1')
 		expect(supabase.from).toHaveBeenCalledWith('pages')
+		expect(supabase.from).toHaveBeenCalledWith('documents')
 		expect(mockBuilder.delete).toHaveBeenCalled()
 		expect(mockBuilder.eq).toHaveBeenCalledWith('id', 'p-1')
 	})

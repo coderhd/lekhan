@@ -54,8 +54,8 @@ async function getWorkspaceForPage (supabaseAdmin, pageId) {
 
 async function indexPage (supabaseAdmin, pageId, text) {
 	const workspaceId = await getWorkspaceForPage(supabaseAdmin, pageId)
-	let links = 0
-	let tags = 0
+	let linkRows = []
+	let tagRows = []
 
 	if (workspaceId) {
 		const { data: workspacePages, error: workspaceError } = await supabaseAdmin
@@ -71,63 +71,27 @@ async function indexPage (supabaseAdmin, pageId, text) {
 			titleIndex.set(normalizeTitle(page.title), page.id)
 		}
 
-		const linkRows = extractLinks(text).map(link => ({
+		linkRows = extractLinks(text).map(link => ({
 			workspace_id: workspaceId,
 			from_page_id: pageId,
 			to_page_id: titleIndex.get(normalizeTitle(link.title)) || null,
 			to_title: link.title,
 		}))
-
-		const { error: linksDeleteError } = await supabaseAdmin
-			.from('page_links')
-			.delete()
-			.eq('from_page_id', pageId)
-		if (linksDeleteError) {
-			throw linksDeleteError
-		}
-		if (linkRows.length > 0) {
-			const { error: linksInsertError } = await supabaseAdmin
-				.from('page_links')
-				.insert(linkRows)
-			if (linksInsertError) {
-				throw linksInsertError
-			}
-		}
-
-		const tagRows = extractTags(text).map(tag => ({ page_id: pageId, tag }))
-
-		const { error: tagsDeleteError } = await supabaseAdmin
-			.from('page_tags')
-			.delete()
-			.eq('page_id', pageId)
-		if (tagsDeleteError) {
-			throw tagsDeleteError
-		}
-		if (tagRows.length > 0) {
-			const { error: tagsInsertError } = await supabaseAdmin
-				.from('page_tags')
-				.insert(tagRows)
-			if (tagsInsertError) {
-				throw tagsInsertError
-			}
-		}
-
-		links = linkRows.length
-		tags = tagRows.length
+		tagRows = extractTags(text).map(tag => ({ page_id: pageId, tag }))
 	}
 
-	const { error: updateError } = await supabaseAdmin
-		.from('pages')
-		.update({
-			searchable_text: text,
-			updated_at: new Date().toISOString(),
-		})
-		.eq('id', pageId)
-	if (updateError) {
-		throw updateError
+	const { data, error } = await supabaseAdmin.rpc('sync_page_graph', {
+		p_page_id: pageId,
+		p_workspace_id: workspaceId,
+		p_searchable_text: text,
+		p_links: linkRows,
+		p_tags: tagRows,
+	})
+	if (error) {
+		throw error
 	}
 
-	return { links, tags }
+	return { links: data?.links ?? 0, tags: data?.tags ?? 0 }
 }
 
 module.exports = { extractLinks, extractTags, normalizeTitle, getWorkspaceForPage, indexPage }

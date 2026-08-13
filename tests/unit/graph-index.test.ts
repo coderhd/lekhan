@@ -86,14 +86,10 @@ describe('getWorkspaceForPage', () => {
 		expect(await getWorkspaceForPage(admin, 'missing')).toBeNull()
 	})
 })
-
 describe('indexPage', () => {
 	const pageText = '# Notes\nMeeting with [[Priya]] about #work\nAlso see [[Priya]] again'
 
-	it('upserts links, tags and searchable_text for a known page', async () => {
-		const insertedLinks: any[] = []
-		const insertedTags: any[] = []
-		const pagesUpdates: Array<{ fields: Record<string, unknown>; id: string }> = []
+	it('replaces links, tags and searchable_text via a single transactional rpc call', async () => {
 		let pageSelectCalls = 0
 		const workspacePagesData = [{ id: 'priya-page', title: 'Priya' }]
 
@@ -117,62 +113,35 @@ describe('indexPage', () => {
 				if (table === 'pages') {
 					return {
 						select: vi.fn(() => ({ eq: makePageEq })),
-						update: vi.fn((fields: Record<string, unknown>) => ({
-							eq: vi.fn(async (column: string, id: string) => {
-								pagesUpdates.push({ fields, id })
-								return { data: null, error: null }
-							}),
-						})),
-					}
-				}
-				if (table === 'page_links') {
-					return {
-						delete: vi.fn(() => ({
-							eq: vi.fn(async () => ({ data: null, error: null })),
-						})),
-						insert: vi.fn(async (rows: any[]) => {
-							insertedLinks.push(...rows)
-							return { data: null, error: null }
-						}),
-					}
-				}
-				if (table === 'page_tags') {
-					return {
-						delete: vi.fn(() => ({
-							eq: vi.fn(async () => ({ data: null, error: null })),
-						})),
-						insert: vi.fn(async (rows: any[]) => {
-							insertedTags.push(...rows)
-							return { data: null, error: null }
-						}),
+						update: vi.fn(),
 					}
 				}
 				return {}
 			}),
+			rpc: vi.fn(async () => ({ data: { links: 1, tags: 1 }, error: null })),
 		}
 
 		const result = await indexPage(admin, 'page-1', pageText)
 
 		expect(result).toEqual({ links: 1, tags: 1 })
-		expect(insertedLinks).toEqual([
-			{ workspace_id: 'ws-1', from_page_id: 'page-1', to_page_id: 'priya-page', to_title: 'Priya' },
-		])
-		expect(insertedTags).toEqual([{ page_id: 'page-1', tag: 'work' }])
-		expect(admin.from).toHaveBeenCalledWith('pages')
-		expect(admin.from).toHaveBeenCalledWith('page_links')
-		expect(admin.from).toHaveBeenCalledWith('page_tags')
-
-		// Findings #4/#5a: exactly one pages.update per save, carrying both
-		// searchable_text (the passed text) and updated_at.
-		expect(pagesUpdates).toHaveLength(1)
-		expect(pagesUpdates[0]).toEqual({
-			fields: { searchable_text: pageText, updated_at: expect.any(String) },
-			id: 'page-1',
+		expect(admin.rpc).toHaveBeenCalledTimes(1)
+		expect(admin.rpc).toHaveBeenCalledWith('sync_page_graph', {
+			p_page_id: 'page-1',
+			p_workspace_id: 'ws-1',
+			p_searchable_text: pageText,
+			p_links: [
+				{ workspace_id: 'ws-1', from_page_id: 'page-1', to_page_id: 'priya-page', to_title: 'Priya' },
+			],
+			p_tags: [{ page_id: 'page-1', tag: 'work' }],
 		})
+		// Concurrency guard (finding #8): all mutation goes through the single
+		// transactional rpc — no interleavable table-level delete/insert calls.
+		expect(admin.from).not.toHaveBeenCalledWith('page_links')
+		expect(admin.from).not.toHaveBeenCalledWith('page_tags')
+		expect(admin.from('pages').update).not.toHaveBeenCalled()
 	})
 
-	it('resolves nothing and stores no links when the page has no workspace', async () => {
-		const pagesUpdateCalls: Array<Record<string, unknown>> = []
+	it('passes empty rows and persists text when the page has no workspace', async () => {
 		const admin: any = {
 			from: vi.fn(() => ({
 				select: vi.fn(() => ({
@@ -180,20 +149,18 @@ describe('indexPage', () => {
 						maybeSingle: vi.fn(async () => ({ data: null, error: null })),
 					})),
 				})),
-				update: vi.fn((fields: Record<string, unknown>) => {
-					pagesUpdateCalls.push(fields)
-					return { eq: vi.fn(async () => ({ data: null, error: null })) }
-				}),
 			})),
+			rpc: vi.fn(async () => ({ data: { links: 0, tags: 0 }, error: null })),
 		}
 		const result = await indexPage(admin, 'page-1', '[[Any]]')
+
 		expect(result).toEqual({ links: 0, tags: 0 })
-		expect(admin.from).not.toHaveBeenCalledWith('page_links')
-		// searchable_text is still persisted even without a workspace
-		expect(pagesUpdateCalls).toHaveLength(1)
-		expect(pagesUpdateCalls[0]).toEqual({
-			searchable_text: '[[Any]]',
-			updated_at: expect.any(String),
+		expect(admin.rpc).toHaveBeenCalledWith('sync_page_graph', {
+			p_page_id: 'page-1',
+			p_workspace_id: null,
+			p_searchable_text: '[[Any]]',
+			p_links: [],
+			p_tags: [],
 		})
 	})
 
@@ -210,19 +177,17 @@ describe('indexPage', () => {
 		await expect(indexPage(admin, 'page-1', 'text')).rejects.toMatchObject({ message: 'workspace lookup failed' })
 	})
 
-	it('throws when the final pages update carries an error', async () => {
+	it('throws when the transactional rpc call carries an error', async () => {
 		const admin: any = {
 			from: vi.fn(() => ({
 				select: vi.fn(() => ({
 					eq: vi.fn(() => ({
-						maybeSingle: vi.fn(async () => ({ data: null, error: null })),
+						maybeSingle: vi.fn(async () => ({ data: { workspace_id: 'ws-1' }, error: null })),
 					})),
 				})),
-				update: vi.fn(() => ({
-					eq: vi.fn(async () => ({ data: null, error: { message: 'update failed' } })),
-				})),
 			})),
+			rpc: vi.fn(async () => ({ data: null, error: { message: 'sync failed' } })),
 		}
-		await expect(indexPage(admin, 'page-1', 'text')).rejects.toMatchObject({ message: 'update failed' })
+		await expect(indexPage(admin, 'page-1', 'text')).rejects.toMatchObject({ message: 'sync failed' })
 	})
 })

@@ -69,6 +69,17 @@ export async function deletePage (pageId: string): Promise<void> {
 	if (error) {
 		throw error
 	}
+
+	// Legacy cutover: also remove the mapped documents row so the deleted
+	// page cannot stay reachable through legacy fallback or storage auth.
+	const { error: legacyError } = await supabase
+		.from('documents')
+		.delete()
+		.eq('id', pageId)
+
+	if (legacyError) {
+		throw legacyError
+	}
 }
 
 export async function updatePagePublicStatus (pageId: string, isPublic: boolean): Promise<void> {
