@@ -80,6 +80,17 @@ export async function updatePagePublicStatus (pageId: string, isPublic: boolean)
 	if (error) {
 		throw error
 	}
+
+	// Mirror to the legacy documents row (same id) so anon access granted by
+	// documents.is_public stays in sync with pages.is_public.
+	const { error: documentsError } = await supabase
+		.from('documents')
+		.update({ is_public: isPublic })
+		.eq('id', pageId)
+
+	if (documentsError) {
+		throw documentsError
+	}
 }
 
 export async function fetchPageDetails (pageId: string): Promise<Page> {

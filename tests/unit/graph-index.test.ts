@@ -93,6 +93,7 @@ describe('indexPage', () => {
 	it('upserts links, tags and searchable_text for a known page', async () => {
 		const insertedLinks: any[] = []
 		const insertedTags: any[] = []
+		const pagesUpdates: Array<{ fields: Record<string, unknown>; id: string }> = []
 		let pageSelectCalls = 0
 		const workspacePagesData = [{ id: 'priya-page', title: 'Priya' }]
 
@@ -116,8 +117,11 @@ describe('indexPage', () => {
 				if (table === 'pages') {
 					return {
 						select: vi.fn(() => ({ eq: makePageEq })),
-						update: vi.fn(() => ({
-							eq: vi.fn(async () => ({ data: null, error: null })),
+						update: vi.fn((fields: Record<string, unknown>) => ({
+							eq: vi.fn(async (column: string, id: string) => {
+								pagesUpdates.push({ fields, id })
+								return { data: null, error: null }
+							}),
 						})),
 					}
 				}
@@ -157,9 +161,18 @@ describe('indexPage', () => {
 		expect(admin.from).toHaveBeenCalledWith('pages')
 		expect(admin.from).toHaveBeenCalledWith('page_links')
 		expect(admin.from).toHaveBeenCalledWith('page_tags')
+
+		// Findings #4/#5a: exactly one pages.update per save, carrying both
+		// searchable_text (the passed text) and updated_at.
+		expect(pagesUpdates).toHaveLength(1)
+		expect(pagesUpdates[0]).toEqual({
+			fields: { searchable_text: pageText, updated_at: expect.any(String) },
+			id: 'page-1',
+		})
 	})
 
 	it('resolves nothing and stores no links when the page has no workspace', async () => {
+		const pagesUpdateCalls: Array<Record<string, unknown>> = []
 		const admin: any = {
 			from: vi.fn(() => ({
 				select: vi.fn(() => ({
@@ -167,10 +180,49 @@ describe('indexPage', () => {
 						maybeSingle: vi.fn(async () => ({ data: null, error: null })),
 					})),
 				})),
+				update: vi.fn((fields: Record<string, unknown>) => {
+					pagesUpdateCalls.push(fields)
+					return { eq: vi.fn(async () => ({ data: null, error: null })) }
+				}),
 			})),
 		}
 		const result = await indexPage(admin, 'page-1', '[[Any]]')
 		expect(result).toEqual({ links: 0, tags: 0 })
 		expect(admin.from).not.toHaveBeenCalledWith('page_links')
+		// searchable_text is still persisted even without a workspace
+		expect(pagesUpdateCalls).toHaveLength(1)
+		expect(pagesUpdateCalls[0]).toEqual({
+			searchable_text: '[[Any]]',
+			updated_at: expect.any(String),
+		})
+	})
+
+	it('throws when the workspace lookup carries an error', async () => {
+		const admin: any = {
+			from: vi.fn(() => ({
+				select: vi.fn(() => ({
+					eq: vi.fn(() => ({
+						maybeSingle: vi.fn(async () => ({ data: null, error: { message: 'workspace lookup failed' } })),
+					})),
+				})),
+			})),
+		}
+		await expect(indexPage(admin, 'page-1', 'text')).rejects.toMatchObject({ message: 'workspace lookup failed' })
+	})
+
+	it('throws when the final pages update carries an error', async () => {
+		const admin: any = {
+			from: vi.fn(() => ({
+				select: vi.fn(() => ({
+					eq: vi.fn(() => ({
+						maybeSingle: vi.fn(async () => ({ data: null, error: null })),
+					})),
+				})),
+				update: vi.fn(() => ({
+					eq: vi.fn(async () => ({ data: null, error: { message: 'update failed' } })),
+				})),
+			})),
+		}
+		await expect(indexPage(admin, 'page-1', 'text')).rejects.toMatchObject({ message: 'update failed' })
 	})
 })

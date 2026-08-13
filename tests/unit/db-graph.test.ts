@@ -107,8 +107,10 @@ describe('Graph Service', () => {
 		expect(mockBuilder.eq).toHaveBeenCalledWith('id', 'p-1')
 	})
 
-	it('updatePagePublicStatus updates is_public', async () => {
+	it('updatePagePublicStatus mirrors is_public to pages and documents', async () => {
 		await updatePagePublicStatus('p-1', true)
+		expect(supabase.from).toHaveBeenCalledWith('pages')
+		expect(supabase.from).toHaveBeenCalledWith('documents')
 		expect(mockBuilder.update).toHaveBeenCalledWith({ is_public: true })
 		expect(mockBuilder.eq).toHaveBeenCalledWith('id', 'p-1')
 	})

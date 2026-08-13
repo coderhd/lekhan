@@ -41,56 +41,93 @@ function extractTags (text) {
 }
 
 async function getWorkspaceForPage (supabaseAdmin, pageId) {
-	const { data } = await supabaseAdmin
+	const { data, error } = await supabaseAdmin
 		.from('pages')
 		.select('workspace_id')
 		.eq('id', pageId)
 		.maybeSingle()
+	if (error) {
+		throw error
+	}
 	return data ? data.workspace_id : null
 }
 
 async function indexPage (supabaseAdmin, pageId, text) {
 	const workspaceId = await getWorkspaceForPage(supabaseAdmin, pageId)
-	if (!workspaceId) {
-		return { links: 0, tags: 0 }
+	let links = 0
+	let tags = 0
+
+	if (workspaceId) {
+		const { data: workspacePages, error: workspaceError } = await supabaseAdmin
+			.from('pages')
+			.select('id, title')
+			.eq('workspace_id', workspaceId)
+		if (workspaceError) {
+			throw workspaceError
+		}
+
+		const titleIndex = new Map()
+		for (const page of workspacePages || []) {
+			titleIndex.set(normalizeTitle(page.title), page.id)
+		}
+
+		const linkRows = extractLinks(text).map(link => ({
+			workspace_id: workspaceId,
+			from_page_id: pageId,
+			to_page_id: titleIndex.get(normalizeTitle(link.title)) || null,
+			to_title: link.title,
+		}))
+
+		const { error: linksDeleteError } = await supabaseAdmin
+			.from('page_links')
+			.delete()
+			.eq('from_page_id', pageId)
+		if (linksDeleteError) {
+			throw linksDeleteError
+		}
+		if (linkRows.length > 0) {
+			const { error: linksInsertError } = await supabaseAdmin
+				.from('page_links')
+				.insert(linkRows)
+			if (linksInsertError) {
+				throw linksInsertError
+			}
+		}
+
+		const tagRows = extractTags(text).map(tag => ({ page_id: pageId, tag }))
+
+		const { error: tagsDeleteError } = await supabaseAdmin
+			.from('page_tags')
+			.delete()
+			.eq('page_id', pageId)
+		if (tagsDeleteError) {
+			throw tagsDeleteError
+		}
+		if (tagRows.length > 0) {
+			const { error: tagsInsertError } = await supabaseAdmin
+				.from('page_tags')
+				.insert(tagRows)
+			if (tagsInsertError) {
+				throw tagsInsertError
+			}
+		}
+
+		links = linkRows.length
+		tags = tagRows.length
 	}
 
-	const { data: workspacePages } = await supabaseAdmin
+	const { error: updateError } = await supabaseAdmin
 		.from('pages')
-		.select('id, title')
-		.eq('workspace_id', workspaceId)
-
-	const titleIndex = new Map()
-	for (const page of workspacePages || []) {
-		titleIndex.set(normalizeTitle(page.title), page.id)
-	}
-
-	const links = extractLinks(text)
-	const linkRows = links.map(link => ({
-		workspace_id: workspaceId,
-		from_page_id: pageId,
-		to_page_id: titleIndex.get(normalizeTitle(link.title)) || null,
-		to_title: link.title,
-	}))
-
-	const tags = extractTags(text)
-
-	await supabaseAdmin.from('page_links').delete().eq('from_page_id', pageId)
-	if (linkRows.length > 0) {
-		await supabaseAdmin.from('page_links').insert(linkRows)
-	}
-
-	await supabaseAdmin.from('page_tags').delete().eq('page_id', pageId)
-	if (tags.length > 0) {
-		await supabaseAdmin.from('page_tags').insert(tags.map(tag => ({ page_id: pageId, tag })))
-	}
-
-	await supabaseAdmin
-		.from('pages')
-		.update({ searchable_text: text })
+		.update({
+			searchable_text: text,
+			updated_at: new Date().toISOString(),
+		})
 		.eq('id', pageId)
+	if (updateError) {
+		throw updateError
+	}
 
-	return { links: linkRows.length, tags: tags.length }
+	return { links, tags }
 }
 
 module.exports = { extractLinks, extractTags, normalizeTitle, getWorkspaceForPage, indexPage }
