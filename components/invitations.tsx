@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { DocumentInvitation } from '@/types'
-import { fetchPendingInvitations, acceptInvitation, declineInvitation } from '@/services/db'
+import { PageInvitation } from '@/types'
+import { fetchPendingPageInvitations, acceptPageInvitation, declinePageInvitation } from '@/services/graph'
 import GlobalLoader from './global-loader'
 import { toast } from 'sonner'
 
@@ -19,12 +19,12 @@ export default function Invitations({
 	onRefresh,
 	variant = 'default'
 }: InvitationsProps) {
-	const [invites, setInvites] = useState<DocumentInvitation[]>([])
+	const [invites, setInvites] = useState<PageInvitation[]>([])
 	const [loading, setLoading] = useState(true)
 
 	const fetchInvitations = async () => {
 		try {
-			const data = await fetchPendingInvitations(userEmail)
+			const data = await fetchPendingPageInvitations(userEmail)
 			setInvites(data)
 		} catch (err) {
 			console.error('Error fetching invitations:', err)
@@ -39,9 +39,9 @@ export default function Invitations({
 		}
 	}, [userEmail])
 
-	const handleAccept = async (invite: DocumentInvitation) => {
+	const handleAccept = async (invite: PageInvitation) => {
 		try {
-			await acceptInvitation(invite, userId)
+			await acceptPageInvitation(invite, userId)
 			toast.success('Invitation accepted!')
 			fetchInvitations()
 			onRefresh()
@@ -53,7 +53,7 @@ export default function Invitations({
 
 	const handleDecline = async (inviteId: string) => {
 		try {
-			await declineInvitation(inviteId)
+			await declinePageInvitation(inviteId)
 			toast.success('Invitation declined')
 			fetchInvitations()
 		} catch (err: unknown) {
@@ -82,7 +82,7 @@ export default function Invitations({
 				{invites.map((invite) => (
 					<div key={invite.id} className="p-4 border-b border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
 						<p className='text-sm text-on-surface'>
-							<span className='font-semibold'>{invite.profiles?.full_name || invite.profiles?.email}</span> invited you to edit <span className='font-semibold'>"{invite.documents?.title || 'Untitled'}"</span>
+							<span className='font-semibold'>{invite.profiles?.full_name || invite.profiles?.email}</span> invited you to edit <span className='font-semibold'>"{invite.pages?.title || 'Untitled'}"</span>
 						</p>
 						<div className='flex items-center gap-2 mt-3'>
 							<button onClick={() => handleAccept(invite)} className='bg-primary-container text-on-primary-container text-xs font-bold px-3 py-1.5 rounded-md hover:brightness-110 active:scale-95 transition-all'>Accept</button>
@@ -110,7 +110,7 @@ export default function Invitations({
 							<p className='text-sm font-medium text-on-surface'>
 								Invitation to join{' '}
 								<span className='font-bold text-primary-container'>
-									{invite.documents?.title || 'Untitled'}
+									{invite.pages?.title || 'Untitled'}
 								</span>{' '}
 								as <span className='capitalize font-bold'>{invite.role}</span>
 							</p>
