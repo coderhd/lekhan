@@ -24,28 +24,35 @@ function getSupabaseClient(token) {
 	)
 }
 
-async function verifyUserRole(supabase, documentId, token) {
-	if (token === 'anonymous') {
-		const apiKey =
-			process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-			process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-			''
+// Resolve an entity (page first, legacy document fallback) to owner + public flag.
+async function getEntityOwner(supabase, entityId) {
+	const { data: page } = await supabase
+		.from('pages')
+		.select('owner_id, is_public')
+		.eq('id', entityId)
+		.maybeSingle()
 
-		const anonClient = createClient(
-			process.env.NEXT_PUBLIC_SUPABASE_URL,
-			apiKey,
-			{
-				auth: { persistSession: false, autoRefreshToken: false },
-				global: { headers: { apikey: apiKey } },
-			}
-		)
-		const { data: doc } = await anonClient
-			.from('documents')
-			.select('is_public')
-			.eq('id', documentId)
-			.single()
-		
-		if (doc && doc.is_public) {
+	if (page) {
+		return { type: 'page', owner_id: page.owner_id, is_public: page.is_public }
+	}
+
+	const { data: doc } = await supabase
+		.from('documents')
+		.select('owner_id, is_public')
+		.eq('id', entityId)
+		.maybeSingle()
+
+	if (doc) {
+		return { type: 'document', owner_id: doc.owner_id, is_public: doc.is_public }
+	}
+
+	return null
+}
+
+async function verifyUserRole(supabase, entityId, token) {
+	if (token === 'anonymous') {
+		const entity = await getEntityOwner(supabase, entityId)
+		if (entity && entity.is_public) {
 			return 'viewer'
 		}
 		return null
@@ -53,44 +60,88 @@ async function verifyUserRole(supabase, documentId, token) {
 
 	const { data: { user }, error } = await supabase.auth.getUser(token)
 	if (error || !user) {
-		console.error(`[Auth] getUser failed for doc ${documentId}:`, error?.message || 'No user found')
+		console.error(`[Auth] getUser failed for ${entityId}:`, error?.message || 'No user found')
 		return null
 	}
 
-	const { data: doc } = await supabase
-		.from('documents')
-		.select('owner_id')
-		.eq('id', documentId)
-		.single()
+	const entity = await getEntityOwner(supabase, entityId)
+	if (!entity) {
+		return null
+	}
 
-	if (doc && doc.owner_id === user.id) {
+	if (entity.owner_id === user.id) {
 		return 'owner'
+	}
+
+	if (entity.type === 'page') {
+		const { data: member } = await supabase
+			.from('page_members')
+			.select('role')
+			.eq('page_id', entityId)
+			.eq('user_id', user.id)
+			.single()
+		if (member) {
+			return member.role
+		}
+
+		// Temporary authority during legacy cutover: mapped pages inherit live
+		// document_members grants (the one-time backfill goes stale after later
+		// grants/revocations made through the legacy app). The page RLS helper
+		// (can_access_page) already evaluates the same authority.
+		const { data: page } = await supabase
+			.from('pages')
+			.select('source_document_id')
+			.eq('id', entityId)
+			.maybeSingle()
+		if (page && page.source_document_id) {
+			const { data: legacyMember } = await supabase
+				.from('document_members')
+				.select('role')
+				.eq('document_id', page.source_document_id)
+				.eq('user_id', user.id)
+				.single()
+			return legacyMember ? legacyMember.role : null
+		}
+
+		return null
 	}
 
 	const { data: member } = await supabase
 		.from('document_members')
 		.select('role')
-		.eq('document_id', documentId)
+		.eq('document_id', entityId)
 		.eq('user_id', user.id)
 		.single()
 
 	return member ? member.role : null
 }
 
-async function getDocumentOwnerPlanLimit(supabaseAdmin, documentId) {
+async function getDocumentOwnerPlanLimit(supabaseAdmin, entityId) {
 	try {
-		const { data: doc } = await supabaseAdmin
-			.from('documents')
+		const { data: page } = await supabaseAdmin
+			.from('pages')
 			.select('owner_id')
-			.eq('id', documentId)
-			.single()
+			.eq('id', entityId)
+			.maybeSingle()
 
-		if (!doc || !doc.owner_id) return 2
+		let ownerId = null
+		if (page && page.owner_id) {
+			ownerId = page.owner_id
+		} else {
+			const { data: doc } = await supabaseAdmin
+				.from('documents')
+				.select('owner_id')
+				.eq('id', entityId)
+				.maybeSingle()
+			ownerId = doc ? doc.owner_id : null
+		}
+
+		if (!ownerId) return 2
 
 		const { data: profile } = await supabaseAdmin
 			.from('profiles')
 			.select('plan')
-			.eq('id', doc.owner_id)
+			.eq('id', ownerId)
 			.single()
 
 		const plan = (profile && profile.plan ? profile.plan : 'free').toLowerCase()
@@ -107,4 +158,4 @@ async function getDocumentOwnerPlanLimit(supabaseAdmin, documentId) {
 	}
 }
 
-module.exports = { getSupabaseClient, verifyUserRole, getDocumentOwnerPlanLimit }
+module.exports = { getSupabaseClient, getEntityOwner, verifyUserRole, getDocumentOwnerPlanLimit }
