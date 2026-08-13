@@ -5,12 +5,12 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import GlobalLoader from '@/components/global-loader'
 import SettingsClient from '@/components/settings-client'
-import { fetchOwnedDocumentsWithMembers } from '@/services/db'
+import { fetchOwnedPagesWithMembers } from '@/services/graph'
 
 export default function SettingsPage() {
 	const router = useRouter()
 	const [user, setUser] = useState<any | null>(null)
-	const [documents, setDocuments] = useState<any[]>([])
+	const [pages, setPages] = useState<any[]>([])
 	const [loading, setLoading] = useState(true)
 
 	useEffect(() => {
@@ -26,8 +26,8 @@ export default function SettingsPage() {
 					email: sessionUser.email,
 					full_name: sessionUser.user_metadata?.full_name
 				})
-				const docs = await fetchOwnedDocumentsWithMembers(sessionUser.id)
-				setDocuments(docs)
+				const pages = await fetchOwnedPagesWithMembers(sessionUser.id)
+				setPages(pages)
 			} catch (err) {
 				console.error(err)
 				router.push('/login')
@@ -41,5 +41,5 @@ export default function SettingsPage() {
 	if (loading) return <GlobalLoader text="Loading Settings..." />
 	if (!user) return null
 
-	return <SettingsClient user={user} documents={documents} setDocuments={setDocuments} />
+	return <SettingsClient user={user} pages={pages} setPages={setPages} />
 }
