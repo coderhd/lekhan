@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { supabase } from '@/lib/supabase'
+import { PageInvitation } from '@/types'
 import {
 	fetchWorkspaces,
 	fetchWorkspacePages,
@@ -11,6 +12,20 @@ import {
 	fetchPageBacklinks,
 	fetchPageTags,
 	fetchWorkspaceGraph,
+	ensureWorkspace,
+	fetchSharedPages,
+	fetchPageMemberRole,
+	fetchPageMembers,
+	removePageMember,
+	updatePageMemberRole,
+	createPageInvitation,
+	fetchPendingPageInvitations,
+	acceptPageInvitation,
+	declinePageInvitation,
+	fetchPageInvitationDetails,
+	fetchMentionablePageCollaborators,
+	fetchOwnedPagesWithMembers,
+	fetchVersionsForEntity,
 } from '@/services/graph'
 
 vi.mock('@/lib/supabase', () => {
@@ -20,8 +35,11 @@ vi.mock('@/lib/supabase', () => {
 		update: vi.fn().mockReturnThis(),
 		delete: vi.fn().mockReturnThis(),
 		eq: vi.fn().mockReturnThis(),
+		in: vi.fn().mockReturnThis(),
 		order: vi.fn().mockReturnThis(),
+		or: vi.fn().mockReturnThis(),
 		single: vi.fn().mockResolvedValue({ data: null, error: null }),
+		maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
 		then: vi.fn((cb) => Promise.resolve({ data: [], count: 0, error: null }).then(cb)),
 	}
 	return {
@@ -31,9 +49,9 @@ vi.mock('@/lib/supabase', () => {
 	}
 })
 
-describe('Graph Service', () => {
-	const mockBuilder = (supabase.from as any)()
+const mockBuilder = (supabase.from as any)()
 
+describe('Graph Service', () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		mockBuilder.select.mockReturnThis()
@@ -41,8 +59,11 @@ describe('Graph Service', () => {
 		mockBuilder.update.mockReturnThis()
 		mockBuilder.delete.mockReturnThis()
 		mockBuilder.eq.mockReturnThis()
+		mockBuilder.in.mockReturnThis()
 		mockBuilder.order.mockReturnThis()
+		mockBuilder.or.mockReturnThis()
 		mockBuilder.single.mockResolvedValue({ data: null, error: null })
+		mockBuilder.maybeSingle.mockResolvedValue({ data: null, error: null })
 		mockBuilder.then.mockImplementation((cb: any) => Promise.resolve({ data: [], count: 0, error: null }).then(cb))
 	})
 
@@ -160,5 +181,182 @@ describe('Graph Service', () => {
 		expect(result).toEqual({ pages: mockPages, links: mockLinks })
 		expect(supabase.from).toHaveBeenCalledWith('pages')
 		expect(supabase.from).toHaveBeenCalledWith('page_links')
+	})
+})
+
+describe('Graph Service P2 additions', () => {
+	it('ensureWorkspace returns an existing workspace', async () => {
+		const ws = { id: 'ws-1', name: 'My Workspace', owner_id: 'user-123', is_team: false, created_at: '', updated_at: '' }
+		mockBuilder.maybeSingle.mockResolvedValue({ data: ws, error: null })
+		const result = await ensureWorkspace('user-123')
+		expect(supabase.from).toHaveBeenCalledWith('workspaces')
+		expect(mockBuilder.eq).toHaveBeenCalledWith('owner_id', 'user-123')
+		expect(result).toEqual(ws)
+	})
+
+	it('ensureWorkspace inserts a workspace when none exists', async () => {
+		mockBuilder.maybeSingle.mockResolvedValue({ data: null, error: null })
+		mockBuilder.single.mockResolvedValue({ data: { id: 'ws-2', owner_id: 'user-123' }, error: null })
+		const result = await ensureWorkspace('user-123')
+		expect(mockBuilder.insert).toHaveBeenCalledWith({ owner_id: 'user-123' })
+		expect(result).toEqual({ id: 'ws-2', owner_id: 'user-123' })
+	})
+
+	it('ensureWorkspace refetches when a concurrent insert hits a unique violation', async () => {
+		mockBuilder.maybeSingle.mockResolvedValue({ data: null, error: null })
+		mockBuilder.single
+			.mockResolvedValueOnce({ data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } })
+			.mockResolvedValueOnce({ data: { id: 'ws-3', owner_id: 'user-123' }, error: null })
+		const result = await ensureWorkspace('user-123')
+		expect(result).toEqual({ id: 'ws-3', owner_id: 'user-123' })
+	})
+
+	it('fetchSharedPages queries page_members with page embed', async () => {
+		const shared = [{ role: 'editor', pages: { id: 'p-1', title: 'A' } }]
+		mockBuilder.then.mockImplementationOnce((onfulfilled: any) =>
+			Promise.resolve({ data: shared, error: null }).then(onfulfilled)
+		)
+		const result = await fetchSharedPages('user-123')
+		expect(supabase.from).toHaveBeenCalledWith('page_members')
+		expect(mockBuilder.eq).toHaveBeenCalledWith('user_id', 'user-123')
+		expect(result).toEqual(shared)
+	})
+
+	it('fetchPageMemberRole returns the role for a member', async () => {
+		mockBuilder.single.mockResolvedValue({ data: { role: 'viewer' }, error: null })
+		const role = await fetchPageMemberRole('p-1', 'user-123')
+		expect(supabase.from).toHaveBeenCalledWith('page_members')
+		expect(role).toBe('viewer')
+	})
+
+	it('fetchPageMemberRole returns null on error', async () => {
+		mockBuilder.single.mockResolvedValue({ data: null, error: { message: 'no rows' } })
+		const role = await fetchPageMemberRole('p-1', 'user-123')
+		expect(role).toBeNull()
+	})
+
+	it('fetchPageMembers returns members with profile embed', async () => {
+		const members = [{ id: 'm-1', page_id: 'p-1', user_id: 'u-1', role: 'editor' }]
+		mockBuilder.then.mockImplementationOnce((onfulfilled: any) =>
+			Promise.resolve({ data: members, error: null }).then(onfulfilled)
+		)
+		const result = await fetchPageMembers('p-1')
+		expect(supabase.from).toHaveBeenCalledWith('page_members')
+		expect(mockBuilder.eq).toHaveBeenCalledWith('page_id', 'p-1')
+		expect(result).toEqual(members)
+	})
+
+	it('removePageMember deletes the membership', async () => {
+		await removePageMember('p-1', 'u-9')
+		expect(supabase.from).toHaveBeenCalledWith('page_members')
+		expect(mockBuilder.delete).toHaveBeenCalled()
+		expect(mockBuilder.eq).toHaveBeenCalledWith('page_id', 'p-1')
+		expect(mockBuilder.eq).toHaveBeenCalledWith('user_id', 'u-9')
+	})
+
+	it('updatePageMemberRole updates the role', async () => {
+		await updatePageMemberRole('p-1', 'u-9', 'viewer')
+		expect(mockBuilder.update).toHaveBeenCalledWith({ role: 'viewer' })
+		expect(mockBuilder.eq).toHaveBeenCalledWith('page_id', 'p-1')
+		expect(mockBuilder.eq).toHaveBeenCalledWith('user_id', 'u-9')
+	})
+
+	it('createPageInvitation counts members and pending invites against the plan limit', async () => {
+		mockBuilder.single.mockResolvedValue({ data: { id: 'p-1', owner_id: 'owner-1' }, error: null })
+		let counts = 0
+		mockBuilder.then.mockImplementation((onfulfilled: any) =>
+			Promise.resolve({ data: [], count: counts++, error: null }).then(onfulfilled)
+		)
+		await createPageInvitation('p-1', 'owner-1', 'x@test.com', 'viewer', 'tok-1')
+		expect(supabase.from).toHaveBeenCalledWith('page_invitations')
+		expect(mockBuilder.insert).toHaveBeenCalledWith({
+			page_id: 'p-1',
+			inviter_id: 'owner-1',
+			invitee_email: 'x@test.com',
+			role: 'viewer',
+			token: 'tok-1',
+			status: 'pending',
+		})
+	})
+
+	it('fetchPendingPageInvitations filters by email and pending status', async () => {
+		const invites = [{ id: 'i-1', page_id: 'p-1', role: 'editor' }]
+		mockBuilder.then.mockImplementationOnce((onfulfilled: any) =>
+			Promise.resolve({ data: invites, error: null }).then(onfulfilled)
+		)
+		const result = await fetchPendingPageInvitations('x@test.com')
+		expect(supabase.from).toHaveBeenCalledWith('page_invitations')
+		expect(mockBuilder.eq).toHaveBeenCalledWith('invitee_email', 'x@test.com')
+		expect(mockBuilder.eq).toHaveBeenCalledWith('status', 'pending')
+		expect(result).toEqual(invites)
+	})
+
+	it('acceptPageInvitation inserts a member then marks the invite accepted', async () => {
+		const invite = { id: 'i-1', page_id: 'p-1', role: 'editor' } as PageInvitation
+		mockBuilder.single.mockResolvedValue({ data: { id: 'p-1', owner_id: 'owner-1' }, error: null })
+		mockBuilder.then.mockImplementation((onfulfilled: any) =>
+			Promise.resolve({ data: [], count: 0, error: null }).then(onfulfilled)
+		)
+		await acceptPageInvitation(invite, 'user-123')
+		expect(mockBuilder.insert).toHaveBeenCalledWith({ page_id: 'p-1', user_id: 'user-123', role: 'editor' })
+		expect(mockBuilder.update).toHaveBeenCalledWith({ status: 'accepted' })
+		expect(mockBuilder.eq).toHaveBeenCalledWith('id', 'i-1')
+	})
+
+	it('declinePageInvitation marks the invite declined', async () => {
+		await declinePageInvitation('i-1')
+		expect(mockBuilder.update).toHaveBeenCalledWith({ status: 'declined' })
+		expect(mockBuilder.eq).toHaveBeenCalledWith('id', 'i-1')
+	})
+
+	it('fetchPageInvitationDetails fetches by token', async () => {
+		const invite = { id: 'i-1', page_id: 'p-1', token: 'tok-1' }
+		mockBuilder.single.mockResolvedValue({ data: invite, error: null })
+		const result = await fetchPageInvitationDetails('tok-1')
+		expect(supabase.from).toHaveBeenCalledWith('page_invitations')
+		expect(mockBuilder.eq).toHaveBeenCalledWith('token', 'tok-1')
+		expect(result).toEqual(invite)
+	})
+
+	it('fetchMentionablePageCollaborators returns owner and editor members', async () => {
+		mockBuilder.single.mockResolvedValue({
+			data: { owner_id: 'owner-1', profiles: { id: 'owner-1', email: 'o@test.com', full_name: 'Owner' } },
+			error: null,
+		})
+		mockBuilder.then.mockImplementationOnce((onfulfilled: any) =>
+			Promise.resolve({
+				data: [{ role: 'editor', profiles: { id: 'ed-1', email: 'e@test.com', full_name: 'Editor' } }],
+				error: null,
+			}).then(onfulfilled)
+		)
+		const result = await fetchMentionablePageCollaborators('p-1')
+		expect(supabase.from).toHaveBeenCalledWith('pages')
+		expect(supabase.from).toHaveBeenCalledWith('page_members')
+		expect(result).toEqual([
+			{ id: 'owner-1', email: 'o@test.com', full_name: 'Owner' },
+			{ id: 'ed-1', email: 'e@test.com', full_name: 'Editor' },
+		])
+	})
+
+	it('fetchOwnedPagesWithMembers embeds page members', async () => {
+		const pages = [{ id: 'p-1', page_members: [{ id: 'm-1', user_id: 'u-1', role: 'editor' }] }]
+		mockBuilder.then.mockImplementationOnce((onfulfilled: any) =>
+			Promise.resolve({ data: pages, error: null }).then(onfulfilled)
+		)
+		const result = await fetchOwnedPagesWithMembers('user-123')
+		expect(supabase.from).toHaveBeenCalledWith('pages')
+		expect(mockBuilder.eq).toHaveBeenCalledWith('owner_id', 'user-123')
+		expect(result).toEqual(pages)
+	})
+
+	it('fetchVersionsForEntity queries page_id OR document_id', async () => {
+		const versions = [{ id: 'v-1', version_name: 'Draft' }]
+		mockBuilder.then.mockImplementationOnce((onfulfilled: any) =>
+			Promise.resolve({ data: versions, error: null }).then(onfulfilled)
+		)
+		const result = await fetchVersionsForEntity('p-1')
+		expect(supabase.from).toHaveBeenCalledWith('document_versions')
+		expect(mockBuilder.or).toHaveBeenCalledWith('page_id.eq.p-1,document_id.eq.p-1')
+		expect(result).toEqual(versions)
 	})
 })
