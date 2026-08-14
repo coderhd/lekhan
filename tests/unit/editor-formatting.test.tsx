@@ -4,6 +4,10 @@ import EditorWorkspace from '../../components/editor-workspace'
 import GlobalSearchPalette from '../../components/global-search-palette'
 import * as Y from 'yjs'
 
+vi.mock('../../components/session-reauth-provider', () => ({
+	useSessionReauth: () => ({ isLocked: false, lockSession: vi.fn(), unlockSession: vi.fn() }),
+}))
+
 // Mock the hook to avoid actual websocket connections during test
 const mockDoc = new Y.Doc()
 vi.mock('@/hooks/use-editor-collab', () => ({

@@ -6,6 +6,10 @@ import Dashboard from '@/components/dashboard'
 import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
 import GlobalSearchPalette from '@/components/global-search-palette'
 
+vi.mock('@/components/session-reauth-provider', () => ({
+	useSessionReauth: () => ({ isLocked: false, lockSession: vi.fn(), unlockSession: vi.fn() }),
+}))
+
 let authCallbacks: ((event: string, session: any) => void)[] = []
 
 vi.mock('next/navigation', () => ({

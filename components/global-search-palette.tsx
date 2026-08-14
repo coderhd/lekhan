@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import * as Dialog from '@radix-ui/react-dialog'
 import { supabase } from '@/lib/supabase'
 import { fetchRecentPages, searchPages } from '@/services/search'
+import { useSessionReauth } from '@/components/session-reauth-provider'
 import { toast } from 'sonner'
 
 const DEBOUNCE_MS = 200
@@ -31,6 +32,7 @@ export function useGlobalSearch () {
 
 export default function GlobalSearchPalette ({ children }: { children: ReactNode }) {
 	const router = useRouter()
+	const { isLocked } = useSessionReauth()
 	const [open, setOpen] = useState(false)
 	const [userId, setUserId] = useState<string | null>(null)
 	const [query, setQuery] = useState('')
@@ -41,17 +43,17 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 	const requestIdRef = useRef(0)
 
 	const openPalette = useCallback(() => {
-		if (!userId) return
+		if (!userId || isLocked) return
 		setQuery('')
 		setRows([])
 		setSelectedIndex(0)
 		setOpen(true)
-	}, [userId])
+	}, [userId, isLocked])
 
-	// Cmd/Ctrl+K opens the palette anywhere on authenticated pages.
+	// Cmd/Ctrl+K opens the palette anywhere on authenticated, unlocked pages.
 	useEffect(() => {
 		const handler = (e: globalThis.KeyboardEvent) => {
-			if (!userId) return
+			if (!userId || isLocked) return
 			if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
 				e.preventDefault()
 				openPalette()
@@ -79,9 +81,14 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 		}
 	}, [])
 
+	// Close the palette if the reauth lock engages while it is open.
+	useEffect(() => {
+		if (isLocked) setOpen(false)
+	}, [isLocked])
+
 	// Debounced fetch: recent pages when the query is empty, ranked results when querying.
 	useEffect(() => {
-		if (!userId || !open) return
+		if (!userId || !open || isLocked) return
 		const requestId = ++requestIdRef.current
 		setLoading(true)
 		if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -112,7 +119,7 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 		return () => {
 			if (debounceRef.current) clearTimeout(debounceRef.current)
 		}
-	}, [query, userId, open])
+	}, [query, userId, open, isLocked])
 
 	const handleSelect = useCallback((row: SearchRow) => {
 		setOpen(false)
@@ -136,7 +143,7 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 	return (
 		<GlobalSearchContext.Provider value={{ open: openPalette }}>
 			{children}
-			{userId && (
+			{userId && !isLocked && (
 				<Dialog.Root open={open} onOpenChange={setOpen}>
 					<Dialog.Portal>
 						<Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] animate-in fade-in" />

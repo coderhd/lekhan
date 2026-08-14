@@ -24,6 +24,11 @@ vi.mock('@/lib/supabase', () => ({
 	},
 }))
 
+const reauth = vi.hoisted(() => ({ useSessionReauth: vi.fn() }))
+vi.mock('@/components/session-reauth-provider', () => ({
+	useSessionReauth: (...args: any[]) => reauth.useSessionReauth(...args),
+}))
+
 import GlobalSearchPalette, { useGlobalSearch } from '@/components/global-search-palette'
 
 const Trigger = () => {
@@ -55,6 +60,7 @@ describe('GlobalSearchPalette', () => {
 		searchPages.mockResolvedValue([
 			{ id: 'p-9', title: 'Obsidian Workflow', icon: null, workspace_id: 'ws-1', updated_at: '2026-08-14T00:00:00Z', surface: 'title', context: null },
 		])
+		reauth.useSessionReauth.mockReturnValue({ isLocked: false, lockSession: vi.fn(), unlockSession: vi.fn() })
 	})
 
 	afterEach(() => {
@@ -121,6 +127,52 @@ describe('GlobalSearchPalette', () => {
 		await act(async () => {}) // flush the getSession promise so userId is set
 		fireEvent.click(screen.getByText('Open Search'))
 		expect(screen.getByPlaceholderText(/search pages/i)).toBeTruthy()
+	})
+
+	it('does not open via Cmd+K when the session is locked', async () => {
+		reauth.useSessionReauth.mockReturnValue({ isLocked: true, lockSession: vi.fn(), unlockSession: vi.fn() })
+		renderPalette()
+		await act(async () => {}) // flush the getSession promise so userId is set
+		await act(async () => {
+			document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, cancelable: true }))
+		})
+		expect(screen.queryByPlaceholderText(/search pages/i)).toBeNull()
+		expect(fetchRecentPages).not.toHaveBeenCalled()
+	})
+
+	it('does not open from the header trigger when the session is locked', async () => {
+		reauth.useSessionReauth.mockReturnValue({ isLocked: true, lockSession: vi.fn(), unlockSession: vi.fn() })
+		renderPalette()
+		await act(async () => {}) // flush the getSession promise so userId is set
+		fireEvent.click(screen.getByText('Open Search'))
+		expect(screen.queryByPlaceholderText(/search pages/i)).toBeNull()
+	})
+
+	it('does not swallow the native Cmd+K shortcut when the session is locked', async () => {
+		reauth.useSessionReauth.mockReturnValue({ isLocked: true, lockSession: vi.fn(), unlockSession: vi.fn() })
+		renderPalette()
+		await act(async () => {}) // flush the getSession promise so userId is set
+		let evt: KeyboardEvent
+		await act(async () => {
+			evt = new KeyboardEvent('keydown', { key: 'k', metaKey: true, cancelable: true })
+			document.dispatchEvent(evt)
+		})
+		expect(evt!.defaultPrevented).toBe(false)
+	})
+
+	it('closes the palette when the session locks while it is open', async () => {
+		const view = renderPalette()
+		await openViaKey()
+		expect(screen.getByPlaceholderText(/search pages/i)).toBeTruthy()
+		reauth.useSessionReauth.mockReturnValue({ isLocked: true, lockSession: vi.fn(), unlockSession: vi.fn() })
+		await act(async () => {
+			view.rerender(
+				<GlobalSearchPalette>
+					<Trigger />
+				</GlobalSearchPalette>
+			)
+		})
+		expect(screen.queryByPlaceholderText(/search pages/i)).toBeNull()
 	})
 
 	it('shows a toast and empty state when search fails', async () => {
