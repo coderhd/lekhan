@@ -872,7 +872,7 @@ Run the existing dashboard test to confirm the in-place search box still works u
 npm run test -- tests/unit/dashboard-refetch-on-auth.test.tsx tests/unit/search.test.ts tests/unit/global-search-palette.test.tsx
 ```
 
-Expected: all pass.
+Expected: all pass. NOTE: the dashboard/editor harnesses must be wrapped in `<GlobalSearchPalette>` (test-side accommodation, standing ruling): the components now call `useGlobalSearch()`, which throws outside the provider. The dashboard harness additionally needs (a) `getSession` in its `@/lib/supabase` mock and a `@/services/search` stub (`searchPages`/`fetchRecentPages` resolve `[]`), and (b) multi-subscriber auth fan-out (`authCallbacks` + `fireAuth`) — the palette subscribes to `onAuthStateChange` too, and a single-slot `authCallback` mock would fire the palette's handler instead of Dashboard's, stealing the graph `mockImplementationOnce` promises and masking the refetch behavior under test. Same for `editor-formatting.test.tsx` (wrap + `getSession` + `onAuthStateChange` in its supabase mock).
 
 - [ ] **Step 5: Lint + build**
 
