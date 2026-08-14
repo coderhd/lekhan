@@ -36,6 +36,7 @@ vi.mock('@/lib/supabase', () => {
 		delete: vi.fn().mockReturnThis(),
 		eq: vi.fn().mockReturnThis(),
 		in: vi.fn().mockReturnThis(),
+		neq: vi.fn().mockReturnThis(),
 		order: vi.fn().mockReturnThis(),
 		or: vi.fn().mockReturnThis(),
 		single: vi.fn().mockResolvedValue({ data: null, error: null }),
@@ -185,6 +186,10 @@ describe('Graph Service', () => {
 })
 
 describe('Graph Service P2 additions', () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+	})
+
 	it('ensureWorkspace returns an existing workspace', async () => {
 		const ws = { id: 'ws-1', name: 'My Workspace', owner_id: 'user-123', is_team: false, created_at: '', updated_at: '' }
 		mockBuilder.maybeSingle.mockResolvedValue({ data: ws, error: null })
@@ -279,6 +284,25 @@ describe('Graph Service P2 additions', () => {
 		})
 	})
 
+	it('createPageInvitation rejects at the collaborator limit without inserting', async () => {
+		mockBuilder.single.mockResolvedValue({ data: { id: 'p-1', owner_id: 'owner-1' }, error: null })
+		mockBuilder.then
+			.mockImplementationOnce((onfulfilled: any) =>
+				Promise.resolve({ data: [], count: 2, error: null }).then(onfulfilled)
+			)
+			.mockImplementationOnce((onfulfilled: any) =>
+				Promise.resolve({ data: [], count: 0, error: null }).then(onfulfilled)
+			)
+		await expect(createPageInvitation('p-1', 'owner-1', 'x@test.com', 'viewer', 'tok-1')).rejects.toThrow('Collaborator limit reached')
+		expect(mockBuilder.insert).not.toHaveBeenCalled()
+	})
+
+	it('createPageInvitation propagates precheck failures without inserting', async () => {
+		mockBuilder.single.mockResolvedValue({ data: null, error: { message: 'page fetch failed' } })
+		await expect(createPageInvitation('p-1', 'owner-1', 'x@test.com', 'viewer', 'tok-1')).rejects.toThrow('page fetch failed')
+		expect(mockBuilder.insert).not.toHaveBeenCalled()
+	})
+
 	it('fetchPendingPageInvitations filters by email and pending status', async () => {
 		const invites = [{ id: 'i-1', page_id: 'p-1', role: 'editor' }]
 		mockBuilder.then.mockImplementationOnce((onfulfilled: any) =>
@@ -292,7 +316,7 @@ describe('Graph Service P2 additions', () => {
 	})
 
 	it('acceptPageInvitation inserts a member then marks the invite accepted', async () => {
-		const invite = { id: 'i-1', page_id: 'p-1', role: 'editor' } as PageInvitation
+		const invite = { id: 'i-1', page_id: 'p-1', role: 'editor', status: 'pending' } as PageInvitation
 		mockBuilder.single.mockResolvedValue({ data: { id: 'p-1', owner_id: 'owner-1' }, error: null })
 		mockBuilder.then.mockImplementation((onfulfilled: any) =>
 			Promise.resolve({ data: [], count: 0, error: null }).then(onfulfilled)
@@ -301,6 +325,39 @@ describe('Graph Service P2 additions', () => {
 		expect(mockBuilder.insert).toHaveBeenCalledWith({ page_id: 'p-1', user_id: 'user-123', role: 'editor' })
 		expect(mockBuilder.update).toHaveBeenCalledWith({ status: 'accepted' })
 		expect(mockBuilder.eq).toHaveBeenCalledWith('id', 'i-1')
+	})
+
+	it('acceptPageInvitation rejects a non-pending invite without inserting', async () => {
+		const invite = { id: 'i-1', page_id: 'p-1', role: 'editor', status: 'declined' } as PageInvitation
+		await expect(acceptPageInvitation(invite, 'user-123')).rejects.toThrow('This invitation is no longer available')
+		expect(mockBuilder.insert).not.toHaveBeenCalled()
+		expect(mockBuilder.update).not.toHaveBeenCalled()
+	})
+
+	it('acceptPageInvitation rejects at the collaborator limit without inserting', async () => {
+		const invite = { id: 'i-1', page_id: 'p-1', role: 'editor', status: 'pending' } as PageInvitation
+		mockBuilder.single.mockResolvedValue({ data: { id: 'p-1', owner_id: 'owner-1' }, error: null })
+		mockBuilder.then
+			.mockImplementationOnce((onfulfilled: any) =>
+				Promise.resolve({ data: [], count: 2, error: null }).then(onfulfilled)
+			)
+			.mockImplementationOnce((onfulfilled: any) =>
+				Promise.resolve({ data: [], count: 0, error: null }).then(onfulfilled)
+			)
+		await expect(acceptPageInvitation(invite, 'user-123')).rejects.toThrow('Collaborator limit reached')
+		expect(mockBuilder.insert).not.toHaveBeenCalled()
+		expect(mockBuilder.update).not.toHaveBeenCalled()
+	})
+
+	it('acceptPageInvitation propagates count-query failures without inserting', async () => {
+		const invite = { id: 'i-1', page_id: 'p-1', role: 'editor', status: 'pending' } as PageInvitation
+		mockBuilder.single.mockResolvedValue({ data: { id: 'p-1', owner_id: 'owner-1' }, error: null })
+		mockBuilder.then.mockImplementationOnce((onfulfilled: any) =>
+			Promise.resolve({ data: [], count: null, error: { message: 'count failed' } }).then(onfulfilled)
+		)
+		await expect(acceptPageInvitation(invite, 'user-123')).rejects.toThrow('count failed')
+		expect(mockBuilder.insert).not.toHaveBeenCalled()
+		expect(mockBuilder.update).not.toHaveBeenCalled()
 	})
 
 	it('declinePageInvitation marks the invite declined', async () => {
@@ -350,13 +407,20 @@ describe('Graph Service P2 additions', () => {
 	})
 
 	it('fetchVersionsForEntity queries page_id OR document_id', async () => {
+		const entityId = '11111111-1111-4111-8111-111111111111'
 		const versions = [{ id: 'v-1', version_name: 'Draft' }]
 		mockBuilder.then.mockImplementationOnce((onfulfilled: any) =>
 			Promise.resolve({ data: versions, error: null }).then(onfulfilled)
 		)
-		const result = await fetchVersionsForEntity('p-1')
+		const result = await fetchVersionsForEntity(entityId)
 		expect(supabase.from).toHaveBeenCalledWith('document_versions')
-		expect(mockBuilder.or).toHaveBeenCalledWith('page_id.eq.p-1,document_id.eq.p-1')
+		expect(mockBuilder.or).toHaveBeenCalledWith(`page_id.eq.${entityId},document_id.eq.${entityId}`)
 		expect(result).toEqual(versions)
+	})
+
+	it('fetchVersionsForEntity rejects a non-UUID id without querying', async () => {
+		const result = await fetchVersionsForEntity('p-1')
+		expect(result).toEqual([])
+		expect(supabase.from).not.toHaveBeenCalledWith('document_versions')
 	})
 })

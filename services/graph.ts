@@ -1,6 +1,14 @@
 import { supabase } from '@/lib/supabase'
-import { Backlink, DocumentVersion, MemberPageItem, MemberRole, Page, PageInvitation, PageLink, PageMember, PageTag, Workspace } from '@/types'
+import { Backlink, DocumentVersion, MemberPageItem, MemberRole, Page, PageInvitation, PageInvitationProjection, PageLink, PageMember, PageTag, Workspace } from '@/types'
 import { getPlanCollaboratorLimit, getUserAICredits } from '@/services/db'
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const normalizeInvitation = (row: PageInvitationProjection): PageInvitation => ({
+	...row,
+	pages: Array.isArray(row.pages) ? row.pages[0] : row.pages,
+	profiles: Array.isArray(row.profiles) ? row.profiles[0] : row.profiles,
+})
 
 export async function fetchWorkspaces (userId: string): Promise<Workspace[]> {
 	const { data, error } = await supabase
@@ -276,31 +284,31 @@ export async function createPageInvitation (
 	role: 'editor' | 'viewer',
 	token: string
 ): Promise<void> {
-	try {
-		const pageDetails = await fetchPageDetails(pageId)
-		const ownerCredits = await getUserAICredits(pageDetails.owner_id)
-		const allowedLimit = getPlanCollaboratorLimit(ownerCredits.plan)
+	const pageDetails = await fetchPageDetails(pageId)
+	const ownerCredits = await getUserAICredits(pageDetails.owner_id)
+	const allowedLimit = getPlanCollaboratorLimit(ownerCredits.plan)
 
-		const { count: memberCount } = await supabase
-			.from('page_members')
-			.select('*', { count: 'exact', head: true })
-			.eq('page_id', pageId)
+	const { count: memberCount, error: memberError } = await supabase
+		.from('page_members')
+		.select('*', { count: 'exact', head: true })
+		.eq('page_id', pageId)
+	if (memberError) {
+		throw memberError
+	}
 
-		const { count: inviteCount } = await supabase
-			.from('page_invitations')
-			.select('*', { count: 'exact', head: true })
-			.eq('page_id', pageId)
-			.eq('status', 'pending')
+	const { count: inviteCount, error: inviteError } = await supabase
+		.from('page_invitations')
+		.select('*', { count: 'exact', head: true })
+		.eq('page_id', pageId)
+		.eq('status', 'pending')
+	if (inviteError) {
+		throw inviteError
+	}
 
-		const totalCount = (memberCount || 0) + (inviteCount || 0)
+	const totalCount = (memberCount || 0) + (inviteCount || 0)
 
-		if (totalCount >= allowedLimit) {
-			throw new Error(`Collaborator limit reached for page owner's ${ownerCredits.plan.toUpperCase()} plan (max ${allowedLimit}). Upgrade plan to add more collaborators.`)
-		}
-	} catch (e: any) {
-		if (e.message && e.message.includes('Collaborator limit reached')) {
-			throw e
-		}
+	if (totalCount >= allowedLimit) {
+		throw new Error(`Collaborator limit reached for page owner's ${ownerCredits.plan.toUpperCase()} plan (max ${allowedLimit}). Upgrade plan to add more collaborators.`)
 	}
 
 	const { error } = await supabase
@@ -325,9 +333,12 @@ export async function fetchPendingPageInvitations (email: string): Promise<PageI
 		.select(`
 			id,
 			page_id,
-			role,
 			inviter_id,
 			invitee_email,
+			role,
+			token,
+			status,
+			created_at,
 			pages (title),
 			profiles:inviter_id (email, full_name)
 		`)
@@ -337,30 +348,43 @@ export async function fetchPendingPageInvitations (email: string): Promise<PageI
 	if (error) {
 		throw error
 	}
-	return (data as unknown as PageInvitation[]) || []
+	return (data as PageInvitationProjection[]).map(normalizeInvitation) || []
 }
 
 export async function acceptPageInvitation (invite: PageInvitation, userId: string): Promise<void> {
-	try {
-		const pageDetails = await fetchPageDetails(invite.page_id)
-		const ownerCredits = await getUserAICredits(pageDetails.owner_id)
-		const allowedLimit = getPlanCollaboratorLimit(ownerCredits.plan)
-
-		const { count: memberCount } = await supabase
-			.from('page_members')
-			.select('*', { count: 'exact', head: true })
-			.eq('page_id', invite.page_id)
-
-		if ((memberCount || 0) >= allowedLimit) {
-			throw new Error(`Collaborator limit reached for this page's owner (${ownerCredits.plan.toUpperCase()} plan, max ${allowedLimit}).`)
-		}
-	} catch (e: any) {
-		if (e.message && e.message.includes('Collaborator limit reached')) {
-			throw e
-		}
+	if (invite.status !== 'pending') {
+		throw new Error('This invitation is no longer available')
 	}
 
-	const { error: memberError } = await supabase
+	const pageDetails = await fetchPageDetails(invite.page_id)
+	const ownerCredits = await getUserAICredits(pageDetails.owner_id)
+	const allowedLimit = getPlanCollaboratorLimit(ownerCredits.plan)
+
+	const { count: memberCount, error: memberError } = await supabase
+		.from('page_members')
+		.select('*', { count: 'exact', head: true })
+		.eq('page_id', invite.page_id)
+	if (memberError) {
+		throw memberError
+	}
+
+	// Count other pending invites, excluding the one being accepted, so the
+	// invitee's own pending row is not double-counted against the limit.
+	const { count: inviteCount, error: inviteError } = await supabase
+		.from('page_invitations')
+		.select('*', { count: 'exact', head: true })
+		.eq('page_id', invite.page_id)
+		.eq('status', 'pending')
+		.neq('id', invite.id)
+	if (inviteError) {
+		throw inviteError
+	}
+
+	if ((memberCount || 0) + (inviteCount || 0) >= allowedLimit) {
+		throw new Error(`Collaborator limit reached for this page's owner (${ownerCredits.plan.toUpperCase()} plan, max ${allowedLimit}).`)
+	}
+
+	const { error: memberError2 } = await supabase
 		.from('page_members')
 		.insert({
 			page_id: invite.page_id,
@@ -368,17 +392,17 @@ export async function acceptPageInvitation (invite: PageInvitation, userId: stri
 			role: invite.role,
 		})
 
-	if (memberError && !memberError.message.includes('duplicate key')) {
-		throw memberError
+	if (memberError2 && !memberError2.message.includes('duplicate key')) {
+		throw memberError2
 	}
 
-	const { error: inviteError } = await supabase
+	const { error: inviteError2 } = await supabase
 		.from('page_invitations')
 		.update({ status: 'accepted' })
 		.eq('id', invite.id)
 
-	if (inviteError) {
-		throw inviteError
+	if (inviteError2) {
+		throw inviteError2
 	}
 }
 
@@ -399,8 +423,12 @@ export async function fetchPageInvitationDetails (token: string): Promise<PageIn
 		.select(`
 			id,
 			page_id,
+			inviter_id,
+			invitee_email,
 			role,
+			token,
 			status,
+			created_at,
 			pages (title),
 			profiles:inviter_id (email, full_name)
 		`)
@@ -410,7 +438,7 @@ export async function fetchPageInvitationDetails (token: string): Promise<PageIn
 	if (error) {
 		throw error
 	}
-	return data as unknown as PageInvitation
+	return normalizeInvitation(data as PageInvitationProjection)
 }
 
 export async function fetchMentionablePageCollaborators (pageId: string): Promise<Array<{ id: string; email: string; full_name: string; avatar_url?: string }>> {
@@ -479,6 +507,10 @@ export async function fetchOwnedPagesWithMembers (userId: string): Promise<(Page
 }
 
 export async function fetchVersionsForEntity (entityId: string): Promise<DocumentVersion[]> {
+	if (!UUID_PATTERN.test(entityId)) {
+		return []
+	}
+
 	const { data, error } = await supabase
 		.from('document_versions')
 		.select(`

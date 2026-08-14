@@ -41,7 +41,7 @@ export interface DocumentInvitation {
 
 export interface DocumentVersion {
 	id: string
-	document_id: string
+	document_id: string | null
 	page_id?: string | null
 	version_name: string
 	created_at: string
@@ -123,6 +123,14 @@ export interface PageInvitation {
 	created_at: string
 	pages?: { title: string }
 	profiles?: { email: string; full_name: string | null }
+}
+
+// Projection returned by invitation queries: every PageInvitation field is
+// selected, and the embedded relations come back in array form per the
+// PostgREST client's generic inference (normalized to objects at runtime).
+export interface PageInvitationProjection extends Omit<PageInvitation, 'pages' | 'profiles'> {
+	pages?: { title: string }[]
+	profiles?: { email: string; full_name: string | null }[]
 }
 
 export interface MemberPageItem {

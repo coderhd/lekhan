@@ -35,47 +35,45 @@ export default function ShareModal({
 	const [membersLoading, setMembersLoading] = useState(false)
 
 	useEffect(() => {
-		if (isOpen) {
-			fetchDocPublicState()
-			fetchCollaborators()
-		}
-	}, [isOpen, documentId])
+		if (!isOpen) return
 
-	const fetchDocPublicState = async () => {
-		try {
-			const data = await fetchPageDetails(documentId)
-			setIsPublic(data.is_public)
-		} catch (err) {
-			console.error('Error fetching doc public state:', err)
-		}
-	}
-
-	const fetchCollaborators = async () => {
-		try {
-			const collabs = await fetchPastCollaborators(userId)
-			setPastCollaborators(collabs)
-		} catch (err) {
-			console.error('Error fetching past collaborators:', err)
-		}
-	}
-
-	const loadMembers = async () => {
+		let cancelled = false
 		setMembersLoading(true)
-		try {
-			const data = await fetchPageMembers(documentId)
-			setMembers(data)
-		} catch (err) {
-			console.error('Error fetching page members:', err)
-		} finally {
-			setMembersLoading(false)
-		}
-	}
 
-	useEffect(() => {
-		if (isOpen) {
-			loadMembers()
+		const load = async () => {
+			try {
+				const data = await fetchPageDetails(documentId)
+				if (cancelled) return
+				setIsPublic(data.is_public)
+			} catch (err) {
+				console.error('Error fetching doc public state:', err)
+			}
+			try {
+				const collabs = await fetchPastCollaborators(userId)
+				if (cancelled) return
+				setPastCollaborators(collabs)
+			} catch (err) {
+				console.error('Error fetching past collaborators:', err)
+			}
+			try {
+				const memberData = await fetchPageMembers(documentId)
+				if (cancelled) return
+				setMembers(memberData)
+			} catch (err) {
+				console.error('Error fetching page members:', err)
+			} finally {
+				if (!cancelled) {
+					setMembersLoading(false)
+				}
+			}
 		}
-	}, [isOpen, documentId])
+
+		load()
+
+		return () => {
+			cancelled = true
+		}
+	}, [isOpen, documentId, userId])
 
 	const handleRemoveMember = async (member: PageMember) => {
 		try {

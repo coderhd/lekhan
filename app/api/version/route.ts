@@ -103,17 +103,42 @@ export async function POST(request: NextRequest) {
 
 		// 1. Verify user role: only owners and editors can create versions.
 		// Pages are the primary entity; legacy documents fall back for
-		// unmapped ids (rollback path).
-		const { data: page } = await supabaseClient
+		// unmapped ids (rollback path). The page lookup must be trusted
+		// (service-role, RLS-bypassing): an RLS-filtered null here would also
+		// mean "no access", and legacy documents share the id space with pages
+		// (P1 backfill kept twin records), so an authorized legacy-document
+		// user could otherwise slip past page authorization.
+		const { data: page } = await supabaseAdmin
 			.from('pages')
-			.select('owner_id')
+			.select('id')
 			.eq('id', documentId)
 			.maybeSingle()
 
-		let isOwner = !!(page && page.owner_id === user.id)
+		let isOwner = false
 		let isEditor = false
 
-		if (!page) {
+		if (page) {
+			// Page path: authorize through the caller-scoped client so RLS
+			// still gates what the caller can see.
+			const { data: pageRow } = await supabaseClient
+				.from('pages')
+				.select('owner_id')
+				.eq('id', documentId)
+				.maybeSingle()
+
+			isOwner = !!(pageRow && pageRow.owner_id === user.id)
+
+			if (!isOwner) {
+				const { data: member } = await supabaseClient
+					.from('page_members')
+					.select('role')
+					.eq('page_id', documentId)
+					.eq('user_id', user.id)
+					.single()
+
+				isEditor = !!(member && member.role === 'editor')
+			}
+		} else {
 			const { data: doc } = await supabaseClient
 				.from('documents')
 				.select('owner_id')
@@ -132,15 +157,6 @@ export async function POST(request: NextRequest) {
 
 				isEditor = !!(member && member.role === 'editor')
 			}
-		} else if (!isOwner) {
-			const { data: member } = await supabaseClient
-				.from('page_members')
-				.select('role')
-				.eq('page_id', documentId)
-				.eq('user_id', user.id)
-				.single()
-
-			isEditor = !!(member && member.role === 'editor')
 		}
 
 		if (!isOwner && !isEditor) {

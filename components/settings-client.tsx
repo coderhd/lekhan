@@ -14,9 +14,11 @@ import BYOKSettings from '@/components/byok-settings'
 import PricingMatrix from '@/components/pricing-plans'
 import { CustomSelect } from './ui/custom-select'
 
+const EMPTY_PAGES: any[] = []
+
 export default function SettingsClient({
 	user,
-	pages: initialPages = [],
+	pages: initialPages = EMPTY_PAGES,
 	setPages: setParentPages,
 }: {
 	user: { id?: string; email: string; full_name?: string }

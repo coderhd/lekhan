@@ -21,6 +21,7 @@ export default function PageRoute({
 	const [loading, setLoading] = useState(true)
 
 	useEffect(() => {
+		let cancelled = false
 		const loadPageAndSession = async () => {
 			try {
 				// 1. Get current session and token
@@ -35,18 +36,22 @@ export default function PageRoute({
 					return
 				}
 
+				// 2. Fetch page details once and reuse the result for both the
+				// public-page validation and the page title state.
+				let page: Awaited<ReturnType<typeof fetchPageDetails>> | null = null
 				if (session) {
+					if (cancelled) return
 					setUser(session.user)
 					setToken(session.access_token)
+					page = await fetchPageDetails(params.id)
 				} else {
 					// Check if page is public
 					try {
-						const page = await fetchPageDetails(params.id)
+						page = await fetchPageDetails(params.id)
 						if (page && page.is_public) {
-							// Mock anonymous user
-							const randomId = Math.random().toString(36).substring(7)
+							if (cancelled) return
 							setUser({
-								id: `anon-${randomId}`,
+								id: `anon-${crypto.randomUUID()}`,
 								email: 'anonymous@public',
 								full_name: 'Anonymous Viewer'
 							})
@@ -61,26 +66,30 @@ export default function PageRoute({
 					}
 				}
 
-				// 2. Fetch page details
-				const page = await fetchPageDetails(params.id)
+				if (cancelled) return
 				setPageTitle(page.title)
 			} catch (err: unknown) {
 				console.error('Error loading page:', err)
 				toast.error('Page not found or access denied')
 				router.push('/')
 			} finally {
-				setLoading(false)
+				if (!cancelled) {
+					setLoading(false)
+				}
 			}
 		}
 
 		loadPageAndSession()
+		return () => {
+			cancelled = true
+		}
 	}, [params.id, router])
 
 	if (loading) {
 		return <GlobalLoader text="Loading page..." />
 	}
 
-	if (!user || !token || !pageTitle) {
+	if (!user || !token || pageTitle === null) {
 		return null
 	}
 

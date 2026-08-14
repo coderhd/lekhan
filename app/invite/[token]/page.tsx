@@ -43,6 +43,12 @@ export default function InvitePage ({
 					return
 				}
 
+				if (invitation.status !== 'pending') {
+					toast.error('This invitation is no longer available')
+					router.push('/')
+					return
+				}
+
 				setInvite(invitation)
 			} catch (err) {
 				console.error('Unexpected error loading invite page:', err)

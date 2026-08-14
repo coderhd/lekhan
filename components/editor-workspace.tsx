@@ -1072,7 +1072,7 @@ export default function EditorWorkspace({
 				documentId={pageId}
 				documentTitle={title}
 				userId={currentUser.id}
-				isOwner={isViewer === false && currentUser.id === (ownerId ?? '')}
+				isOwner={currentUser.id === ownerId}
 			/>
 
 			<PromptDialog

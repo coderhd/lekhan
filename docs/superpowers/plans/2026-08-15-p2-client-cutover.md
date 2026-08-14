@@ -175,7 +175,10 @@ END;
 $$;
 
 -- 3. document_versions: nullable page_id FK (twin-less pages can hold versions);
--- document_id stays NOT NULL for legacy rows written before the cutover.
+-- document_id must be nullable: page-backed records (version-history.tsx
+-- checkpoint save, app/api/version/route.ts page branch) insert page-only
+-- rows and omit document_id. Follow-up migration
+-- 20260816000001_document_versions_page_only.sql drops the NOT NULL.
 ALTER TABLE public.document_versions
 	ADD COLUMN IF NOT EXISTS page_id UUID REFERENCES public.pages(id) ON DELETE CASCADE;
 
@@ -799,7 +802,7 @@ export interface PageLink {
 ```ts
 export interface DocumentVersion {
 	id: string
-	document_id: string
+	document_id: string | null
 	page_id?: string | null
 	version_name: string
 	created_at: string
@@ -1392,13 +1395,19 @@ git commit -m "feat(dashboard): cut over to pages and page members"
 
 In `tests/unit/editor-formatting.test.tsx`:
 
-(a) Replace the `vi.mock('@/services/db', ...)` block (lines 34-42) with:
+(a) Replace the `vi.mock('@/services/db', ...)` block (lines 34-42) with separate
+mocks for the two service modules — `getUserAICredits` is imported from
+`@/services/db` by `EditorWorkspace`, so it must be mocked there, NOT in the
+graph-service mock:
 ```ts
 vi.mock('@/services/graph', () => ({
 	fetchPageDetails: vi.fn().mockResolvedValue({ owner_id: 'test-user', is_public: false }),
 	fetchPageMemberRole: vi.fn().mockResolvedValue('owner'),
 	updatePageTitle: vi.fn().mockResolvedValue(true),
 	fetchMentionablePageCollaborators: vi.fn().mockResolvedValue([]),
+}))
+
+vi.mock('@/services/db', () => ({
 	getUserAICredits: vi.fn().mockResolvedValue({ plan: 'free', totalAllocated: 50, usedCredits: 0, remainingCredits: 50 }),
 }))
 ```

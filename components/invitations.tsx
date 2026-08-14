@@ -56,6 +56,7 @@ export default function Invitations({
 			await declinePageInvitation(inviteId)
 			toast.success('Invitation declined')
 			fetchInvitations()
+			onRefresh()
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err)
 			toast.error(`Failed to decline: ${message}`)
