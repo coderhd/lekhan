@@ -72,7 +72,7 @@ DECLARE
 	v_pattern text;
 	v_limit integer;
 BEGIN
-	v_limit := least(coalesce(p_limit, 15), 50);
+	v_limit := greatest(least(coalesce(p_limit, 15), 50), 0);
 	IF p_query IS NULL OR length(btrim(p_query)) = 0 THEN
 		RETURN;
 	END IF;
@@ -515,6 +515,17 @@ describe('GlobalSearchPalette', () => {
 		expect(screen.getByText('Obsidian Workflow')).toBeTruthy()
 	})
 
+	it('renders recent pages when opened after the mount-time fetch would have completed', async () => {
+		renderPalette()
+		await act(async () => {}) // flush the getSession promise so userId is set
+		await act(async () => { await vi.advanceTimersByTimeAsync(210) })
+		expect(fetchRecentPages).not.toHaveBeenCalled()
+		await openViaKey()
+		await act(async () => { await vi.advanceTimersByTimeAsync(210) })
+		expect(fetchRecentPages).toHaveBeenCalledWith('user-1', 8)
+		expect(screen.getByText('Recent Page')).toBeTruthy()
+	})
+
 	it('navigates to the selected page on Enter', async () => {
 		renderPalette()
 		await openViaKey()
@@ -615,6 +626,7 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 	// Cmd/Ctrl+K opens the palette anywhere on authenticated pages.
 	useEffect(() => {
 		const handler = (e: globalThis.KeyboardEvent) => {
+			if (!userId) return
 			if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
 				e.preventDefault()
 				openPalette()
@@ -644,7 +656,7 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 
 	// Debounced fetch: recent pages when the query is empty, ranked results when querying.
 	useEffect(() => {
-		if (!userId) return
+		if (!userId || !open) return
 		const requestId = ++requestIdRef.current
 		setLoading(true)
 		if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -675,7 +687,7 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 		return () => {
 			if (debounceRef.current) clearTimeout(debounceRef.current)
 		}
-	}, [query, userId])
+	}, [query, userId, open])
 
 	const handleSelect = useCallback((row: SearchRow) => {
 		setOpen(false)
@@ -759,7 +771,7 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `npm run test -- tests/unit/global-search-palette.test.tsx`
-Expected: 7/7 pass.
+Expected: 8/8 pass.
 
 - [ ] **Step 5: Lint + build**
 
