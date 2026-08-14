@@ -34,6 +34,7 @@ import { SlashMenuExtension, buildSlashMenuItems } from '@/lib/slash-menu-extens
 import { SlashMenuComponent } from './slash-menu'
 import ProfileMenu from './profile-menu'
 import ThemeToggle from './theme-toggle'
+import { useGlobalSearch } from '@/components/global-search-palette'
 import { ColorHighlightPopover } from './color-highlight-popover'
 import { ImageUploadButton } from './image-upload-button'
 import GlobalLoader from './global-loader'
@@ -255,6 +256,8 @@ export default function EditorWorkspace({
 		setDiffPreview(null)
 		setIsLekhanBotOpen(true)
 	}, [])
+
+	const { open: openGlobalSearch } = useGlobalSearch()
 
 
 
@@ -756,6 +759,14 @@ export default function EditorWorkspace({
 								</div>
 							)}
 						</div>
+
+						<button
+							onClick={openGlobalSearch}
+							className="hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium bg-surface-container-low"
+							title="Search (Cmd+K)"
+						>
+							<span className="material-symbols-outlined text-primary-container text-lg">search</span>
+						</button>
 
 						<button
 							onClick={() => { setIsHistoryOpen(!isHistoryOpen); setIsAIPanelOpen(false); }}

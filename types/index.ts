@@ -137,3 +137,13 @@ export interface MemberPageItem {
 	role: MemberRole
 	pages: Page
 }
+
+export interface SearchResult {
+	id: string
+	title: string
+	icon: string | null
+	workspace_id: string
+	updated_at: string
+	surface: 'title' | 'tag' | 'link' | 'content'
+	context: string | null
+}
