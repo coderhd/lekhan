@@ -24,7 +24,7 @@ navigation. Serves as the quick-switch palette from the H0 roadmap.
 
 ## Architecture
 
-```
+```text
 Cmd+K / header button ──▶ GlobalSearchPalette (root layout, authed only)
                             │  debounced query
                             ▼
