@@ -5,7 +5,8 @@ import React from 'react'
 const push = vi.fn()
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }))
 
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
+vi.mock('sonner', () => ({ toast }))
 
 const searchPages = vi.fn()
 const fetchRecentPages = vi.fn()
@@ -181,6 +182,7 @@ describe('GlobalSearchPalette', () => {
 		await openViaKey()
 		fireEvent.change(screen.getByPlaceholderText(/search pages/i), { target: { value: 'x' } })
 		await act(async () => { await vi.advanceTimersByTimeAsync(210) })
+		expect(toast.error).toHaveBeenCalledWith('Search failed. Please try again.')
 		expect(screen.getByText(/no pages match/i)).toBeTruthy()
 	})
 })

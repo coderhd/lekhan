@@ -148,6 +148,7 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 					<Dialog.Portal>
 						<Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] animate-in fade-in" />
 						<Dialog.Content className="fixed top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-xl bg-surface-container rounded-2xl border border-black/10 dark:border-white/10 shadow-2xl z-[100000] animate-in zoom-in-95">
+							<Dialog.Title className="sr-only">Search pages</Dialog.Title>
 							<div className="flex items-center gap-xs px-4 py-3 border-b border-black/5 dark:border-white/5">
 								<span className="material-symbols-outlined text-on-surface-variant shrink-0">search</span>
 								<input
@@ -156,6 +157,7 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 									value={query}
 									onChange={(e) => setQuery(e.target.value)}
 									onKeyDown={onInputKeyDown}
+									aria-label="Search pages"
 									className="w-full bg-transparent outline-none text-on-surface placeholder:text-on-surface-variant/50"
 									placeholder="Search pages, tags, links…"
 								/>
