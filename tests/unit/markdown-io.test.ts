@@ -181,6 +181,23 @@ describe('buildFrontmatter / assembleMarkdownFile', () => {
 		expect(yaml).toContain('other: 1')
 	})
 
+	it('drops reserved keys that live only in properties', () => {
+		const yaml = buildFrontmatter({
+			properties: { title: 'fake', tags: ['fake'], other: 1 },
+		})
+		expect(yaml).not.toContain('title: fake')
+		expect(yaml).not.toContain('tags:')
+		expect(yaml).toContain('other: 1')
+	})
+
+	it('omits properties-only reserved keys from assembled files', () => {
+		const file = assembleMarkdownFile({ properties: { title: 'fake', tags: ['fake'], other: 1 } }, 'Body\n')
+		expect(file).not.toContain('title: fake')
+		expect(file).not.toContain('tags:')
+		expect(file).toContain('other: 1')
+		expect(file).toContain('Body\n')
+	})
+
 	it('passes through the body when no meta keys exist', () => {
 		expect(assembleMarkdownFile({ properties: {} }, 'Body text\n')).toBe('Body text\n')
 	})

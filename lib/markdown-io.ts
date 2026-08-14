@@ -100,7 +100,15 @@ export function parseFrontmatter(markdown: string): ParsedFrontmatter {
 }
 
 function pageMetaToData(meta: PageMeta): Record<string, unknown> {
-	const data: Record<string, unknown> = { ...meta.properties }
+	// Reserved keys never serialize from `properties` — they must come from
+	// the top-level `PageMeta` fields. `parseFrontmatter` guarantees this
+	// invariant; filtering keeps it true for hand-built metas too.
+	const data: Record<string, unknown> = {}
+	for (const [key, value] of Object.entries(meta.properties)) {
+		if (!RESERVED_KEYS.has(key)) {
+			data[key] = value
+		}
+	}
 	if (meta.title !== undefined) {
 		data.title = meta.title
 	}
