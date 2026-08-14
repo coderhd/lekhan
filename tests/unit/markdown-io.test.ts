@@ -15,7 +15,7 @@ import {
 function expectMdRoundTrip(md: string) {
 	const serialized = serializeMarkdown(parseMarkdown(md))
 	expect(serialized).toBe(md)
-	expect(JSON.stringify(parseMarkdown(serialized))).toBe(JSON.stringify(parseMarkdown(md)))
+	expect(parseMarkdown(serialized)).toEqual(parseMarkdown(md))
 }
 
 describe('parseMarkdown / serializeMarkdown — block round-trip stability', () => {
@@ -83,7 +83,8 @@ describe('parseMarkdown / serializeMarkdown — block round-trip stability', () 
 
 	it('round-trips an empty document', () => {
 		const doc = parseMarkdown('')
-		expect(JSON.stringify(serializeMarkdown(doc))).toBe(JSON.stringify(''))
+		expect(serializeMarkdown(doc)).toBe('')
+		expect(parseMarkdown('')).toEqual(doc)
 	})
 
 	it('is stable across repeated serialize(parse()) applications', () => {
@@ -101,7 +102,7 @@ describe('inline HTML preservation', () => {
 		expect(serialized).toContain('<span')
 		expect(serialized).toContain('colored</span>')
 		// Stability: re-parsing the serialized output yields the same doc.
-		expect(JSON.stringify(parseMarkdown(serialized))).toBe(JSON.stringify(parseMarkdown(md)))
+		expect(parseMarkdown(serialized)).toEqual(parseMarkdown(md))
 	})
 })
 
@@ -241,6 +242,6 @@ describe('end-to-end: a full markdown file round-trips', () => {
 		expect(reparsed.body).toBe(serializedBody)
 
 		const reparsedDoc = parseMarkdown(reparsed.body)
-		expect(JSON.stringify(reparsedDoc)).toBe(JSON.stringify(parseMarkdown(serializedBody)))
+		expect(reparsedDoc).toEqual(parseMarkdown(serializedBody))
 	})
 })

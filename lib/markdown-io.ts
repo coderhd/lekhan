@@ -34,6 +34,15 @@ function getHeadlessEditor(): Editor {
 	return headlessEditor
 }
 
+interface MarkdownStorage {
+	parser: { parse: (md: string) => string }
+	serializer: { serialize: (node: unknown) => string }
+}
+
+function getMarkdownStorage(editor: Editor): MarkdownStorage {
+	return (editor as unknown as { storage: { markdown: MarkdownStorage } }).storage.markdown
+}
+
 /**
  * Parse markdown into a Tiptap doc (JSONContent). The shared schema's
  * markdown parser handles the full supported block set; inline HTML is kept
@@ -41,7 +50,7 @@ function getHeadlessEditor(): Editor {
  */
 export function parseMarkdown(markdown: string): JSONContent {
 	const editor = getHeadlessEditor()
-	const html = (editor as unknown as { storage: { markdown: { parser: { parse: (md: string) => string } } } }).storage.markdown.parser.parse(markdown)
+	const html = getMarkdownStorage(editor).parser.parse(markdown)
 	editor.commands.setContent(html)
 	return editor.getJSON()
 }
@@ -54,8 +63,7 @@ export function parseMarkdown(markdown: string): JSONContent {
 export function serializeMarkdown(doc: JSONContent): string {
 	const editor = getHeadlessEditor()
 	editor.commands.setContent(doc)
-	const serializer = (editor as unknown as { storage: { markdown: { serializer: { serialize: (node: unknown) => string } } } }).storage.markdown.serializer
-	const markdown = serializer.serialize(editor.state.doc)
+	const markdown = getMarkdownStorage(editor).serializer.serialize(editor.state.doc)
 	// Canonical trailing newline so `serialize(parse(md))` reproduces
 	// well-formed markdown files exactly; an empty doc stays empty.
 	return markdown.length > 0 && !markdown.endsWith('\n') ? markdown + '\n' : markdown
