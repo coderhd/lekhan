@@ -7,11 +7,6 @@ import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
 
 let authCallback: ((event: string, session: any) => void) | null = null
 
-const fetchOwned = vi.fn()
-const fetchShared = vi.fn()
-const fetchInvites = vi.fn()
-const createDocument = vi.fn()
-
 vi.mock('next/navigation', () => ({
 	useRouter: () => ({ push: vi.fn() }),
 }))
@@ -27,13 +22,20 @@ vi.mock('@/lib/supabase', () => ({
 	},
 }))
 
-vi.mock('@/services/db', () => ({
-	fetchOwnedDocuments: (...args: any[]) => fetchOwned(...args),
-	fetchSharedDocuments: (...args: any[]) => fetchShared(...args),
-	fetchPendingInvitations: (...args: any[]) => fetchInvites(...args),
-	createDocument: (...args: any[]) => createDocument(...args),
-	deleteDocument: vi.fn(),
-	updateDocumentTitle: vi.fn(),
+const ensureWorkspace = vi.fn()
+const fetchWorkspacePages = vi.fn()
+const fetchSharedPages = vi.fn()
+const fetchPageInvites = vi.fn()
+const createPage = vi.fn()
+
+vi.mock('@/services/graph', () => ({
+	ensureWorkspace: (...args: any[]) => ensureWorkspace(...args),
+	fetchWorkspacePages: (...args: any[]) => fetchWorkspacePages(...args),
+	fetchSharedPages: (...args: any[]) => fetchSharedPages(...args),
+	fetchPendingPageInvitations: (...args: any[]) => fetchPageInvites(...args),
+	createPage: (...args: any[]) => createPage(...args),
+	deletePage: vi.fn(),
+	updatePageTitle: vi.fn(),
 }))
 
 vi.mock('@/components/invitations', () => ({ default: () => <div data-testid="invitations" /> }))
@@ -63,77 +65,79 @@ function renderDashboard() {
 describe('Dashboard refetch on auth', () => {
 	beforeEach(() => {
 		authCallback = null
-		fetchOwned.mockReset()
-		fetchShared.mockReset()
-		fetchInvites.mockReset()
-		fetchOwned.mockResolvedValue([])
-		fetchShared.mockResolvedValue([])
-		fetchInvites.mockResolvedValue([])
+		ensureWorkspace.mockReset()
+		fetchWorkspacePages.mockReset()
+		fetchSharedPages.mockReset()
+		fetchPageInvites.mockReset()
+		ensureWorkspace.mockResolvedValue({ id: 'ws-1', owner_id: 'user-1' })
+		fetchWorkspacePages.mockResolvedValue([])
+		fetchSharedPages.mockResolvedValue([])
+		fetchPageInvites.mockResolvedValue([])
 	})
 
 	it('refetches documents when a fresh session is established (SIGNED_IN)', async () => {
 		renderDashboard()
 
-		await waitFor(() => expect(fetchOwned).toHaveBeenCalledTimes(1))
+		await waitFor(() => expect(fetchWorkspacePages).toHaveBeenCalledTimes(1))
 
 		act(() => {
 			authCallback?.('SIGNED_IN', { user: { id: 'user-1', email: 'author@example.com' } })
 		})
 
-		await waitFor(() => expect(fetchOwned).toHaveBeenCalledTimes(2))
+		await waitFor(() => expect(fetchWorkspacePages).toHaveBeenCalledTimes(2))
 	})
 
 	it('does not refetch on unrelated auth events', async () => {
 		renderDashboard()
 
-		await waitFor(() => expect(fetchOwned).toHaveBeenCalledTimes(1))
+		await waitFor(() => expect(fetchWorkspacePages).toHaveBeenCalledTimes(1))
 
 		act(() => {
 			authCallback?.('TOKEN_REFRESHED', { user: { id: 'user-1', email: 'author@example.com' } })
 			authCallback?.('USER_UPDATED', { user: { id: 'user-1', email: 'author@example.com' } })
 		})
 
-		expect(fetchOwned).toHaveBeenCalledTimes(1)
+		expect(fetchWorkspacePages).toHaveBeenCalledTimes(1)
 	})
 
 	it('shows a retryable error state instead of the empty state when fetching fails', async () => {
-		fetchOwned.mockRejectedValueOnce(new Error('PGRST303'))
+		fetchWorkspacePages.mockRejectedValueOnce(new Error('PGRST303'))
 
 		renderDashboard()
 
-		expect(await screen.findByText(/couldn't load your documents/i)).toBeInTheDocument()
+		expect(await screen.findByText(/couldn't load your pages/i)).toBeInTheDocument()
 		expect(screen.queryByText(/welcome to lekhan/i)).not.toBeInTheDocument()
 
-		fetchOwned.mockResolvedValueOnce([{ id: 'doc-1', title: 'My Doc', owner_id: 'user-1', updated_at: new Date().toISOString() }])
+		fetchWorkspacePages.mockResolvedValueOnce([{ id: 'doc-1', title: 'My Doc', owner_id: 'user-1', updated_at: new Date().toISOString() }])
 
 		act(() => {
 			screen.getByRole('button', { name: /try again/i }).click()
 		})
 
-		await waitFor(() => expect(fetchOwned).toHaveBeenCalledTimes(2))
-		expect(screen.queryByText(/couldn't load your documents/i)).not.toBeInTheDocument()
+		await waitFor(() => expect(fetchWorkspacePages).toHaveBeenCalledTimes(2))
+		expect(screen.queryByText(/couldn't load your pages/i)).not.toBeInTheDocument()
 	})
 
 	it('replaces the error view with a loading state during a retry', async () => {
-		fetchOwned.mockRejectedValueOnce(new Error('PGRST303'))
+		fetchWorkspacePages.mockRejectedValueOnce(new Error('PGRST303'))
 
 		renderDashboard()
 
-		expect(await screen.findByText(/couldn't load your documents/i)).toBeInTheDocument()
+		expect(await screen.findByText(/couldn't load your pages/i)).toBeInTheDocument()
 
 		const ownedDeferred = deferred<any[]>()
 		const sharedDeferred = deferred<any[]>()
 		const invitesDeferred = deferred<any[]>()
 
-		fetchOwned.mockImplementationOnce(() => ownedDeferred.promise)
-		fetchShared.mockImplementationOnce(() => sharedDeferred.promise)
-		fetchInvites.mockImplementationOnce(() => invitesDeferred.promise)
+		fetchWorkspacePages.mockImplementationOnce(() => ownedDeferred.promise)
+		fetchSharedPages.mockImplementationOnce(() => sharedDeferred.promise)
+		fetchPageInvites.mockImplementationOnce(() => invitesDeferred.promise)
 
 		act(() => {
 			screen.getByRole('button', { name: /try again/i }).click()
 		})
 
-		expect(screen.queryByText(/couldn't load your documents/i)).not.toBeInTheDocument()
+		expect(screen.queryByText(/couldn't load your pages/i)).not.toBeInTheDocument()
 		expect(screen.getByText('Loading dashboard...')).toBeInTheDocument()
 
 		await act(async () => {
@@ -143,7 +147,7 @@ describe('Dashboard refetch on auth', () => {
 		})
 
 		expect(screen.queryByText('Loading dashboard...')).not.toBeInTheDocument()
-		expect(screen.queryByText(/couldn't load your documents/i)).not.toBeInTheDocument()
+		expect(screen.queryByText(/couldn't load your pages/i)).not.toBeInTheDocument()
 	})
 
 	it('keeps the newer result when a refreshed request resolves before the original', async () => {
@@ -154,23 +158,23 @@ describe('Dashboard refetch on auth', () => {
 		const secondShared = deferred<any[]>()
 		const secondInvites = deferred<any[]>()
 
-		fetchOwned.mockImplementationOnce(() => firstOwned.promise)
-		fetchShared.mockImplementationOnce(() => firstShared.promise)
-		fetchInvites.mockImplementationOnce(() => firstInvites.promise)
+		fetchWorkspacePages.mockImplementationOnce(() => firstOwned.promise)
+		fetchSharedPages.mockImplementationOnce(() => firstShared.promise)
+		fetchPageInvites.mockImplementationOnce(() => firstInvites.promise)
 
 		renderDashboard()
 
-		await waitFor(() => expect(fetchOwned).toHaveBeenCalledTimes(1))
+		await waitFor(() => expect(fetchWorkspacePages).toHaveBeenCalledTimes(1))
 
-		fetchOwned.mockImplementationOnce(() => secondOwned.promise)
-		fetchShared.mockImplementationOnce(() => secondShared.promise)
-		fetchInvites.mockImplementationOnce(() => secondInvites.promise)
+		fetchWorkspacePages.mockImplementationOnce(() => secondOwned.promise)
+		fetchSharedPages.mockImplementationOnce(() => secondShared.promise)
+		fetchPageInvites.mockImplementationOnce(() => secondInvites.promise)
 
 		act(() => {
 			authCallback?.('SIGNED_IN', { user: { id: 'user-1', email: 'author@example.com' } })
 		})
 
-		await waitFor(() => expect(fetchOwned).toHaveBeenCalledTimes(2))
+		await waitFor(() => expect(fetchWorkspacePages).toHaveBeenCalledTimes(2))
 
 		// Resolve the newer (refreshed) request first with two docs.
 		await act(async () => {

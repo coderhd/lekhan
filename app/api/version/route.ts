@@ -101,39 +101,84 @@ export async function POST(request: NextRequest) {
 			return NextResponse.json({ error: 'Document snapshot exceeds maximum allowed size' }, { status: 413 })
 		}
 
-		// 1. Verify user role: only owners and editors can create versions
-		const { data: doc } = await supabaseClient
-			.from('documents')
-			.select('owner_id')
+		// 1. Verify user role: only owners and editors can create versions.
+		// Pages are the primary entity; legacy documents fall back for
+		// unmapped ids (rollback path). The page lookup must be trusted
+		// (service-role, RLS-bypassing): an RLS-filtered null here would also
+		// mean "no access", and legacy documents share the id space with pages
+		// (P1 backfill kept twin records), so an authorized legacy-document
+		// user could otherwise slip past page authorization.
+		const { data: page } = await supabaseAdmin
+			.from('pages')
+			.select('id')
 			.eq('id', documentId)
-			.single()
+			.maybeSingle()
 
-		const isOwner = doc && doc.owner_id === user.id
+		let isOwner = false
 		let isEditor = false
 
-		if (!isOwner) {
-			const { data: member } = await supabaseClient
-				.from('document_members')
-				.select('role')
-				.eq('document_id', documentId)
-				.eq('user_id', user.id)
-				.single()
+		if (page) {
+			// Page path: authorize through the caller-scoped client so RLS
+			// still gates what the caller can see.
+			const { data: pageRow } = await supabaseClient
+				.from('pages')
+				.select('owner_id')
+				.eq('id', documentId)
+				.maybeSingle()
 
-			isEditor = !!(member && member.role === 'editor')
+			isOwner = !!(pageRow && pageRow.owner_id === user.id)
+
+			if (!isOwner) {
+				const { data: member } = await supabaseClient
+					.from('page_members')
+					.select('role')
+					.eq('page_id', documentId)
+					.eq('user_id', user.id)
+					.single()
+
+				isEditor = !!(member && member.role === 'editor')
+			}
+		} else {
+			const { data: doc } = await supabaseClient
+				.from('documents')
+				.select('owner_id')
+				.eq('id', documentId)
+				.maybeSingle()
+
+			isOwner = !!(doc && doc.owner_id === user.id)
+
+			if (!isOwner && doc) {
+				const { data: member } = await supabaseClient
+					.from('document_members')
+					.select('role')
+					.eq('document_id', documentId)
+					.eq('user_id', user.id)
+					.single()
+
+				isEditor = !!(member && member.role === 'editor')
+			}
 		}
 
 		if (!isOwner && !isEditor) {
 			return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 })
 		}
 
-		// 2. Create the document_versions record
+		// 2. Create the document_versions record (page_id for pages)
 		const { data: version, error: dbError } = await supabaseClient
 			.from('document_versions')
-			.insert({
-				document_id: documentId,
-				version_name: versionName,
-				created_by: user.id,
-			})
+			.insert(
+				page
+					? {
+						page_id: documentId,
+						version_name: versionName,
+						created_by: user.id,
+					}
+					: {
+						document_id: documentId,
+						version_name: versionName,
+						created_by: user.id,
+					}
+			)
 			.select()
 			.single()
 

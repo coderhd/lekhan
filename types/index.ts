@@ -41,7 +41,8 @@ export interface DocumentInvitation {
 
 export interface DocumentVersion {
 	id: string
-	document_id: string
+	document_id: string | null
+	page_id?: string | null
 	version_name: string
 	created_at: string
 	created_by: string
@@ -80,6 +81,7 @@ export interface Page {
 
 export interface PageLink {
 	id: string
+	workspace_id: string
 	from_page_id: string
 	to_page_id: string | null
 	to_title: string
@@ -97,4 +99,41 @@ export interface PageTag {
 export interface Backlink {
 	from_page_id: string
 	from_title: string
+}
+
+export type MemberRole = 'owner' | 'editor' | 'viewer'
+
+export interface PageMember {
+	id: string
+	page_id: string
+	user_id: string
+	role: MemberRole
+	created_at: string
+	profiles?: { id: string; email: string; full_name: string | null; avatar_url?: string | null }
+}
+
+export interface PageInvitation {
+	id: string
+	page_id: string
+	inviter_id: string
+	invitee_email: string
+	role: 'editor' | 'viewer'
+	token: string
+	status: 'pending' | 'accepted' | 'declined'
+	created_at: string
+	pages?: { title: string }
+	profiles?: { email: string; full_name: string | null }
+}
+
+// Projection returned by invitation queries: every PageInvitation field is
+// selected, and the embedded relations come back in array form per the
+// PostgREST client's generic inference (normalized to objects at runtime).
+export interface PageInvitationProjection extends Omit<PageInvitation, 'pages' | 'profiles'> {
+	pages?: { title: string }[]
+	profiles?: { email: string; full_name: string | null }[]
+}
+
+export interface MemberPageItem {
+	role: MemberRole
+	pages: Page
 }

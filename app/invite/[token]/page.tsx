@@ -3,8 +3,8 @@
 import { use, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { DocumentInvitation } from '@/types'
-import { fetchInvitationDetails, acceptInvitation, declineInvitation } from '@/services/db'
+import { PageInvitation } from '@/types'
+import { fetchPageInvitationDetails, acceptPageInvitation, declinePageInvitation } from '@/services/graph'
 import GlobalLoader from '@/components/global-loader'
 import { toast } from 'sonner'
 
@@ -16,7 +16,7 @@ export default function InvitePage ({
 	const params = use(paramsPromise)
 	const router = useRouter()
 	const [user, setUser] = useState<any | null>(null)
-	const [invite, setInvite] = useState<DocumentInvitation | null>(null)
+	const [invite, setInvite] = useState<PageInvitation | null>(null)
 	const [loading, setLoading] = useState(true)
 	const [processing, setProcessing] = useState(false)
 
@@ -36,10 +36,16 @@ export default function InvitePage ({
 				setUser(session.user)
 
 				// 2. Fetch invitation details
-				const invitation = await fetchInvitationDetails(params.token)
+				const invitation = await fetchPageInvitationDetails(params.token)
 
 				if (invitation.status === 'accepted') {
-					router.push(`/doc/${invitation.document_id}`)
+					router.push(`/page/${invitation.page_id}`)
+					return
+				}
+
+				if (invitation.status !== 'pending') {
+					toast.error('This invitation is no longer available')
+					router.push('/')
 					return
 				}
 
@@ -62,8 +68,8 @@ export default function InvitePage ({
 		setProcessing(true)
 
 		try {
-			await acceptInvitation(invite, user.id)
-			router.push(`/doc/${invite.document_id}`)
+			await acceptPageInvitation(invite, user.id)
+			router.push(`/page/${invite.page_id}`)
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err)
 			toast.error(`Failed to accept: ${message}`)
@@ -78,7 +84,7 @@ export default function InvitePage ({
 		setProcessing(true)
 
 		try {
-			await declineInvitation(invite.id)
+			await declinePageInvitation(invite.id)
 			router.push('/')
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err)
@@ -99,18 +105,18 @@ export default function InvitePage ({
 		<div className='flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black p-4'>
 			<div className='w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/60 p-8 backdrop-blur-xl shadow-2xl text-center'>
 				<h2 className='text-2xl font-bold tracking-tight text-white mb-2'>
-					Document Invitation
+					Page Invitation
 				</h2>
 				<p className='text-sm text-slate-400 mb-6'>
-					You have been invited to join a collaborative document workspace
+					You have been invited to join a collaborative page workspace
 				</p>
 
 				<div className='rounded-xl bg-slate-950/60 border border-white/5 p-5 mb-6 text-left'>
 					<p className='text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1'>
-						Document Title
+						Page Title
 					</p>
 					<p className='text-lg font-bold text-white mb-4'>
-						{invite.documents?.title || 'Untitled'}
+						{invite.pages?.title || 'Untitled'}
 					</p>
 
 					<p className='text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1'>

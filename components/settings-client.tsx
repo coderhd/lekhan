@@ -7,22 +7,24 @@ import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import {
 	getUserAICredits,
-	removeDocumentMember,
-	fetchOwnedDocumentsWithMembers,
 	type UserAICredits,
 } from '@/services/db'
+import { removePageMember, updatePageMemberRole, fetchOwnedPagesWithMembers } from '@/services/graph'
 import BYOKSettings from '@/components/byok-settings'
 import PricingMatrix from '@/components/pricing-plans'
+import { CustomSelect } from './ui/custom-select'
+
+const EMPTY_PAGES: any[] = []
 
 export default function SettingsClient({
 	user,
-	documents: initialDocuments = [],
-	setDocuments: setParentDocuments,
+	pages: initialPages = EMPTY_PAGES,
+	setPages: setParentPages,
 }: {
 	user: { id?: string; email: string; full_name?: string }
 	token?: string
-	documents?: any[]
-	setDocuments?: React.Dispatch<React.SetStateAction<any[]>>
+	pages?: any[]
+	setPages?: React.Dispatch<React.SetStateAction<any[]>>
 }) {
 	const router = useRouter()
 	const [activeTab, setActiveTab] = useState<'profile' | 'collaborators' | 'usage' | 'billing'>('profile')
@@ -33,12 +35,12 @@ export default function SettingsClient({
 	const [loading, setLoading] = useState(false)
 	const [currentPage, setCurrentPage] = useState(1)
 
-	// Documents State for Collaborators tab
-	const [documentsState, setDocumentsState] = useState<any[]>(initialDocuments)
+	// Pages State for Collaborators tab
+	const [pagesState, setPagesState] = useState<any[]>(initialPages)
 
 	useEffect(() => {
-		setDocumentsState(initialDocuments)
-	}, [initialDocuments])
+		setPagesState(initialPages)
+	}, [initialPages])
 
 	// Real DB AI Credits
 	const [aiCredits, setAiCredits] = useState<UserAICredits>({
@@ -105,15 +107,15 @@ export default function SettingsClient({
 		}
 	}
 
-	const handleRemoveMember = async (documentId: string, memberUserId: string) => {
+	const handleRemoveMember = async (pageId: string, memberUserId: string) => {
 		try {
-			await removeDocumentMember(documentId, memberUserId)
+			await removePageMember(pageId, memberUserId)
 			if (user?.id) {
-				const updatedDocs = await fetchOwnedDocumentsWithMembers(user.id)
-				if (setParentDocuments) {
-					setParentDocuments(updatedDocs)
+				const updatedPages = await fetchOwnedPagesWithMembers(user.id)
+				if (setParentPages) {
+					setParentPages(updatedPages)
 				}
-				setDocumentsState(updatedDocs)
+				setPagesState(updatedPages)
 			}
 			toast.success('Collaborator removed successfully')
 		} catch {
@@ -121,10 +123,24 @@ export default function SettingsClient({
 		}
 	}
 
+	const handleRoleChange = async (pageId: string, memberUserId: string, role: 'editor' | 'viewer') => {
+		try {
+			await updatePageMemberRole(pageId, memberUserId, role)
+			setPagesState(prev => prev.map((page: any) =>
+				page.id === pageId
+					? { ...page, page_members: (page.page_members || []).map((m: any) => m.user_id === memberUserId ? { ...m, role } : m) }
+					: page
+			))
+			toast.success('Role updated successfully')
+		} catch {
+			toast.error('Failed to update role')
+		}
+	}
+
 	// Pagination for Collaborations
 	const itemsPerPage = 5
-	const totalPages = Math.ceil(documentsState.length / itemsPerPage) || 1
-	const paginatedDocuments = documentsState.slice(
+	const totalPages = Math.ceil(pagesState.length / itemsPerPage) || 1
+	const paginatedPages = pagesState.slice(
 		(currentPage - 1) * itemsPerPage,
 		currentPage * itemsPerPage
 	)
@@ -253,16 +269,16 @@ export default function SettingsClient({
 							<div className="space-y-8 max-w-3xl">
 								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
 									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Manage Collaborators</h2>
-									<p className="text-sm text-on-surface-variant mb-6">View and manage access to documents you own.</p>
+									<p className="text-sm text-on-surface-variant mb-6">View and manage access to pages you own.</p>
 
-									{documentsState.length === 0 ? (
+									{pagesState.length === 0 ? (
 										<div className="py-8 text-center bg-black/5 dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5 border-dashed">
-											<p className="text-on-surface-variant italic text-sm">You don't own any documents yet.</p>
+											<p className="text-on-surface-variant italic text-sm">You don't own any pages yet.</p>
 										</div>
 									) : (
 										<div className="space-y-6">
-											{paginatedDocuments.map((doc: any) => {
-												const members = doc.document_members || []
+											{paginatedPages.map((doc: any) => {
+												const members = doc.page_members || []
 
 												return (
 													<div
@@ -270,7 +286,7 @@ export default function SettingsClient({
 														className="border border-black/10 dark:border-outline/10 rounded-xl p-5 bg-white/50 dark:bg-surface-dim/30 hover:bg-white dark:hover:bg-surface-dim/50 transition-all shadow-sm"
 													>
 														<div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
-															<h3 className="font-title-lg font-semibold text-primary-container">{doc.title || 'Untitled Document'}</h3>
+															<h3 className="font-title-lg font-semibold text-primary-container">{doc.title || 'Untitled Page'}</h3>
 															<span className="text-xs font-bold px-3 py-1 bg-black/5 dark:bg-white/10 rounded-full text-on-surface-variant inline-block w-fit">
 																{members.length} {members.length === 1 ? 'collaborator' : 'collaborators'}
 															</span>
@@ -281,30 +297,44 @@ export default function SettingsClient({
 														) : (
 															<ul className="space-y-2 mt-2">
 																{members.map((member: { user_id: string; role: string; profiles?: { full_name?: string; email: string } }) => (
-																	<li
-																		key={member.user_id}
-																		className="flex justify-between items-center bg-black/5 dark:bg-surface-variant/10 p-3 rounded-lg border border-black/5 dark:border-white/5 group"
-																	>
-																		<div className="flex items-center gap-3">
-																			<div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs uppercase shrink-0">
-																				{(member.profiles?.full_name || member.profiles?.email || '?').charAt(0)}
-																			</div>
-																			<div className="min-w-0">
-																				<div className="text-on-surface text-xs font-semibold truncate">
-																					{member.profiles?.full_name || member.profiles?.email}
-																				</div>
-																				<div className="text-[11px] text-on-surface-variant/80 mt-0.5 truncate">
-																					{member.profiles?.email} • <span className="capitalize font-medium text-primary">{member.role}</span>
-																				</div>
-																			</div>
-																		</div>
-																		<button
-																			onClick={() => handleRemoveMember(doc.id, member.user_id)}
-																			className="text-error hover:text-error/80 text-xs font-bold px-3 py-1.5 border border-error/30 rounded-md hover:bg-error/10 transition-colors shrink-0"
-																		>
-																			Remove
-																		</button>
-																	</li>
+<li
+													key={member.user_id}
+													className="flex justify-between items-center bg-black/5 dark:bg-surface-variant/10 p-3 rounded-lg border border-black/5 dark:border-white/5 group"
+												>
+													<div className="flex items-center gap-3">
+														<div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs uppercase shrink-0">
+															{(member.profiles?.full_name || member.profiles?.email || '?').charAt(0)}
+														</div>
+														<div className="min-w-0">
+															<div className="text-on-surface text-xs font-semibold truncate">
+																{member.profiles?.full_name || member.profiles?.email}
+															</div>
+															<div className="text-[11px] text-on-surface-variant/80 mt-0.5 truncate">
+																{member.profiles?.email} • <span className="capitalize font-medium text-primary">{member.role}</span>
+															</div>
+														</div>
+													</div>
+													{member.role !== 'owner' && (
+														<div className="flex items-center gap-2 shrink-0">
+															<CustomSelect
+																value={member.role as 'editor' | 'viewer'}
+																onValueChange={(val) => handleRoleChange(doc.id, member.user_id, val as 'editor' | 'viewer')}
+																options={[
+																	{ label: 'Editor', value: 'editor' },
+																	{ label: 'Viewer', value: 'viewer' },
+																]}
+																triggerClassName="h-7 w-[100px] bg-transparent border border-black/10 dark:border-white/10 rounded-lg text-[10px] font-medium text-on-surface px-2 focus:ring-0"
+																contentClassName="w-[100px]"
+															/>
+															<button
+																onClick={() => handleRemoveMember(doc.id, member.user_id)}
+																className="text-error hover:text-error/80 text-xs font-bold px-3 py-1.5 border border-error/30 rounded-md hover:bg-error/10 transition-colors shrink-0"
+															>
+																Remove
+															</button>
+														</div>
+													)}
+												</li>
 																))}
 															</ul>
 														)}

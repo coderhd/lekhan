@@ -28,7 +28,7 @@ describe('SettingsClient Tabbed Navigation', () => {
 	it('renders tab buttons and switches between tabs', () => {
 		render(
 			<GlobalHeaderProvider>
-				<SettingsClient user={user} token="mock" documents={documents} setDocuments={vi.fn()} />
+				<SettingsClient user={user} token="mock" pages={documents} setPages={vi.fn()} />
 			</GlobalHeaderProvider>
 		)
 		expect(screen.getByRole('button', { name: /Profile & Security/i })).toBeInTheDocument()
