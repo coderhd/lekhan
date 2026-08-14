@@ -274,9 +274,9 @@ Create `tests/unit/search.test.ts`:
 ```ts
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const rpcMock = vi.fn()
+const { rpcMock } = vi.hoisted(() => ({ rpcMock: vi.fn() }))
 vi.mock('@/lib/supabase', () => ({
-	supabase: { rpc: (...args: any[]) => rpcMock(...args) },
+	supabase: { rpc: rpcMock },
 }))
 
 const ensureWorkspace = vi.fn()
