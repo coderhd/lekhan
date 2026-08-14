@@ -96,11 +96,17 @@ A single pure module both import and export call, exposed as:
 - `parseMarkdown(md: string): JSONContent` — markdown → Tiptap doc, via the `tiptap-markdown`
   parser configured with the editor's shared extensions.
 - `serializeMarkdown(doc: JSONContent): string` — Tiptap doc → markdown, via the
-  `tiptap-markdown` serializer.
-- `parseFrontmatter(md: string): { data: Record<string, unknown>; body: string }` — via
-  `gray-matter` (new dependency; its YAML parser/stringifier is used on both sides).
-- `buildFrontmatter({ title, properties, tags }): string` — YAML frontmatter for export.
-- `assembleMarkdownFile({ title, properties, tags, body }): string` — frontmatter + body.
+  `tiptap-markdown` serializer (emits a canonical trailing newline).
+- `parseFrontmatter(md: string): { data: PageMeta; body: string }` — via `gray-matter` (new
+  dependency; its YAML parser/stringifier is used on both sides). `PageMeta` splits the raw
+  frontmatter into the reserved page fields and everything else:
+  `{ title?: string; tags?: string[]; properties: Record<string, unknown> }` — `title`/`tags`
+  are reserved keys (a single string `tags` normalizes to an array); all other keys become
+  `properties`.
+- `buildFrontmatter(meta: PageMeta): string | null` — inner YAML (no `---` fences) for export;
+  `null` when there is nothing to serialize.
+- `assembleMarkdownFile(meta: PageMeta, body: string): string` — frontmatter + body; body
+  passes through untouched when `meta` has no keys.
 
 The shared Tiptap extension list currently lives inside `components/editor-workspace.tsx`
 (`getSharedExtensions`). It is **extracted to `lib/editor-extensions.ts`** so the live editor,

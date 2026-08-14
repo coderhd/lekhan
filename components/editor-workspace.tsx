@@ -3,19 +3,8 @@
 import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useEditor, EditorContent, Editor } from '@tiptap/react'
-import { StarterKit } from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
 import { CollaborationCursor } from '@/lib/collaboration-cursor'
-import { FontFamily } from '@tiptap/extension-font-family'
-import { TextStyle } from '@tiptap/extension-text-style'
-import { Color } from '@tiptap/extension-color'
-import { Highlight } from '@tiptap/extension-highlight'
-import { TextAlign } from '@tiptap/extension-text-align'
-import { Underline } from '@tiptap/extension-underline'
-import { TaskList } from '@tiptap/extension-task-list'
-import { TaskItem } from '@tiptap/extension-task-item'
-import { Image } from '@tiptap/extension-image'
-import { Link } from '@tiptap/extension-link'
 import { EyeOff } from 'lucide-react'
 import tippy from 'tippy.js'
 import { createRoot } from 'react-dom/client'
@@ -46,13 +35,6 @@ import MentionList, { MentionItem } from './mention-list'
 import { fetchPageDetails, fetchPageMemberRole, updatePageTitle, fetchMentionablePageCollaborators } from '@/services/graph'
 import { getUserAICredits } from '@/services/db'
 
-import { Table } from '@tiptap/extension-table'
-import { TableRow } from '@tiptap/extension-table-row'
-import { TableHeader } from '@tiptap/extension-table-header'
-import { TableCell } from '@tiptap/extension-table-cell'
-import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
-import { createLowlight, common } from 'lowlight'
-import { Markdown } from 'tiptap-markdown'
 import { TableToolbar } from './table-toolbar'
 import { CodeBlockLanguageSelect } from './code-block-language-select'
 import { DragContextMenu } from './drag-context-menu'
@@ -60,11 +42,6 @@ import { exportToDocx, exportToPdf } from '@/lib/export-utils'
 import PricingPlans from './pricing-plans'
 import { Download, Sparkles, FileText, FileSpreadsheet } from 'lucide-react'
 import * as Dialog from '@radix-ui/react-dialog'
-
-const lowlight = createLowlight(common)
-
-import { Document } from '@tiptap/extension-document'
-import { Placeholder } from '@tiptap/extension-placeholder'
 
 interface EditorWorkspaceProps {
 	pageId: string
@@ -86,63 +63,8 @@ const CURSOR_COLORS = [
 	'#ef4444', // red
 ]
 
-const CustomDocument = Document.extend({
-	content: 'heading block*',
-})
-
-import { AnyExtension } from '@tiptap/core'
-import { PersistentSelection } from '@/lib/persistent-selection'
+import { getSharedExtensions } from '@/lib/editor-extensions'
 import { decideMarkdownPaste } from '@/lib/markdown-paste'
-
-const getSharedExtensions = (): AnyExtension[] => [
-	CustomDocument,
-	PersistentSelection,
-	StarterKit.configure({
-		document: false,
-		codeBlock: false,
-		link: false,
-		underline: false,
-		undoRedo: false,
-	}),
-	CodeBlockLowlight.configure({
-		lowlight,
-	}),
-	Table.configure({
-		resizable: true,
-	}),
-	TableRow,
-	TableHeader,
-	TableCell,
-	Markdown.configure({
-		html: true,
-		transformPastedText: true,
-		transformCopiedText: true,
-	}),
-	Placeholder.configure({
-		placeholder: ({ node }) => {
-			if (node.type.name === 'heading') {
-				return 'Untitled Document'
-			}
-			return 'Type / to choose a block, or start typing...'
-		},
-	}),
-	TextStyle,
-	FontFamily,
-	Color,
-	Highlight.configure({ multicolor: true }),
-	TextAlign.configure({ types: ['heading', 'paragraph'] }),
-	Underline,
-	TaskList,
-	TaskItem.configure({ nested: true }),
-	Image.configure({
-		inline: true,
-		allowBase64: true,
-	}),
-	Link.configure({
-		openOnClick: false,
-		autolink: true,
-	}),
-]
 
 function getInitials(nameOrEmail: string) {
 	if (!nameOrEmail) return '?'

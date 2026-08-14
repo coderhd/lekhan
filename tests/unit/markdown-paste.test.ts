@@ -1,15 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { Editor } from '@tiptap/react'
-import { StarterKit } from '@tiptap/starter-kit'
-import { Document } from '@tiptap/extension-document'
-import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
-import { createLowlight, common } from 'lowlight'
-import { Markdown } from 'tiptap-markdown'
 import { decideMarkdownPaste } from '@/lib/markdown-paste'
-
-const CustomDocument = Document.extend({
-	content: 'heading block*',
-})
+import { getSharedExtensions } from '@/lib/editor-extensions'
 
 describe('decideMarkdownPaste', () => {
 	it('parses pasted markdown as rich content even when the clipboard HTML wraps it in a <pre>', () => {
@@ -77,17 +69,9 @@ describe('decideMarkdownPaste', () => {
 
 describe('pasting markdown into a live editor', () => {
 	function buildEditor() {
-		const lowlight = createLowlight(common)
 		return new Editor({
 			extensions: [
-				CustomDocument,
-				StarterKit.configure({ document: false, codeBlock: false, link: false, underline: false, undoRedo: false }),
-				CodeBlockLowlight.configure({ lowlight }),
-				Markdown.configure({
-					html: true,
-					transformPastedText: true,
-					transformCopiedText: true,
-				}),
+				...getSharedExtensions(),
 			],
 		})
 	}
