@@ -49,12 +49,17 @@ provider registry).
 | P2 — Client Cutover onto the Pages Graph | #9 | Progressive migration; app fully on the graph |
 | H0 — Global Search (index-native, keyboard-first) | #25 | Tickets #33–#36 done; shipped in PR #37 |
 
+### In progress — specced `ready-for-agent`
+
+| Epic | Issue | Tickets | Blocker edges | Spec ref |
+|---|---|---|---|---|
+| H0 — Markdown Import/Export (full round-trip) | #26 | MI-T1 #56 (frontier) → MI-T2 #57 → MI-T3 #58; MI-T4 #59 | → H0 Obsidian Importer #27 (blocker) | §13 · `docs/superpowers/specs/2026-08-14-h0-markdown-import-export-design.md` |
+| H0 — Obsidian Importer | #27 | OI-T1 #60 (frontier) → OI-T2 #61 → OI-T3 #62; OI-T4 #63 | ← #26; → H1 Notion importer #45 (blocker) | §13 · `docs/superpowers/specs/2026-08-14-h0-obsidian-importer-design.md` |
+
 ### Remaining `needs-spec`
 
 | Epic | Issue | Blocker edges | Spec ref |
 |---|---|---|---|
-| H0 — Markdown Import/Export (full round-trip) | #26 | → H0 Obsidian Importer #27 (blocker) | §13 |
-| H0 — Obsidian Importer | #27 | ← #26; → H1 Notion importer #45 (blocker) | §13 |
 | H0 — AI Provider Registry | #28 | → H2 AI agents #50 (blocker) | §6 |
 | H0 — Real Billing (Stripe + Razorpay) | #29 | → H2 Team workspaces #49 (blocker); H3 suite pricing rides on it | §7 |
 | H0 — Public Pages / Publish polish | #30 | → H1 Public pages + publish #40 (blocker) | §4 (H1 scope note in epic) |
@@ -63,8 +68,8 @@ provider registry).
 
 **Sequencing narrative:** the import pipeline is the shared foundation — Markdown
 Import/Export (#26) establishes the `importer → IR → graph` pipeline, and Obsidian
-Importer (#27) is the first real importer on it. Both must land before the H1 Notion
-importer (#45). Docs Site (#32) is a launch requirement and unblocks the H1 docs
+Importer (#27) is the first real importer on it (and lands the first-class callout node
+in the shared round-trip schema). Both must land before the H1 Notion importer (#45). Docs Site (#32) is a launch requirement and unblocks the H1 docs
 depth. AI Provider Registry (#28) is the cost-safety keystone: every tier runs on the
 user's own keys or machine, so it must be live before launch and unblocks H2 agents.
 
