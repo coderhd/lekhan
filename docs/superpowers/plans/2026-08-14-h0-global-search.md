@@ -142,7 +142,7 @@ GRANT EXECUTE ON FUNCTION public.search_pages(text, integer) TO anon, authentica
 
 - [ ] **Step 2: Syntax check + commit**
 
-The file must be parseable SQL. Run the same sanity check as P2 Task 1 (balanced statement-enders — expect exactly 7: 1 `CREATE EXTENSION`, 4 `CREATE INDEX`, 1 `CREATE FUNCTION` closing `$$;`, 1 `GRANT`):
+The file must be parseable SQL. Run the same sanity check as P2 Task 1 (balanced statement-enders — expect exactly 17: 7 top-level = 1 `CREATE EXTENSION`, 4 `CREATE INDEX`, 1 `CREATE FUNCTION` closing `$$;`, 1 `GRANT`; plus 10 PL/pgSQL body statement-enders: 3 `DECLARE` vars, `v_limit := …;`, `RETURN;`, `END IF;`, `v_literal := …;`, `v_pattern := …;`, `LIMIT v_limit;`, `END;`):
 
 ```bash
 awk '/^[[:space:]]*$/{next} {if ($0 ~ /;\s*$/) c++} END {print c " statement-enders"}' supabase/migrations/20260817000000_global_search.sql
