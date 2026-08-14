@@ -1,7 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import EditorWorkspace from '../../components/editor-workspace'
+import GlobalSearchPalette from '../../components/global-search-palette'
 import * as Y from 'yjs'
+
+vi.mock('../../components/session-reauth-provider', () => ({
+	useSessionReauth: () => ({ isLocked: false, lockSession: vi.fn(), unlockSession: vi.fn() }),
+}))
 
 // Mock the hook to avoid actual websocket connections during test
 const mockDoc = new Y.Doc()
@@ -26,6 +31,8 @@ vi.mock('@/lib/supabase', () => ({
 	supabase: {
 		auth: {
 			getUser: vi.fn(),
+			getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
+			onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
 		}
 	}
 }))
@@ -53,12 +60,14 @@ describe('EditorWorkspace Formatting', () => {
 		const mockUser = { id: 'test-user', email: 'test@example.com' }
 		
 		render(
-			<EditorWorkspace 
-pageId="page-1" 
-			initialTitle="Test Doc"
-				token="token-1" 
-				currentUser={mockUser} 
-			/>
+			<GlobalSearchPalette>
+				<EditorWorkspace 
+					pageId="page-1" 
+					initialTitle="Test Doc"
+					token="token-1" 
+					currentUser={mockUser} 
+				/>
+			</GlobalSearchPalette>
 		)
 
 		expect(await screen.findByTitle('Bold')).toBeDefined()

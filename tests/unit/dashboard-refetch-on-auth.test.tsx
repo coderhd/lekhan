@@ -4,8 +4,13 @@ import { render, screen, act, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import Dashboard from '@/components/dashboard'
 import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
+import GlobalSearchPalette from '@/components/global-search-palette'
 
-let authCallback: ((event: string, session: any) => void) | null = null
+vi.mock('@/components/session-reauth-provider', () => ({
+	useSessionReauth: () => ({ isLocked: false, lockSession: vi.fn(), unlockSession: vi.fn() }),
+}))
+
+let authCallbacks: ((event: string, session: any) => void)[] = []
 
 vi.mock('next/navigation', () => ({
 	useRouter: () => ({ push: vi.fn() }),
@@ -15,9 +20,10 @@ vi.mock('@/lib/supabase', () => ({
 	supabase: {
 		auth: {
 			onAuthStateChange: vi.fn((cb: (event: string, session: any) => void) => {
-				authCallback = cb
+				authCallbacks.push(cb)
 				return { data: { subscription: { unsubscribe: vi.fn() } } }
 			}),
+			getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
 		},
 	},
 }))
@@ -38,6 +44,11 @@ vi.mock('@/services/graph', () => ({
 	updatePageTitle: vi.fn(),
 }))
 
+vi.mock('@/services/search', () => ({
+	searchPages: vi.fn().mockResolvedValue([]),
+	fetchRecentPages: vi.fn().mockResolvedValue([]),
+}))
+
 vi.mock('@/components/invitations', () => ({ default: () => <div data-testid="invitations" /> }))
 vi.mock('@/components/profile-menu', () => ({ default: () => <div /> }))
 vi.mock('@/components/theme-toggle', () => ({ default: () => <div /> }))
@@ -54,17 +65,23 @@ function deferred<T>() {
 	return { promise, resolve }
 }
 
+function fireAuth(event: string, session: any) {
+	for (const cb of authCallbacks) cb(event, session)
+}
+
 function renderDashboard() {
 	return render(
-		<GlobalHeaderProvider>
-			<Dashboard user={user} />
-		</GlobalHeaderProvider>
+		<GlobalSearchPalette>
+			<GlobalHeaderProvider>
+				<Dashboard user={user} />
+			</GlobalHeaderProvider>
+		</GlobalSearchPalette>
 	)
 }
 
 describe('Dashboard refetch on auth', () => {
 	beforeEach(() => {
-		authCallback = null
+		authCallbacks = []
 		ensureWorkspace.mockReset()
 		fetchWorkspacePages.mockReset()
 		fetchSharedPages.mockReset()
@@ -81,7 +98,7 @@ describe('Dashboard refetch on auth', () => {
 		await waitFor(() => expect(fetchWorkspacePages).toHaveBeenCalledTimes(1))
 
 		act(() => {
-			authCallback?.('SIGNED_IN', { user: { id: 'user-1', email: 'author@example.com' } })
+			fireAuth('SIGNED_IN', { user: { id: 'user-1', email: 'author@example.com' } })
 		})
 
 		await waitFor(() => expect(fetchWorkspacePages).toHaveBeenCalledTimes(2))
@@ -93,8 +110,8 @@ describe('Dashboard refetch on auth', () => {
 		await waitFor(() => expect(fetchWorkspacePages).toHaveBeenCalledTimes(1))
 
 		act(() => {
-			authCallback?.('TOKEN_REFRESHED', { user: { id: 'user-1', email: 'author@example.com' } })
-			authCallback?.('USER_UPDATED', { user: { id: 'user-1', email: 'author@example.com' } })
+			fireAuth('TOKEN_REFRESHED', { user: { id: 'user-1', email: 'author@example.com' } })
+			fireAuth('USER_UPDATED', { user: { id: 'user-1', email: 'author@example.com' } })
 		})
 
 		expect(fetchWorkspacePages).toHaveBeenCalledTimes(1)
@@ -171,7 +188,7 @@ describe('Dashboard refetch on auth', () => {
 		fetchPageInvites.mockImplementationOnce(() => secondInvites.promise)
 
 		act(() => {
-			authCallback?.('SIGNED_IN', { user: { id: 'user-1', email: 'author@example.com' } })
+			fireAuth('SIGNED_IN', { user: { id: 'user-1', email: 'author@example.com' } })
 		})
 
 		await waitFor(() => expect(fetchWorkspacePages).toHaveBeenCalledTimes(2))

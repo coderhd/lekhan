@@ -8,6 +8,7 @@ import { ensureWorkspace, fetchWorkspacePages, fetchSharedPages, createPage, del
 import Invitations from './invitations'
 import ProfileMenu from './profile-menu'
 import ThemeToggle from './theme-toggle'
+import { useGlobalSearch } from '@/components/global-search-palette'
 import GlobalLoader from './global-loader'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check } from 'lucide-react'
@@ -27,6 +28,7 @@ import { GlobalHeaderSlot } from './layout/global-header-context'
 
 export default function Dashboard({ user }: DashboardProps) {
 	const router = useRouter()
+	const { open: openGlobalSearch } = useGlobalSearch()
 	const [myPages, setMyPages] = useState<Page[]>([])
 	const [sharedPages, setSharedPages] = useState<MemberPageItem[]>([])
 	const [pendingInvitesCount, setPendingInvitesCount] = useState(0)
@@ -245,6 +247,13 @@ export default function Dashboard({ user }: DashboardProps) {
 		<div className="min-h-screen bg-background text-on-surface">
 			<GlobalHeaderSlot slot="right">
 				<div className="flex items-center gap-md">
+					<button
+						onClick={openGlobalSearch}
+						className="p-2 flex items-center justify-center rounded-lg hover:bg-black/5 dark:hover:bg-white/10 premium-transition text-on-surface-variant hover:text-on-surface relative hover:scale-110 active:scale-90"
+						title="Search (Cmd+K)"
+					>
+						<span className="material-symbols-outlined leading-none">search</span>
+					</button>
 					<ThemeToggle />
 					<div className="relative" ref={notificationsRef}>
 						<button
