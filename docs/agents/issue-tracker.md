@@ -15,6 +15,35 @@ Infer the repo from `git remote -v` — `gh` does this automatically when run in
 
 **Note:** `gh` is installed at `/opt/homebrew/bin/gh` but is not on the default PATH in this shell. Prefix commands with `export PATH="/opt/homebrew/bin:$PATH"` (or run the binary by its full path).
 
+## Project board lifecycle
+
+Every item on the Lekhan GitHub project board (`github.com/users/coderhd/projects/1`) moves through one
+state machine — keep the board's Status column truthful, always:
+
+**`Backlog` → `Ready` → `In progress` → `In review` → `Done`**
+
+| Transition | Meaning | Who moves it |
+|---|---|---|
+| `Backlog` → `Ready` | Prioritized as next-up work | Human or roadmap session (see `docs/roadmap.md`) |
+| `Ready` → `In progress` | Work actually started on the issue | The agent that starts the work, before dispatching/writing code |
+| `In progress` → `In review` | Implementation done, review underway | Agent when the review is dispatched |
+| `In review` → `Done` | Review clean, merged, tickets closed | Agent after verification |
+
+Rules:
+
+- Move an item to `In progress` the moment implementation begins — never leave a `Ready` item being worked.
+- Move to `In review` when the review/verification starts, not when it's assumed done.
+- Move to `Done` only after verification passes and the work is merged/closed.
+- A finished or abandoned item must not sit in `Ready`/`In progress` — reflect reality.
+- If an item must retreat (e.g. review found gaps and it's re-opened), move it back rather than leave it stale.
+
+The statuses live in the **Status** single-select field. The **Priority** field (`P0`/`P1`/`P2`) is independent and
+set by the roadmap/human; `Backlog` is the default resting state.
+
+**Move an item:** `docs/agents/project-board.sh <issue-number> <Backlog|Ready|In progress|In review|Done>`
+(e.g. `docs/agents/project-board.sh 26 Ready`). The script resolves the issue's project item and sets the Status
+field. Verify afterwards with `gh project view` or the GraphQL query shown below.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
