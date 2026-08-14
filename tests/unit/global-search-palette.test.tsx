@@ -86,6 +86,17 @@ describe('GlobalSearchPalette', () => {
 		expect(screen.getByText('Obsidian Workflow')).toBeTruthy()
 	})
 
+	it('renders recent pages when opened after the mount-time fetch would have completed', async () => {
+		renderPalette()
+		await act(async () => {}) // flush the getSession promise so userId is set
+		await act(async () => { await vi.advanceTimersByTimeAsync(210) })
+		expect(fetchRecentPages).not.toHaveBeenCalled()
+		await openViaKey()
+		await act(async () => { await vi.advanceTimersByTimeAsync(210) })
+		expect(fetchRecentPages).toHaveBeenCalledWith('user-1', 8)
+		expect(screen.getByText('Recent Page')).toBeTruthy()
+	})
+
 	it('navigates to the selected page on Enter', async () => {
 		renderPalette()
 		await openViaKey()

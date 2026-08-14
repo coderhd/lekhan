@@ -51,6 +51,7 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 	// Cmd/Ctrl+K opens the palette anywhere on authenticated pages.
 	useEffect(() => {
 		const handler = (e: globalThis.KeyboardEvent) => {
+			if (!userId) return
 			if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
 				e.preventDefault()
 				openPalette()
@@ -80,7 +81,7 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 
 	// Debounced fetch: recent pages when the query is empty, ranked results when querying.
 	useEffect(() => {
-		if (!userId) return
+		if (!userId || !open) return
 		const requestId = ++requestIdRef.current
 		setLoading(true)
 		if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -111,7 +112,7 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 		return () => {
 			if (debounceRef.current) clearTimeout(debounceRef.current)
 		}
-	}, [query, userId])
+	}, [query, userId, open])
 
 	const handleSelect = useCallback((row: SearchRow) => {
 		setOpen(false)
