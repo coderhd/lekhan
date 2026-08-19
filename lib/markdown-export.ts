@@ -1,8 +1,21 @@
 import type { JSONContent } from '@tiptap/core'
 import { generateHTML } from '@tiptap/core'
 import { Mention } from '@tiptap/extension-mention'
+import { Document } from '@tiptap/extension-document'
 import { assembleMarkdownFile, serializeMarkdown, type PageMeta } from '@/lib/markdown-io'
 import { getSharedExtensions } from '@/lib/editor-extensions'
+
+/**
+ * The shared schema plus the page-context `Mention` node. Export serializes
+ * live-editor docs that can contain mentions, so the schema must know the
+ * node or serialization throws/warns "Unknown node type" and the body is
+ * dropped. Composed here (not added to `getSharedExtensions`) to keep the
+ * round-trip engine's schema seam intact.
+ */
+const exportExtensions = (): ReturnType<typeof getSharedExtensions> => [
+	...getSharedExtensions({ document: Document }),
+	Mention.configure({ HTMLAttributes: { class: 'mention' } }),
+]
 
 /**
  * Slugify a page title into a safe filename fragment: lowercase, and every
@@ -62,7 +75,7 @@ export function stripAutoHeading(doc: JSONContent): JSONContent {
  * both `.md` and `.mdx`.
  */
 export function serializeExportBodyMarkdown(doc: JSONContent): string {
-	return serializeMarkdown(stripAutoHeading(doc))
+	return serializeMarkdown(stripAutoHeading(doc), exportExtensions())
 }
 
 /**
@@ -72,10 +85,7 @@ export function serializeExportBodyMarkdown(doc: JSONContent): string {
  * "Unknown node type" and no file downloads.
  */
 export function serializeExportBodyHtml(doc: JSONContent): string {
-	return generateHTML(stripAutoHeading(doc), [
-		...getSharedExtensions(),
-		Mention.configure({ HTMLAttributes: { class: 'mention' } }),
-	])
+	return generateHTML(stripAutoHeading(doc), exportExtensions())
 }
 
 function escapeHtml(value: string): string {
