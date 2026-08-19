@@ -37,6 +37,36 @@ Rules:
 - A finished or abandoned item must not sit in `Ready`/`In progress` — reflect reality.
 - If an item must retreat (e.g. review found gaps and it's re-opened), move it back rather than leave it stale.
 
+### Dependency hygiene (keep blockers truthful, always)
+
+A **completed item must not block anything.** A closed ticket's dependency edges are
+redundant — GitHub gates on open blockers only, so a stale edge never gates, but it
+still shows in the UI and in `dependencies/blocked_by` queries, and a `Blocked by`
+line naming a closed ticket makes that issue look unready to pick up. So, **every
+time an item is completed** (merged + moved to `Done`, or closed):
+
+1. **Remove its outgoing edges.** For each issue that lists the completed item as a
+   blocker, delete the edge and re-check:
+   `DELETE /repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by/<blocker-db-id>`
+   where `<blocker-db-id>` is the completed item's numeric **database id**
+   (`gh api repos/<owner>/<repo>/issues/<n> --jq .id`, _not_ the `#number`). The
+   blocker's id goes in the **path** (not the body).
+2. **Sync the child's `Blocked by` body line.** Remove the completed ticket's line
+   from any issue body that lists it (`gh api --method PATCH .../issues/<child> -f body=...`);
+   if that empties the section, drop the section.
+3. **Audit before finishing a session:** verify no open issue lists a closed blocker
+   and no closed issue reports `blocking > 0`:
+   - `GET /repos/<owner>/<repo>/issues/<child>/dependencies/blocked_by` lists **all**
+     blockers (open and closed) — check every entry is open.
+   - GraphQL `issueDependenciesSummary.blocking`/`blockedBy` count **open** blockers
+     only — fine for gating, but misses stale closed edges, so use the REST list to
+     catch them.
+
+The **frontier query** below already gates on open blockers only
+(`issue_dependencies_summary.blocked_by > 0`), so cleanup is about truthfulness, not
+picking logic — keep it that way and a finished ticket is never mistaken for a live
+blocker.
+
 The statuses live in the **Status** single-select field. The **Priority** field (`P0`/`P1`/`P2`) is independent and
 set by the roadmap/human; `Backlog` is the default resting state.
 
