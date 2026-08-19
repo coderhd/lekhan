@@ -55,6 +55,7 @@ interface EditorWorkspaceProps {
 	pageId: string
 	initialTitle: string
 	token: string
+	initialContent?: string | null
 	currentUser: {
 		id: string
 		email: string
@@ -74,6 +75,7 @@ const CURSOR_COLORS = [
 import { getSharedExtensions } from '@/lib/editor-extensions'
 import { decideMarkdownPaste } from '@/lib/markdown-paste'
 import { insertParsedHtml } from '@/lib/insert-parsed-html'
+import { hydrateOnOpen } from '@/lib/import-hydration'
 
 function getInitials(nameOrEmail: string) {
 	if (!nameOrEmail) return '?'
@@ -90,6 +92,7 @@ function getInitials(nameOrEmail: string) {
 export default function EditorWorkspace({	pageId,
 	initialTitle,
 	token,
+	initialContent,
 	currentUser,
 }: EditorWorkspaceProps) {
 	const router = useRouter()
@@ -521,6 +524,20 @@ export default function EditorWorkspace({	pageId,
 			}
 		}
 	}, [editor])
+
+	// Hydrate an imported markdown payload into a freshly-created page. Runs
+	// only after the collab doc is locally synced (so the doc reflects what is
+	// actually persisted) and only once per mount: a page the user already has
+	// content in is never clobbered, and useEditor recreating the instance when
+	// ydoc/provider arrive must not re-run the hydration.
+	const hydratedRef = useRef(false)
+	useEffect(() => {
+		if (hydratedRef.current) return
+		if (!editor || !ydoc || !isLocalSynced) return
+		if (hydrateOnOpen(editor, initialContent)) {
+			hydratedRef.current = true
+		}
+	}, [editor, ydoc, isLocalSynced, initialContent])
 
 	const handleLekhanBotResult = useCallback((
 		actionId: string,

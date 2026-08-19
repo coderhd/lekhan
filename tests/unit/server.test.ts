@@ -339,7 +339,7 @@ describe('Server Pages Cutover & Graph Index Integration', () => {
 		const makePageEq = () => ({
 			maybeSingle: vi.fn(async () => {
 				pageSelectCalls += 1
-				if (pageSelectCalls === 1) return { data: { workspace_id: 'ws-1' }, error: null }
+				if (pageSelectCalls === 1) return { data: { workspace_id: 'ws-1', properties: {} }, error: null }
 				return { data: workspacePagesData, error: null }
 			}),
 			then: (onfulfilled: any) =>

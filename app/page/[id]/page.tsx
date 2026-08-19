@@ -4,6 +4,7 @@ import { use, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { fetchPageDetails } from '@/services/graph'
+import { consumePendingImport } from '@/services/import'
 import GlobalLoader from '@/components/global-loader'
 import EditorWorkspace from '@/components/editor-workspace'
 import { toast } from 'sonner'
@@ -18,6 +19,7 @@ export default function PageRoute({
 	const [user, setUser] = useState<any | null>(null)
 	const [token, setToken] = useState<string | null>(null)
 	const [pageTitle, setPageTitle] = useState<string | null>(null)
+	const [initialContent, setInitialContent] = useState<string | null>(null)
 	const [loading, setLoading] = useState(true)
 
 	useEffect(() => {
@@ -68,6 +70,11 @@ export default function PageRoute({
 
 				if (cancelled) return
 				setPageTitle(page.title)
+				// A pending import payload (markdown body) is consumed here, on
+				// the page route, and passed to the workspace for first-open
+				// hydration. `consumePendingImport` is read-and-delete, so a
+				// refresh or re-mount of this route finds nothing pending.
+				setInitialContent(consumePendingImport(params.id))
 			} catch (err: unknown) {
 				console.error('Error loading page:', err)
 				toast.error('Page not found or access denied')
@@ -97,6 +104,7 @@ export default function PageRoute({
 		<EditorWorkspace
 			pageId={params.id}
 			initialTitle={pageTitle}
+			initialContent={initialContent}
 			token={token}
 			currentUser={{
 				id: user.id,

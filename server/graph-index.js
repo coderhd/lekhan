@@ -40,49 +40,81 @@ function extractTags (text) {
 	return tags
 }
 
+/**
+ * Fold frontmatter tags (`pages.properties.tags`) into the tag index so
+ * imported and properties-driven tags are searchable like body `#tags`.
+ * Accepts an array of strings or a single comma/space-separated string;
+ * tags are lowercased, trimmed and deduped, and constrained to the same
+ * character set as body `#tags` (so `page_tags` rows stay consistent).
+ * Anything else (or absent) yields no tags.
+ */
+function extractPropertyTags (properties) {
+	if (!properties || typeof properties !== 'object') return []
+	const raw = properties.tags
+	const values = Array.isArray(raw)
+		? raw.filter(t => typeof t === 'string')
+		: (typeof raw === 'string' ? raw.split(/[,\s]+/) : [])
+	const tags = []
+	const seen = new Set()
+	for (const value of values) {
+		const tag = value.trim().toLowerCase()
+		if (!tag || !/^[a-zA-Z0-9_][a-zA-Z0-9_\-/]*$/.test(tag) || seen.has(tag)) continue
+		seen.add(tag)
+		tags.push(tag)
+	}
+	return tags
+}
+
 async function getWorkspaceForPage (supabaseAdmin, pageId) {
 	const { data, error } = await supabaseAdmin
 		.from('pages')
-		.select('workspace_id')
+		.select('workspace_id, properties')
 		.eq('id', pageId)
 		.maybeSingle()
 	if (error) {
 		throw error
 	}
-	return data ? data.workspace_id : null
+	return data
+		? { workspaceId: data.workspace_id, properties: data.properties || {} }
+		: null
 }
 
 async function indexPage (supabaseAdmin, pageId, text) {
-	const workspaceId = await getWorkspaceForPage(supabaseAdmin, pageId)
+	const page = await getWorkspaceForPage(supabaseAdmin, pageId)
 	let linkRows = []
 	let tagRows = []
 
-	if (workspaceId) {
+	if (page) {
 		const { data: workspacePages, error: workspaceError } = await supabaseAdmin
 			.from('pages')
 			.select('id, title')
-			.eq('workspace_id', workspaceId)
+			.eq('workspace_id', page.workspaceId)
 		if (workspaceError) {
 			throw workspaceError
 		}
 
 		const titleIndex = new Map()
-		for (const page of workspacePages || []) {
-			titleIndex.set(normalizeTitle(page.title), page.id)
+		for (const workspacePage of workspacePages || []) {
+			titleIndex.set(normalizeTitle(workspacePage.title), workspacePage.id)
 		}
 
 		linkRows = extractLinks(text).map(link => ({
-			workspace_id: workspaceId,
+			workspace_id: page.workspaceId,
 			from_page_id: pageId,
 			to_page_id: titleIndex.get(normalizeTitle(link.title)) || null,
 			to_title: link.title,
 		}))
 		tagRows = extractTags(text).map(tag => ({ page_id: pageId, tag }))
+		for (const tag of extractPropertyTags(page.properties)) {
+			if (!tagRows.some(row => row.tag === tag)) {
+				tagRows.push({ page_id: pageId, tag })
+			}
+		}
 	}
 
 	const { data, error } = await supabaseAdmin.rpc('sync_page_graph', {
 		p_page_id: pageId,
-		p_workspace_id: workspaceId,
+		p_workspace_id: page ? page.workspaceId : null,
 		p_searchable_text: text,
 		p_links: linkRows,
 		p_tags: tagRows,
@@ -94,4 +126,4 @@ async function indexPage (supabaseAdmin, pageId, text) {
 	return { links: data?.links ?? 0, tags: data?.tags ?? 0 }
 }
 
-module.exports = { extractLinks, extractTags, normalizeTitle, getWorkspaceForPage, indexPage }
+module.exports = { extractLinks, extractTags, extractPropertyTags, normalizeTitle, getWorkspaceForPage, indexPage }

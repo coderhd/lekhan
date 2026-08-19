@@ -54,16 +54,21 @@ export function resolveTags(pageTags: string[], properties: Record<string, unkno
 }
 
 /**
- * Strip the live editor's auto-filled leading heading (the `heading block*`
- * placeholder that shows "Untitled Document") from a doc. It is not page
- * content, and without stripping it an empty page would export a stray `# `
- * or `<h1></h1>` as its first element. Non-empty headings are the user's
- * real first block and are kept.
+ * Strip the live editor's auto-filled empty headings (the `heading block*`
+ * placeholder that shows "Untitled Document") from a doc. They are not page
+ * content: without stripping, an empty page would export a stray `# ` as its
+ * first element and any replacement of a doc that doesn't end in a heading
+ * (e.g. markdown import hydration) would export a trailing `# ` line. Non-empty
+ * headings are the user's real blocks and are kept.
  */
 export function stripAutoHeading(doc: JSONContent): JSONContent {
 	const content = [...(doc.content ?? [])]
 	if (content[0]?.type === 'heading' && !(content[0].content ?? []).length) {
 		content.shift()
+	}
+	const last = content[content.length - 1]
+	if (content.length > 1 && last?.type === 'heading' && !(last.content ?? []).length) {
+		content.pop()
 	}
 	return { ...doc, content }
 }

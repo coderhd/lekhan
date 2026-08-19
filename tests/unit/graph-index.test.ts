@@ -60,17 +60,21 @@ describe('normalizeTitle', () => {
 })
 
 describe('getWorkspaceForPage', () => {
-	it('returns workspace_id for an existing page', async () => {
+	it('returns workspace_id and properties for an existing page', async () => {
 		const admin: any = {
 			from: vi.fn(() => ({
 				select: vi.fn(() => ({
 					eq: vi.fn(() => ({
-						maybeSingle: vi.fn(async () => ({ data: { workspace_id: 'ws-1' }, error: null })),
+						maybeSingle: vi.fn(async () => ({
+							data: { workspace_id: 'ws-1', properties: { tags: ['work'] } },
+							error: null,
+						})),
 					})),
 				})),
 			})),
 		}
-		expect(await getWorkspaceForPage(admin, 'page-1')).toBe('ws-1')
+		expect(await getWorkspaceForPage(admin, 'page-1')).toEqual({ workspaceId: 'ws-1', properties: { tags: ['work'] } })
+		expect(admin.from).toHaveBeenCalledWith('pages')
 	})
 
 	it('returns null when the page does not exist', async () => {
@@ -89,38 +93,39 @@ describe('getWorkspaceForPage', () => {
 describe('indexPage', () => {
 	const pageText = '# Notes\nMeeting with [[Priya]] about #work\nAlso see [[Priya]] again'
 
-	it('replaces links, tags and searchable_text via a single transactional rpc call', async () => {
-		let pageSelectCalls = 0
-		const workspacePagesData = [{ id: 'priya-page', title: 'Priya' }]
-
-		// A builder node that is BOTH directly awaitable (indexPage's workspace-pages
-		// fetch awaits .eq() itself) AND chainable (.maybeSingle() for getWorkspaceForPage).
-		const makePageEq = () => {
-			const node = {
-				maybeSingle: vi.fn(async () => {
-					pageSelectCalls += 1
-					if (pageSelectCalls === 1) return { data: { workspace_id: 'ws-1' }, error: null }
-					return { data: workspacePagesData, error: null }
-				}),
-				then: (onfulfilled: any) =>
-					Promise.resolve({ data: workspacePagesData, error: null }).then(onfulfilled),
-			}
-			return node
+	// A builder node that is BOTH directly awaitable (indexPage's workspace-pages
+	// fetch awaits .eq() itself) AND chainable (.maybeSingle() for getWorkspaceForPage).
+	// `maybeSingle` returns the page row (workspace_id + properties); the `then`
+	// path returns the workspace pages used for link resolution.
+	const makePageEq = (pageRow: { workspace_id: string; properties: Record<string, unknown> }) => {
+		const node = {
+			maybeSingle: vi.fn(async () => ({ data: pageRow, error: null })),
+			then: (onfulfilled: any) =>
+				Promise.resolve({ data: workspacePagesData, error: null }).then(onfulfilled),
 		}
+		return node
+	}
 
+	const workspacePagesData = [{ id: 'priya-page', title: 'Priya' }]
+
+	const makeAdmin = (rpcResult: any = { data: { links: 1, tags: 1 }, error: null }, pageRow: { workspace_id: string; properties: Record<string, unknown> } = { workspace_id: 'ws-1', properties: {} }) => {
 		const admin: any = {
 			from: vi.fn((table: string) => {
 				if (table === 'pages') {
 					return {
-						select: vi.fn(() => ({ eq: makePageEq })),
+						select: vi.fn(() => ({ eq: vi.fn(() => makePageEq(pageRow)) })),
 						update: vi.fn(),
 					}
 				}
 				return {}
 			}),
-			rpc: vi.fn(async () => ({ data: { links: 1, tags: 1 }, error: null })),
+			rpc: vi.fn(async () => rpcResult),
 		}
+		return admin
+	}
 
+	it('replaces links, tags and searchable_text via a single transactional rpc call', async () => {
+		const admin = makeAdmin()
 		const result = await indexPage(admin, 'page-1', pageText)
 
 		expect(result).toEqual({ links: 1, tags: 1 })
@@ -139,6 +144,98 @@ describe('indexPage', () => {
 		expect(admin.from).not.toHaveBeenCalledWith('page_links')
 		expect(admin.from).not.toHaveBeenCalledWith('page_tags')
 		expect(admin.from('pages').update).not.toHaveBeenCalled()
+	})
+
+	it('folds properties.tags (array form) into the tag rows alongside body tags', async () => {
+		const admin = makeAdmin({ data: { links: 1, tags: 2 }, error: null }, { workspace_id: 'ws-1', properties: { tags: ['frontmatter', 'work'] } })
+
+		const result = await indexPage(admin, 'page-1', pageText)
+		expect(result).toEqual({ links: 1, tags: 2 })
+		expect(admin.rpc).toHaveBeenCalledWith('sync_page_graph', {
+			p_page_id: 'page-1',
+			p_workspace_id: 'ws-1',
+			p_searchable_text: pageText,
+			p_links: [
+				{ workspace_id: 'ws-1', from_page_id: 'page-1', to_page_id: 'priya-page', to_title: 'Priya' },
+			],
+			// body #work first, then properties.tags with `work` deduped against the body tag
+			p_tags: [
+				{ page_id: 'page-1', tag: 'work' },
+				{ page_id: 'page-1', tag: 'frontmatter' },
+			],
+		})
+	})
+
+	it('folds properties.tags string form (comma/space separated) into tag rows', async () => {
+		const admin = makeAdmin({ data: { links: 0, tags: 3 }, error: null }, { workspace_id: 'ws-1', properties: { tags: 'meeting, project/alpha  urgent' } })
+
+		const result = await indexPage(admin, 'page-1', 'plain text')
+		expect(result).toEqual({ links: 0, tags: 3 })
+		expect(admin.rpc).toHaveBeenCalledWith('sync_page_graph', {
+			p_page_id: 'page-1',
+			p_workspace_id: 'ws-1',
+			p_searchable_text: 'plain text',
+			p_links: [],
+			p_tags: [
+				{ page_id: 'page-1', tag: 'meeting' },
+				{ page_id: 'page-1', tag: 'project/alpha' },
+				{ page_id: 'page-1', tag: 'urgent' },
+			],
+		})
+	})
+
+	it('keeps body tags and links unchanged when properties.tags is absent', async () => {
+		const admin = makeAdmin()
+		const result = await indexPage(admin, 'page-1', pageText)
+		expect(admin.rpc).toHaveBeenCalledWith('sync_page_graph', {
+			p_page_id: 'page-1',
+			p_workspace_id: 'ws-1',
+			p_searchable_text: pageText,
+			p_links: [
+				{ workspace_id: 'ws-1', from_page_id: 'page-1', to_page_id: 'priya-page', to_title: 'Priya' },
+			],
+			p_tags: [{ page_id: 'page-1', tag: 'work' }],
+		})
+		expect(result).toEqual({ links: 1, tags: 1 })
+	})
+
+	it('normalizes and dedupes property tags (case, whitespace, duplicates) against body tags', async () => {
+		const admin = makeAdmin({ data: { links: 1, tags: 2 }, error: null }, { workspace_id: 'ws-1', properties: { tags: ['Work', 'work', '  spaced  ', ''] } })
+
+		const result = await indexPage(admin, 'page-1', pageText)
+		expect(result).toEqual({ links: 1, tags: 2 })
+		expect(admin.rpc).toHaveBeenCalledWith('sync_page_graph', {
+			p_page_id: 'page-1',
+			p_workspace_id: 'ws-1',
+			p_searchable_text: pageText,
+			p_links: [
+				{ workspace_id: 'ws-1', from_page_id: 'page-1', to_page_id: 'priya-page', to_title: 'Priya' },
+			],
+			p_tags: [
+				{ page_id: 'page-1', tag: 'work' },
+				{ page_id: 'page-1', tag: 'spaced' },
+			],
+		})
+	})
+
+	it('drops property tags outside the body-tag character set', async () => {
+		const admin = makeAdmin({ data: { links: 1, tags: 2 }, error: null }, { workspace_id: 'ws-1', properties: { tags: ['a b', '##', '@#', 'ok/tag'] } })
+
+		const result = await indexPage(admin, 'page-1', pageText)
+		expect(result).toEqual({ links: 1, tags: 2 })
+		expect(admin.rpc).toHaveBeenCalledWith('sync_page_graph', {
+			p_page_id: 'page-1',
+			p_workspace_id: 'ws-1',
+			p_searchable_text: pageText,
+			p_links: [
+				{ workspace_id: 'ws-1', from_page_id: 'page-1', to_page_id: 'priya-page', to_title: 'Priya' },
+			],
+			// invalid `a b`, `##`, `@#` are dropped; only the body #work and ok/tag survive
+			p_tags: [
+				{ page_id: 'page-1', tag: 'work' },
+				{ page_id: 'page-1', tag: 'ok/tag' },
+			],
+		})
 	})
 
 	it('passes empty rows and persists text when the page has no workspace', async () => {
@@ -182,7 +279,7 @@ describe('indexPage', () => {
 			from: vi.fn(() => ({
 				select: vi.fn(() => ({
 					eq: vi.fn(() => ({
-						maybeSingle: vi.fn(async () => ({ data: { workspace_id: 'ws-1' }, error: null })),
+						maybeSingle: vi.fn(async () => ({ data: { workspace_id: 'ws-1', properties: {} }, error: null })),
 					})),
 				})),
 			})),
