@@ -1,12 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
 	slugifyTitle,
-	markdownExportFilename,
-	mdxExportFilename,
-	htmlExportFilename,
+	exportFilename,
 	resolveTags,
 	buildMarkdownExport,
-	serializeExportBody,
+	serializeExportBodyMarkdown,
 	serializeExportBodyHtml,
 	buildStandaloneHtml,
 } from '@/lib/markdown-export'
@@ -39,19 +37,23 @@ describe('slugifyTitle', () => {
 	})
 })
 
-describe('markdownExportFilename', () => {
-	it('appends the .md extension to a slugified title', () => {
-		expect(markdownExportFilename('My Page')).toBe('my-page.md')
+describe('exportFilename', () => {
+	it('appends the extension to a slugified title', () => {
+		expect(exportFilename('My Page', 'md')).toBe('my-page.md')
+		expect(exportFilename('My Page', 'mdx')).toBe('my-page.mdx')
+		expect(exportFilename('My Page', 'html')).toBe('my-page.html')
 	})
 
 	it('slugs the title before naming the file', () => {
-		expect(markdownExportFilename('Meeting Notes: 2026!')).toBe('meeting-notes-2026.md')
-		expect(markdownExportFilename('मेरी नोट्स')).toBe('मेरी-नोट्स.md')
+		expect(exportFilename('Meeting Notes: 2026!', 'md')).toBe('meeting-notes-2026.md')
+		expect(exportFilename('Meeting Notes: 2026!', 'mdx')).toBe('meeting-notes-2026.mdx')
+		expect(exportFilename('मेरी नोट्स', 'html')).toBe('मेरी-नोट्स.html')
 	})
 
-	it('falls back to untitled.md for an empty title', () => {
-		expect(markdownExportFilename('')).toBe('untitled.md')
-		expect(markdownExportFilename('   ')).toBe('untitled.md')
+	it('falls back to untitled for an empty title', () => {
+		expect(exportFilename('', 'mdx')).toBe('untitled.mdx')
+		expect(exportFilename('   ', 'html')).toBe('untitled.html')
+		expect(exportFilename('', 'md')).toBe('untitled.md')
 	})
 })
 
@@ -77,9 +79,9 @@ describe('resolveTags', () => {
 	})
 })
 
-describe('serializeExportBody', () => {
+describe('serializeExportBodyMarkdown', () => {
 	it('strips the auto-filled empty leading heading', () => {
-		const body = serializeExportBody({
+		const body = serializeExportBodyMarkdown({
 			type: 'doc',
 			content: [{ type: 'heading', attrs: { level: 1 }, content: [] }],
 		})
@@ -87,7 +89,7 @@ describe('serializeExportBody', () => {
 	})
 
 	it('strips an empty leading heading but keeps following blocks', () => {
-		const body = serializeExportBody({
+		const body = serializeExportBodyMarkdown({
 			type: 'doc',
 			content: [
 				{ type: 'heading', attrs: { level: 1 }, content: [] },
@@ -98,7 +100,7 @@ describe('serializeExportBody', () => {
 	})
 
 	it('keeps a non-empty leading heading', () => {
-		const body = serializeExportBody({
+		const body = serializeExportBodyMarkdown({
 			type: 'doc',
 			content: [
 				{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'My Notes' }] },
@@ -109,7 +111,7 @@ describe('serializeExportBody', () => {
 	})
 
 	it('passes through docs without a heading', () => {
-		const body = serializeExportBody({
+		const body = serializeExportBodyMarkdown({
 			type: 'doc',
 			content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Body text' }] }],
 		})
@@ -183,34 +185,10 @@ describe('buildMarkdownExport', () => {
 	})
 })
 
-describe('mdxExportFilename', () => {
-	it('appends the .mdx extension to a slugified title', () => {
-		expect(mdxExportFilename('My Page')).toBe('my-page.mdx')
-	})
-
-	it('slugs the title before naming the file', () => {
-		expect(mdxExportFilename('Meeting Notes: 2026!')).toBe('meeting-notes-2026.mdx')
-	})
-
-	it('falls back to untitled.mdx for an empty title', () => {
-		expect(mdxExportFilename('')).toBe('untitled.mdx')
-	})
-})
-
-describe('htmlExportFilename', () => {
-	it('appends the .html extension to a slugified title', () => {
-		expect(htmlExportFilename('My Page')).toBe('my-page.html')
-	})
-
-	it('falls back to untitled.html for an empty title', () => {
-		expect(htmlExportFilename('   ')).toBe('untitled.html')
-	})
-})
-
-describe('serializeExportBody (MDX body)', () => {
+describe('serializeExportBodyMarkdown (MDX body)', () => {
 	it('produces the markdown body the .md export assembles (MDX = same file, .mdx extension)', () => {
 		const doc = parseMarkdown('# Heading\n\nSome **bold** and [a link](https://example.com).')
-		const file = buildMarkdownExport({ title: 'My Page', properties: {}, pageTags: [], body: serializeExportBody(doc) })
+		const file = buildMarkdownExport({ title: 'My Page', properties: {}, pageTags: [], body: serializeExportBodyMarkdown(doc) })
 		expect(file).toMatch(/^---\n/)
 		expect(file).toContain('# Heading')
 		expect(file).toContain('**bold**')
@@ -218,7 +196,7 @@ describe('serializeExportBody (MDX body)', () => {
 
 	it('preserves editor-representable inline HTML (mark-rendered spans)', () => {
 		const doc = parseMarkdown('A <span style="color: red">colored</span> word.')
-		expect(serializeExportBody(doc)).toContain('<span style="color: red;">colored</span>')
+		expect(serializeExportBodyMarkdown(doc)).toContain('<span style="color: red;">colored</span>')
 	})
 })
 

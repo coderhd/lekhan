@@ -23,18 +23,6 @@ export function exportFilename(title: string, extension: 'md' | 'mdx' | 'html'):
 	return `${slug || 'untitled'}.${extension}`
 }
 
-export function markdownExportFilename(title: string): string {
-	return exportFilename(title, 'md')
-}
-
-export function mdxExportFilename(title: string): string {
-	return exportFilename(title, 'mdx')
-}
-
-export function htmlExportFilename(title: string): string {
-	return exportFilename(title, 'html')
-}
-
 /**
  * Resolve the tags to serialize into frontmatter. `page_tags` is the source
  * of truth; `properties.tags` is its round-trip mirror and only a fallback.
@@ -72,7 +60,7 @@ export function stripAutoHeading(doc: JSONContent): JSONContent {
  * links, code, …) round-trips into the output; the same body is saved as
  * both `.md` and `.mdx`.
  */
-export function serializeExportBody(doc: JSONContent): string {
+export function serializeExportBodyMarkdown(doc: JSONContent): string {
 	return serializeMarkdown(stripAutoHeading(doc))
 }
 
