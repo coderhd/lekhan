@@ -6,6 +6,7 @@ import {
 	buildFrontmatter,
 	assembleMarkdownFile,
 } from '@/lib/markdown-io'
+import { collectCodeBlocks } from './code-blocks'
 
 /**
  * The strongest guarantee: serializing a parsed doc yields the exact same
@@ -260,5 +261,79 @@ describe('end-to-end: a full markdown file round-trips', () => {
 
 		const reparsedDoc = parseMarkdown(reparsed.body)
 		expect(reparsedDoc).toEqual(parseMarkdown(serializedBody))
+	})
+})
+
+describe('parseMarkdown — code blocks with blank lines stay intact', () => {
+	const sample = [
+		"import { render, screen, waitFor } from '@testing-library/react'",
+		"import userEvent from '@testing-library/user-event'",
+		'',
+		"describe('SearchComponent', () => {",
+		"\tit('debounces input', async () => {",
+		'\t\tconst user = userEvent.setup()',
+		'\t\trender(<SearchComponent onSearch={mockSearch} />)',
+		'',
+		'\t\tconst input = screen.getByRole("textbox", { name: /search users/i })',
+		'\t\tawait user.type(input, "Alex")',
+		'',
+		'\t\tawait waitFor(() => {',
+		'\t\t\texpect(screen.getByText("Alex Johnson")).toBeInTheDocument()',
+		'\t\t})',
+		'\t})',
+		'})',
+	].join('\n')
+
+	it('does not split a code block at blank lines', () => {
+		const markdown = `before\n\n\`\`\`typescript\n${sample}\n\`\`\`\n\nafter\n`
+		const doc = parseMarkdown(markdown)
+
+		const blocks = collectCodeBlocks(doc)
+
+		expect(blocks).toHaveLength(1)
+		expect(blocks[0].language).toBe('typescript')
+		expect(blocks[0].text).toBe(sample)
+		expect(blocks[0].text).not.toContain('</code></pre>')
+
+		// The regression used to drop code lines into code-marked paragraphs.
+		const leakedInlineCode: string[] = []
+		const walk = (node: any) => {
+			if (node.type === 'text' && node.marks?.some((m: any) => m.type === 'code')) {
+				leakedInlineCode.push(node.text)
+			}
+			for (const child of node.content ?? []) walk(child)
+		}
+		walk(doc)
+		expect(leakedInlineCode).toEqual([])
+	})
+
+	it('keeps every block of a multi-fence document whole', () => {
+		const markdown = [
+			'```ts',
+			'const a = 1',
+			'',
+			'\tconst b = 2',
+			'```',
+			'',
+			'```tsx',
+			'export function Modal() {',
+			'\treturn null',
+			'',
+			'\t// comment',
+			'}',
+			'```',
+			'',
+		].join('\n')
+		const doc = parseMarkdown(markdown)
+
+		const blocks = collectCodeBlocks(doc).map((b) => ({
+			language: b.language,
+			firstLine: b.text.split('\n')[0],
+			lines: b.text.split('\n').length,
+		}))
+
+		expect(blocks).toHaveLength(2)
+		expect(blocks[0]).toEqual({ language: 'ts', firstLine: 'const a = 1', lines: 3 })
+		expect(blocks[1]).toEqual({ language: 'tsx', firstLine: 'export function Modal() {', lines: 5 })
 	})
 })
