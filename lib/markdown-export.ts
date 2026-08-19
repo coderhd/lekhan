@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/core'
 import { generateHTML } from '@tiptap/core'
+import { Mention } from '@tiptap/extension-mention'
 import { assembleMarkdownFile, serializeMarkdown, type PageMeta } from '@/lib/markdown-io'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 
@@ -66,10 +67,15 @@ export function serializeExportBodyMarkdown(doc: JSONContent): string {
 
 /**
  * Serialize a page doc's body to HTML for the standalone `.html` export,
- * dropping the placeholder leading heading like the markdown path.
+ * dropping the placeholder leading heading like the markdown path. Mention
+ * nodes need the Mention extension in the schema or `generateHTML` throws
+ * "Unknown node type" and no file downloads.
  */
 export function serializeExportBodyHtml(doc: JSONContent): string {
-	return generateHTML(stripAutoHeading(doc), getSharedExtensions())
+	return generateHTML(stripAutoHeading(doc), [
+		...getSharedExtensions(),
+		Mention.configure({ HTMLAttributes: { class: 'mention' } }),
+	])
 }
 
 function escapeHtml(value: string): string {

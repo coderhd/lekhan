@@ -225,6 +225,24 @@ describe('serializeExportBodyHtml', () => {
 		expect(html).toContain('<p>Body text</p>')
 	})
 
+	it('serializes a mention node without throwing', () => {
+		const html = serializeExportBodyHtml({
+			type: 'doc',
+			content: [
+				{
+					type: 'paragraph',
+					content: [
+						{ type: 'text', text: 'Assigned to ' },
+						{ type: 'mention', attrs: { id: 'user-1', label: 'Alice' } },
+						{ type: 'text', text: '.' },
+					],
+				},
+			],
+		})
+		expect(html).toContain('@Alice')
+		expect(html).toContain('mention')
+	})
+
 	it('renders editor marks as HTML elements', () => {
 		const html = serializeExportBodyHtml({
 			type: 'doc',
