@@ -39,7 +39,8 @@ export async function fetchWorkspacePages (workspaceId: string): Promise<Page[]>
 export async function createPage (
 	workspaceId: string,
 	ownerId: string,
-	parentId: string | null = null
+	parentId: string | null = null,
+	options: { title?: string; properties?: Record<string, unknown> } = {}
 ): Promise<Page> {
 	const { data, error } = await supabase
 		.from('pages')
@@ -47,7 +48,8 @@ export async function createPage (
 			workspace_id: workspaceId,
 			owner_id: ownerId,
 			parent_id: parentId,
-			title: 'Untitled',
+			title: options.title ?? 'Untitled',
+			...(options.properties ? { properties: options.properties } : {}),
 		})
 		.select()
 		.single()

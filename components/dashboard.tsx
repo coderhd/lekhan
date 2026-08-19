@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { MemberPageItem, Page } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { ensureWorkspace, fetchWorkspacePages, fetchSharedPages, createPage, deletePage, updatePageTitle, fetchPendingPageInvitations } from '@/services/graph'
+import { importMarkdownFile } from '@/services/import'
 import Invitations from './invitations'
 import ProfileMenu from './profile-menu'
 import ThemeToggle from './theme-toggle'
@@ -155,6 +156,29 @@ export default function Dashboard({ user }: DashboardProps) {
 		}
 	}
 
+	const importFileInputRef = useRef<HTMLInputElement>(null)
+
+	const handleImportMarkdown = async (file: File) => {
+		if (!file.name.toLowerCase().match(/\.(md|markdown|mdown|txt)$/)) {
+			toast.error('Please choose a .md, .markdown, .mdown or .txt file.')
+			return
+		}
+		try {
+			const text = await file.text()
+			const workspace = await ensureWorkspace(user.id)
+			const page = await importMarkdownFile(text, {
+				workspaceId: workspace.id,
+				ownerId: user.id,
+				filename: file.name,
+			})
+			toast.success(`Imported "${page.title}"`)
+			router.push(`/page/${page.id}`)
+		} catch (err: unknown) {
+			const message = err instanceof Error ? err.message : String(err)
+			toast.error(`Failed to import: ${message}`)
+		}
+	}
+
 
 
 	const handleDeleteDocument = (id: string, e: React.MouseEvent) => {
@@ -245,6 +269,19 @@ export default function Dashboard({ user }: DashboardProps) {
 
 	return (
 		<div className="min-h-screen bg-background text-on-surface">
+			<input
+				ref={importFileInputRef}
+				type="file"
+				accept=".md,.markdown,.mdown,.txt"
+				className="hidden"
+				onChange={(e) => {
+					const file = e.target.files?.[0]
+					e.target.value = ''
+					if (file) {
+						handleImportMarkdown(file)
+					}
+				}}
+			/>
 			<GlobalHeaderSlot slot="right">
 				<div className="flex items-center gap-md">
 					<button
@@ -325,10 +362,16 @@ export default function Dashboard({ user }: DashboardProps) {
 								<p className="text-on-surface-variant max-w-md mb-8">
 									You haven't created any pages yet. Create your first page to start collaborating with your team!
 								</p>
-								<button onClick={handleCreatePage} className="flex items-center gap-sm bg-primary text-on-primary font-bold px-xl py-3 rounded-lg hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 premium-transition">
-									<span className="material-symbols-outlined">add</span>
-									Create
-								</button>
+								<div className="flex items-center gap-sm">
+									<button onClick={handleCreatePage} className="flex items-center gap-sm bg-primary text-on-primary font-bold px-xl py-3 rounded-lg hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 premium-transition">
+										<span className="material-symbols-outlined">add</span>
+										Create
+									</button>
+									<button onClick={() => importFileInputRef.current?.click()} className="flex items-center gap-sm bg-surface-container text-on-surface font-bold px-xl py-3 rounded-lg hover:bg-surface-container-high hover:shadow-md premium-transition">
+										<span className="material-symbols-outlined">upload_file</span>
+										Import
+									</button>
+								</div>
 							</div>
 						) : (
 							<div className="flex flex-col items-center justify-center py-20 text-center opacity-0 animate-fade-in-up stagger-2 min-h-[60vh]">
@@ -417,6 +460,10 @@ export default function Dashboard({ user }: DashboardProps) {
 										<button onClick={handleCreatePage} className="hidden md:flex items-center gap-sm bg-primary text-on-primary font-bold px-lg py-2 rounded-lg hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 premium-transition ml-2">
 											<span className="material-symbols-outlined">add</span>
 											New
+										</button>
+										<button onClick={() => importFileInputRef.current?.click()} className="hidden md:flex items-center gap-sm bg-surface-container text-on-surface font-bold px-lg py-2 rounded-lg hover:bg-surface-container-high hover:shadow-md premium-transition ml-2">
+											<span className="material-symbols-outlined">upload_file</span>
+											Import
 										</button>
 									</div>
 								</div>
