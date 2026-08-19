@@ -2,6 +2,17 @@ import { Document as DocxDocument, Packer, Paragraph, TextRun, HeadingLevel, Tab
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 
+export function downloadBlob(blob: Blob, filename: string): void {
+	const url = URL.createObjectURL(blob)
+	const link = document.createElement('a')
+	link.href = url
+	link.download = filename
+	document.body.appendChild(link)
+	link.click()
+	document.body.removeChild(link)
+	URL.revokeObjectURL(url)
+}
+
 export async function exportToDocx(editorHtml: string, title: string): Promise<void> {
 	try {
 		const tempDiv = document.createElement('div')
@@ -65,14 +76,7 @@ export async function exportToDocx(editorHtml: string, title: string): Promise<v
 		})
 
 		const blob = await Packer.toBlob(doc)
-		const url = URL.createObjectURL(blob)
-		const link = document.createElement('a')
-		link.href = url
-		link.download = `${(title || 'document').replace(/\s+/g, '_')}.docx`
-		document.body.appendChild(link)
-		link.click()
-		document.body.removeChild(link)
-		URL.revokeObjectURL(url)
+		downloadBlob(blob, `${(title || 'document').replace(/\s+/g, '_')}.docx`)
 	} catch (err) {
 		console.error('Error generating DOCX export:', err)
 		throw err

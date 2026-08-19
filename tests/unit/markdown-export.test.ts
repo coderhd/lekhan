@@ -4,6 +4,7 @@ import {
 	markdownExportFilename,
 	resolveTags,
 	buildMarkdownExport,
+	serializeExportBody,
 } from '@/lib/markdown-export'
 import { parseFrontmatter } from '@/lib/markdown-io'
 
@@ -15,6 +16,11 @@ describe('slugifyTitle', () => {
 	it('strips punctuation and collapses separators', () => {
 		expect(slugifyTitle('Hello, World!')).toBe('hello-world')
 		expect(slugifyTitle('Version 2.0 — release')).toBe('version-2-0-release')
+	})
+
+	it('keeps non-Latin letters and digits', () => {
+		expect(slugifyTitle('मेरी नोट्स')).toBe('मेरी-नोट्स')
+		expect(slugifyTitle('日本語のページ')).toBe('日本語のページ')
 	})
 
 	it('trims leading and trailing separators', () => {
@@ -36,6 +42,7 @@ describe('markdownExportFilename', () => {
 
 	it('slugs the title before naming the file', () => {
 		expect(markdownExportFilename('Meeting Notes: 2026!')).toBe('meeting-notes-2026.md')
+		expect(markdownExportFilename('मेरी नोट्स')).toBe('मेरी-नोट्स.md')
 	})
 
 	it('falls back to untitled.md for an empty title', () => {
@@ -49,6 +56,11 @@ describe('resolveTags', () => {
 		expect(resolveTags(['real'], { tags: ['mirror'] })).toEqual(['real'])
 	})
 
+	it('ignores blank page_tags and falls back to the properties mirror', () => {
+		expect(resolveTags([''], { tags: ['fallback'] })).toEqual(['fallback'])
+		expect(resolveTags(['   '], { tags: ['fallback'] })).toEqual(['fallback'])
+	})
+
 	it('falls back to properties.tags when page_tags is empty', () => {
 		expect(resolveTags([], { tags: ['fallback'] })).toEqual(['fallback'])
 		expect(resolveTags([], { tags: ['a', 'b'] })).toEqual(['a', 'b'])
@@ -58,6 +70,46 @@ describe('resolveTags', () => {
 		expect(resolveTags([], {})).toEqual([])
 		expect(resolveTags([], { tags: 42 })).toEqual([])
 		expect(resolveTags([], { tags: ['ok', 7] })).toEqual(['ok'])
+	})
+})
+
+describe('serializeExportBody', () => {
+	it('strips the auto-filled empty leading heading', () => {
+		const body = serializeExportBody({
+			type: 'doc',
+			content: [{ type: 'heading', attrs: { level: 1 }, content: [] }],
+		})
+		expect(body).toBe('')
+	})
+
+	it('strips an empty leading heading but keeps following blocks', () => {
+		const body = serializeExportBody({
+			type: 'doc',
+			content: [
+				{ type: 'heading', attrs: { level: 1 }, content: [] },
+				{ type: 'paragraph', content: [{ type: 'text', text: 'Body text' }] },
+			],
+		})
+		expect(body).toBe('Body text\n')
+	})
+
+	it('keeps a non-empty leading heading', () => {
+		const body = serializeExportBody({
+			type: 'doc',
+			content: [
+				{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'My Notes' }] },
+				{ type: 'paragraph', content: [{ type: 'text', text: 'Body text' }] },
+			],
+		})
+		expect(body).toBe('# My Notes\n\nBody text\n')
+	})
+
+	it('passes through docs without a heading', () => {
+		const body = serializeExportBody({
+			type: 'doc',
+			content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Body text' }] }],
+		})
+		expect(body).toBe('Body text\n')
 	})
 })
 

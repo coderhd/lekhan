@@ -37,9 +37,8 @@ import { fetchPageDetails, fetchPageMemberRole, updatePageTitle, fetchMentionabl
 import { TableToolbar } from './table-toolbar'
 import { CodeBlockLanguageSelect } from './code-block-language-select'
 import { DragContextMenu } from './drag-context-menu'
-import { exportToDocx, exportToPdf } from '@/lib/export-utils'
-import { buildMarkdownExport, markdownExportFilename } from '@/lib/markdown-export'
-import { serializeMarkdown } from '@/lib/markdown-io'
+import { exportToDocx, exportToPdf, downloadBlob } from '@/lib/export-utils'
+import { buildMarkdownExport, markdownExportFilename, serializeExportBody } from '@/lib/markdown-export'
 import { Download, FileText, FileSpreadsheet, FileCode } from 'lucide-react'
 
 interface EditorWorkspaceProps {
@@ -139,17 +138,9 @@ export default function EditorWorkspace({
 					title,
 					properties: pageDetails.properties || {},
 					pageTags: pageTags.map((t) => t.tag),
-					body: serializeMarkdown(editor.getJSON()),
+					body: serializeExportBody(editor.getJSON()),
 				})
-				const blob = new Blob([file], { type: 'text/markdown;charset=utf-8' })
-				const url = URL.createObjectURL(blob)
-				const link = document.createElement('a')
-				link.href = url
-				link.download = markdownExportFilename(title)
-				document.body.appendChild(link)
-				link.click()
-				document.body.removeChild(link)
-				URL.revokeObjectURL(url)
+				downloadBlob(new Blob([file], { type: 'text/markdown;charset=utf-8' }), markdownExportFilename(title))
 			} else if (type === 'docx') {
 				await exportToDocx(editor.getHTML(), title)
 			} else if (type === 'pdf') {
@@ -727,24 +718,24 @@ export default function EditorWorkspace({
 										className="bg-surface-container-low border border-black/10 dark:border-white/10 text-on-surface px-2.5 h-8 rounded-lg font-medium text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50 disabled:pointer-events-none"
 										title="Export Document"
 									>
-									<Download className="w-3.5 h-3.5 text-primary" />
-									<span className="hidden lg:inline font-bold">Export</span>
-								</button>
+										<Download className="w-3.5 h-3.5 text-primary" />
+										<span className="hidden lg:inline font-bold">Export</span>
+									</button>
 
-								{isExportOpen && (
-									<div className="absolute top-full right-0 pt-1.5 w-52 z-50 animate-in fade-in zoom-in-95" role="menu">
-										<div className="bg-surface-container rounded-xl border border-black/10 dark:border-white/10 p-1 shadow-xl flex flex-col gap-0.5 text-xs">
-											<button
-												type="button"
-												disabled={isExporting}
-												onClick={() => handleExport('markdown')}
-												className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full disabled:opacity-50 disabled:pointer-events-none"
-												role="menuitem"
-											>
-												<FileCode className="w-4 h-4 text-emerald-500" />
-												<span>Download as Markdown (.md)</span>
-											</button>
-											<button
+									{isExportOpen && (
+										<div className="absolute top-full right-0 pt-1.5 w-52 z-50 animate-in fade-in zoom-in-95" role="menu">
+											<div className="bg-surface-container rounded-xl border border-black/10 dark:border-white/10 p-1 shadow-xl flex flex-col gap-0.5 text-xs">
+												<button
+													type="button"
+													disabled={isExporting}
+													onClick={() => handleExport('markdown')}
+													className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full disabled:opacity-50 disabled:pointer-events-none"
+													role="menuitem"
+												>
+													<FileCode className="w-4 h-4 text-emerald-500" />
+													<span>Download as Markdown (.md)</span>
+												</button>
+												<button
 													type="button"
 													disabled={isExporting}
 													onClick={() => handleExport('docx')}
