@@ -2,11 +2,15 @@ import { describe, it, expect } from 'vitest'
 import {
 	slugifyTitle,
 	markdownExportFilename,
+	mdxExportFilename,
+	htmlExportFilename,
 	resolveTags,
 	buildMarkdownExport,
 	serializeExportBody,
+	serializeExportBodyHtml,
+	buildStandaloneHtml,
 } from '@/lib/markdown-export'
-import { parseFrontmatter } from '@/lib/markdown-io'
+import { parseFrontmatter, parseMarkdown } from '@/lib/markdown-io'
 
 describe('slugifyTitle', () => {
 	it('lowercases and hyphenates spaces', () => {
@@ -176,5 +180,102 @@ describe('buildMarkdownExport', () => {
 		expect(data.tags).toEqual(['notes', 'work'])
 		expect(data.properties).toEqual({ author: 'Harsh', count: 3 })
 		expect(body.trim()).toBe('# Heading\n\nSome **bold** text.')
+	})
+})
+
+describe('mdxExportFilename', () => {
+	it('appends the .mdx extension to a slugified title', () => {
+		expect(mdxExportFilename('My Page')).toBe('my-page.mdx')
+	})
+
+	it('slugs the title before naming the file', () => {
+		expect(mdxExportFilename('Meeting Notes: 2026!')).toBe('meeting-notes-2026.mdx')
+	})
+
+	it('falls back to untitled.mdx for an empty title', () => {
+		expect(mdxExportFilename('')).toBe('untitled.mdx')
+	})
+})
+
+describe('htmlExportFilename', () => {
+	it('appends the .html extension to a slugified title', () => {
+		expect(htmlExportFilename('My Page')).toBe('my-page.html')
+	})
+
+	it('falls back to untitled.html for an empty title', () => {
+		expect(htmlExportFilename('   ')).toBe('untitled.html')
+	})
+})
+
+describe('serializeExportBody (MDX body)', () => {
+	it('produces the markdown body the .md export assembles (MDX = same file, .mdx extension)', () => {
+		const doc = parseMarkdown('# Heading\n\nSome **bold** and [a link](https://example.com).')
+		const file = buildMarkdownExport({ title: 'My Page', properties: {}, pageTags: [], body: serializeExportBody(doc) })
+		expect(file).toMatch(/^---\n/)
+		expect(file).toContain('# Heading')
+		expect(file).toContain('**bold**')
+	})
+
+	it('preserves editor-representable inline HTML (mark-rendered spans)', () => {
+		const doc = parseMarkdown('A <span style="color: red">colored</span> word.')
+		expect(serializeExportBody(doc)).toContain('<span style="color: red;">colored</span>')
+	})
+})
+
+describe('serializeExportBodyHtml', () => {
+	it('serializes the doc to HTML, stripping the auto-filled empty leading heading', () => {
+		const html = serializeExportBodyHtml({
+			type: 'doc',
+			content: [
+				{ type: 'heading', attrs: { level: 1 }, content: [] },
+				{ type: 'paragraph', content: [{ type: 'text', text: 'Body text' }] },
+			],
+		})
+		expect(html).toContain('<p>Body text</p>')
+		expect(html).not.toContain('<h1>')
+	})
+
+	it('keeps a non-empty leading heading', () => {
+		const html = serializeExportBodyHtml({
+			type: 'doc',
+			content: [
+				{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'My Notes' }] },
+				{ type: 'paragraph', content: [{ type: 'text', text: 'Body text' }] },
+			],
+		})
+		expect(html).toContain('<h1>My Notes</h1>')
+		expect(html).toContain('<p>Body text</p>')
+	})
+
+	it('renders editor marks as HTML elements', () => {
+		const html = serializeExportBodyHtml({
+			type: 'doc',
+			content: [
+				{
+					type: 'paragraph',
+					content: [
+						{ type: 'text', text: 'Some ', marks: [{ type: 'bold' }] },
+						{ type: 'text', text: 'bold' },
+						{ type: 'text', text: ' text.', marks: [{ type: 'bold' }] },
+					],
+				},
+			],
+		})
+		expect(html).toContain('<strong>Some </strong>bold<strong> text.</strong>')
+	})
+})
+
+describe('buildStandaloneHtml', () => {
+	it('wraps editor HTML in a minimal standalone document', () => {
+		const out = buildStandaloneHtml('<p>Hello</p>', 'My Page')
+		expect(out).toMatch(/^<!doctype html>/i)
+		expect(out).toContain('<title>My Page</title>')
+		expect(out).toContain('<meta charset="utf-8">')
+		expect(out).toContain('<p>Hello</p>')
+	})
+
+	it('escapes the title', () => {
+		const out = buildStandaloneHtml('', 'A <b> & "Title"')
+		expect(out).toContain('<title>A &lt;b&gt; &amp; &quot;Title&quot;</title>')
 	})
 })

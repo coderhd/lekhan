@@ -38,8 +38,8 @@ import { TableToolbar } from './table-toolbar'
 import { CodeBlockLanguageSelect } from './code-block-language-select'
 import { DragContextMenu } from './drag-context-menu'
 import { exportToDocx, exportToPdf, downloadBlob } from '@/lib/export-utils'
-import { buildMarkdownExport, markdownExportFilename, serializeExportBody } from '@/lib/markdown-export'
-import { Download, FileText, FileSpreadsheet, FileCode } from 'lucide-react'
+import { buildMarkdownExport, exportFilename, serializeExportBody, serializeExportBodyHtml, buildStandaloneHtml } from '@/lib/markdown-export'
+import { Download, FileText, FileSpreadsheet, FileCode, Globe } from 'lucide-react'
 
 interface EditorWorkspaceProps {
 	pageId: string
@@ -126,11 +126,11 @@ export default function EditorWorkspace({
 		}
 	}, [pageId])
 
-	const handleExport = async (type: 'markdown' | 'docx' | 'pdf') => {
+	const handleExport = async (type: 'markdown' | 'mdx' | 'html' | 'docx' | 'pdf') => {
 		if (!editor) return
 		setIsExporting(true)
 		try {
-			if (type === 'markdown') {
+			if (type === 'markdown' || type === 'mdx') {
 				const [pageDetails, pageTags] = await Promise.all([
 					fetchPageDetails(pageId),
 					fetchPageTags(pageId),
@@ -141,7 +141,11 @@ export default function EditorWorkspace({
 					pageTags: pageTags.map((t) => t.tag),
 					body: serializeExportBody(editor.getJSON()),
 				})
-				downloadBlob(new Blob([file], { type: 'text/markdown;charset=utf-8' }), markdownExportFilename(title))
+				const extension = type === 'mdx' ? 'mdx' : 'md'
+				downloadBlob(new Blob([file], { type: 'text/markdown;charset=utf-8' }), exportFilename(title, extension))
+			} else if (type === 'html') {
+				const html = buildStandaloneHtml(serializeExportBodyHtml(editor.getJSON()), title)
+				downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), exportFilename(title, 'html'))
 			} else if (type === 'docx') {
 				await exportToDocx(editor.getHTML(), title)
 			} else if (type === 'pdf') {
@@ -732,10 +736,30 @@ export default function EditorWorkspace({
 													className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full disabled:opacity-50 disabled:pointer-events-none"
 													role="menuitem"
 												>
-													<FileCode className="w-4 h-4 text-emerald-500" />
-													<span>Download as Markdown (.md)</span>
-												</button>
-												<button
+												<FileCode className="w-4 h-4 text-emerald-500" />
+												<span>Download as Markdown (.md)</span>
+											</button>
+											<button
+												type="button"
+												disabled={isExporting}
+												onClick={() => handleExport('mdx')}
+												className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full disabled:opacity-50 disabled:pointer-events-none"
+												role="menuitem"
+											>
+												<FileCode className="w-4 h-4 text-purple-500" />
+												<span>Download as MDX (.mdx)</span>
+											</button>
+											<button
+												type="button"
+												disabled={isExporting}
+												onClick={() => handleExport('html')}
+												className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full disabled:opacity-50 disabled:pointer-events-none"
+												role="menuitem"
+											>
+												<Globe className="w-4 h-4 text-orange-500" />
+												<span>Download as HTML (.html)</span>
+											</button>
+											<button
 													type="button"
 													disabled={isExporting}
 													onClick={() => handleExport('docx')}
