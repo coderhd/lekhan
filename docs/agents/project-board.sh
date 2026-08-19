@@ -55,6 +55,6 @@ mutation($project: ID!, $item: ID!, $field: ID!, $value: String!) {
   updateProjectV2ItemFieldValue(
     input: { projectId: $project, itemId: $item, fieldId: $field, value: { singleSelectOptionId: $value } }
   ) { projectV2Item { id } }
-}' -F "project=$PROJECT_ID" -F "item=$item_id" -F "field=$STATUS_FIELD_ID" -F "value=$option_id" >/dev/null
+}' -F "project=$PROJECT_ID" -F "item=$item_id" -F "field=$STATUS_FIELD_ID" -f "value=$option_id" >/dev/null
 
 echo "issue #$issue_number -> $target"
