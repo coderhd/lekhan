@@ -32,16 +32,15 @@ import { PromptDialog } from './ui/prompt-dialog'
 import * as Y from 'yjs'
 import { Mention } from '@tiptap/extension-mention'
 import MentionList, { MentionItem } from './mention-list'
-import { fetchPageDetails, fetchPageMemberRole, updatePageTitle, fetchMentionablePageCollaborators } from '@/services/graph'
-import { getUserAICredits } from '@/services/db'
+import { fetchPageDetails, fetchPageMemberRole, updatePageTitle, fetchMentionablePageCollaborators, fetchPageTags } from '@/services/graph'
 
 import { TableToolbar } from './table-toolbar'
 import { CodeBlockLanguageSelect } from './code-block-language-select'
 import { DragContextMenu } from './drag-context-menu'
 import { exportToDocx, exportToPdf } from '@/lib/export-utils'
-import PricingPlans from './pricing-plans'
-import { Download, Sparkles, FileText, FileSpreadsheet } from 'lucide-react'
-import * as Dialog from '@radix-ui/react-dialog'
+import { buildMarkdownExport, markdownExportFilename } from '@/lib/markdown-export'
+import { serializeMarkdown } from '@/lib/markdown-io'
+import { Download, FileText, FileSpreadsheet, FileCode } from 'lucide-react'
 
 interface EditorWorkspaceProps {
 	pageId: string
@@ -110,55 +109,8 @@ export default function EditorWorkspace({
 	} | null>(null)
 	const [isDetectingLanguage, setIsDetectingLanguage] = useState(false)
 	const [mentionables, setMentionables] = useState<MentionItem[]>([])
-	const [userPlan, setUserPlan] = useState<'free' | 'go' | 'pro' | 'team' | 'enterprise'>('free')
 	const [isExporting, setIsExporting] = useState(false)
 	const [isExportOpen, setIsExportOpen] = useState(false)
-	const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false)
-
-	useEffect(() => {
-		let isCurrent = true
-		const checkPlan = async () => {
-			if (currentUser?.id) {
-				try {
-					const credits = await getUserAICredits(currentUser.id)
-					if (isCurrent) {
-						setUserPlan(credits.plan)
-					}
-				} catch (err) {
-					console.error('Error fetching plan:', err)
-				}
-			}
-		}
-		checkPlan()
-		return () => {
-			isCurrent = false
-		}
-	}, [currentUser?.id])
-
-	const handleExport = async (type: 'docx' | 'pdf') => {
-		if (userPlan === 'free') {
-			setIsUpgradeModalOpen(true)
-			return
-		}
-		if (!editor) return
-		setIsExporting(true)
-		try {
-			if (type === 'docx') {
-				await exportToDocx(editor.getHTML(), title)
-			} else if (type === 'pdf') {
-				const editorEl = editor.view.dom as HTMLElement
-				if (editorEl) {
-					await exportToPdf(editorEl, title)
-				}
-			}
-		} catch (err) {
-			console.error('Export error:', err)
-		} finally {
-			setIsExporting(false)
-			setIsExportOpen(false)
-		}
-	}
-
 
 	useEffect(() => {
 		const loadMentionables = async () => {
@@ -173,6 +125,46 @@ export default function EditorWorkspace({
 			loadMentionables()
 		}
 	}, [pageId])
+
+	const handleExport = async (type: 'markdown' | 'docx' | 'pdf') => {
+		if (!editor) return
+		setIsExporting(true)
+		try {
+			if (type === 'markdown') {
+				const [pageDetails, pageTags] = await Promise.all([
+					fetchPageDetails(pageId),
+					fetchPageTags(pageId),
+				])
+				const file = buildMarkdownExport({
+					title,
+					properties: pageDetails.properties || {},
+					pageTags: pageTags.map((t) => t.tag),
+					body: serializeMarkdown(editor.getJSON()),
+				})
+				const blob = new Blob([file], { type: 'text/markdown;charset=utf-8' })
+				const url = URL.createObjectURL(blob)
+				const link = document.createElement('a')
+				link.href = url
+				link.download = markdownExportFilename(title)
+				document.body.appendChild(link)
+				link.click()
+				document.body.removeChild(link)
+				URL.revokeObjectURL(url)
+			} else if (type === 'docx') {
+				await exportToDocx(editor.getHTML(), title)
+			} else if (type === 'pdf') {
+				const editorEl = editor.view.dom as HTMLElement
+				if (editorEl) {
+					await exportToPdf(editorEl, title)
+				}
+			}
+		} catch (err) {
+			console.error('Export error:', err)
+		} finally {
+			setIsExporting(false)
+			setIsExportOpen(false)
+		}
+	}
 
 	const handleOpenLekhanBot = useCallback(() => {
 		setDiffPreview(null)
@@ -735,19 +727,24 @@ export default function EditorWorkspace({
 										className="bg-surface-container-low border border-black/10 dark:border-white/10 text-on-surface px-2.5 h-8 rounded-lg font-medium text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50 disabled:pointer-events-none"
 										title="Export Document"
 									>
-										<Download className="w-3.5 h-3.5 text-primary" />
-										<span className="hidden lg:inline font-bold">Export</span>
-										{userPlan === 'free' && (
-											<span className="text-[10px] bg-primary/20 text-primary px-1 rounded font-semibold">
-												PRO
-											</span>
-										)}
-									</button>
+									<Download className="w-3.5 h-3.5 text-primary" />
+									<span className="hidden lg:inline font-bold">Export</span>
+								</button>
 
-									{isExportOpen && (
-										<div className="absolute top-full right-0 pt-1.5 w-44 z-50 animate-in fade-in zoom-in-95" role="menu">
-											<div className="bg-surface-container rounded-xl border border-black/10 dark:border-white/10 p-1 shadow-xl flex flex-col gap-0.5 text-xs">
-												<button
+								{isExportOpen && (
+									<div className="absolute top-full right-0 pt-1.5 w-52 z-50 animate-in fade-in zoom-in-95" role="menu">
+										<div className="bg-surface-container rounded-xl border border-black/10 dark:border-white/10 p-1 shadow-xl flex flex-col gap-0.5 text-xs">
+											<button
+												type="button"
+												disabled={isExporting}
+												onClick={() => handleExport('markdown')}
+												className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full disabled:opacity-50 disabled:pointer-events-none"
+												role="menuitem"
+											>
+												<FileCode className="w-4 h-4 text-emerald-500" />
+												<span>Download as Markdown (.md)</span>
+											</button>
+											<button
 													type="button"
 													disabled={isExporting}
 													onClick={() => handleExport('docx')}
@@ -1023,27 +1020,6 @@ export default function EditorWorkspace({
 				}}
 				defaultValue={editor?.getAttributes('link').href || ''}
 			/>
-
-			<Dialog.Root open={isUpgradeModalOpen} onOpenChange={setIsUpgradeModalOpen}>
-				<Dialog.Portal>
-					<Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] animate-in fade-in" />
-					<Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-surface-container max-w-4xl w-[92vw] max-h-[90vh] overflow-y-auto rounded-2xl border border-black/10 dark:border-white/10 p-6 shadow-2xl z-[100000] animate-in zoom-in-95">
-						<div className="flex items-center justify-between mb-2">
-							<div className="flex items-center gap-2">
-								<Sparkles className="w-5 h-5 text-primary" />
-								<h3 className="text-lg font-bold text-on-surface">Upgrade to Premium</h3>
-							</div>
-							<Dialog.Close className="text-on-surface-variant hover:text-on-surface p-1 rounded-lg">
-								<span className="material-symbols-outlined text-lg">close</span>
-							</Dialog.Close>
-						</div>
-						<p className="text-sm text-on-surface-variant mb-6">
-							Exporting documents as DOCX or PDF is a premium feature available on Go, Pro, Team, and Enterprise plans. Upgrade today to unlock document exports, unlimited documents, and higher AI limits!
-						</p>
-						<PricingPlans currentPlan={userPlan} />
-					</Dialog.Content>
-				</Dialog.Portal>
-			</Dialog.Root>
 		</div>
 	)
 }
