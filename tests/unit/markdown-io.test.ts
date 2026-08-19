@@ -6,6 +6,7 @@ import {
 	buildFrontmatter,
 	assembleMarkdownFile,
 } from '@/lib/markdown-io'
+import { collectCodeBlocks } from './code-blocks'
 
 /**
  * The strongest guarantee: serializing a parsed doc yields the exact same
@@ -287,23 +288,23 @@ describe('parseMarkdown — code blocks with blank lines stay intact', () => {
 		const markdown = `before\n\n\`\`\`typescript\n${sample}\n\`\`\`\n\nafter\n`
 		const doc = parseMarkdown(markdown)
 
-		const blocks: { language: string | null; text: string }[] = []
-		const walk = (node: (typeof doc & { content?: unknown[] }) | undefined) => {
-			if (!node) return
-			if (node.type === 'codeBlock') {
-				blocks.push({
-					language: node.attrs?.language ?? null,
-					text: (node.content?.[0] as any)?.text ?? '',
-				})
-			}
-			for (const child of node.content ?? []) walk(child as any)
-		}
-		walk(doc)
+		const blocks = collectCodeBlocks(doc)
 
 		expect(blocks).toHaveLength(1)
 		expect(blocks[0].language).toBe('typescript')
 		expect(blocks[0].text).toBe(sample)
 		expect(blocks[0].text).not.toContain('</code></pre>')
+
+		// The regression used to drop code lines into code-marked paragraphs.
+		const leakedInlineCode: string[] = []
+		const walk = (node: any) => {
+			if (node.type === 'text' && node.marks?.some((m: any) => m.type === 'code')) {
+				leakedInlineCode.push(node.text)
+			}
+			for (const child of node.content ?? []) walk(child)
+		}
+		walk(doc)
+		expect(leakedInlineCode).toEqual([])
 	})
 
 	it('keeps every block of a multi-fence document whole', () => {
@@ -325,20 +326,11 @@ describe('parseMarkdown — code blocks with blank lines stay intact', () => {
 		].join('\n')
 		const doc = parseMarkdown(markdown)
 
-		const blocks: { language: string | null; firstLine: string; lines: number }[] = []
-		const walk = (node: (typeof doc & { content?: unknown[] }) | undefined) => {
-			if (!node) return
-			if (node.type === 'codeBlock') {
-				const text = (node.content?.[0] as any)?.text ?? ''
-				blocks.push({
-					language: node.attrs?.language ?? null,
-					firstLine: text.split('\n')[0],
-					lines: text.split('\n').length,
-				})
-			}
-			for (const child of node.content ?? []) walk(child as any)
-		}
-		walk(doc)
+		const blocks = collectCodeBlocks(doc).map((b) => ({
+			language: b.language,
+			firstLine: b.text.split('\n')[0],
+			lines: b.text.split('\n').length,
+		}))
 
 		expect(blocks).toHaveLength(2)
 		expect(blocks[0]).toEqual({ language: 'ts', firstLine: 'const a = 1', lines: 3 })

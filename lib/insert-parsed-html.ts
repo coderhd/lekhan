@@ -13,18 +13,24 @@ import { DOMParser } from '@tiptap/pm/model'
  * closing `</code></pre>` tags leak into the text, splitting one code block
  * into several. Parsing the HTML directly with the editor's schema keeps it
  * intact.
+ *
+ * With `{ replaceDocument: true }` the whole document is replaced (what the
+ * base `setContent` does, including its default whitespace collapsing). The
+ * default branch inserts at the current selection like `insertContentAt`,
+ * which parses with `preserveWhitespace: 'full'`; the whitespace difference
+ * between the two branches mirrors tiptap's own asymmetry.
  */
 export function insertParsedHtml(
 	editor: Editor,
 	html: string,
-	opts: { replaceAll?: boolean } = {},
+	opts: { replaceDocument?: boolean } = {},
 ): void {
 	const element = document.createElement('div')
 	element.innerHTML = html
 	const parser = DOMParser.fromSchema(editor.schema)
 	const { tr } = editor.state
 
-	if (opts.replaceAll) {
+	if (opts.replaceDocument) {
 		tr.replaceWith(0, tr.doc.content.size, parser.parse(element))
 	} else {
 		const fragment = parser.parseSlice(element, { preserveWhitespace: 'full' }).content

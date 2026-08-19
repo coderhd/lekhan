@@ -3,6 +3,7 @@ import { Editor } from '@tiptap/react'
 import { decideMarkdownPaste } from '@/lib/markdown-paste'
 import { insertParsedHtml } from '@/lib/insert-parsed-html'
 import { getSharedExtensions } from '@/lib/editor-extensions'
+import { collectCodeBlocks } from './code-blocks'
 
 describe('decideMarkdownPaste', () => {
 	it('parses pasted markdown as rich content even when the clipboard HTML wraps it in a <pre>', () => {
@@ -117,25 +118,43 @@ describe('pasting markdown into a live editor', () => {
 		// Mirrors the editor-workspace handlePaste flow: markdown -> HTML via
 		// the parser, then inserted without re-running the markdown parser.
 		const parsedHtml = (editor as any).storage.markdown.parser.parse(plain)
-		insertParsedHtml(editor, parsedHtml, { replaceAll: true })
+		insertParsedHtml(editor, parsedHtml, { replaceDocument: true })
 
-		const doc = editor.getJSON()
-		const blocks: { language: string | null; text: string }[] = []
-		const walk = (node: any) => {
-			if (node.type === 'codeBlock') {
-				blocks.push({
-					language: node.attrs?.language ?? null,
-					text: node.content?.[0]?.text ?? '',
-				})
-			}
-			for (const child of node.content ?? []) walk(child)
-		}
-		walk(doc)
+		const blocks = collectCodeBlocks(editor.getJSON())
 
 		expect(blocks).toHaveLength(1)
 		expect(blocks[0].language).toBe('typescript')
 		expect(blocks[0].text).toBe(code)
 		expect(blocks[0].text).not.toContain('</code></pre>')
+		editor.destroy()
+	})
+
+	it('keeps a code block whole when pasting into an existing document', () => {
+		const editor = buildEditor()
+		// Mirror a live editor doc (schema content is `heading block*`).
+		editor.commands.setContent({
+			type: 'doc',
+			content: [
+				{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Title' }] },
+				{ type: 'paragraph', content: [{ type: 'text', text: 'existing content' }] },
+			],
+		})
+		const end = editor.state.doc.content.size
+		editor.commands.setTextSelection({ from: end, to: end })
+
+		const code = '\tconst a = 1\n\n\tconst b = 2'
+		const plain = `\`\`\`typescript\n${code}\n\`\`\``
+		const parsedHtml = (editor as any).storage.markdown.parser.parse(plain)
+		insertParsedHtml(editor, parsedHtml)
+
+		const blocks = collectCodeBlocks(editor.getJSON())
+		expect(blocks).toHaveLength(1)
+		expect(blocks[0].language).toBe('typescript')
+		expect(blocks[0].text).toBe(code)
+
+		const out = editor.getHTML()
+		expect(out).toContain('existing content')
+		expect(out).not.toContain('&lt;/code&gt;')
 		editor.destroy()
 	})
 

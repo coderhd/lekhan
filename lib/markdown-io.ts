@@ -55,7 +55,7 @@ export function parseMarkdown(markdown: string): JSONContent {
 	// The parser output is already HTML; inserting it through `setContent`
 	// would re-parse it as markdown and corrupt code blocks that contain
 	// blank lines (see lib/insert-parsed-html.ts).
-	insertParsedHtml(editor, html, { replaceAll: true })
+	insertParsedHtml(editor, html, { replaceDocument: true })
 	return editor.getJSON()
 }
 

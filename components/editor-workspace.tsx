@@ -462,12 +462,10 @@ export default function EditorWorkspace({
 						const parsedHtml = parser.parse(plainText)
 						if (parsedHtml) {
 							event.preventDefault()
-							// The parser output is already HTML; sending it back
-							// through the markdown `setContent`/`insertContent`
-							// overrides re-parses it as markdown and corrupts code
-							// blocks containing blank lines.
-							const replaceAll = currentEditor.isEmpty || currentEditor.getText().trim() === ''
-							insertParsedHtml(currentEditor, parsedHtml, { replaceAll })
+							// parsedHtml is already HTML — see lib/insert-parsed-html.ts:
+							// the markdown command overrides would re-parse it as markdown.
+							const replaceDocument = currentEditor.isEmpty || currentEditor.getText().trim() === ''
+							insertParsedHtml(currentEditor, parsedHtml, { replaceDocument })
 							return true
 						}
 					}
