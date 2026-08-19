@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import {
 	slugifyTitle,
-	markdownExportFilename,
+	exportFilename,
 	resolveTags,
 	buildMarkdownExport,
-	serializeExportBody,
+	serializeExportBodyMarkdown,
+	serializeExportBodyHtml,
+	buildStandaloneHtml,
 } from '@/lib/markdown-export'
-import { parseFrontmatter } from '@/lib/markdown-io'
+import { parseFrontmatter, parseMarkdown } from '@/lib/markdown-io'
 
 describe('slugifyTitle', () => {
 	it('lowercases and hyphenates spaces', () => {
@@ -35,19 +37,23 @@ describe('slugifyTitle', () => {
 	})
 })
 
-describe('markdownExportFilename', () => {
-	it('appends the .md extension to a slugified title', () => {
-		expect(markdownExportFilename('My Page')).toBe('my-page.md')
+describe('exportFilename', () => {
+	it('appends the extension to a slugified title', () => {
+		expect(exportFilename('My Page', 'md')).toBe('my-page.md')
+		expect(exportFilename('My Page', 'mdx')).toBe('my-page.mdx')
+		expect(exportFilename('My Page', 'html')).toBe('my-page.html')
 	})
 
 	it('slugs the title before naming the file', () => {
-		expect(markdownExportFilename('Meeting Notes: 2026!')).toBe('meeting-notes-2026.md')
-		expect(markdownExportFilename('मेरी नोट्स')).toBe('मेरी-नोट्स.md')
+		expect(exportFilename('Meeting Notes: 2026!', 'md')).toBe('meeting-notes-2026.md')
+		expect(exportFilename('Meeting Notes: 2026!', 'mdx')).toBe('meeting-notes-2026.mdx')
+		expect(exportFilename('मेरी नोट्स', 'html')).toBe('मेरी-नोट्स.html')
 	})
 
-	it('falls back to untitled.md for an empty title', () => {
-		expect(markdownExportFilename('')).toBe('untitled.md')
-		expect(markdownExportFilename('   ')).toBe('untitled.md')
+	it('falls back to untitled for an empty title', () => {
+		expect(exportFilename('', 'mdx')).toBe('untitled.mdx')
+		expect(exportFilename('   ', 'html')).toBe('untitled.html')
+		expect(exportFilename('', 'md')).toBe('untitled.md')
 	})
 })
 
@@ -73,9 +79,9 @@ describe('resolveTags', () => {
 	})
 })
 
-describe('serializeExportBody', () => {
+describe('serializeExportBodyMarkdown', () => {
 	it('strips the auto-filled empty leading heading', () => {
-		const body = serializeExportBody({
+		const body = serializeExportBodyMarkdown({
 			type: 'doc',
 			content: [{ type: 'heading', attrs: { level: 1 }, content: [] }],
 		})
@@ -83,7 +89,7 @@ describe('serializeExportBody', () => {
 	})
 
 	it('strips an empty leading heading but keeps following blocks', () => {
-		const body = serializeExportBody({
+		const body = serializeExportBodyMarkdown({
 			type: 'doc',
 			content: [
 				{ type: 'heading', attrs: { level: 1 }, content: [] },
@@ -94,7 +100,7 @@ describe('serializeExportBody', () => {
 	})
 
 	it('keeps a non-empty leading heading', () => {
-		const body = serializeExportBody({
+		const body = serializeExportBodyMarkdown({
 			type: 'doc',
 			content: [
 				{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'My Notes' }] },
@@ -105,7 +111,7 @@ describe('serializeExportBody', () => {
 	})
 
 	it('passes through docs without a heading', () => {
-		const body = serializeExportBody({
+		const body = serializeExportBodyMarkdown({
 			type: 'doc',
 			content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Body text' }] }],
 		})
@@ -176,5 +182,96 @@ describe('buildMarkdownExport', () => {
 		expect(data.tags).toEqual(['notes', 'work'])
 		expect(data.properties).toEqual({ author: 'Harsh', count: 3 })
 		expect(body.trim()).toBe('# Heading\n\nSome **bold** text.')
+	})
+})
+
+describe('serializeExportBodyMarkdown (MDX body)', () => {
+	it('produces the markdown body the .md export assembles (MDX = same file, .mdx extension)', () => {
+		const doc = parseMarkdown('# Heading\n\nSome **bold** and [a link](https://example.com).')
+		const file = buildMarkdownExport({ title: 'My Page', properties: {}, pageTags: [], body: serializeExportBodyMarkdown(doc) })
+		expect(file).toMatch(/^---\n/)
+		expect(file).toContain('# Heading')
+		expect(file).toContain('**bold**')
+	})
+
+	it('preserves editor-representable inline HTML (mark-rendered spans)', () => {
+		const doc = parseMarkdown('A <span style="color: red">colored</span> word.')
+		expect(serializeExportBodyMarkdown(doc)).toContain('<span style="color: red;">colored</span>')
+	})
+})
+
+describe('serializeExportBodyHtml', () => {
+	it('serializes the doc to HTML, stripping the auto-filled empty leading heading', () => {
+		const html = serializeExportBodyHtml({
+			type: 'doc',
+			content: [
+				{ type: 'heading', attrs: { level: 1 }, content: [] },
+				{ type: 'paragraph', content: [{ type: 'text', text: 'Body text' }] },
+			],
+		})
+		expect(html).toContain('<p>Body text</p>')
+		expect(html).not.toContain('<h1>')
+	})
+
+	it('keeps a non-empty leading heading', () => {
+		const html = serializeExportBodyHtml({
+			type: 'doc',
+			content: [
+				{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'My Notes' }] },
+				{ type: 'paragraph', content: [{ type: 'text', text: 'Body text' }] },
+			],
+		})
+		expect(html).toContain('<h1>My Notes</h1>')
+		expect(html).toContain('<p>Body text</p>')
+	})
+
+	it('serializes a mention node without throwing', () => {
+		const html = serializeExportBodyHtml({
+			type: 'doc',
+			content: [
+				{
+					type: 'paragraph',
+					content: [
+						{ type: 'text', text: 'Assigned to ' },
+						{ type: 'mention', attrs: { id: 'user-1', label: 'Alice' } },
+						{ type: 'text', text: '.' },
+					],
+				},
+			],
+		})
+		expect(html).toContain('@Alice')
+		expect(html).toContain('mention')
+	})
+
+	it('renders editor marks as HTML elements', () => {
+		const html = serializeExportBodyHtml({
+			type: 'doc',
+			content: [
+				{
+					type: 'paragraph',
+					content: [
+						{ type: 'text', text: 'Some ', marks: [{ type: 'bold' }] },
+						{ type: 'text', text: 'bold' },
+						{ type: 'text', text: ' text.', marks: [{ type: 'bold' }] },
+					],
+				},
+			],
+		})
+		expect(html).toContain('<strong>Some </strong>bold<strong> text.</strong>')
+	})
+})
+
+describe('buildStandaloneHtml', () => {
+	it('wraps editor HTML in a minimal standalone document', () => {
+		const out = buildStandaloneHtml('<p>Hello</p>', 'My Page')
+		expect(out).toMatch(/^<!doctype html>/i)
+		expect(out).toContain('<title>My Page</title>')
+		expect(out).toContain('<meta charset="utf-8">')
+		expect(out).toContain('<p>Hello</p>')
+	})
+
+	it('escapes the title', () => {
+		const out = buildStandaloneHtml('', 'A <b> & "Title"')
+		expect(out).toContain('<title>A &lt;b&gt; &amp; &quot;Title&quot;</title>')
 	})
 })

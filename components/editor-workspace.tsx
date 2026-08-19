@@ -38,8 +38,18 @@ import { TableToolbar } from './table-toolbar'
 import { CodeBlockLanguageSelect } from './code-block-language-select'
 import { DragContextMenu } from './drag-context-menu'
 import { exportToDocx, exportToPdf, downloadBlob } from '@/lib/export-utils'
-import { buildMarkdownExport, markdownExportFilename, serializeExportBody } from '@/lib/markdown-export'
-import { Download, FileText, FileSpreadsheet, FileCode } from 'lucide-react'
+import { buildMarkdownExport, exportFilename, serializeExportBodyMarkdown, serializeExportBodyHtml, buildStandaloneHtml } from '@/lib/markdown-export'
+import { Download, FileText, FileSpreadsheet, FileCode, Globe, type LucideIcon } from 'lucide-react'
+
+type ExportType = 'markdown' | 'mdx' | 'html' | 'docx' | 'pdf'
+
+const EXPORT_MENU_ITEMS: { type: ExportType; label: string; icon: LucideIcon; iconClass: string }[] = [
+	{ type: 'markdown', label: 'Download as Markdown (.md)', icon: FileCode, iconClass: 'text-emerald-500' },
+	{ type: 'mdx', label: 'Download as MDX (.mdx)', icon: FileCode, iconClass: 'text-purple-500' },
+	{ type: 'html', label: 'Download as HTML (.html)', icon: Globe, iconClass: 'text-orange-500' },
+	{ type: 'docx', label: 'Download as DOCX', icon: FileSpreadsheet, iconClass: 'text-blue-500' },
+	{ type: 'pdf', label: 'Download as PDF', icon: FileText, iconClass: 'text-red-500' },
+]
 
 interface EditorWorkspaceProps {
 	pageId: string
@@ -77,8 +87,7 @@ function getInitials(nameOrEmail: string) {
 	return nameOrEmail.charAt(0).toUpperCase()
 }
 
-export default function EditorWorkspace({
-	pageId,
+export default function EditorWorkspace({	pageId,
 	initialTitle,
 	token,
 	currentUser,
@@ -126,11 +135,11 @@ export default function EditorWorkspace({
 		}
 	}, [pageId])
 
-	const handleExport = async (type: 'markdown' | 'docx' | 'pdf') => {
+	const handleExport = async (type: ExportType) => {
 		if (!editor) return
 		setIsExporting(true)
 		try {
-			if (type === 'markdown') {
+			if (type === 'markdown' || type === 'mdx') {
 				const [pageDetails, pageTags] = await Promise.all([
 					fetchPageDetails(pageId),
 					fetchPageTags(pageId),
@@ -139,9 +148,13 @@ export default function EditorWorkspace({
 					title,
 					properties: pageDetails.properties || {},
 					pageTags: pageTags.map((t) => t.tag),
-					body: serializeExportBody(editor.getJSON()),
+					body: serializeExportBodyMarkdown(editor.getJSON()),
 				})
-				downloadBlob(new Blob([file], { type: 'text/markdown;charset=utf-8' }), markdownExportFilename(title))
+				const extension = type === 'mdx' ? 'mdx' : 'md'
+				downloadBlob(new Blob([file], { type: 'text/markdown;charset=utf-8' }), exportFilename(title, extension))
+			} else if (type === 'html') {
+				const html = buildStandaloneHtml(serializeExportBodyHtml(editor.getJSON()), title)
+				downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), exportFilename(title, 'html'))
 			} else if (type === 'docx') {
 				await exportToDocx(editor.getHTML(), title)
 			} else if (type === 'pdf') {
@@ -725,36 +738,22 @@ export default function EditorWorkspace({
 									{isExportOpen && (
 										<div className="absolute top-full right-0 pt-1.5 w-52 z-50 animate-in fade-in zoom-in-95" role="menu">
 											<div className="bg-surface-container rounded-xl border border-black/10 dark:border-white/10 p-1 shadow-xl flex flex-col gap-0.5 text-xs">
-												<button
-													type="button"
-													disabled={isExporting}
-													onClick={() => handleExport('markdown')}
-													className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full disabled:opacity-50 disabled:pointer-events-none"
-													role="menuitem"
-												>
-													<FileCode className="w-4 h-4 text-emerald-500" />
-													<span>Download as Markdown (.md)</span>
-												</button>
-												<button
-													type="button"
-													disabled={isExporting}
-													onClick={() => handleExport('docx')}
-													className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full disabled:opacity-50 disabled:pointer-events-none"
-													role="menuitem"
-												>
-													<FileSpreadsheet className="w-4 h-4 text-blue-500" />
-													<span>Download as DOCX</span>
-												</button>
-												<button
-													type="button"
-													disabled={isExporting}
-													onClick={() => handleExport('pdf')}
-													className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full disabled:opacity-50 disabled:pointer-events-none"
-													role="menuitem"
-												>
-													<FileText className="w-4 h-4 text-red-500" />
-													<span>Download as PDF</span>
-												</button>
+												{EXPORT_MENU_ITEMS.map((item) => {
+													const Icon = item.icon
+													return (
+														<button
+															key={item.type}
+															type="button"
+															disabled={isExporting}
+															onClick={() => handleExport(item.type)}
+															className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full disabled:opacity-50 disabled:pointer-events-none"
+															role="menuitem"
+														>
+															<Icon className={`w-4 h-4 ${item.iconClass}`} />
+															<span>{item.label}</span>
+														</button>
+													)
+												})}
 											</div>
 										</div>
 									)}
