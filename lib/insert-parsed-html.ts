@@ -31,7 +31,9 @@ export function insertParsedHtml(
 	const { tr } = editor.state
 
 	if (opts.replaceDocument) {
-		tr.replaceWith(0, tr.doc.content.size, parser.parse(element))
+		// Insert the parsed child nodes, not the doc node itself — mirroring
+		// tiptap's insertContentAt, which passes `doc.content`.
+		tr.replaceWith(0, tr.doc.content.size, parser.parse(element).content)
 	} else {
 		const fragment = parser.parseSlice(element, { preserveWhitespace: 'full' }).content
 		let { from, to } = editor.state.selection
