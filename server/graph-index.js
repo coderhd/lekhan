@@ -44,8 +44,9 @@ function extractTags (text) {
  * Fold frontmatter tags (`pages.properties.tags`) into the tag index so
  * imported and properties-driven tags are searchable like body `#tags`.
  * Accepts an array of strings or a single comma/space-separated string;
- * tags are lowercased, trimmed and deduped. Anything else (or absent) yields
- * no tags.
+ * tags are lowercased, trimmed and deduped, and constrained to the same
+ * character set as body `#tags` (so `page_tags` rows stay consistent).
+ * Anything else (or absent) yields no tags.
  */
 function extractPropertyTags (properties) {
 	if (!properties || typeof properties !== 'object') return []
@@ -57,7 +58,7 @@ function extractPropertyTags (properties) {
 	const seen = new Set()
 	for (const value of values) {
 		const tag = value.trim().toLowerCase()
-		if (!tag || seen.has(tag)) continue
+		if (!tag || !/^[a-zA-Z0-9_][a-zA-Z0-9_\-/]*$/.test(tag) || seen.has(tag)) continue
 		seen.add(tag)
 		tags.push(tag)
 	}

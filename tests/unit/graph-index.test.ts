@@ -218,6 +218,26 @@ describe('indexPage', () => {
 		})
 	})
 
+	it('drops property tags outside the body-tag character set', async () => {
+		const admin = makeAdmin({ data: { links: 1, tags: 2 }, error: null }, { workspace_id: 'ws-1', properties: { tags: ['a b', '##', '@#', 'ok/tag'] } })
+
+		const result = await indexPage(admin, 'page-1', pageText)
+		expect(result).toEqual({ links: 1, tags: 2 })
+		expect(admin.rpc).toHaveBeenCalledWith('sync_page_graph', {
+			p_page_id: 'page-1',
+			p_workspace_id: 'ws-1',
+			p_searchable_text: pageText,
+			p_links: [
+				{ workspace_id: 'ws-1', from_page_id: 'page-1', to_page_id: 'priya-page', to_title: 'Priya' },
+			],
+			// invalid `a b`, `##`, `@#` are dropped; only the body #work and ok/tag survive
+			p_tags: [
+				{ page_id: 'page-1', tag: 'work' },
+				{ page_id: 'page-1', tag: 'ok/tag' },
+			],
+		})
+	})
+
 	it('passes empty rows and persists text when the page has no workspace', async () => {
 		const admin: any = {
 			from: vi.fn(() => ({

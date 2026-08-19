@@ -117,6 +117,18 @@ describe('serializeExportBodyMarkdown', () => {
 		})
 		expect(body).toBe('Body text\n')
 	})
+
+	it('strips a trailing empty heading (live-schema fill artifact) alongside the leading one', () => {
+		const body = serializeExportBodyMarkdown({
+			type: 'doc',
+			content: [
+				{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'My Notes' }] },
+				{ type: 'paragraph', content: [{ type: 'text', text: 'Body text' }] },
+				{ type: 'heading', attrs: { level: 1 }, content: [] },
+			],
+		})
+		expect(body).toBe('# My Notes\n\nBody text\n')
+	})
 })
 
 describe('buildMarkdownExport', () => {
