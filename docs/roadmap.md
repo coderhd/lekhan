@@ -41,6 +41,11 @@ This suite substrate is the H0 data-model decision (approach B, architect now).
 Launch requirement: **nothing ships in H0 unless it is global-ready** (i18n, billing,
 provider registry).
 
+> **Delivery estimates:** dates assume **6–8 focused hours/day** (one `M` ticket ≈ 1 day,
+> one `L` ≈ 2). Each ticket's `Start date`, `Target date`, and `Estimate` (hours) live on
+> the Lekhan project board — the tracker is the source of truth; this file mirrors it.
+> Dates on `needs-spec` epics are **provisional** (spec first, then tickets).
+
 ### Delivered `done`
 
 | Epic | Issue | Notes |
@@ -51,20 +56,31 @@ provider registry).
 
 ### In progress — specced `ready-for-agent`
 
-| Epic | Issue | Tickets | Blocker edges | Spec ref |
+| Epic | Issue | Tickets | Blocker edges | Delivery | Spec ref |
+|---|---|---|---|---|---|
+| H0 — Markdown Import/Export (full round-trip) | #26 | MI-T1 #56 (done) → MI-T2 #57 (done) → MI-T3 #58 (frontier) → MI-T4 #59 | → H0 Obsidian Importer #27 (blocker) | #58 Aug 19 · #59 Aug 20 · **epic Aug 20** | §13 · `docs/superpowers/specs/2026-08-14-h0-markdown-import-export-design.md` |
+| H0 — Obsidian Importer | #27 | OI-T1 #60 (frontier) → OI-T2 #61 → OI-T3 #62; OI-T4 #63 | ← #26; → H1 Notion importer #45 (blocker) | #60 Aug 21 · #61 Aug 22–23 · #62 Aug 24–25 · #63 Aug 26 · **epic Aug 26** | §13 · `docs/superpowers/specs/2026-08-14-h0-obsidian-importer-design.md` |
+
+### Remaining `needs-spec` — provisional targets (spec first)
+
+| Epic | Issue | Blocker edges | Provisional target | Spec ref |
 |---|---|---|---|---|
-| H0 — Markdown Import/Export (full round-trip) | #26 | MI-T1 #56 (done) → MI-T2 #57 (done) → MI-T3 #58 (frontier) → MI-T4 #59 | → H0 Obsidian Importer #27 (blocker) | §13 · `docs/superpowers/specs/2026-08-14-h0-markdown-import-export-design.md` |
-| H0 — Obsidian Importer | #27 | OI-T1 #60 (frontier) → OI-T2 #61 → OI-T3 #62; OI-T4 #63 | ← #26; → H1 Notion importer #45 (blocker) | §13 · `docs/superpowers/specs/2026-08-14-h0-obsidian-importer-design.md` |
+| H0 — AI Provider Registry | #28 | → H2 AI agents #50 (blocker) | Aug 27 – Sep 4 | §6 |
+| H0 — Real Billing (Stripe + Razorpay) | #29 | → H2 Team workspaces #49 (blocker); H3 suite pricing rides on it | Sep 5 – Sep 12 | §7 |
+| H0 — Public Pages / Publish polish | #30 | → H1 Public pages + publish #40 (blocker) | Sep 13 – Sep 17 | §4 (H1 scope note in epic) |
+| H0 — i18n Framework | #31 | → H1 localized docs (edge on #46) | Sep 18 – Sep 24 | §4 |
+| H0 — Docs Site (docs.lekhan.app) | #32 | → H1 Full docs #46 (blocker) | Sep 25 – Sep 30 | §12 |
 
-### Remaining `needs-spec`
+### H0 ticket schedule (Start → Target · hours)
 
-| Epic | Issue | Blocker edges | Spec ref |
-|---|---|---|---|
-| H0 — AI Provider Registry | #28 | → H2 AI agents #50 (blocker) | §6 |
-| H0 — Real Billing (Stripe + Razorpay) | #29 | → H2 Team workspaces #49 (blocker); H3 suite pricing rides on it | §7 |
-| H0 — Public Pages / Publish polish | #30 | → H1 Public pages + publish #40 (blocker) | §4 (H1 scope note in epic) |
-| H0 — i18n Framework | #31 | → H1 localized docs (edge on #46) | §4 |
-| H0 — Docs Site (docs.lekhan.app) | #32 | → H1 Full docs #46 (blocker) | §12 |
+| Ticket | Issue | Start | Target | Est. | Status |
+|---|---|---|---|---|---|
+| MI-T3 — MDX + HTML export | #58 | Aug 19 | Aug 19 | 6h | In progress |
+| MI-T4 — Markdown import | #59 | Aug 20 | Aug 20 | 6h | Ready |
+| OI-T1 — Callout node | #60 | Aug 21 | Aug 21 | 6h | Ready |
+| OI-T2 — Vault ingestion → IR | #61 | Aug 22 | Aug 23 | 14h | Ready |
+| OI-T3 — /api/import route | #62 | Aug 24 | Aug 25 | 12h | Ready |
+| OI-T4 — Import UX + report | #63 | Aug 26 | Aug 26 | 6h | Ready |
 
 **Sequencing narrative:** the import pipeline is the shared foundation — Markdown
 Import/Export (#26) establishes the `importer → IR → graph` pipeline, and Obsidian
@@ -76,6 +92,11 @@ user's own keys or machine, so it must be live before launch and unblocks H2 age
 ---
 
 ## H1 — PKM Depth ("The Second Brain") `h1`
+
+> **Target:** opens once the H0 import pipeline lands (epics #26/#27 done ≈ **Aug 26**).
+> First H1 epic is #39 (no blockers) — ~**early Oct** for the earliest H1 items once
+> H0's `needs-spec` epics and H1 speccing happen. Dates are provisional; re-baseline at
+> the H0→H1 handoff.
 
 | Epic | Issue | Blocker edges | Spec ref |
 |---|---|---|---|
