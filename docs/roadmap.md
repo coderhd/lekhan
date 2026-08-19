@@ -53,7 +53,7 @@ provider registry).
 
 | Epic | Issue | Tickets | Blocker edges | Spec ref |
 |---|---|---|---|---|
-| H0 — Markdown Import/Export (full round-trip) | #26 | MI-T1 #56 (done) → MI-T2 #57 (frontier) → MI-T3 #58; MI-T4 #59 | → H0 Obsidian Importer #27 (blocker) | §13 · `docs/superpowers/specs/2026-08-14-h0-markdown-import-export-design.md` |
+| H0 — Markdown Import/Export (full round-trip) | #26 | MI-T1 #56 (done) → MI-T2 #57 (done) → MI-T3 #58 (frontier) → MI-T4 #59 | → H0 Obsidian Importer #27 (blocker) | §13 · `docs/superpowers/specs/2026-08-14-h0-markdown-import-export-design.md` |
 | H0 — Obsidian Importer | #27 | OI-T1 #60 (frontier) → OI-T2 #61 → OI-T3 #62; OI-T4 #63 | ← #26; → H1 Notion importer #45 (blocker) | §13 · `docs/superpowers/specs/2026-08-14-h0-obsidian-importer-design.md` |
 
 ### Remaining `needs-spec`
