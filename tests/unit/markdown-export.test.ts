@@ -198,6 +198,23 @@ describe('serializeExportBodyMarkdown (MDX body)', () => {
 		const doc = parseMarkdown('A <span style="color: red">colored</span> word.')
 		expect(serializeExportBodyMarkdown(doc)).toContain('<span style="color: red;">colored</span>')
 	})
+
+	it('keeps a mention node as inline HTML instead of dropping the body', () => {
+		const md = serializeExportBodyMarkdown({
+			type: 'doc',
+			content: [
+				{
+					type: 'paragraph',
+					content: [
+						{ type: 'text', text: 'Assigned to ' },
+						{ type: 'mention', attrs: { id: 'user-1', label: 'Alice' } },
+					],
+				},
+			],
+		})
+		expect(md).toContain('@Alice')
+		expect(md).toContain('mention')
+	})
 })
 
 describe('serializeExportBodyHtml', () => {

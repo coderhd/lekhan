@@ -1,5 +1,5 @@
 import { Editor } from '@tiptap/core'
-import type { JSONContent } from '@tiptap/core'
+import type { AnyExtension, JSONContent } from '@tiptap/core'
 import { Document } from '@tiptap/extension-document'
 import matter from 'gray-matter'
 import { getSharedExtensions } from '@/lib/editor-extensions'
@@ -24,8 +24,15 @@ export interface ParsedFrontmatter {
 const RESERVED_KEYS = new Set(['title', 'tags'])
 
 let headlessEditor: Editor | null = null
+let customEditor: Editor | null = null
 
-function getHeadlessEditor(): Editor {
+function getHeadlessEditor(extensions?: AnyExtension[]): Editor {
+	if (extensions) {
+		if (!customEditor) {
+			customEditor = new Editor({ extensions })
+		}
+		return customEditor
+	}
 	if (!headlessEditor) {
 		// A plain `block+` document (not the live editor's `heading block*`)
 		// so arbitrary markdown round-trips without the leading-heading
@@ -62,10 +69,13 @@ export function parseMarkdown(markdown: string): JSONContent {
 /**
  * Serialize a Tiptap doc (JSONContent) back to markdown. The output is
  * stable: `serializeMarkdown(parseMarkdown(md))` reproduces `md` for
- * canonical input, and re-parsing the output yields the same doc.
+ * canonical input, and re-parsing the output yields the same doc. Pass
+ * `extensions` to serialize against a schema that differs from the shared
+ * round-trip one (e.g. page-context nodes like mentions, which are absent
+ * from `getSharedExtensions`).
  */
-export function serializeMarkdown(doc: JSONContent): string {
-	const editor = getHeadlessEditor()
+export function serializeMarkdown(doc: JSONContent, extensions?: AnyExtension[]): string {
+	const editor = getHeadlessEditor(extensions)
 	editor.commands.setContent(doc)
 	const markdown = getMarkdownStorage(editor).serializer.serialize(editor.state.doc)
 	// Canonical trailing newline so `serialize(parse(md))` reproduces
