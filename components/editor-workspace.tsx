@@ -63,6 +63,7 @@ const CURSOR_COLORS = [
 
 import { getSharedExtensions } from '@/lib/editor-extensions'
 import { decideMarkdownPaste } from '@/lib/markdown-paste'
+import { insertParsedHtml } from '@/lib/insert-parsed-html'
 
 function getInitials(nameOrEmail: string) {
 	if (!nameOrEmail) return '?'
@@ -461,11 +462,12 @@ export default function EditorWorkspace({
 						const parsedHtml = parser.parse(plainText)
 						if (parsedHtml) {
 							event.preventDefault()
-							if (currentEditor.isEmpty || currentEditor.getText().trim() === '') {
-								currentEditor.commands.setContent(parsedHtml)
-							} else {
-								currentEditor.commands.insertContent(parsedHtml)
-							}
+							// The parser output is already HTML; sending it back
+							// through the markdown `setContent`/`insertContent`
+							// overrides re-parses it as markdown and corrupts code
+							// blocks containing blank lines.
+							const replaceAll = currentEditor.isEmpty || currentEditor.getText().trim() === ''
+							insertParsedHtml(currentEditor, parsedHtml, { replaceAll })
 							return true
 						}
 					}

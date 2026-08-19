@@ -262,3 +262,86 @@ describe('end-to-end: a full markdown file round-trips', () => {
 		expect(reparsedDoc).toEqual(parseMarkdown(serializedBody))
 	})
 })
+
+describe('parseMarkdown — code blocks with blank lines stay intact', () => {
+	const sample = [
+		"import { render, screen, waitFor } from '@testing-library/react'",
+		"import userEvent from '@testing-library/user-event'",
+		'',
+		"describe('SearchComponent', () => {",
+		"\tit('debounces input', async () => {",
+		'\t\tconst user = userEvent.setup()',
+		'\t\trender(<SearchComponent onSearch={mockSearch} />)',
+		'',
+		'\t\tconst input = screen.getByRole("textbox", { name: /search users/i })',
+		'\t\tawait user.type(input, "Alex")',
+		'',
+		'\t\tawait waitFor(() => {',
+		'\t\t\texpect(screen.getByText("Alex Johnson")).toBeInTheDocument()',
+		'\t\t})',
+		'\t})',
+		'})',
+	].join('\n')
+
+	it('does not split a code block at blank lines', () => {
+		const markdown = `before\n\n\`\`\`typescript\n${sample}\n\`\`\`\n\nafter\n`
+		const doc = parseMarkdown(markdown)
+
+		const blocks: { language: string | null; text: string }[] = []
+		const walk = (node: (typeof doc & { content?: unknown[] }) | undefined) => {
+			if (!node) return
+			if (node.type === 'codeBlock') {
+				blocks.push({
+					language: node.attrs?.language ?? null,
+					text: (node.content?.[0] as any)?.text ?? '',
+				})
+			}
+			for (const child of node.content ?? []) walk(child as any)
+		}
+		walk(doc)
+
+		expect(blocks).toHaveLength(1)
+		expect(blocks[0].language).toBe('typescript')
+		expect(blocks[0].text).toBe(sample)
+		expect(blocks[0].text).not.toContain('</code></pre>')
+	})
+
+	it('keeps every block of a multi-fence document whole', () => {
+		const markdown = [
+			'```ts',
+			'const a = 1',
+			'',
+			'\tconst b = 2',
+			'```',
+			'',
+			'```tsx',
+			'export function Modal() {',
+			'\treturn null',
+			'',
+			'\t// comment',
+			'}',
+			'```',
+			'',
+		].join('\n')
+		const doc = parseMarkdown(markdown)
+
+		const blocks: { language: string | null; firstLine: string; lines: number }[] = []
+		const walk = (node: (typeof doc & { content?: unknown[] }) | undefined) => {
+			if (!node) return
+			if (node.type === 'codeBlock') {
+				const text = (node.content?.[0] as any)?.text ?? ''
+				blocks.push({
+					language: node.attrs?.language ?? null,
+					firstLine: text.split('\n')[0],
+					lines: text.split('\n').length,
+				})
+			}
+			for (const child of node.content ?? []) walk(child as any)
+		}
+		walk(doc)
+
+		expect(blocks).toHaveLength(2)
+		expect(blocks[0]).toEqual({ language: 'ts', firstLine: 'const a = 1', lines: 3 })
+		expect(blocks[1]).toEqual({ language: 'tsx', firstLine: 'export function Modal() {', lines: 5 })
+	})
+})

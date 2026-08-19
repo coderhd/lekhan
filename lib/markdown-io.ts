@@ -3,6 +3,7 @@ import type { JSONContent } from '@tiptap/core'
 import { Document } from '@tiptap/extension-document'
 import matter from 'gray-matter'
 import { getSharedExtensions } from '@/lib/editor-extensions'
+import { insertParsedHtml } from '@/lib/insert-parsed-html'
 
 /**
  * A page's frontmatter, split into the reserved page fields (`title`, `tags`)
@@ -51,7 +52,10 @@ function getMarkdownStorage(editor: Editor): MarkdownStorage {
 export function parseMarkdown(markdown: string): JSONContent {
 	const editor = getHeadlessEditor()
 	const html = getMarkdownStorage(editor).parser.parse(markdown)
-	editor.commands.setContent(html)
+	// The parser output is already HTML; inserting it through `setContent`
+	// would re-parse it as markdown and corrupt code blocks that contain
+	// blank lines (see lib/insert-parsed-html.ts).
+	insertParsedHtml(editor, html, { replaceAll: true })
 	return editor.getJSON()
 }
 

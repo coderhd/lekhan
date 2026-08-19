@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { Editor } from '@tiptap/react'
 import { decideMarkdownPaste } from '@/lib/markdown-paste'
+import { insertParsedHtml } from '@/lib/insert-parsed-html'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 
 describe('decideMarkdownPaste', () => {
@@ -92,6 +93,49 @@ describe('pasting markdown into a live editor', () => {
 		expect(out).toContain('<ul')
 		expect(out).toContain('<li><p>item one</p></li>')
 		expect(out).not.toContain('<pre><code>')
+		editor.destroy()
+	})
+
+	it('does not split a pasted fenced code block at blank lines', () => {
+		const editor = buildEditor()
+		const code = [
+			"import { render, screen } from '@testing-library/react'",
+			'',
+			"describe('SearchComponent', () => {",
+			"\tit('debounces input', async () => {",
+			'\t\tconst user = userEvent.setup()',
+			'',
+			'\t\tconst input = screen.getByRole("textbox")',
+			'\t})',
+			'})',
+		].join('\n')
+		const plain = `Intro\n\n\`\`\`typescript\n${code}\n\`\`\`\n\nOutro`
+
+		const kind = decideMarkdownPaste(plain, undefined)
+		expect(kind).toBe('markdown')
+
+		// Mirrors the editor-workspace handlePaste flow: markdown -> HTML via
+		// the parser, then inserted without re-running the markdown parser.
+		const parsedHtml = (editor as any).storage.markdown.parser.parse(plain)
+		insertParsedHtml(editor, parsedHtml, { replaceAll: true })
+
+		const doc = editor.getJSON()
+		const blocks: { language: string | null; text: string }[] = []
+		const walk = (node: any) => {
+			if (node.type === 'codeBlock') {
+				blocks.push({
+					language: node.attrs?.language ?? null,
+					text: node.content?.[0]?.text ?? '',
+				})
+			}
+			for (const child of node.content ?? []) walk(child)
+		}
+		walk(doc)
+
+		expect(blocks).toHaveLength(1)
+		expect(blocks[0].language).toBe('typescript')
+		expect(blocks[0].text).toBe(code)
+		expect(blocks[0].text).not.toContain('</code></pre>')
 		editor.destroy()
 	})
 
