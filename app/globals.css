@@ -454,6 +454,41 @@ ul[data-type="taskList"] li>div {
 	flex: 1 1 auto;
 }
 
+/* Tiptap Callout Styles */
+.callout {
+	border: 1px solid var(--callout-border, #d0d7de);
+	border-left: 4px solid var(--callout-accent, #57606a);
+	border-radius: 6px;
+	padding: 12px 16px;
+	margin: 8px 0;
+	background: var(--callout-bg, rgba(127, 127, 127, 0.06));
+}
+.callout-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-weight: 600;
+	margin-bottom: 8px;
+	cursor: pointer;
+	user-select: none;
+	background: none;
+	border: none;
+	padding: 0;
+	width: 100%;
+	text-align: left;
+}
+.callout-title svg { width: 1em; height: 1em; }
+.callout-content > :first-child { margin-top: 0; }
+.callout-content > :last-child { margin-bottom: 0; }
+.callout-note    { --callout-accent: #0969da; }
+.callout-warning { --callout-accent: #bf8700; }
+.callout-info    { --callout-accent: #0969da; }
+.callout-tip     { --callout-accent: #1a7f37; }
+.callout-success { --callout-accent: #1a7f37; }
+.callout-danger  { --callout-accent: #cf222e; }
+.callout-question{ --callout-accent: #8250df; }
+.callout[data-callout-collapsed="true"] .callout-content { display: none; }
+
 /* Tiptap Collaboration Cursor */
 .collaboration-cursor__caret {
 	border-left: 1px solid #0d0d0d;

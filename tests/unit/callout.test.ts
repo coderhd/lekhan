@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseMarkdown, serializeMarkdown } from '@/lib/markdown-io'
+import { buildStandaloneHtml } from '@/lib/markdown-export'
 import { CALLOUT_TYPES } from '@/lib/callout'
 
 /** Doc-level round-trip: parse → serialize → parse yields the same doc. */
@@ -87,5 +88,13 @@ describe('callout parse/serialize round-trip', () => {
 describe('CALLOUT_TYPES', () => {
 	it('defines the canonical known set', () => {
 		expect(CALLOUT_TYPES).toEqual(['note', 'warning', 'info', 'tip', 'success', 'danger', 'question'])
+	})
+})
+
+describe('callout export HTML', () => {
+	it('wraps the callout in styled standalone HTML', () => {
+		const html = buildStandaloneHtml('<div class="callout callout-note">…</div>', 'Page')
+		expect(html).toContain('<style>')
+		expect(html).toContain('.callout')
 	})
 })
