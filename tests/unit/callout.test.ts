@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { parseMarkdown, serializeMarkdown } from '@/lib/markdown-io'
 import { buildStandaloneHtml } from '@/lib/markdown-export'
-import { CALLOUT_TYPES, Callout, MARKER_INPUT_RE } from '@/lib/callout'
+import { CALLOUT_TYPES, Callout, BLOCKQUOTE_MARKER_RE, handleCalloutInputRule } from '@/lib/callout'
 import { InputRule, Editor } from '@tiptap/core'
 import { Document } from '@tiptap/extension-document'
 import { StarterKit } from '@tiptap/starter-kit'
@@ -103,39 +103,80 @@ describe('callout export HTML', () => {
 	})
 })
 
-describe('callout input rule', () => {
-	it('converts "> [!note] " typed text into a callout', async () => {
-		const editor = new Editor({
+describe('callout input rule (Enter-trigger inside blockquote)', () => {
+	// Faithful per-keystroke simulation through the editor view's
+	// handleTextInput path (the exact path prosemirror-view uses for real
+	// keystrokes), so the blockquote rule's eager `> ` match fires exactly as
+	// it does for real typing. Unhandled chars are dispatched via the view's
+	// default text-insertion path, NOT via commands.insertContent, which does
+	// not exercise input rules (tiptap-markdown also re-parses its strings as
+	// markdown).
+	function typeInto(editor: Editor, text: string) {
+		const view = editor.view as any
+		for (const ch of text) {
+			const deflt = () => {
+				const { from, to } = view.state.selection
+				view.dispatch(view.state.tr.insertText(ch, from, to))
+			}
+			const handled = view.someProp('handleTextInput', (fn: any) =>
+				fn(view, view.state.selection.from, view.state.selection.to, ch, deflt))
+			if (!handled) deflt()
+		}
+	}
+
+	// Simulate the Enter keydown through handleKeyDown — the path that runs
+	// the input-rule plugin's Enter trigger (text '\n'). When no rule
+	// converts, the base keymap handles the split, as in the live editor.
+	function pressEnter(editor: Editor) {
+		const view = editor.view as any
+		view.someProp('handleKeyDown', (fn: any) => fn(view, new KeyboardEvent('keydown', { key: 'Enter' })))
+	}
+
+	function makeEditor() {
+		return new Editor({
 			extensions: [
 				Document,
 				StarterKit.configure({ document: false }),
 				Markdown.configure({ html: true }),
 				Callout.extend({
 					addInputRules() {
-						return [
-							new InputRule({
-								find: MARKER_INPUT_RE,
-								handler: ({ range, chain, match }) => {
-									const type = match?.[1]?.trim().toLowerCase() || 'note'
-									const collapsed = Boolean(match?.[2])
-									const title = (match?.[3] ?? '').trim()
-									chain().focus().deleteRange(range).insertContent({
-										type: 'callout',
-										attrs: { type, title, collapsed },
-										content: [{ type: 'paragraph' }],
-									}).run()
-								},
-							}),
-						]
+						return [new InputRule({ find: BLOCKQUOTE_MARKER_RE, handler: handleCalloutInputRule })]
 					},
 				}),
 			],
 		})
-		editor.commands.insertContent({ type: 'text', text: '> [!note] ' }, { applyInputRules: true })
-		await new Promise((resolve) => setTimeout(resolve, 0))
+	}
+
+	it('converts "> [!note] Title" + Enter into a callout', () => {
+		const editor = makeEditor()
+		typeInto(editor, '> [!note] Title')
+		pressEnter(editor)
+		const json = JSON.stringify(editor.getJSON())
+		expect(json).toContain('"type":"callout"')
+		expect(json).toContain('"title":"Title"')
+		expect(json).toContain('"type":"note"')
+		editor.destroy()
+	})
+
+	it('handles the collapsed "-" variant', () => {
+		const editor = makeEditor()
+		typeInto(editor, '> [!warning]- Danger')
+		pressEnter(editor)
+		const json = JSON.stringify(editor.getJSON())
+		expect(json).toContain('"type":"callout"')
+		expect(json).toContain('"type":"warning"')
+		expect(json).toContain('"collapsed":true')
+		expect(json).toContain('"title":"Danger"')
+		editor.destroy()
+	})
+
+	it('leaves a plain blockquote ("> hello") as a blockquote', () => {
+		const editor = makeEditor()
+		typeInto(editor, '> hello')
+		pressEnter(editor)
 		const json = editor.getJSON()
-		expect(JSON.stringify(json)).toContain('"type":"callout"')
-		expect(json.content?.[0]?.attrs).toMatchObject({ type: 'note', title: '', collapsed: false })
+		expect(json.content?.some((n) => n.type === 'blockquote')).toBe(true)
+		expect(json.content?.some((n) => n.type === 'callout')).toBe(false)
 		editor.destroy()
 	})
 })

@@ -76,9 +76,8 @@ import { getSharedExtensions } from '@/lib/editor-extensions'
 import { decideMarkdownPaste } from '@/lib/markdown-paste'
 import { insertParsedHtml } from '@/lib/insert-parsed-html'
 import { hydrateOnOpen } from '@/lib/import-hydration'
-import { Callout } from '@/lib/callout'
+import { Callout, BLOCKQUOTE_MARKER_RE, handleCalloutInputRule } from '@/lib/callout'
 import { CalloutNodeView } from './callout-node-view'
-import { MARKER_INPUT_RE } from '@/lib/callout'
 import { InputRule } from '@tiptap/core'
 
 const LiveCallout = Callout.extend({
@@ -86,21 +85,7 @@ const LiveCallout = Callout.extend({
 		return ReactNodeViewRenderer(CalloutNodeView)
 	},
 	addInputRules() {
-		return [
-			new InputRule({
-				find: MARKER_INPUT_RE,
-				handler: ({ range, chain, match }) => {
-					const type = match?.[1]?.trim().toLowerCase() || 'note'
-					const collapsed = Boolean(match?.[2])
-					const title = (match?.[3] ?? '').trim()
-					chain().focus().deleteRange(range).insertContent({
-						type: 'callout',
-						attrs: { type, title, collapsed },
-						content: [{ type: 'paragraph' }],
-					}).run()
-				},
-			}),
-		]
+		return [new InputRule({ find: BLOCKQUOTE_MARKER_RE, handler: handleCalloutInputRule })]
 	},
 })
 

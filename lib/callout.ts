@@ -18,6 +18,43 @@ const MARKER_RE = /^\[!([a-zA-Z0-9 ]+)\](?:(-))?(?: +([^\n]*))?/
 /** Input-rule match: `> [!note]` / `> [!note]-` / `> [!note] Title` followed by a space. */
 export const MARKER_INPUT_RE = /^> \[!([a-zA-Z0-9 ]+)\](-)?(?: +([^\n]*))? $/
 
+/**
+ * Input-rule find for the Enter-trigger design: the marker + optional title
+ * at the start of a blockquote's inner paragraph text, anchored to a trailing
+ * newline so the rule fires only on the Enter keydown (when the input-rule
+ * plugin's handleKeyDown runs with text `\n`) — never mid-typing, where the
+ * blockquote's eager `> ` rule wins and where a bare `[!note]`/`[!note] ` would
+ * otherwise match prematurely and drop the title.
+ */
+export const BLOCKQUOTE_MARKER_RE = /^\[!([a-zA-Z0-9 ]+)\](-)?(?: +([^\n]*))?\n$/
+
+/**
+ * Shared input-rule handler used by both the live editor and the tests: on
+ * Enter inside a blockquote whose first paragraph starts with a `[!type]`
+ * marker, replace the enclosing blockquote with a callout carrying
+ * `type`/`title`/`collapsed` (from `match[1]`/`match[3]`/`match[2]`) and a
+ * body paragraph. No-ops (returns without inserting) when the text is not
+ * inside a blockquote.
+ */
+export function handleCalloutInputRule({ state, range, match, chain }: any) {
+	const $from = state.doc.resolve(range.from)
+	const blockquote = $from.node(-1)
+	if (!blockquote || blockquote.type.name !== 'blockquote') return
+	const type = match[1].trim().toLowerCase()
+	const collapsed = Boolean(match[2])
+	const title = (match[3] ?? '').trim()
+	const blockquotePos = $from.before(-1)
+	chain()
+		.focus()
+		.deleteRange({ from: blockquotePos, to: blockquotePos + blockquote.nodeSize })
+		.insertContent({
+			type: 'callout',
+			attrs: { type, title, collapsed },
+			content: [{ type: 'paragraph' }],
+		})
+		.run()
+}
+
 function escapeHtml(value: string): string {
 	return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
