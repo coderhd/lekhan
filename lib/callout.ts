@@ -90,8 +90,10 @@ function calloutCoreRule(state: any) {
 		}
 
 		// Every remaining token up to blockquote_close (later paragraphs,
-		// lists, code) is preserved verbatim.
-		for (let t = i + 3; t < end; t++) {
+		// lists, code) is preserved verbatim. i + 3 is the first paragraph's
+		// own paragraph_close, which is dropped because the first paragraph
+		// is rebuilt above.
+		for (let t = i + 4; t < end; t++) {
 			replacement.push(tokens[t])
 		}
 

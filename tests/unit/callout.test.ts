@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseMarkdown, serializeMarkdown } from '@/lib/markdown-io'
-import { Callout, CALLOUT_TYPES } from '@/lib/callout'
+import { CALLOUT_TYPES } from '@/lib/callout'
 
 /** Doc-level round-trip: parse → serialize → parse yields the same doc. */
 function expectDocRoundTrip(md: string) {
@@ -47,6 +47,14 @@ describe('callout parse/serialize round-trip', () => {
 	it('preserves a blank line between body paragraphs', () => {
 		const md = '> [!note] T\n> p1\n>\n> p2\n'
 		expect(serializeMarkdown(parseMarkdown(md))).toBe(md)
+	})
+
+	it('round-trips a marker-only first line (no inline body on it)', () => {
+		const md = '> [!note] Title\n>\n> body\n'
+		const doc = parseMarkdown(md)
+		expect(doc.content?.[0]?.attrs).toMatchObject({ type: 'note', title: 'Title', collapsed: false })
+		expect(doc.content?.[0]?.content?.[0]?.type).toBe('paragraph')
+		expectDocRoundTrip(md)
 	})
 
 	it('round-trips a callout containing a list', () => {
