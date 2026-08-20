@@ -15,6 +15,9 @@ export interface MarkdownItLike {
 
 const MARKER_RE = /^\[!([a-zA-Z0-9 ]+)\](?:(-))?(?: +([^\n]*))?/
 
+/** Input-rule match: `> [!note]` / `> [!note]-` / `> [!note] Title` followed by a space. */
+export const MARKER_INPUT_RE = /^> \[!([a-zA-Z0-9 ]+)\](-)?(?: +([^\n]*))? $/
+
 function escapeHtml(value: string): string {
 	return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
@@ -167,7 +170,7 @@ export const Callout = Node.create({
 	addStorage() {
 		return {
 			markdown: {
-serialize(state: any, node: any) {
+				serialize(state: any, node: any) {
 					const { type, title, collapsed } = node.attrs
 					const marker = collapsed ? '-' : ''
 					state.write(`> [!${type}]${marker}${title ? ` ${title}` : ''}`)
