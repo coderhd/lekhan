@@ -1,4 +1,10 @@
 import JSZip from 'jszip'
+import { parseFrontmatter, parseMarkdown } from '@/lib/markdown-io'
+import { fitLiveSchema } from '@/lib/import-hydration'
+import { contentToYjsBase64, contentToPlainText, uint8ArrayToBase64 } from '@/lib/yjs-seed'
+import { titleFromFilename } from '@/lib/title-from-filename'
+
+export const MAX_IMPORT_PAGES = 2000
 
 export interface VaultEntry {
 	/** Vault-relative path with forward slashes, e.g. `guides/foo.md`. */
@@ -172,4 +178,211 @@ export async function readVaultDirectory (handle: VaultDirectoryHandle): Promise
 
 	await walk(handle, '')
 	return { files, directories: [...directories] }
+}
+
+export interface ObsidianImportPage {
+	title: string
+	folderPath: string | null
+	properties: Record<string, unknown>
+	tags: string[]
+	contentYjsBase64: string
+	plainText: string
+	isFolder: boolean
+}
+
+export interface ObsidianImportIR {
+	workspaceId: string
+	pages: ObsidianImportPage[]
+}
+
+export interface ObsidianImportReport {
+	pages: number
+	folderPages: number
+	linksResolved: number
+	linksUnresolved: number
+	degradedBlocks: number
+}
+
+export interface ObsidianImportResult {
+	ir: ObsidianImportIR
+	report: ObsidianImportReport
+}
+
+export interface ObsidianImportOptions {
+	workspaceId: string
+	/** Titles of pages already in the workspace, used to resolve wikilinks in the report. */
+	existingPageTitles: string[]
+}
+
+const IMAGE_MIME: Record<string, string> = {
+	png: 'image/png',
+	jpg: 'image/jpeg',
+	jpeg: 'image/jpeg',
+	gif: 'image/gif',
+	webp: 'image/webp',
+	svg: 'image/svg+xml',
+	bmp: 'image/bmp',
+	avif: 'image/avif',
+	ico: 'image/x-icon',
+}
+
+// Mirrors server/graph-index.js normalizeTitle (client bundle cannot import server CJS).
+function normalizeTitle (title: string): string {
+	return String(title || '').toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+// Mirrors server/graph-index.js MARKDOWN_LINK_RE.
+const WIKILINK_RE = /\[\[([^[\]|]+?)(?:\|([^[\]]+?))?\]\]/g
+
+function extractWikilinks (text: string): string[] {
+	const targets: string[] = []
+	const seen = new Set<string>()
+	let match
+	WIKILINK_RE.lastIndex = 0
+	while ((match = WIKILINK_RE.exec(text)) !== null) {
+		const target = match[1].trim()
+		if (!target) continue
+		const key = normalizeTitle(target)
+		if (seen.has(key)) continue
+		seen.add(key)
+		targets.push(target)
+	}
+	return targets
+}
+
+const EMBED_RE = /!\[\[([^\]]+)\]\]/g
+
+function imageExtOf (name: string): string | null {
+	const m = /\.([a-z0-9]+)$/i.exec(name)
+	return m ? m[1].toLowerCase() : null
+}
+
+/**
+ * Rewrite `![[...]]` embeds in a body before markdown parsing:
+ * image embeds whose attachment exists in the vault become `![alt](data:image/...;base64,...)`
+ * markdown image syntax (parsed into a real image node); everything else degrades to a
+ * `[[wikilink]]` and increments `degraded`.
+ */
+function processEmbeds (body: string, imageIndex: Map<string, VaultEntry>, degraded: { count: number }): string {
+	return body.replace(EMBED_RE, (whole, innerRaw: string) => {
+		const inner = innerRaw.trim()
+		const target = inner.split('|')[0].trim() // drop Obsidian size/alias suffix
+		const ext = imageExtOf(target)
+		const entry = imageIndex.get(target.toLowerCase())
+		if (ext && IMAGE_MIME[ext] && entry) {
+			const mime = IMAGE_MIME[ext]
+			return `![${target}](data:${mime};base64,${uint8ArrayToBase64(entry.data)})`
+		}
+		degraded.count += 1
+		return `[[${inner}]]`
+	})
+}
+
+const EMPTY_PAGE_DOC = {
+	type: 'doc',
+	content: [{ type: 'heading', attrs: { level: 1 }, content: [] }],
+}
+
+/**
+ * Normalize a vault into the IR + report. Pure and synchronous (parsing and
+ * Yjs seeding are both sync); the async part is reading the vault (see
+ * `readVaultZip` / `readVaultFiles` / `readVaultDirectory`).
+ */
+export function importObsidianVault (content: VaultContent, options: ObsidianImportOptions): ObsidianImportResult {
+	const { workspaceId, existingPageTitles } = options
+	const notePages: ObsidianImportPage[] = []
+	const folderPages: ObsidianImportPage[] = []
+	const degraded = { count: 0 }
+
+	// Index images by lowercase basename for embed resolution.
+	const imageIndex = new Map<string, VaultEntry>()
+	for (const file of content.files) {
+		const name = file.path.split('/').pop() ?? file.path
+		imageIndex.set(name.toLowerCase(), file)
+	}
+
+	// Folder pages: every discovered directory, including empty ones, ordered
+	// shallow-first so the write stage can build the parent chain.
+	const sortedDirs = [...content.directories].sort((a, b) => a.split('/').length - b.split('/').length)
+	for (const dir of sortedDirs) {
+		const segments = dir.split('/')
+		folderPages.push({
+			title: segments[segments.length - 1],
+			folderPath: segments.length > 1 ? segments.slice(0, -1).join('/') : null,
+			properties: {},
+			tags: [],
+			contentYjsBase64: contentToYjsBase64(EMPTY_PAGE_DOC),
+			plainText: '',
+			isFolder: true,
+		})
+	}
+
+	for (const file of content.files) {
+		if (!file.path.toLowerCase().endsWith('.md') && !file.path.toLowerCase().endsWith('.markdown')) continue
+
+		const raw = new TextDecoder().decode(file.data)
+		const { data, body } = parseFrontmatter(raw)
+
+		const title = data.title ?? titleFromFilename(file.path.split('/').pop() ?? '')
+
+		const properties: Record<string, unknown> = { ...data.properties }
+		if (data.tags && data.tags.length > 0) {
+			properties.tags = data.tags
+		}
+
+		const processedBody = processEmbeds(body, imageIndex, degraded)
+		const fitted = fitLiveSchema(parseMarkdown(processedBody))
+
+		notePages.push({
+			title,
+			folderPath: file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : null,
+			properties,
+			tags: data.tags ?? [],
+			contentYjsBase64: contentToYjsBase64(fitted),
+			plainText: contentToPlainText(fitted),
+			isFolder: false,
+		})
+	}
+
+	if (notePages.length === 0) {
+		throw new Error('No markdown files found in the vault. Nothing to import.')
+	}
+	if (notePages.length > MAX_IMPORT_PAGES) {
+		throw new Error(`Vault exceeds the maximum of ${MAX_IMPORT_PAGES} pages. Split the vault and import in parts.`)
+	}
+
+	// Resolve wikilinks against imported titles ∪ existing workspace titles.
+	// Counts are distinct normalized targets across ALL note plainTexts (a
+	// link back-linked from ten notes is one resolved target).
+	const knownTitles = new Set([
+		...notePages.map((p) => normalizeTitle(p.title)),
+		...existingPageTitles.map(normalizeTitle),
+	])
+	const distinctTargets = new Map<string, string>()
+	for (const page of notePages) {
+		for (const target of extractWikilinks(page.plainText)) {
+			distinctTargets.set(normalizeTitle(target), target)
+		}
+	}
+	let linksResolved = 0
+	let linksUnresolved = 0
+	for (const normalized of distinctTargets.keys()) {
+		if (knownTitles.has(normalized)) {
+			linksResolved += 1
+		} else {
+			linksUnresolved += 1
+		}
+	}
+
+	const pages = [...folderPages, ...notePages]
+	return {
+		ir: { workspaceId, pages },
+		report: {
+			pages: notePages.length,
+			folderPages: folderPages.length,
+			linksResolved,
+			linksUnresolved,
+			degradedBlocks: degraded.count,
+		},
+	}
 }

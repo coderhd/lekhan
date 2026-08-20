@@ -1,6 +1,9 @@
 import { createPage } from '@/services/graph'
 import { parseFrontmatter, parseMarkdown } from '@/lib/markdown-io'
+import { titleFromFilename } from '@/lib/title-from-filename'
 import type { Page } from '@/types'
+
+export { titleFromFilename }
 
 /**
  * Per-tab payload store for import hydration. A module-scoped Map that
@@ -14,17 +17,6 @@ export interface ImportMarkdownOptions {
 	workspaceId: string
 	ownerId: string
 	filename?: string
-}
-
-/**
- * Derive a page title from a filename: the extension is stripped and
- * separators collapse to spaces. The design's fallback when the frontmatter
- * has no `title`.
- */
-export function titleFromFilename(filename: string): string {
-	const base = filename.replace(/\.(md|markdown|mdown|txt)$/i, '').trim()
-	if (!base) return 'Untitled'
-	return base.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
 /**

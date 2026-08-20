@@ -9,7 +9,7 @@ import { parseMarkdown } from '@/lib/markdown-io'
  * slot so the content is preserved instead of being coerced/dropped by the
  * stricter schema.
  */
-function fitLiveSchema(content: JSONContent): JSONContent {
+export function fitLiveSchema(content: JSONContent): JSONContent {
 	const nodes = (content.content ?? []).filter((node, index, all) => {
 		// Trailing empty paragraphs are artifacts of the body's final newline —
 		// the TrailingNode extension already appends the editor's own empty slot.
