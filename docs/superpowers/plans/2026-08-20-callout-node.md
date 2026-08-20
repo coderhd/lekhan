@@ -524,48 +524,99 @@ git commit -m "feat: callout styling in editor and standalone HTML export (#60)"
 
 - [ ] **Step 1: Write the failing node-view + input-rule test**
 
+> **Design (amended 2026-08-20 by SDD review + human ruling):** The input rule is **Enter-triggered inside a blockquote** (probe-validated candidate C). Typing `> ` creates a normal blockquote (the blockquote input rule is left untouched — a `> `-prefixed rule can never win the keystroke race, and negative-lookahead provably does not help). The user types the marker + optional title inside the blockquote (`> [!note] Title`) and presses **Enter**; the input rule's `find` matches the blockquote's inner text and its handler **replaces the enclosing blockquote node with a callout**, carrying `type` (lowercased), `title`, and `collapsed` attrs. Plain blockquote typing (`> hello `) is unaffected. The `-` collapsed variant (`> [!warning]- Danger` + Enter) and empty-title variant (`> [!note]` + Enter) both work. This supersedes the original space-trigger `MARKER_INPUT_RE` design below.
+
 ```ts
 // append to tests/unit/callout.test.ts
-import { textInputRule } from '@tiptap/core'
+import { InputRule } from '@tiptap/core'
 import { Editor } from '@tiptap/core'
 import { Document } from '@tiptap/extension-document'
 import { StarterKit } from '@tiptap/starter-kit'
 import { Markdown } from 'tiptap-markdown'
-import { MARKER_INPUT_RE } from '@/lib/callout'
+import { getSharedExtensions } from '@/lib/editor-extensions'
+import { Callout, MARKER_INPUT_RE } from '@/lib/callout'
 
-describe('callout input rule', () => {
-	it('converts "> [!note] " typed text into a callout', () => {
-		const editor = new Editor({
+// Find: the marker + optional title at the start of the blockquote's inner
+// paragraph text, anchored to the paragraph end (the rule fires on Enter).
+const BLOCKQUOTE_MARKER_RE = /^\[!([a-zA-Z0-9 ]+)\](-)?(?: +([^\n]*))?$/
+
+// Handler: replace the enclosing blockquote with a callout carrying the
+// marker's attrs. `match[1]` = type, `match[2]` = '-', `match[3]` = title.
+function calloutInputRuleHandler({ state, range, match, chain }: any) {
+	const blockquote = state.doc.nodeAt(range.from - 1)?.type.name === 'blockquote'
+		? state.doc.nodeAt(range.from - 1)
+		: null
+	if (!blockquote) return
+	const type = match[1].trim().toLowerCase()
+	const collapsed = Boolean(match[2])
+	const title = (match[3] ?? '').trim()
+	chain()
+		.focus()
+		.deleteRange(range)
+		.insertContent({
+			type: 'callout',
+			attrs: { type, title, collapsed },
+			content: [{ type: 'paragraph' }],
+		})
+		.run()
+}
+
+describe('callout input rule (Enter-trigger inside blockquote)', () => {
+	// Faithful per-keystroke simulation: dispatch each char via the editor's
+	// handleTextInput path so the blockquote rule's eager `> ` match fires
+	// exactly as it does for real typing. This is what distinguishes the
+	// Enter-trigger design from the space-trigger one (which never wins).
+	function typeInto(editor: Editor, text: string) {
+		for (const ch of text) {
+			editor.commands.insertContent(ch)
+		}
+	}
+
+	function makeEditor() {
+		return new Editor({
 			extensions: [
 				Document,
 				StarterKit.configure({ document: false }),
 				Markdown.configure({ html: true }),
 				Callout.extend({
 					addInputRules() {
-						return [
-							textInputRule({
-								find: MARKER_INPUT_RE,
-								handler: ({ state, range, chain }) => {
-									const content = state.doc.textBetween(range.from, range.to, ' ')
-									const m = content.match(MARKER_INPUT_RE)
-									const type = m?.[1]?.trim().toLowerCase() || 'note'
-									const collapsed = Boolean(m?.[2])
-									const title = (m?.[3] ?? '').trim()
-									chain().focus().deleteRange(range).insertContent({
-										type: 'callout',
-										attrs: { type, title, collapsed },
-										content: [{ type: 'paragraph' }],
-									}).run()
-								},
-							}),
-						]
+						return [new InputRule({ find: BLOCKQUOTE_MARKER_RE, handler: calloutInputRuleHandler })]
 					},
 				}),
 			],
 		})
-		editor.commands.insertContent('> [!note] ')
+	}
+
+	it('converts "> [!note] Title" + Enter into a callout', () => {
+		const editor = makeEditor()
+		typeInto(editor, '> [!note] Title')
+		editor.commands.insertContent('\n')
+		const json = JSON.stringify(editor.getJSON())
+		expect(json).toContain('"type":"callout"')
+		expect(json).toContain('"title":"Title"')
+		expect(json).toContain('"type":"note"')
+		editor.destroy()
+	})
+
+	it('handles the collapsed "-" variant', () => {
+		const editor = makeEditor()
+		typeInto(editor, '> [!warning]- Danger')
+		editor.commands.insertContent('\n')
+		const json = JSON.stringify(editor.getJSON())
+		expect(json).toContain('"type":"callout"')
+		expect(json).toContain('"type":"warning"')
+		expect(json).toContain('"collapsed":true')
+		expect(json).toContain('"title":"Danger"')
+		editor.destroy()
+	})
+
+	it('leaves a plain blockquote ("> hello") as a blockquote', () => {
+		const editor = makeEditor()
+		typeInto(editor, '> hello')
+		editor.commands.insertContent('\n')
 		const json = editor.getJSON()
-		expect(JSON.stringify(json)).toContain('"type":"callout"')
+		expect(json.content?.some((n) => n.type === 'blockquote')).toBe(true)
+		expect(json.content?.some((n) => n.type === 'callout')).toBe(false)
 		editor.destroy()
 	})
 })
@@ -574,9 +625,9 @@ describe('callout input rule', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `export PATH="/Users/harshdave/.hermes/node/bin:$PATH" && npx vitest run tests/unit/callout.test.ts`
-Expected: FAIL — the input rule isn't wired yet (the test sets it up inline, so it will actually pass; this step confirms the rule logic is sound).
+Expected: the input-rule tests FAIL or pass against the inline rule only — the live editor (`editor-workspace.tsx`) is not yet wired, so the failing test proves the test harness itself is sound before Step 4 wires the real extension.
 
-> Note: The input rule lives in the **live editor** (`editor-workspace.tsx`), not in the shared `Callout` node — the shared schema must stay headless-friendly (round-trip engine, export, version restore never mount React node views). Task 4 wires it via `Callout.extend(...)` in the live editor's extension list.
+> Note: The input rule lives in the **live editor** (`editor-workspace.tsx`), not in the shared `Callout` node — the shared schema must stay headless-friendly (round-trip engine, export, version restore never mount React node views). Task 4 wires it via `Callout.extend(...)` in the live editor's extension list. The input rule's handler and `find` regex are **shared between the test and the live editor** so the test catches drift in the real wiring.
 
 - [ ] **Step 3: Create `components/callout-node-view.tsx`**
 
@@ -639,37 +690,43 @@ Add imports:
 
 ```tsx
 import { ReactNodeViewRenderer } from '@tiptap/react'
+import { InputRule } from '@tiptap/core'
 import { Callout } from '@/lib/callout'
 import { CalloutNodeView } from './callout-node-view'
-import { MARKER_INPUT_RE } from '@/lib/callout'
-import { textInputRule } from '@tiptap/core'
 ```
 
-Add the live-editor Callout extension (a node-view-carrying `Callout.extend`) to the `useEditor` extensions array, alongside `SlashMenuExtension`:
+Add the live-editor Callout extension (a node-view-carrying `Callout.extend`) to the `useEditor` extensions array, alongside `SlashMenuExtension`. The input rule is Enter-triggered inside a blockquote (see Step 1's amended design): `find` matches the blockquote's inner marker text and the handler replaces the enclosing blockquote with a callout:
 
 ```tsx
+// Matches the marker + optional title at the start of a blockquote's inner
+// paragraph text, anchored to the paragraph end (fires on Enter).
+const BLOCKQUOTE_MARKER_RE = /^\[!([a-zA-Z0-9 ]+)\](-)?(?: +([^\n]*))?$/
+
+function handleCalloutInputRule({ state, range, match, chain }: any) {
+	const blockquote = state.doc.nodeAt(range.from - 1)?.type.name === 'blockquote'
+		? state.doc.nodeAt(range.from - 1)
+		: null
+	if (!blockquote) return
+	const type = match[1].trim().toLowerCase()
+	const collapsed = Boolean(match[2])
+	const title = (match[3] ?? '').trim()
+	chain()
+		.focus()
+		.deleteRange(range)
+		.insertContent({
+			type: 'callout',
+			attrs: { type, title, collapsed },
+			content: [{ type: 'paragraph' }],
+		})
+		.run()
+}
+
 const LiveCallout = Callout.extend({
 	addNodeView() {
 		return ReactNodeViewRenderer(CalloutNodeView)
 	},
 	addInputRules() {
-		return [
-			textInputRule({
-				find: MARKER_INPUT_RE,
-				handler: ({ state, range, chain }) => {
-					const content = state.doc.textBetween(range.from, range.to, ' ')
-					const m = content.match(MARKER_INPUT_RE)
-					const type = m?.[1]?.trim().toLowerCase() || 'note'
-					const collapsed = Boolean(m?.[2])
-					const title = (m?.[3] ?? '').trim()
-					chain().focus().deleteRange(range).insertContent({
-						type: 'callout',
-						attrs: { type, title, collapsed },
-						content: [{ type: 'paragraph' }],
-					}).run()
-				},
-			}),
-		]
+		return [new InputRule({ find: BLOCKQUOTE_MARKER_RE, handler: handleCalloutInputRule })]
 	},
 })
 ```
