@@ -8,6 +8,7 @@ import { StarterKit } from '@tiptap/starter-kit'
 import { Markdown } from 'tiptap-markdown'
 import { buildSlashMenuItems } from '@/lib/slash-menu-extension'
 import { getSharedExtensions } from '@/lib/editor-extensions'
+import type { JSONContent } from '@tiptap/core'
 
 /** Doc-level round-trip: parse → serialize → parse yields the same doc. */
 function expectDocRoundTrip(md: string) {
@@ -102,6 +103,30 @@ describe('callout export HTML', () => {
 		const html = buildStandaloneHtml('<div class="callout callout-note">…</div>', 'Page')
 		expect(html).toContain('<style>')
 		expect(html).toContain('.callout')
+	})
+
+	it('restores a titled callout without duplicating the title in the body', () => {
+		// The version-restore path renders the doc to HTML (`getHTML`, which
+		// uses `renderHTML`) and feeds it back through `setContent`, which
+		// parses it with `parseHTML`. The title lives in a `.callout-title`
+		// div and must never leak into the `.callout-content` body.
+		const md = '> [!note] My title\n> Body line one\n> Body line two\n'
+		const doc = parseMarkdown(md)
+		const editor = new Editor({ extensions: getSharedExtensions({ document: Document }) })
+		editor.commands.setContent(doc)
+		const html = editor.getHTML()
+		editor.commands.setContent(html)
+		const restored = editor.getJSON()
+		editor.destroy()
+
+		const callout = restored.content?.[0]
+		expect(callout?.type).toBe('callout')
+		expect(callout?.attrs).toMatchObject({ type: 'note', title: 'My title', collapsed: false })
+		const bodyText = (callout?.content as Array<JSONContent> | undefined)
+			?.map((n) => (n.content as Array<{ text?: string }> | undefined)?.map((t) => t.text).join(''))
+			.join('\n')
+		expect(bodyText).not.toContain('My title')
+		expect(bodyText).toBe('Body line one Body line two')
 	})
 })
 

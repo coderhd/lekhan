@@ -41,7 +41,7 @@ export const CalloutNodeView = ({ node, updateAttributes, selected }: any) => {
 				<CalloutIcon type={type} />
 				<span>{title || DEFAULT_TITLES[type] || type}</span>
 			</button>
-			{!collapsed && <NodeViewContent className="callout-content" />}
+			<NodeViewContent className="callout-content" />
 		</NodeViewWrapper>
 	)
 }

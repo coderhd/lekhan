@@ -145,7 +145,8 @@ function renderCalloutOpen(tokens: any[], idx: number) {
 	const t = tokens[idx]
 	return (
 		`<div data-callout="true" data-callout-type="${escapeHtml(t.meta.type)}" ` +
-		`data-callout-title="${escapeHtml(t.meta.title)}" data-callout-collapsed="${String(t.meta.collapsed)}">\n`
+		`data-callout-title="${escapeHtml(t.meta.title)}" data-callout-collapsed="${String(t.meta.collapsed)}">\n` +
+		`<div class="callout-content">\n`
 	)
 }
 
@@ -172,6 +173,7 @@ export const Callout = Node.create({
 		return [
 			{
 				tag: 'div[data-callout]',
+				contentElement: '.callout-content',
 				getAttrs: (el) => {
 					const htmlEl = el as HTMLElement
 					return {
@@ -224,7 +226,7 @@ export const Callout = Node.create({
 						markdownit.core.ruler.push('lekhan_callout', calloutCoreRule)
 						const md = markdownit as any
 						md.renderer.rules.callout_open = renderCalloutOpen
-						md.renderer.rules.callout_close = () => '</div>\n'
+						md.renderer.rules.callout_close = () => '</div>\n</div>\n'
 					},
 				},
 			},
