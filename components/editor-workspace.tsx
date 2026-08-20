@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { useEditor, EditorContent, Editor } from '@tiptap/react'
+import { useEditor, EditorContent, Editor, ReactNodeViewRenderer } from '@tiptap/react'
 import Collaboration from '@tiptap/extension-collaboration'
 import { CollaborationCursor } from '@/lib/collaboration-cursor'
 import { EyeOff } from 'lucide-react'
@@ -76,6 +76,33 @@ import { getSharedExtensions } from '@/lib/editor-extensions'
 import { decideMarkdownPaste } from '@/lib/markdown-paste'
 import { insertParsedHtml } from '@/lib/insert-parsed-html'
 import { hydrateOnOpen } from '@/lib/import-hydration'
+import { Callout } from '@/lib/callout'
+import { CalloutNodeView } from './callout-node-view'
+import { MARKER_INPUT_RE } from '@/lib/callout'
+import { InputRule } from '@tiptap/core'
+
+const LiveCallout = Callout.extend({
+	addNodeView() {
+		return ReactNodeViewRenderer(CalloutNodeView)
+	},
+	addInputRules() {
+		return [
+			new InputRule({
+				find: MARKER_INPUT_RE,
+				handler: ({ range, chain, match }) => {
+					const type = match?.[1]?.trim().toLowerCase() || 'note'
+					const collapsed = Boolean(match?.[2])
+					const title = (match?.[3] ?? '').trim()
+					chain().focus().deleteRange(range).insertContent({
+						type: 'callout',
+						attrs: { type, title, collapsed },
+						content: [{ type: 'paragraph' }],
+					}).run()
+				},
+			}),
+		]
+	},
+})
 
 function getInitials(nameOrEmail: string) {
 	if (!nameOrEmail) return '?'
@@ -283,7 +310,7 @@ export default function EditorWorkspace({	pageId,
 
 	const editor = useEditor({
 		extensions: [
-			...getSharedExtensions(),
+			...getSharedExtensions().map((ext) => (ext.name === 'callout' ? LiveCallout : ext)),
 			...(ydoc ? [
 				Collaboration.configure({
 					document: ydoc,
