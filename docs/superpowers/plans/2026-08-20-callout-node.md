@@ -534,32 +534,44 @@ import { Document } from '@tiptap/extension-document'
 import { StarterKit } from '@tiptap/starter-kit'
 import { Markdown } from 'tiptap-markdown'
 import { getSharedExtensions } from '@/lib/editor-extensions'
-import { Callout, MARKER_INPUT_RE } from '@/lib/callout'
+import { Callout, BLOCKQUOTE_MARKER_RE, handleCalloutInputRule } from '@/lib/callout'
 
-// Find: the marker + optional title at the start of the blockquote's inner
-// paragraph text, anchored to the paragraph end (the rule fires on Enter).
-const BLOCKQUOTE_MARKER_RE = /^\[!([a-zA-Z0-9 ]+)\](-)?(?: +([^\n]*))?$/
+// NOTE (amended after fix round 1): the working implementation lives in
+// `lib/callout.ts` — `BLOCKQUOTE_MARKER_RE` and `handleCalloutInputRule`
+// (exported, shared by the live editor and the tests). Two corrections were
+// made against the original draft below:
+// 1. The regex is anchored to a TRAILING NEWLINE (`\n`), not `$`: the
+//    input-rule plugin's Enter path runs with text `\n`, and a bare
+//    `$`-anchored regex neither fires on Enter nor can distinguish Enter
+//    from the mid-typing `[!note]`/`[!note] ` moments (which would drop the
+//    title). `BLOCKQUOTE_MARKER_RE = /^\[!([a-zA-Z0-9 ]+)\](-)?(?: +([^\n]*))?\n$/`.
+// 2. The handler resolves the enclosing blockquote via
+//    `state.doc.resolve(range.from).node(-1)` — `nodeAt(range.from - 1)` is
+//    the inner PARAGRAPH, not the blockquote — and deletes the whole
+//    blockquote node (`$from.before(-1)` .. `+ nodeSize`) before inserting
+//    the callout (a genuine replacement, not nesting).
 
-// Handler: replace the enclosing blockquote with a callout carrying the
-// marker's attrs. `match[1]` = type, `match[2]` = '-', `match[3]` = title.
-function calloutInputRuleHandler({ state, range, match, chain }: any) {
-	const blockquote = state.doc.nodeAt(range.from - 1)?.type.name === 'blockquote'
-		? state.doc.nodeAt(range.from - 1)
-		: null
-	if (!blockquote) return
-	const type = match[1].trim().toLowerCase()
-	const collapsed = Boolean(match[2])
-	const title = (match[3] ?? '').trim()
-	chain()
-		.focus()
-		.deleteRange(range)
-		.insertContent({
-			type: 'callout',
-			attrs: { type, title, collapsed },
-			content: [{ type: 'paragraph' }],
-		})
-		.run()
-}
+// (Original draft — superseded by the shared exports above. Kept as design
+// intent only; do not use verbatim.)
+// const BLOCKQUOTE_MARKER_RE = /^\[!([a-zA-Z0-9 ]+)\](-)?(?: +([^\n]*))?$/
+// function calloutInputRuleHandler({ state, range, match, chain }: any) {
+// 	const $from = state.doc.resolve(range.from)
+// 	const blockquote = $from.node(-1)
+// 	if (!blockquote || blockquote.type.name !== 'blockquote') return
+// 	const type = match[1].trim().toLowerCase()
+// 	const collapsed = Boolean(match[2])
+// 	const title = (match[3] ?? '').trim()
+// 	const blockquotePos = $from.before(-1)
+// 	chain()
+// 		.focus()
+// 		.deleteRange({ from: blockquotePos, to: blockquotePos + blockquote.nodeSize })
+// 		.insertContent({
+// 			type: 'callout',
+// 			attrs: { type, title, collapsed },
+// 			content: [{ type: 'paragraph' }],
+// 		})
+// 		.run()
+// }
 
 describe('callout input rule (Enter-trigger inside blockquote)', () => {
 	// Faithful per-keystroke simulation: dispatch each char through the
@@ -695,36 +707,13 @@ Add imports:
 ```tsx
 import { ReactNodeViewRenderer } from '@tiptap/react'
 import { InputRule } from '@tiptap/core'
-import { Callout } from '@/lib/callout'
+import { Callout, BLOCKQUOTE_MARKER_RE, handleCalloutInputRule } from '@/lib/callout'
 import { CalloutNodeView } from './callout-node-view'
 ```
 
 Add the live-editor Callout extension (a node-view-carrying `Callout.extend`) to the `useEditor` extensions array, alongside `SlashMenuExtension`. The input rule is Enter-triggered inside a blockquote (see Step 1's amended design): `find` matches the blockquote's inner marker text and the handler replaces the enclosing blockquote with a callout:
 
 ```tsx
-// Matches the marker + optional title at the start of a blockquote's inner
-// paragraph text, anchored to the paragraph end (fires on Enter).
-const BLOCKQUOTE_MARKER_RE = /^\[!([a-zA-Z0-9 ]+)\](-)?(?: +([^\n]*))?$/
-
-function handleCalloutInputRule({ state, range, match, chain }: any) {
-	const blockquote = state.doc.nodeAt(range.from - 1)?.type.name === 'blockquote'
-		? state.doc.nodeAt(range.from - 1)
-		: null
-	if (!blockquote) return
-	const type = match[1].trim().toLowerCase()
-	const collapsed = Boolean(match[2])
-	const title = (match[3] ?? '').trim()
-	chain()
-		.focus()
-		.deleteRange(range)
-		.insertContent({
-			type: 'callout',
-			attrs: { type, title, collapsed },
-			content: [{ type: 'paragraph' }],
-		})
-		.run()
-}
-
 const LiveCallout = Callout.extend({
 	addNodeView() {
 		return ReactNodeViewRenderer(CalloutNodeView)
