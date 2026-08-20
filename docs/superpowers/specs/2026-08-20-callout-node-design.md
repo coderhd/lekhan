@@ -57,8 +57,9 @@ view uses.
   (via `wrapBlock("> ", …)`, the prosemirror-markdown blockquote helper). Collapsed
   callouts emit `> [!type]- title`.
 - **Parse** uses tiptap-markdown's `parse.setup` core-rule hook: a markdown-it rule
-  that matches blockquote tokens whose first line is `[!type]`, converting the
-  blockquote into a callout token. Plain blockquotes (no `[!type]`) are untouched.
+  that matches blockquote tokens whose first line is `[!type]`, rewriting the
+  blockquote group so it renders as `<div data-callout …>` (matched by the node's
+  `parseHTML`). Plain blockquotes (no `[!type]`) are untouched.
 
 ### 2.4 Interactivity scope
 
@@ -124,11 +125,12 @@ export const Callout = Node.create({
           const { type, title, collapsed } = node.attrs
           const marker = collapsed ? `-` : ''
           state.write(`> [!${type}]${marker}${title ? ` ${title}` : ''}`)
-          state.closeBlock(node)
+          state.ensureNewLine()
           node.forEach((child) => {
+            // wrapBlock writes the `> ` prefix for every line of `child` and
+            // closes the child itself; do NOT call closeBlock here.
             state.wrapBlock('> ', null, child, () => state.renderContent(child))
           })
-          state.closeBlock(node)
         },
         parse: { /* handled by markdown-it core rule, see §3.2 */ },
       },
@@ -161,9 +163,12 @@ markdown: {
 
 The rule inspects `state.tokens`: a `blockquote_open` whose first child
 paragraph's first inline token is `text` matching `/^\[!([a-z0-9]+)\](-?)(.*)$/i`
-becomes a `callout` token. The marker line is consumed (not rendered as content);
-remaining blockquote content becomes the callout's children. Blockquotes that don't
-match stay as-is (regression-safe for existing plain blockquotes).
+is rewritten — the blockquote token group is replaced by an `html_block` token
+whose content is the `<div data-callout …>` markup (type/title/collapsed from the
+marker line, body blocks re-rendered inside). markdown-it emits that HTML verbatim;
+the schema's `parseHTML` (`div[data-callout]`) then matches it into a callout node.
+Blockquotes that don't match are left untouched (regression-safe for plain
+blockquotes). The marker line is consumed, never rendered as content.
 
 ### 3.3 Serialize
 
@@ -189,6 +194,11 @@ const CalloutNodeView = ({ node, updateAttributes, selected }) => {
   )
 }
 ```
+
+`CalloutIcon` maps each known type to a `lucide-react` icon (the codebase's icon
+library); unknown types fall back to a neutral icon. The slash menu item itself uses
+the Material-style string icon convention of `buildSlashMenuItems` (e.g.
+`icon: 'chat_bubble_outline'`).
 
 The `Callout` extension sets `addNodeView()` to `ReactNodeViewRenderer(CalloutNodeView)`
 when running in the live editor. In headless editors (created in `lib/markdown-io.ts`)
