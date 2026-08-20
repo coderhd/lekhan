@@ -562,13 +562,17 @@ function calloutInputRuleHandler({ state, range, match, chain }: any) {
 }
 
 describe('callout input rule (Enter-trigger inside blockquote)', () => {
-	// Faithful per-keystroke simulation: dispatch each char via the editor's
-	// handleTextInput path so the blockquote rule's eager `> ` match fires
-	// exactly as it does for real typing. This is what distinguishes the
-	// Enter-trigger design from the space-trigger one (which never wins).
+	// Faithful per-keystroke simulation: dispatch each char through the
+	// editor view's handleTextInput path (the exact path prosemirror-view uses
+	// for real keystrokes) so the blockquote rule's eager `> ` match fires
+	// exactly as it does for real typing. `commands.insertContent` does NOT
+	// exercise input rules and would bypass the race — do not use it.
 	function typeInto(editor: Editor, text: string) {
+		const view = editor.view as any
 		for (const ch of text) {
-			editor.commands.insertContent(ch)
+			view.someProp('handleTextInput', (fn: any) => fn(view, view.state.selection.from, view.state.selection.to, ch, () => {
+				editor.commands.insertContent(ch)
+			}))
 		}
 	}
 
