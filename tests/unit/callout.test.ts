@@ -6,6 +6,8 @@ import { InputRule, Editor } from '@tiptap/core'
 import { Document } from '@tiptap/extension-document'
 import { StarterKit } from '@tiptap/starter-kit'
 import { Markdown } from 'tiptap-markdown'
+import { buildSlashMenuItems } from '@/lib/slash-menu-extension'
+import { getSharedExtensions } from '@/lib/editor-extensions'
 
 /** Doc-level round-trip: parse → serialize → parse yields the same doc. */
 function expectDocRoundTrip(md: string) {
@@ -177,6 +179,29 @@ describe('callout input rule (Enter-trigger inside blockquote)', () => {
 		const json = editor.getJSON()
 		expect(json.content?.some((n) => n.type === 'blockquote')).toBe(true)
 		expect(json.content?.some((n) => n.type === 'callout')).toBe(false)
+		editor.destroy()
+	})
+})
+
+describe('callout slash menu', () => {
+	it('offers a Callout item', () => {
+		const items = buildSlashMenuItems(() => {})
+		const callout = items.find((item) => item.id === 'callout')
+		expect(callout).toBeDefined()
+		expect(callout?.label).toBe('Callout')
+	})
+
+	it('inserts an empty callout at the cursor', () => {
+		const editor = new Editor({ extensions: getSharedExtensions({ document: Document }) })
+		const items = buildSlashMenuItems(() => {})
+		const callout = items.find((item) => item.id === 'callout')
+		expect(callout).toBeDefined()
+		callout?.action(editor)
+
+		const json = editor.getJSON()
+		expect(json.content?.[0]?.type).toBe('callout')
+		expect(json.content?.[0]?.attrs).toMatchObject({ type: 'note', title: '', collapsed: false })
+		expect(json.content?.[0]?.content?.[0]?.type).toBe('paragraph')
 		editor.destroy()
 	})
 })
