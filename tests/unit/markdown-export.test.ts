@@ -312,4 +312,12 @@ describe('buildStandaloneHtml', () => {
 		expect(out).toContain('callout callout-note')
 		expect(out).toContain('.callout')
 	})
+
+	it('hides the body of a collapsed callout in the standalone CSS', () => {
+		const doc = parseMarkdown('> [!note]- Title\n> hidden\n')
+		const body = serializeExportBodyHtml(doc)
+		const out = buildStandaloneHtml(body, 'Callout Page')
+		expect(out).toContain('.callout[data-callout-collapsed="true"] .callout-content')
+		expect(out).toContain('display: none')
+	})
 })

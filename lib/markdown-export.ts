@@ -123,6 +123,7 @@ const CALLOUT_EXPORT_CSS = `
 .callout-success{ border-left-color: #1a7f37; }
 .callout-danger { border-left-color: #cf222e; }
 .callout-question{ border-left-color: #8250df; }
+.callout[data-callout-collapsed="true"] .callout-content { display: none; }
 `
 
 /**
