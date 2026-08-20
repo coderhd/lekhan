@@ -96,6 +96,18 @@ export function buildSlashMenuItems(
 			action: (editor) => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
 		},
 		{
+			id: 'callout',
+			label: 'Callout',
+			icon: 'chat_bubble_outline',
+			description: 'Highlighted note block',
+			action: (editor) =>
+				editor.chain().focus().insertContent({
+					type: 'callout',
+					attrs: { type: 'note', title: '', collapsed: false },
+					content: [{ type: 'paragraph' }],
+				}).run(),
+		},
+		{
 			id: 'code-block',
 			label: 'Code Block',
 			icon: 'code_blocks',

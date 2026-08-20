@@ -303,4 +303,21 @@ describe('buildStandaloneHtml', () => {
 		const out = buildStandaloneHtml('', 'A <b> & "Title"')
 		expect(out).toContain('<title>A &lt;b&gt; &amp; &quot;Title&quot;</title>')
 	})
+
+	it('exports a callout doc with its styling', () => {
+		const doc = parseMarkdown('> [!note] Title\n> Body line one\n')
+		const body = serializeExportBodyHtml(doc)
+		const out = buildStandaloneHtml(body, 'Callout Page')
+		expect(out).toContain('data-callout')
+		expect(out).toContain('callout callout-note')
+		expect(out).toContain('.callout')
+	})
+
+	it('hides the body of a collapsed callout in the standalone CSS', () => {
+		const doc = parseMarkdown('> [!note]- Title\n> hidden\n')
+		const body = serializeExportBodyHtml(doc)
+		const out = buildStandaloneHtml(body, 'Callout Page')
+		expect(out).toContain('.callout[data-callout-collapsed="true"] .callout-content')
+		expect(out).toContain('display: none')
+	})
 })

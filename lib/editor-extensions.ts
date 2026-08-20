@@ -20,6 +20,7 @@ import { TaskItem } from '@tiptap/extension-task-item'
 import { Image } from '@tiptap/extension-image'
 import { Link } from '@tiptap/extension-link'
 import { PersistentSelection } from '@/lib/persistent-selection'
+import { Callout } from '@/lib/callout'
 
 const lowlight = createLowlight(common)
 
@@ -79,6 +80,7 @@ export const getSharedExtensions = (options?: { document?: AnyExtension }): AnyE
 	Underline,
 	TaskList,
 	TaskItem.configure({ nested: true }),
+	Callout,
 	Image.configure({
 		inline: true,
 		allowBase64: true,

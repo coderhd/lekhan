@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { useEditor, EditorContent, Editor } from '@tiptap/react'
+import { useEditor, EditorContent, Editor, ReactNodeViewRenderer } from '@tiptap/react'
 import Collaboration from '@tiptap/extension-collaboration'
 import { CollaborationCursor } from '@/lib/collaboration-cursor'
 import { EyeOff } from 'lucide-react'
@@ -76,6 +76,18 @@ import { getSharedExtensions } from '@/lib/editor-extensions'
 import { decideMarkdownPaste } from '@/lib/markdown-paste'
 import { insertParsedHtml } from '@/lib/insert-parsed-html'
 import { hydrateOnOpen } from '@/lib/import-hydration'
+import { Callout, BLOCKQUOTE_MARKER_RE, handleCalloutInputRule } from '@/lib/callout'
+import { CalloutNodeView } from './callout-node-view'
+import { InputRule } from '@tiptap/core'
+
+const LiveCallout = Callout.extend({
+	addNodeView() {
+		return ReactNodeViewRenderer(CalloutNodeView)
+	},
+	addInputRules() {
+		return [new InputRule({ find: BLOCKQUOTE_MARKER_RE, handler: handleCalloutInputRule })]
+	},
+})
 
 function getInitials(nameOrEmail: string) {
 	if (!nameOrEmail) return '?'
@@ -283,7 +295,7 @@ export default function EditorWorkspace({	pageId,
 
 	const editor = useEditor({
 		extensions: [
-			...getSharedExtensions(),
+			...getSharedExtensions().map((ext) => (ext.name === 'callout' ? LiveCallout : ext)),
 			...(ydoc ? [
 				Collaboration.configure({
 					document: ydoc,

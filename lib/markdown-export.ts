@@ -101,6 +101,31 @@ function escapeHtml(value: string): string {
 		.replace(/"/g, '&quot;')
 }
 
+/** Self-contained styles for the callout node in standalone HTML export. */
+const CALLOUT_EXPORT_CSS = `
+.callout {
+  border: 1px solid #d0d7de;
+  border-left: 4px solid #57606a;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 16px 0;
+}
+.callout-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.callout-content > :first-child { margin-top: 0; }
+.callout-content > :last-child { margin-bottom: 0; }
+.callout-note   { border-left-color: #0969da; }
+.callout-warning{ border-left-color: #bf8700; }
+.callout-info   { border-left-color: #0969da; }
+.callout-tip    { border-left-color: #1a7f37; }
+.callout-success{ border-left-color: #1a7f37; }
+.callout-danger { border-left-color: #cf222e; }
+.callout-question{ border-left-color: #8250df; }
+.callout[data-callout-collapsed="true"] .callout-content { display: none; }
+`
+
 /**
  * Wrap the editor's rendered HTML in a minimal standalone HTML document so
  * the `.html` export opens directly in a browser or email client.
@@ -112,6 +137,7 @@ export function buildStandaloneHtml(editorHtml: string, title: string): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(title)}</title>
+  <style>${CALLOUT_EXPORT_CSS}</style>
 </head>
 <body>
 ${editorHtml}
