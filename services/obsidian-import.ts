@@ -5,6 +5,12 @@ import { contentToYjsBase64, contentToPlainText, uint8ArrayToBase64 } from '@/li
 import { titleFromFilename } from '@/lib/title-from-filename'
 
 export const MAX_IMPORT_PAGES = 2000
+/** Per-file unpacked byte limit for vault entries (shared across all vault readers). */
+export const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024
+/** Aggregate unpacked byte limit across all accepted vault entries. */
+export const MAX_IMPORT_TOTAL_BYTES = 100 * 1024 * 1024
+/** Maximum number of accepted image attachments (counted separately from Markdown pages). */
+export const MAX_IMPORT_IMAGE_COUNT = 1000
 
 export interface VaultEntry {
 	/** Vault-relative path with forward slashes, e.g. `guides/foo.md`. */
@@ -117,6 +123,8 @@ export async function readVaultZip (zipFile: File): Promise<VaultContent> {
 	const directories = new Set<string>()
 	const rawKeys = Object.keys(zip.files)
 	const allFileEntries = rawKeys.filter((k) => !zip.files[k].dir)
+	let totalBytes = 0
+	let imageCount = 0
 
 	for (const rawPath of rawKeys) {
 		const path = normalizePath(rawPath)
@@ -134,7 +142,33 @@ export async function readVaultZip (zipFile: File): Promise<VaultContent> {
 		}
 		if (isSkipped(path)) continue
 		if (!isMarkdown(path) && !isImage(path)) continue
+		const isImg = isImage(path)
+		// Validate against reported uncompressed size before decompressing to avoid zip-bomb OOM.
+		const maybeData: unknown = (entry as unknown as { _data?: { uncompressedSize?: number } })._data
+		const reportedSize =
+			maybeData && typeof (maybeData as { uncompressedSize?: unknown }).uncompressedSize === 'number'
+				? (maybeData as { uncompressedSize: number }).uncompressedSize
+				: undefined
+		if (reportedSize !== undefined) {
+			if (reportedSize > MAX_IMPORT_FILE_BYTES) {
+				throw new Error(`File "${path}" exceeds per-file limit of ${MAX_IMPORT_FILE_BYTES} bytes.`)
+			}
+			if (totalBytes + reportedSize > MAX_IMPORT_TOTAL_BYTES) {
+				throw new Error(`Vault exceeds total unpacked size limit of ${MAX_IMPORT_TOTAL_BYTES} bytes.`)
+			}
+		}
+		if (isImg && imageCount + 1 > MAX_IMPORT_IMAGE_COUNT) {
+			throw new Error(`Vault exceeds maximum number of image attachments (${MAX_IMPORT_IMAGE_COUNT}).`)
+		}
 		const data = await entry.async('uint8array')
+		if (data.length > MAX_IMPORT_FILE_BYTES) {
+			throw new Error(`File "${path}" exceeds per-file limit of ${MAX_IMPORT_FILE_BYTES} bytes.`)
+		}
+		if (totalBytes + data.length > MAX_IMPORT_TOTAL_BYTES) {
+			throw new Error(`Vault exceeds total unpacked size limit of ${MAX_IMPORT_TOTAL_BYTES} bytes.`)
+		}
+		totalBytes += data.length
+		if (isImg) imageCount += 1
 		files.push({ path, data })
 		for (const dir of ancestorDirs(path)) directories.add(dir)
 	}
@@ -150,6 +184,8 @@ export async function readVaultZip (zipFile: File): Promise<VaultContent> {
 export async function readVaultFiles (files: File[]): Promise<VaultContent> {
 	const entries: VaultEntry[] = []
 	const directories = new Set<string>()
+	let totalBytes = 0
+	let imageCount = 0
 
 	for (const file of files) {
 		const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath ?? file.name
@@ -157,7 +193,25 @@ export async function readVaultFiles (files: File[]): Promise<VaultContent> {
 		if (!path) continue
 		if (isSkipped(path)) continue
 		if (!isMarkdown(path) && !isImage(path)) continue
+		const isImg = isImage(path)
+		if (file.size > MAX_IMPORT_FILE_BYTES) {
+			throw new Error(`File "${path}" exceeds per-file limit of ${MAX_IMPORT_FILE_BYTES} bytes.`)
+		}
+		if (totalBytes + file.size > MAX_IMPORT_TOTAL_BYTES) {
+			throw new Error(`Vault exceeds total unpacked size limit of ${MAX_IMPORT_TOTAL_BYTES} bytes.`)
+		}
+		if (isImg && imageCount + 1 > MAX_IMPORT_IMAGE_COUNT) {
+			throw new Error(`Vault exceeds maximum number of image attachments (${MAX_IMPORT_IMAGE_COUNT}).`)
+		}
 		const data = await fileToUint8Array(file)
+		if (data.length > MAX_IMPORT_FILE_BYTES) {
+			throw new Error(`File "${path}" exceeds per-file limit of ${MAX_IMPORT_FILE_BYTES} bytes.`)
+		}
+		if (totalBytes + data.length > MAX_IMPORT_TOTAL_BYTES) {
+			throw new Error(`Vault exceeds total unpacked size limit of ${MAX_IMPORT_TOTAL_BYTES} bytes.`)
+		}
+		totalBytes += data.length
+		if (isImg) imageCount += 1
 		entries.push({ path, data })
 		for (const dir of ancestorDirs(path)) directories.add(dir)
 	}
@@ -172,6 +226,8 @@ export async function readVaultFiles (files: File[]): Promise<VaultContent> {
 export async function readVaultDirectory (handle: VaultDirectoryHandle): Promise<VaultContent> {
 	const files: VaultEntry[] = []
 	const directories = new Set<string>()
+	let totalBytes = 0
+	let imageCount = 0
 
 	async function walk (dir: VaultDirectoryHandle, prefix: string): Promise<void> {
 		for await (const entry of dir.values()) {
@@ -183,8 +239,27 @@ export async function readVaultDirectory (handle: VaultDirectoryHandle): Promise
 			} else {
 				if (isSkipped(path)) continue
 				if (!isMarkdown(path) && !isImage(path)) continue
+				const isImg = isImage(path)
 				const file = await entry.getFile()
-				files.push({ path, data: await fileToUint8Array(file) })
+				if (file.size > MAX_IMPORT_FILE_BYTES) {
+					throw new Error(`File "${path}" exceeds per-file limit of ${MAX_IMPORT_FILE_BYTES} bytes.`)
+				}
+				if (totalBytes + file.size > MAX_IMPORT_TOTAL_BYTES) {
+					throw new Error(`Vault exceeds total unpacked size limit of ${MAX_IMPORT_TOTAL_BYTES} bytes.`)
+				}
+				if (isImg && imageCount + 1 > MAX_IMPORT_IMAGE_COUNT) {
+					throw new Error(`Vault exceeds maximum number of image attachments (${MAX_IMPORT_IMAGE_COUNT}).`)
+				}
+				const data = await fileToUint8Array(file)
+				if (data.length > MAX_IMPORT_FILE_BYTES) {
+					throw new Error(`File "${path}" exceeds per-file limit of ${MAX_IMPORT_FILE_BYTES} bytes.`)
+				}
+				if (totalBytes + data.length > MAX_IMPORT_TOTAL_BYTES) {
+					throw new Error(`Vault exceeds total unpacked size limit of ${MAX_IMPORT_TOTAL_BYTES} bytes.`)
+				}
+				totalBytes += data.length
+				if (isImg) imageCount += 1
+				files.push({ path, data })
 			}
 		}
 	}
