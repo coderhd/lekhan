@@ -35,6 +35,15 @@ describe('readVaultZip', () => {
 		const vault = await readVaultZip(await fixtureZip())
 		expect(vault.directories.sort()).toEqual(['emptyfolder', 'guides'])
 	})
+
+	it('records the full ancestor chain for nested files', async () => {
+		const zip = new JSZip()
+		zip.file('guides/notes/deep/foo.md', '# Foo\n')
+		zip.file('guides/notes/deep/img.png', new Uint8Array([1]))
+		const blob = await zip.generateAsync({ type: 'blob' })
+		const vault = await readVaultZip(new File([blob], 'vault.zip', { type: 'application/zip' }))
+		expect(vault.directories.sort()).toEqual(['guides', 'guides/notes', 'guides/notes/deep'])
+	})
 })
 
 describe('readVaultFiles (webkitdirectory)', () => {
@@ -49,5 +58,14 @@ describe('readVaultFiles (webkitdirectory)', () => {
 		const vault = await readVaultFiles(files)
 		expect(vault.files.map((f) => f.path).sort()).toEqual(['guides/a.md', 'root.md'])
 		expect(vault.directories).toEqual(['guides'])
+	})
+
+	it('records the full ancestor chain for nested files', async () => {
+		const makeFile = (rel: string, name: string) =>
+			Object.assign(new File([name], name), { webkitRelativePath: rel })
+		const vault = await readVaultFiles([
+			makeFile('vault/guides/notes/deep/foo.md', 'foo.md'),
+		])
+		expect(vault.directories.sort()).toEqual(['guides', 'guides/notes', 'guides/notes/deep'])
 	})
 })

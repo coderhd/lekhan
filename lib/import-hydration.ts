@@ -14,7 +14,10 @@ export function fitLiveSchema(content: JSONContent): JSONContent {
 		// Trailing empty paragraphs are artifacts of the body's final newline —
 		// the TrailingNode extension already appends the editor's own empty slot.
 		if (index !== all.length - 1 || node.type !== 'paragraph') return true
-		const text = (node.content ?? []).map(child => ('text' in child ? child.text ?? '' : '')).join('')
+		const children = node.content ?? []
+		if (children.length === 0) return false
+		if (children.some((child) => child.type !== 'text')) return true
+		const text = children.map((child) => ('text' in child ? (child.text ?? '') : '')).join('')
 		return text.trim() !== ''
 	})
 	const startsWithHeading = nodes.length > 0 && nodes[0].type === 'heading'

@@ -5,7 +5,7 @@ import Collaboration from '@tiptap/extension-collaboration'
 import * as Y from 'yjs'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 import { readVaultZip } from '@/services/obsidian-import'
-import { importObsidianVault } from '@/services/obsidian-import'
+import { importObsidianVault, type ObsidianImportPage } from '@/services/obsidian-import'
 import { base64ToUint8Array } from '@/lib/yjs-seed'
 
 async function fixtureVault(): Promise<Parameters<typeof importObsidianVault>[0]> {
@@ -154,5 +154,62 @@ describe('importObsidianVault — report', () => {
 		expect(report.degradedBlocks).toBe(1) // ![[unknown.png]] → [[unknown.png]]
 		expect(ir.pages.filter((p) => !p.isFolder)).toHaveLength(report.pages)
 		expect(ir.pages.filter((p) => p.isFolder)).toHaveLength(report.folderPages)
+	})
+})
+
+describe('importObsidianVault — image embed resolution', () => {
+	async function imageVault(): Promise<Parameters<typeof importObsidianVault>[0]> {
+		const zip = new JSZip()
+		// Two images with the same basename in different folders (distinct bytes so
+		// their base64 encodings differ: [1] → AQ==, [2] → Ag==).
+		zip.file('a/logo.png', new Uint8Array([1]))
+		zip.file('b/logo.png', new Uint8Array([2]))
+		// Note in `a/` embedding by bare basename — should resolve to a/logo.png (note-relative).
+		zip.file('a/note.md', ['---', 'title: Note A', '---', '# Note A', '', '![[logo.png]]', ''].join('\n'))
+		// Note in `guides/` with no sibling logo — bare basename is ambiguous (two vault-wide matches), so it degrades.
+		zip.file('guides/note.md', ['---', 'title: Note G', '---', '# Note G', '', '![[logo.png]]', ''].join('\n'))
+		// Root note embedding by vault-relative path — should resolve exactly to a/logo.png.
+		zip.file('root.md', ['---', 'title: RootImg', '---', '# RootImg', '', '![[a/logo.png]]', ''].join('\n'))
+		const blob = await zip.generateAsync({ type: 'blob' })
+		return readVaultZip(new File([blob], 'vault.zip', { type: 'application/zip' }))
+	}
+
+	async function renderHtml(page: ObsidianImportPage): Promise<string> {
+		const fresh = new Y.Doc()
+		Y.applyUpdate(fresh, base64ToUint8Array(page.contentYjsBase64))
+		const editor = new Editor({
+			extensions: [...getSharedExtensions(), Collaboration.configure({ document: fresh })],
+		})
+		const html = editor.getHTML()
+		editor.destroy()
+		return html
+	}
+
+	it('resolves path-qualified embeds to the exact vault-relative image', async () => {
+		const vault = await imageVault()
+		const { ir } = importObsidianVault(vault, { workspaceId: 'ws-1', existingPageTitles: [] })
+		const root = ir.pages.find((p) => p.title === 'RootImg')!
+		const html = await renderHtml(root)
+		expect(html).toContain('data:image/png;base64,AQ==')
+		expect(html).not.toContain('data:image/png;base64,Ag==')
+	})
+
+	it('resolves note-relative embeds to the image in the same folder over a duplicate basename', async () => {
+		const vault = await imageVault()
+		const { ir } = importObsidianVault(vault, { workspaceId: 'ws-1', existingPageTitles: [] })
+		const noteA = ir.pages.find((p) => p.title === 'Note A')!
+		const html = await renderHtml(noteA)
+		expect(html).toContain('data:image/png;base64,AQ==')
+		expect(html).not.toContain('data:image/png;base64,Ag==')
+	})
+
+	it('degrades an ambiguous basename embed (no same-folder image) to a wikilink and reports it', async () => {
+		const vault = await imageVault()
+		const { ir, report } = importObsidianVault(vault, { workspaceId: 'ws-1', existingPageTitles: [] })
+		const noteG = ir.pages.find((p) => p.title === 'Note G')!
+		const html = await renderHtml(noteG)
+		expect(html).not.toContain('data:image/png;base64')
+		expect(noteG.plainText).toContain('[[logo.png]]')
+		expect(report.degradedBlocks).toBe(1)
 	})
 })

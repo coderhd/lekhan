@@ -51,6 +51,20 @@ function dirname (path: string): string {
 	return idx === -1 ? '' : path.slice(0, idx)
 }
 
+/**
+ * Every ancestor directory of a vault-relative path, shallow-first.
+ * `a/b/c.md` → `['a', 'a/b']`. Used so a kept file's complete parent chain
+ * becomes folder pages (the write stage builds the nested hierarchy from them).
+ */
+function ancestorDirs (path: string): string[] {
+	const segments = path.split('/')
+	const dirs: string[] = []
+	for (let i = 1; i < segments.length; i++) {
+		dirs.push(segments.slice(0, i).join('/'))
+	}
+	return dirs
+}
+
 function basename (path: string): string {
 	return path.split('/').pop() ?? path
 }
@@ -122,8 +136,7 @@ export async function readVaultZip (zipFile: File): Promise<VaultContent> {
 		if (!isMarkdown(path) && !isImage(path)) continue
 		const data = await entry.async('uint8array')
 		files.push({ path, data })
-		const dir = dirname(path)
-		if (dir) directories.add(dir)
+		for (const dir of ancestorDirs(path)) directories.add(dir)
 	}
 
 	return { files, directories: [...directories] }
@@ -146,8 +159,7 @@ export async function readVaultFiles (files: File[]): Promise<VaultContent> {
 		if (!isMarkdown(path) && !isImage(path)) continue
 		const data = await fileToUint8Array(file)
 		entries.push({ path, data })
-		const dir = dirname(path)
-		if (dir) directories.add(dir)
+		for (const dir of ancestorDirs(path)) directories.add(dir)
 	}
 
 	return { files: entries, directories: [...directories] }
@@ -165,6 +177,7 @@ export async function readVaultDirectory (handle: VaultDirectoryHandle): Promise
 		for await (const entry of dir.values()) {
 			const path = prefix ? `${prefix}/${entry.name}` : entry.name
 			if (entry.kind === 'directory') {
+				if (isSkipped(path)) continue
 				directories.add(path)
 				await walk(await entry.getDirectoryHandle!(), path)
 			} else {
@@ -257,20 +270,49 @@ function imageExtOf (name: string): string | null {
 	return m ? m[1].toLowerCase() : null
 }
 
+interface ImageIndex {
+	/** Lowercased vault-relative path → image file. */
+	byPath: Map<string, VaultEntry>
+	/** Lowercased basename → image files (may be ambiguous). */
+	byBasename: Map<string, VaultEntry[]>
+}
+
+/**
+ * Resolve an embed target (`![[...]]` inner text, alias/size stripped) to an
+ * image file for the note at `notePath`. Precedence mirrors Obsidian: exact
+ * vault-relative path, then the note's own folder, then a unique basename
+ * match. Duplicate basenames are ambiguous and resolve to nothing rather than
+ * an arbitrary file (the embed degrades to a wikilink and is reported).
+ */
+function resolveImage (target: string, notePath: string, index: ImageIndex): VaultEntry | null {
+	const lower = target.toLowerCase()
+	if (target.includes('/')) {
+		return index.byPath.get(lower) ?? null
+	}
+	const noteFolder = dirname(notePath)
+	if (noteFolder) {
+		const viaNote = index.byPath.get(`${noteFolder}/${target}`.toLowerCase())
+		if (viaNote) return viaNote
+	}
+	const candidates = index.byBasename.get(lower)
+	if (candidates && candidates.length === 1) return candidates[0]
+	return null
+}
+
 /**
  * Rewrite `![[...]]` embeds in a body before markdown parsing:
- * image embeds whose attachment exists in the vault become `![alt](data:image/...;base64,...)`
+ * image embeds that resolve to a vault attachment become `![alt](data:image/...;base64,...)`
  * markdown image syntax (parsed into a real image node); everything else degrades to a
  * `[[wikilink]]` and increments `degraded`.
  */
-function processEmbeds (body: string, imageIndex: Map<string, VaultEntry>, degraded: { count: number }): string {
+function processEmbeds (body: string, imageIndex: ImageIndex, notePath: string, degraded: { count: number }): string {
 	return body.replace(EMBED_RE, (whole, innerRaw: string) => {
 		const inner = innerRaw.trim()
 		const target = inner.split('|')[0].trim() // drop Obsidian size/alias suffix
 		const ext = imageExtOf(target)
-		const entry = imageIndex.get(target.toLowerCase())
-		if (ext && IMAGE_MIME[ext] && entry) {
-			const mime = IMAGE_MIME[ext]
+		const entry = ext && IMAGE_MIME[ext] ? resolveImage(target, notePath, imageIndex) : null
+		if (entry) {
+			const mime = IMAGE_MIME[ext!]
 			return `![${target}](data:${mime};base64,${uint8ArrayToBase64(entry.data)})`
 		}
 		degraded.count += 1
@@ -294,11 +336,17 @@ export function importObsidianVault (content: VaultContent, options: ObsidianImp
 	const folderPages: ObsidianImportPage[] = []
 	const degraded = { count: 0 }
 
-	// Index images by lowercase basename for embed resolution.
-	const imageIndex = new Map<string, VaultEntry>()
+	// Index image files for embed resolution: by vault-relative path and by
+	// basename (basename entries can be ambiguous — resolution guards against
+	// picking an arbitrary file when a name is duplicated across folders).
+	const imageIndex: ImageIndex = { byPath: new Map(), byBasename: new Map() }
 	for (const file of content.files) {
-		const name = file.path.split('/').pop() ?? file.path
-		imageIndex.set(name.toLowerCase(), file)
+		if (!isImage(file.path)) continue
+		imageIndex.byPath.set(file.path.toLowerCase(), file)
+		const base = basename(file.path).toLowerCase()
+		const list = imageIndex.byBasename.get(base) ?? []
+		list.push(file)
+		imageIndex.byBasename.set(base, list)
 	}
 
 	// Folder pages: every discovered directory, including empty ones, ordered
@@ -330,7 +378,7 @@ export function importObsidianVault (content: VaultContent, options: ObsidianImp
 			properties.tags = data.tags
 		}
 
-		const processedBody = processEmbeds(body, imageIndex, degraded)
+		const processedBody = processEmbeds(body, imageIndex, file.path, degraded)
 		const fitted = fitLiveSchema(parseMarkdown(processedBody))
 
 		notePages.push({
