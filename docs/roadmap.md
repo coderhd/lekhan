@@ -60,8 +60,8 @@ provider registry).
 
 | Epic | Issue | Tickets | Blocker edges | Delivery | Spec ref |
 |---|---|---|---|---|---|
-| H0 — Markdown Import/Export (full round-trip) | #26 | MI-T1 #56 (done) → MI-T2 #57 (done) → MI-T3 #58 (done) → MI-T4 #59 (frontier) | → H0 Obsidian Importer #27 (blocker) | #58 Aug 19 (done) · #59 Aug 20 · **epic Aug 20** | §13 · `docs/superpowers/specs/2026-08-14-h0-markdown-import-export-design.md` |
-| H0 — Obsidian Importer | #27 | OI-T1 #60 (frontier) → OI-T2 #61 → OI-T3 #62; OI-T4 #63 | ← #26; → H1 Notion importer #45 (blocker) | #60 Aug 21 · #61 Aug 22–23 · #62 Aug 24–25 · #63 Aug 26 · **epic Aug 26** | §13 · `docs/superpowers/specs/2026-08-14-h0-obsidian-importer-design.md` |
+| H0 — Markdown Import/Export (full round-trip) | #26 | MI-T1 #56 → MI-T2 #57 → MI-T3 #58 → MI-T4 #59 — **all done** | — | delivered Aug 20 · epic closed | §13 · `docs/superpowers/specs/2026-08-14-h0-markdown-import-export-design.md` |
+| H0 — Obsidian Importer | #27 | OI-T1 #60 (done) → OI-T2 #61 (done) → OI-T3 #62 (done, PR #80) → OI-T4 #63 (frontier) | → H1 Interop Bridge #78 / Notion importer #45 | #60 Aug 21 · #61 Aug 23 · #62 Aug 23 · #63 next · **epic ≈ Aug 26** | §13 · `docs/superpowers/specs/2026-08-14-h0-obsidian-importer-design.md` |
 
 ### Remaining `needs-spec` — provisional targets (spec first)
 
@@ -78,10 +78,10 @@ provider registry).
 | Ticket | Issue | Start | Target | Est. | Status |
 |---|---|---|---|---|---|
 | MI-T3 — MDX + HTML export | #58 | Aug 19 | Aug 19 | 6h | Done |
-| MI-T4 — Markdown import | #59 | Aug 20 | Aug 20 | 6h | Ready |
-| OI-T1 — Callout node | #60 | Aug 21 | Aug 21 | 6h | Ready |
-| OI-T2 — Vault ingestion → IR | #61 | Aug 22 | Aug 23 | 14h | Ready |
-| OI-T3 — /api/import route | #62 | Aug 24 | Aug 25 | 12h | Ready |
+| MI-T4 — Markdown import | #59 | Aug 20 | Aug 20 | 6h | Done |
+| OI-T1 — Callout node | #60 | Aug 21 | Aug 21 | 6h | Done |
+| OI-T2 — Vault ingestion → IR | #61 | Aug 22 | Aug 23 | 14h | Done |
+| OI-T3 — /api/import route | #62 | Aug 24 | Aug 25 | 12h | Done (early) |
 | OI-T4 — Import UX + report | #63 | Aug 26 | Aug 26 | 6h | Ready |
 
 **Also shipped:** #70 — mentions in `.md`/`.mdx` export (bug, PR #71), Aug 19.
