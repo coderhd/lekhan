@@ -105,17 +105,22 @@ user's own keys or machine, so it must be live before launch and unblocks H2 age
 | Epic | Issue | Blocker edges | Spec ref |
 |---|---|---|---|
 | H1 — Graph view + backlink pane | #38 | → H2 Databases #47 (blocker) | §4 |
+| H1 — Dual-Dialect Interop Bridge (Obsidian-native files + Notion-compatible content) | #78 | ← #27; subsumes the import half of #45 | `docs/superpowers/specs/…` (spec in issue body) |
 | H1 — Daily notes / quick capture / inbox | #39 | — | §4 |
 | H1 — Public pages + publish | #40 | ← #30 | §4 |
 | H1 — Comments + page mentions | #41 | — | §4 |
 | H1 — Templates | #42 | — | §4 |
 | H1 — Desktop app (Tauri) + mobile PWA | #43 | — | §4 |
 | H1 — Plugins API v1 + open-core release | #44 | → H2 Plugin marketplace #51 (blocker) | §8 |
-| H1 — Notion importer | #45 | ← #27 | §13 |
+| H1 — Notion importer | #45 | ← #27; import half absorbed into #78 | §13 |
 | H1 — Full docs (tutorials, plugin/API ref, migration guides) | #46 | ← #32, ← #31 | §12 |
 
 **Sequencing narrative:** H1 is where the PKM story deepens. Graph view (#38) is the
-headline feature and becomes the substrate H2 databases render over. Plugins API v1
+headline feature and becomes the substrate H2 databases render over. The Interop
+Bridge (#78) is the underdog wedge — Lekhan as the compatibility layer between the
+Obsidian and Notion dialects (import, one-click export both ways, clipboard fluency);
+it rides the #26/#27 import pipeline and absorbs the import half of the Notion
+importer (#45). Plugins API v1
 (#44) is the open-core unlock and unblocks the H2 marketplace. The Notion importer
 (#45) rides the H0 import pipeline. Full docs (#46) cannot be written until both the
 docs site (#32) and i18n (#31) exist.
