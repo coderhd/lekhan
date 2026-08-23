@@ -1,0 +1,104 @@
+{
+  "name": "Community Engagement Drafter (HITL)",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "hours", "hoursInterval": 12 }] } },
+      "id": "b1", "name": "Every 12h",
+      "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "YOUR_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "filtersUI": {
+          "values": [
+            { "lookupColumn": "status", "lookupValue": "pending" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2", "name": "Get pending leads",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.5,
+      "position": [220, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE", "name": "Sheets account" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=YOUR_LLM_ENDPOINT/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'REPLACE_MODEL', messages: [ { role: 'system', content: 'You are the growth voice of Lekhan, an open-source local-first collaborative knowledge workspace (Obsidian-style files + Notion-style collab, BYOK AI). Task: for the given community post, decide engagement. Rules: NEVER spam or hard-sell; be genuinely helpful first; if Lekhan fits, mention it honestly including limitations; always disclose you work on it when suggesting it. Return strict JSON: {\"relevant\": bool, \"score\": 0-10, \"intent\": string, \"draft_reply\": string|null, \"campaign_angle\": string|null, \"reasoning\": string}. Reply null draft if irrelevant or if helping without mentioning Lekhan is more appropriate.' }, { role: 'user', content: JSON.stringify({ title: $json.title, url: $json.link, snippet: ($json.content || '').slice(0, 1500) }) } ] }) }}",
+        "options": {}
+      },
+      "id": "b3", "name": "LLM classify + draft",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
+      "position": [440, 300],
+      "credentials": { "httpHeaderAuth": { "id": "REPLACE", "name": "LLM endpoint key" } }
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "YOUR_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('Get pending leads').item.json.row_number }}",
+            "ai_score": "={{ JSON.parse($json.choices[0].message.content).score }}",
+            "ai_intent": "={{ JSON.parse($json.choices[0].message.content).intent }}",
+            "ai_draft_reply": "={{ JSON.parse($json.choices[0].message.content).draft_reply || '' }}",
+            "campaign_angle": "={{ JSON.parse($json.choices[0].message.content).campaign_angle || '' }}",
+            "status": "=draft_review"
+          },
+          "matchingColumns": ["row_number"]
+        },
+        "options": {}
+      },
+      "id": "b4", "name": "Write drafts back",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.5,
+      "position": [660, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE", "name": "Sheets account" } }
+    },
+    {
+      "parameters": {
+        "operation": "aggregate",
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "id": "b5", "name": "Collect drafts",
+      "type": "n8n-nodes-base.aggregate", "typeVersion": 1,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "digest@lekhan.app",
+        "toEmail": "=YOUR_EMAIL",
+        "subject": "=HITL review: {{ $items().length }} drafted engagements awaiting approval",
+        "html": "=<p>Review in <a href=\"YOUR_SHEET_URL\">the sheet</a> (filter status=draft_review). Set status to <b>approved_reply</b> for replies you will post yourself (Reddit is ALWAYS manual), <b>approved_campaign</b> to fold into the next Brevo campaign, or <b>rejected</b>.</p>{{ $items().map(i => `<hr><p><a href=\"${i.json.link}\">${i.json.title}</a><br>score: ${i.json.ai_score} · intent: ${i.json.ai_intent}<br><blockquote>${i.json.ai_draft_reply}</blockquote></p>`).join('') }}",
+        "options": {}
+      },
+      "id": "b6", "name": "Approval digest email",
+      "type": "n8n-nodes-base.emailSend", "typeVersion": 2.1,
+      "position": [1100, 300],
+      "credentials": { "smtp": { "id": "REPLACE", "name": "SMTP" } }
+    },
+    {
+      "parameters": { "jsCode": "// Weekly Brevo campaign drafter\n// Reads sheet rows where status=approved_campaign, groups campaign_angle\n// themes, and creates a DRAFT campaign in Brevo for human send.\n// Brevo API: POST https://api.brevo.com/v3/emailCampaigns  (header: api-key)\n// Set status:'draft' so sending happens ONLY from the Brevo UI.\nreturn [];" },
+      "id": "b7", "name": "(Placeholder) Brevo draft campaign",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [1320, 300]
+    }
+  ],
+  "connections": {
+    "Every 12h": { "main": [[{ "node": "Get pending leads", "type": "main", "index": 0 }]] },
+    "Get pending leads": { "main": [[{ "node": "LLM classify + draft", "type": "main", "index": 0 }]] },
+    "LLM classify + draft": { "main": [[{ "node": "Write drafts back", "type": "main", "index": 0 }]] },
+    "Write drafts back": { "main": [[{ "node": "Collect drafts", "type": "main", "index": 0 }]] },
+    "Collect drafts": { "main": [[{ "node": "Approval digest email", "type": "main", "index": 0 }]] },
+    "Approval digest email": { "main": [[{ "node": "(Placeholder) Brevo draft campaign", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

@@ -1,0 +1,83 @@
+{
+  "name": "Content Studio (HITL multi-platform)",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "weeks", "weeksInterval": 1 }] } },
+      "id": "c1", "name": "Weekly trigger",
+      "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "documentId": { "__rl": true, "value": "YOUR_CALENDAR_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Ideas", "mode": "name" },
+        "filtersUI": { "values": [{ "lookupColumn": "status", "lookupValue": "idea" }] },
+        "options": {}
+      },
+      "id": "c2", "name": "Get idea seeds",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.5,
+      "position": [220, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE", "name": "Sheets" } }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=YOUR_LLM_ENDPOINT/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'REPLACE_MODEL', messages: [ { role: 'system', content: 'You are the marketing voice of Lekhan: a local-first collaborative knowledge workspace (Obsidian-style files, Notion-style real-time collaboration, AI on the users own keys/BYOK). Adapt ONE seed idea into platform-native posts for X, LinkedIn, Instagram caption. Voice rules — X: max 240 chars, punchy, one idea, optional 1-2 hashtags max, hook first line. LinkedIn: 120-200 words, narrative, founder voice, line breaks every sentence, no hashtag soup (max 3), end with a question or early-access CTA. Instagram: 80-120 word caption, sensory/vibe language, emoji ok, CTA to bio link. NEVER invent metrics, dates, quotes, or user counts. Never use the words game-changer, revolutionary, seamless, supercharge. Every post ends pointing to the early-access link https://lekhan.app/early unless the post is pure education. Return strict JSON: {\"x\": string, \"linkedin\": string, \"instagram\": string, \"visual_brief\": string}. visual_brief = what screenshot/reel to capture.' }, { role: 'user', content: JSON.stringify($json) } ] }) }}",
+        "options": {}
+      },
+      "id": "c3", "name": "LLM adapt per platform",
+      "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
+      "position": [440, 300],
+      "credentials": { "httpHeaderAuth": { "id": "REPLACE", "name": "LLM key" } }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fan out: one item per platform\nconst parsed = JSON.parse($input.first().json.choices[0].message.content);\nconst platforms = ['x', 'linkedin', 'instagram'];\nreturn platforms.map(p => ({ json: { platform: p, body: parsed[p], visual_brief: parsed.visual_brief } }));"
+      },
+      "id": "c4", "name": "Split platforms",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "YOUR_CALENDAR_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Queue", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "platform": "={{ $json.platform }}",
+            "body": "={{ $json.body }}",
+            "visual_brief": "={{ $json.visual_brief }}",
+            "status": "draft"
+          }
+        },
+        "options": {}
+      },
+      "id": "c5", "name": "Append to Queue",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.5,
+      "position": [880, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE", "name": "Sheets" } }
+    },
+    {
+      "parameters": { "jsCode": "// After approval (status=approved in Queue sheet), compile a weekly\n// package email: copy-paste blocks grouped by platform + posting calendar\n// suggestion. Human schedules via native tools (X/LinkedIn/Meta Suite).\nreturn [];" },
+      "id": "c6", "name": "(Placeholder) Weekly package",
+      "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [1100, 300]
+    }
+  ],
+  "connections": {
+    "Weekly trigger": { "main": [[{ "node": "Get idea seeds", "type": "main", "index": 0 }]] },
+    "Get idea seeds": { "main": [[{ "node": "LLM adapt per platform", "type": "main", "index": 0 }]] },
+    "LLM adapt per platform": { "main": [[{ "node": "Split platforms", "type": "main", "index": 0 }]] },
+    "Split platforms": { "main": [[{ "node": "Append to Queue", "type": "main", "index": 0 }]] },
+    "Append to Queue": { "main": [[{ "node": "(Placeholder) Weekly package", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

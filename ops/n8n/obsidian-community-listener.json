@@ -1,0 +1,108 @@
+{
+  "name": "Obsidian Community Listener",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "hours", "hoursInterval": 6 }] } },
+      "id": "a1", "name": "Every 6h",
+      "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": { "url": "https://www.reddit.com/r/ObsidianMD/new/.rss", "options": {} },
+      "id": "a2", "name": "r/ObsidianMD",
+      "type": "n8n-nodes-base.rssFeedRead", "typeVersion": 1.1,
+      "position": [220, 140]
+    },
+    {
+      "parameters": { "url": "https://www.reddit.com/r/PKMS/new/.rss", "options": {} },
+      "id": "a3", "name": "r/PKMS",
+      "type": "n8n-nodes-base.rssFeedRead", "typeVersion": 1.1,
+      "position": [220, 320]
+    },
+    {
+      "parameters": { "url": "https://www.reddit.com/r/Notion/new/.rss", "options": {} },
+      "id": "a4", "name": "r/Notion",
+      "type": "n8n-nodes-base.rssFeedRead", "typeVersion": 1.1,
+      "position": [220, 500]
+    },
+    {
+      "parameters": { "numberInputs": 3 },
+      "id": "a5", "name": "Merge feeds",
+      "type": "n8n-nodes-base.merge", "typeVersion": 3,
+      "position": [460, 320]
+    },
+    {
+      "parameters": {
+        "operation": "removeDuplicates",
+        "compare": "allFieldsEquals",
+        "options": { "dedupeValue": "={{ $json.id || $json.link }}" }
+      },
+      "id": "a6", "name": "Dedupe posts",
+      "type": "n8n-nodes-base.removeDuplicates", "typeVersion": 2,
+      "position": [680, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "version": 2 },
+          "combinator": "or",
+          "conditions": [
+            { "leftValue": "={{ $json.title }}", "rightValue": "collab|collaborat|real.?time|multiplayer", "operator": { "type": "string", "operation": "regex" } },
+            { "leftValue": "={{ $json.title }}", "rightValue": "\\bsync\\b|migrat|switch(ing)? (from|to)|import", "operator": { "type": "string", "operation": "regex" } },
+            { "leftValue": "={{ $json.title }}", "rightValue": "notion.{0,20}(alternative|export|move)|obsidian.{0,20}(notion|collab|sync)", "operator": { "type": "string", "operation": "regex" } },
+            { "leftValue": "={{ $json.title }}", "rightValue": "\\bAI\\b|local llm|ollama|byok|privacy|encrypt", "operator": { "type": "string", "operation": "regex" } },
+            { "leftValue": "={{ $json.title }}", "right": "", "rightValue": "publish|public pages|backlink|graph view", "operator": { "type": "string", "operation": "regex" } }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a7", "name": "Intent filter",
+      "type": "n8n-nodes-base.if", "typeVersion": 2.2,
+      "position": [900, 320]
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "YOUR_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Leads", "mode": "name" },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": []
+        },
+        "options": {}
+      },
+      "id": "a8", "name": "Append to review sheet",
+      "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.5,
+      "position": [1140, 220],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "REPLACE", "name": "Sheets account" } }
+    },
+    {
+      "parameters": {
+        "fromEmail": "digest@lekhan.app",
+        "toEmail": "=YOUR_EMAIL",
+        "subject": "=Lekhan growth: {{ $items().length }} qualified community posts",
+        "html": "<p>{{ $items().length }} new qualified posts.</p>{{ $items().map(i => `<li><a href=\"${i.json.link}\">${i.json.title}</a> — ${i.json.pubDate || ''}</li>`).join('') }}",
+        "options": {}
+      },
+      "id": "a9", "name": "Email digest",
+      "type": "n8n-nodes-base.emailSend", "typeVersion": 2.1,
+      "position": [1140, 420],
+      "credentials": { "smtp": { "id": "REPLACE", "name": "SMTP" } }
+    }
+  ],
+  "connections": {
+    "Every 6h": { "main": [[{ "node": "r/ObsidianMD", "type": "main", "index": 0 }]] },
+    "r/ObsidianMD": { "main": [[{ "node": "Merge feeds", "type": "main", "index": 0 }]] },
+    "r/PKMS": { "main": [[{ "node": "Merge feeds", "type": "main", "index": 1 }]] },
+    "r/Notion": { "main": [[{ "node": "Merge feeds", "type": "main", "index": 2 }]] },
+    "Merge feeds": { "main": [[{ "node": "Dedupe posts", "type": "main", "index": 0 }]] },
+    "Dedupe posts": { "main": [[{ "node": "Intent filter", "type": "main", "index": 0 }]] },
+    "Intent filter": {
+      "main": [
+        [{ "node": "Append to review sheet", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Append to review sheet": { "main": [[{ "node": "Email digest", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
