@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { extractLinks, extractTags, normalizeTitle, getWorkspaceForPage, indexPage } from '../../server/graph-index'
+import { extractLinks, extractTags, normalizeTitle, getWorkspaceForPage, indexPage, indexPages } from '../../server/graph-index'
 
 describe('extractLinks', () => {
 	it('extracts plain wikilinks', () => {
@@ -286,5 +286,68 @@ describe('indexPage', () => {
 			rpc: vi.fn(async () => ({ data: null, error: { message: 'sync failed' } })),
 		}
 		await expect(indexPage(admin, 'page-1', 'text')).rejects.toMatchObject({ message: 'sync failed' })
+	})
+})
+
+describe('indexPages', () => {
+	function makeAdmin(opts: { pagesRows?: unknown[]; workspacePages?: unknown[]; rpcError?: unknown }) {
+		const fromCalls: string[] = []
+		const admin: any = {
+			from: vi.fn((table: string) => {
+				fromCalls.push(table)
+				return {
+					select: vi.fn(() => ({
+						in: vi.fn(async () => ({ data: opts.pagesRows ?? [], error: null })),
+						eq: vi.fn(async () => ({ data: opts.workspacePages ?? [], error: null })),
+					})),
+				}
+			}),
+			rpc: vi.fn(async () => (opts.rpcError ? { data: null, error: opts.rpcError } : { data: { links: 1, tags: 1 }, error: null })),
+		}
+		return { admin, fromCalls }
+	}
+
+	it('resolves links against one title index for the whole batch', async () => {
+		const { admin, fromCalls } = makeAdmin({
+			pagesRows: [
+				{ id: 'p1', workspace_id: 'ws-1', properties: {} },
+				{ id: 'p2', workspace_id: 'ws-1', properties: {} },
+			],
+			workspacePages: [{ id: 'p2', title: 'Target' }],
+		})
+
+		const result = await indexPages(admin, [
+			{ pageId: 'p1', plainText: 'see [[Target]]' },
+			{ pageId: 'p2', plainText: 'no links' },
+		])
+
+		expect(result.indexed).toEqual(['p1', 'p2'])
+		expect(result.errors).toEqual([])
+		// One page-rows fetch + ONE workspace fetch for both pages.
+		expect(fromCalls.filter((_, i) => i > 0)).toHaveLength(1)
+	})
+
+	it('isolates per-page failures without failing the batch', async () => {
+		let rpcCalls = 0
+		const { admin } = makeAdmin({
+			pagesRows: [
+				{ id: 'p1', workspace_id: 'ws-1', properties: {} },
+				{ id: 'bad', workspace_id: 'ws-1', properties: {} },
+			],
+			workspacePages: [],
+		})
+		admin.rpc = vi.fn(async () => {
+			rpcCalls++
+			if (rpcCalls === 2) return { data: null, error: { message: 'sync exploded' } }
+			return { data: { links: 0, tags: 0 }, error: null }
+		})
+
+		const result = await indexPages(admin, [
+			{ pageId: 'p1', plainText: 'a [[B]]' },
+			{ pageId: 'bad', plainText: 'c' },
+		])
+
+		expect(result.indexed).toEqual(['p1'])
+		expect(result.errors).toEqual([{ pageId: 'bad', error: 'sync exploded' }])
 	})
 })
