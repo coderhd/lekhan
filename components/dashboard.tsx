@@ -16,6 +16,7 @@ import { Check } from 'lucide-react'
 import { InlineEdit } from '@/components/inline-edit'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { ImportDialog } from '@/components/import-dialog'
 
 interface DashboardProps {
 	user: {
@@ -156,7 +157,7 @@ export default function Dashboard({ user }: DashboardProps) {
 		}
 	}
 
-	const importFileInputRef = useRef<HTMLInputElement>(null)
+	const [importDialogOpen, setImportDialogOpen] = useState(false)
 
 	const handleImportMarkdown = async (file: File) => {
 		if (!file.name.toLowerCase().match(/\.(md|markdown|mdown|txt)$/)) {
@@ -269,18 +270,17 @@ export default function Dashboard({ user }: DashboardProps) {
 
 	return (
 		<div className="min-h-screen bg-background text-on-surface">
-			<input
-				ref={importFileInputRef}
-				type="file"
-				accept=".md,.markdown,.mdown,.txt"
-				className="hidden"
-				onChange={(e) => {
-					const file = e.target.files?.[0]
-					e.target.value = ''
-					if (file) {
-						handleImportMarkdown(file)
-					}
-				}}
+			<ImportDialog
+				open={importDialogOpen}
+				onOpenChange={setImportDialogOpen}
+				getWorkspace={async () => await ensureWorkspace(user.id)}
+				existingPageTitles={[
+					...myPages.map(page => page.title),
+					...sharedPages.map(item => item.pages.title),
+				]}
+				onMarkdownFile={(file) => handleImportMarkdown(file)}
+				onOpenPage={(pageId) => router.push(`/page/${pageId}`)}
+				onImportComplete={() => fetchPages()}
 			/>
 			<GlobalHeaderSlot slot="right">
 				<div className="flex items-center gap-md">
@@ -367,7 +367,7 @@ export default function Dashboard({ user }: DashboardProps) {
 										<span className="material-symbols-outlined">add</span>
 										Create
 									</button>
-									<button onClick={() => importFileInputRef.current?.click()} className="flex items-center gap-sm bg-surface-container text-on-surface font-bold px-xl py-3 rounded-lg hover:bg-surface-container-high hover:shadow-md premium-transition">
+									<button onClick={() => setImportDialogOpen(true)} className="flex items-center gap-sm bg-surface-container text-on-surface font-bold px-xl py-3 rounded-lg hover:bg-surface-container-high hover:shadow-md premium-transition">
 										<span className="material-symbols-outlined">upload_file</span>
 										Import
 									</button>
@@ -461,7 +461,7 @@ export default function Dashboard({ user }: DashboardProps) {
 											<span className="material-symbols-outlined">add</span>
 											New
 										</button>
-										<button onClick={() => importFileInputRef.current?.click()} className="hidden md:flex items-center gap-sm bg-surface-container text-on-surface font-bold px-lg py-2 rounded-lg hover:bg-surface-container-high hover:shadow-md premium-transition ml-2">
+										<button onClick={() => setImportDialogOpen(true)} className="hidden md:flex items-center gap-sm bg-surface-container text-on-surface font-bold px-lg py-2 rounded-lg hover:bg-surface-container-high hover:shadow-md premium-transition ml-2">
 											<span className="material-symbols-outlined">upload_file</span>
 											Import
 										</button>
@@ -648,7 +648,7 @@ export default function Dashboard({ user }: DashboardProps) {
 			</main>
 
 			{/* FABs for mobile */}
-			<button onClick={() => importFileInputRef.current?.click()} className="md:hidden fixed bottom-24 right-8 z-[100] w-14 h-14 bg-surface-container text-on-surface rounded-full shadow-2xl border border-black/10 dark:border-white/10 flex items-center justify-center active:scale-90 premium-transition" title="Import Markdown">
+			<button onClick={() => setImportDialogOpen(true)} className="md:hidden fixed bottom-24 right-8 z-[100] w-14 h-14 bg-surface-container text-on-surface rounded-full shadow-2xl border border-black/10 dark:border-white/10 flex items-center justify-center active:scale-90 premium-transition" title="Import">
 				<span className="material-symbols-outlined text-3xl">upload_file</span>
 			</button>
 			<button onClick={handleCreatePage} className="md:hidden fixed bottom-8 right-8 z-[100] w-14 h-14 shimmer-btn animate-shimmer text-on-primary-container rounded-full shadow-2xl flex items-center justify-center active:scale-90 premium-transition">
