@@ -61,7 +61,7 @@ provider registry).
 | Epic | Issue | Tickets | Blocker edges | Delivery | Spec ref |
 |---|---|---|---|---|---|
 | H0 — Markdown Import/Export (full round-trip) | #26 | MI-T1 #56 → MI-T2 #57 → MI-T3 #58 → MI-T4 #59 — **all done** | — | delivered Aug 20 · epic closed | §13 · `docs/superpowers/specs/2026-08-14-h0-markdown-import-export-design.md` |
-| H0 — Obsidian Importer | #27 | OI-T1 #60 (done) → OI-T2 #61 (done) → OI-T3 #62 (done, PR #80) → OI-T4 #63 (frontier) | → H1 Interop Bridge #78 / Notion importer #45 | #60 Aug 21 · #61 Aug 23 · #62 Aug 23 · #63 next · **epic ≈ Aug 26** | §13 · `docs/superpowers/specs/2026-08-14-h0-obsidian-importer-design.md` |
+| H0 — Obsidian Importer | #27 | OI-T1–T4 all done (#60, #61, #62/#80, #63/PR #86) | — | delivered Aug 24 · epic closed · pipeline feeds #78 | §13 · `docs/superpowers/specs/2026-08-14-h0-obsidian-importer-design.md` |
 
 ### Remaining `needs-spec` — provisional targets (spec first)
 
@@ -112,7 +112,7 @@ user's own keys or machine, so it must be live before launch and unblocks H2 age
 | H1 — Templates | #42 | — | §4 |
 | H1 — Desktop app (Tauri) + mobile PWA | #43 | — | §4 |
 | H1 — Plugins API v1 + open-core release | #44 | → H2 Plugin marketplace #51 (blocker) | §8 |
-| H1 — Notion importer | #45 | ← #27; import half absorbed into #78 | §13 |
+| H1 — Notion importer | #45 | ← #87 (idempotent imports); import half absorbed into #78 | §13 + #78 constraints |
 | H1 — Full docs (tutorials, plugin/API ref, migration guides) | #46 | ← #32, ← #31 | §12 |
 
 **Sequencing narrative:** H1 is where the PKM story deepens. Graph view (#38) is the
