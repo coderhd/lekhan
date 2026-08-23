@@ -49,7 +49,7 @@ export default function Dashboard({ user }: DashboardProps) {
 	const [myPagesScrollState, setMyPagesScrollState] = useState({ left: false, right: false })
 	const [sharedPagesScrollState, setSharedPagesScrollState] = useState({ left: false, right: false })
 
-	const scrollContainer = (ref: React.RefObject<HTMLDivElement>, direction: 'left' | 'right') => {
+	const scrollContainer = (ref: React.RefObject<HTMLDivElement | null>, direction: 'left' | 'right') => {
 		if (ref.current) {
 			const scrollAmount = ref.current.clientWidth * 0.8
 			ref.current.scrollBy({ left: direction === 'left' ? -scrollAmount : scrollAmount, behavior: 'smooth' })
