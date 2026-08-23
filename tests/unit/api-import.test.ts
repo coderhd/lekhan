@@ -2,14 +2,29 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const indexPageMock = vi.hoisted(() => vi.fn())
+const indexPagesMock = vi.hoisted(() => vi.fn(async (_admin: unknown, items?: Array<{ pageId: string }>) => ({
+	indexed: (items ?? []).map(item => item.pageId),
+	errors: [] as Array<{ pageId: string; error: string }>,
+})))
 const normalizeTitleMock = vi.hoisted(() => (title: string) =>
 	String(title || '').toLowerCase().replace(/\s+/g, ' ').trim()
 )
 
-// Mock the CJS graph-index seam: tests assert indexPage calls, not extraction.
+// Mock the CJS graph-index seam: tests assert the bulk indexing call, not
+// extraction logic (covered by graph-index.test.ts).
 vi.mock('../../server/graph-index.js', () => ({
-	default: { normalizeTitle: normalizeTitleMock, indexPage: indexPageMock },
+	default: { normalizeTitle: normalizeTitleMock, indexPage: indexPageMock, indexPages: indexPagesMock },
 }))
+
+// Partially mock request-limits so the 413 path can be triggered without
+// shipping a multi-megabyte body.
+vi.mock('@/lib/request-limits', async importOriginal => {
+	const actual = await importOriginal<typeof import('@/lib/request-limits')>()
+	return {
+		...actual,
+		readJsonWithLimit: vi.fn(actual.readJsonWithLimit),
+	}
+})
 
 // ---------------------------------------------------------------------------
 // Supabase admin double
@@ -17,7 +32,7 @@ vi.mock('../../server/graph-index.js', () => ({
 
 interface AdminOptions {
 	workspaceOwner?: string | null
-	existingPages?: Array<{ id: string; title: string; parent_id: string | null }>
+	existingPages?: Array<{ id: string; title: string; parent_id: string | null; properties?: Record<string, unknown> }>
 	folderIds?: string[]
 	uploadError?: Error | null
 }
@@ -116,19 +131,32 @@ const h = vi.hoisted(() => {
 	const defaultCaller = {
 		auth: { getUser: async () => ({ data: { user: { id: 'owner-1' } as null | { id: string } }, error: null }) },
 	}
+	const notConfigured = () => {
+		throw new Error('admin client not configured for this test')
+	}
+	const defaultAdmin = {
+		from: notConfigured,
+		storage: { from: notConfigured },
+		auth: { getUser: async () => ({ data: { user: null }, error: null }) },
+	}
 	return {
 		count: 0,
 		adminClient: null as object | null,
 		callerClient: null as object | null,
 		defaultCaller,
+		defaultAdmin: defaultAdmin as object,
 	}
 })
 
+// Parity dispatch: within one request the route's first createClient call is
+// the caller-scoped client and the second is supabaseAdmin. Odd/even call
+// counts keep this correct across multiple requests in a single test.
 vi.mock('@supabase/supabase-js', () => ({
 	createClient: () => {
 		h.count += 1
-		if (h.count === 1) return h.callerClient ?? h.defaultCaller
-		return h.adminClient ?? h.defaultCaller
+		return h.count % 2 === 1
+			? h.callerClient ?? h.defaultCaller
+			: h.adminClient ?? h.defaultAdmin
 	},
 }))
 
@@ -164,6 +192,11 @@ describe('API Route: POST /api/import', () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		indexPageMock.mockResolvedValue({ links: 0, tags: 0 })
+		indexPagesMock.mockReset()
+		indexPagesMock.mockImplementation(async (_admin: unknown, items?: Array<{ pageId: string }>) => ({
+			indexed: (items ?? []).map(item => item.pageId),
+			errors: [] as Array<{ pageId: string; error: string }>,
+		}))
 		h.count = 0
 		h.adminClient = null
 		h.callerClient = null
@@ -211,6 +244,38 @@ describe('API Route: POST /api/import', () => {
 		expect(res.status).toBe(413)
 	})
 
+	it('returns 413 when the body itself crosses the payload limit', async () => {
+		const { readJsonWithLimit, PayloadTooLargeError } = await import('@/lib/request-limits')
+		vi.mocked(readJsonWithLimit).mockRejectedValueOnce(new PayloadTooLargeError(64 * 1024 * 1024))
+		try {
+			const POST = await loadRoute()
+			const res = await POST(makeRequest({ workspaceId: 'ws1', pages: [validPage] }))
+			expect(res.status).toBe(413)
+		} finally {
+			vi.mocked(readJsonWithLimit).mockClear()
+		}
+	})
+
+	it('returns 400 when the batch exceeds MAX_IMPORT_PAGES', async () => {
+		const POST = await loadRoute()
+		const pages = Array.from({ length: 2001 }, (_, i) => ({
+			...validPage,
+			title: `page-${i}`,
+		}))
+		const res = await POST(makeRequest({ workspaceId: 'ws1', pages }))
+		expect(res.status).toBe(400)
+		const data = await res.json()
+		expect(data.error).toMatch(/2000/)
+	})
+
+	it('returns 404 when the target workspace does not exist', async () => {
+		clients = makeAdminClient({ workspaceOwner: undefined })
+		h.adminClient = clients.admin
+		const POST = await loadRoute()
+		const res = await POST(makeRequest({ workspaceId: 'missing-ws', pages: [validPage] }))
+		expect(res.status).toBe(404)
+	})
+
 	it('rejects non-owner callers via trusted service-role lookup', async () => {
 		clients = makeAdminClient({ workspaceOwner: 'someone-else' })
 		h.adminClient = clients.admin
@@ -224,9 +289,15 @@ describe('API Route: POST /api/import', () => {
 	it('creates folder chains once, uploads snapshots, and indexes every leaf', async () => {
 		clients = makeAdminClient({
 			workspaceOwner: 'owner-1',
-			existingPages: [{ id: 'existing-guides', title: 'Guides', parent_id: null }],
+			existingPages: [{
+				id: 'existing-guides',
+				title: 'Guides',
+				parent_id: null,
+				properties: { importFolder: true },
+			}],
 		})
 		h.adminClient = clients.admin
+		const errSpy = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => console.log('[captured]', JSON.stringify(a.map(x => String(x)))))
 		const POST = await loadRoute()
 
 		const res = await POST(makeRequest({
@@ -238,6 +309,7 @@ describe('API Route: POST /api/import', () => {
 			],
 		}))
 
+		errSpy.mockRestore()
 		expect(res.status).toBe(200)
 		const data = await res.json()
 		expect(data.success).toBe(true)
@@ -245,9 +317,11 @@ describe('API Route: POST /api/import', () => {
 		expect(data.pages).toHaveLength(3)
 		expect(data.warnings).toEqual([])
 
-		// Shared "guides" segment reused; only "deep" created once.
+		// Shared "guides" segment reused; only "deep" created once, marked as
+		// an import folder-page.
 		expect(clients.calls.folderInserts).toHaveLength(1)
 		expect(clients.calls.folderInserts[0].title).toBe('deep')
+		expect((clients.calls.folderInserts[0].properties as Record<string, unknown>).importFolder).toBe(true)
 
 		// One batch insert carrying all three leaves.
 		expect(clients.calls.batchInserts).toHaveLength(1)
@@ -256,10 +330,30 @@ describe('API Route: POST /api/import', () => {
 		// Three snapshot uploads at documents/{id}/main_state.bin.
 		expect(clients.calls.uploadedPaths.filter(p => p.endsWith('/main_state.bin'))).toHaveLength(3)
 
-		// Every leaf indexed with its plain text.
-		expect(indexPageMock).toHaveBeenCalledTimes(3)
-		const firstCall = indexPageMock.mock.calls[0]
-		expect(firstCall[2]).toBe('alpha text')
+		// Bulk indexing: one call covering all three leaves, each with its
+		// plain text and generated page id.
+		expect(indexPagesMock).toHaveBeenCalledTimes(1)
+		const indexItems = indexPagesMock.mock.calls[0][1] as Array<{ pageId: string; plainText: string }>
+		expect(indexItems).toHaveLength(3)
+		expect(indexItems[0].plainText).toBe('alpha text')
+	})
+
+	it('maps bulk-index failures to per-leaf index warnings', async () => {
+		indexPagesMock.mockResolvedValue({
+			indexed: [],
+			errors: [{ pageId: 'page-1', error: 'rpc exploded' }],
+		})
+		clients = makeAdminClient({ workspaceOwner: 'owner-1' })
+		h.adminClient = clients.admin
+
+		const POST = await loadRoute()
+		const res = await POST(makeRequest({ workspaceId: 'ws1', pages: [{ ...validPage }] }))
+		expect(res.status).toBe(200)
+		const data = await res.json()
+		expect(data.importedCount).toBe(1) // snapshot succeeded; page still counts as created
+		expect(data.warnings).toHaveLength(1)
+		expect(data.warnings[0].stage).toBe('index')
+		expect(data.warnings[0].error).toBe('rpc exploded')
 	})
 
 	it('reports per-page warnings instead of failing when snapshot upload errors', async () => {

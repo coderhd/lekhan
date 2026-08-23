@@ -3,10 +3,14 @@ import { createClient } from '@supabase/supabase-js'
 import { readJsonWithLimit, PayloadTooLargeError } from '@/lib/request-limits'
 import graphIndex from '../../../server/graph-index.js'
 
-// The client-side pipeline caps a vault at 100 MB unpacked (services/obsidian-import).
-// Base64 inflates ~4/3, so 160 MB of decoded-equivalent JSON gives headroom while
-// keeping the endpoint bounded.
-const MAX_IMPORT_PAYLOAD_BYTES = 160 * 1024 * 1024
+// The import payload is the base64-encoded IR. A 64 MB ceiling keeps peak
+// request memory bounded (readJsonWithLimit buffers, copies and parses the
+// body) while comfortably holding ~2,000 typical note snapshots (~27 MB).
+// Vaults whose encoded IR exceeds this MUST be split by the caller into
+// multiple POST /api/import batches — each batch is independent and complete
+// (folder chains are deduped/reused server-side), so batching preserves full
+// coverage. The batching client lands with the import UX (#63).
+const MAX_IMPORT_PAYLOAD_BYTES = 64 * 1024 * 1024
 // Mirrors MAX_IMPORT_PAGES in services/obsidian-import.ts (kept local so the
 // server bundle does not pull browser ingestion code).
 const MAX_IMPORT_PAGES = 2000
@@ -81,12 +85,11 @@ export async function POST(request: NextRequest) {
 				autoRefreshToken: false,
 			},
 			global: {
-				apikey: serviceRoleKey,
 				headers: {
 					apikey: serviceRoleKey,
 				},
 			},
-		} as never
+		}
 	)
 
 	try {
@@ -169,9 +172,13 @@ export async function POST(request: NextRequest) {
 
 		// Existing workspace pages serve two purposes: reusing folder-page
 		// chains across repeated imports, and resolving parent ids.
+		// Existing workspace pages: only pages explicitly marked as import
+		// folder-pages (properties.importFolder) are reusable as folder chain
+		// targets — an ordinary note that happens to share a folder's title
+		// must never become a hierarchy parent.
 		const { data: existingPages, error: fetchError } = await supabaseAdmin
 			.from('pages')
-			.select('id, title, parent_id')
+			.select('id, title, parent_id, properties')
 			.eq('workspace_id', workspaceId)
 
 		if (fetchError) {
@@ -182,6 +189,10 @@ export async function POST(request: NextRequest) {
 			`${parentId ?? 'root'}|${graphIndex.normalizeTitle(title)}`
 		const existingByFolderKey = new Map<string, string>()
 		for (const row of existingPages ?? []) {
+			const props = (row.properties && typeof row.properties === 'object') ? row.properties as Record<string, unknown> : {}
+			if (props.importFolder !== true) {
+				continue
+			}
 			existingByFolderKey.set(folderKey(row.parent_id ?? null, row.title ?? ''), row.id)
 		}
 
@@ -207,7 +218,7 @@ export async function POST(request: NextRequest) {
 							owner_id: user.id,
 							title: segment,
 							parent_id: parentId ?? undefined,
-							properties: {},
+							properties: { importFolder: true },
 						})
 						.select('id')
 						.single()
@@ -259,44 +270,65 @@ export async function POST(request: NextRequest) {
 			})
 		}
 
-		// Persist each page's Yjs state and index it. A page whose snapshot or
-		// indexing fails does not abort the whole import — it is reported as a
-		// warning so the client's report can surface exactly what needs attention.
+		// Persist each page's Yjs state with bounded concurrency, then index
+		// the whole batch in one pass (graph-index.indexPages loads each page
+		// row and the workspace title index once instead of per page). A page
+		// whose snapshot or indexing fails does not abort the import — it is
+		// reported as a warning so the client's report can surface exactly
+		// what needs attention; failures stay isolated to their own leaf.
+		const UPLOAD_CONCURRENCY = 6
+
+		const uploadOutcomes = new Map<number, { error?: unknown }>()
+		let cursor = 0
+		const workerCount = Math.min(UPLOAD_CONCURRENCY, createdLeaves.length)
+		const workers = Array.from({ length: workerCount }, async () => {
+			while (cursor < createdLeaves.length) {
+				const index = cursor++
+				const leaf = createdLeaves[index]
+				try {
+					const buffer = Buffer.from(leaf.source.contentYjsBase64, 'base64')
+					const { error: uploadError } = await supabaseAdmin.storage
+						.from('documents')
+						.upload(`${leaf.id}/main_state.bin`, buffer, {
+							contentType: 'application/octet-stream',
+							upsert: true,
+						})
+					if (uploadError) {
+						throw uploadError
+					}
+					uploadOutcomes.set(index, {})
+				} catch (err) {
+					uploadOutcomes.set(index, { error: err })
+				}
+			}
+		})
+		await Promise.all(workers)
+
 		const warnings: Array<{ title: string; stage: string; error: string }> = []
 		const createdPages: Array<{ id: string; title: string }> = []
+		const indexItems: Array<{ pageId: string; plainText: string }> = []
 
-		for (const leaf of createdLeaves) {
-			try {
-				const buffer = Buffer.from(leaf.source.contentYjsBase64, 'base64')
-				const { error: uploadError } = await supabaseAdmin.storage
-					.from('documents')
-					.upload(`${leaf.id}/main_state.bin`, buffer, {
-						contentType: 'application/octet-stream',
-						upsert: true,
-					})
-				if (uploadError) {
-					throw uploadError
-				}
-			} catch (err) {
+		for (const [index, leaf] of createdLeaves.entries()) {
+			const outcome = uploadOutcomes.get(index)
+			if (outcome?.error) {
 				warnings.push({
 					title: leaf.source.title,
 					stage: 'snapshot',
-					error: err instanceof Error ? err.message : String(err),
+					error: outcome.error instanceof Error ? outcome.error.message : String(outcome.error),
 				})
 				continue
 			}
-
-			try {
-				await graphIndex.indexPage(supabaseAdmin, leaf.id, leaf.source.plainText)
-			} catch (err) {
-				warnings.push({
-					title: leaf.source.title,
-					stage: 'index',
-					error: err instanceof Error ? err.message : String(err),
-				})
-			}
-
 			createdPages.push({ id: leaf.id, title: leaf.source.title })
+			indexItems.push({ pageId: leaf.id, plainText: leaf.source.plainText })
+		}
+
+		const { errors: indexErrors } = await graphIndex.indexPages(supabaseAdmin, indexItems)
+		for (const indexError of indexErrors) {
+			warnings.push({
+				title: createdLeaves.find(leaf => leaf.id === indexError.pageId)?.source.title ?? '',
+				stage: 'index',
+				error: indexError.error,
+			})
 		}
 
 		return NextResponse.json({
@@ -306,8 +338,8 @@ export async function POST(request: NextRequest) {
 			warnings,
 		})
 	} catch (err: unknown) {
-		const message = err instanceof Error ? err.message : String(err)
+		// Log the detail server-side; never echo internal error messages back.
 		console.error('[API Import Error]', err)
-		return NextResponse.json({ error: message || 'Internal server error' }, { status: 500 })
+		return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
 	}
 }

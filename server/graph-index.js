@@ -126,4 +126,94 @@ async function indexPage (supabaseAdmin, pageId, text) {
 	return { links: data?.links ?? 0, tags: data?.tags ?? 0 }
 }
 
-module.exports = { extractLinks, extractTags, extractPropertyTags, normalizeTitle, getWorkspaceForPage, indexPage }
+/**
+ * Bulk variant of indexPage for import batches: loads each page's row once and
+ * builds one title index per distinct workspace, instead of re-fetching the
+ * whole workspace per page (indexPage is O(pages × workspace) when called in a
+ * loop). Per-page failures are isolated — collected into `errors` rather than
+ * thrown — so one bad page cannot fail the batch.
+ */
+async function indexPages (supabaseAdmin, items) {
+	const indexed = []
+	const errors = []
+	if (!Array.isArray(items) || items.length === 0) {
+		return { indexed, errors }
+	}
+
+	const ids = items.map(item => item.pageId)
+	const { data: pageRows, error: pagesError } = await supabaseAdmin
+		.from('pages')
+		.select('id, workspace_id, properties')
+		.in('id', ids)
+	if (pagesError) {
+		throw pagesError
+	}
+	const rowsById = new Map((pageRows || []).map(row => [row.id, row]))
+
+	const titleIndexes = new Map()
+	async function titleIndexFor (workspaceId) {
+		let titleIndex = titleIndexes.get(workspaceId)
+		if (titleIndex) {
+			return titleIndex
+		}
+		const { data: workspacePages, error } = await supabaseAdmin
+			.from('pages')
+			.select('id, title')
+			.eq('workspace_id', workspaceId)
+		if (error) {
+			throw error
+		}
+		titleIndex = new Map()
+		for (const workspacePage of workspacePages || []) {
+			titleIndex.set(normalizeTitle(workspacePage.title), workspacePage.id)
+		}
+		titleIndexes.set(workspaceId, titleIndex)
+		return titleIndex
+	}
+
+	for (const item of items) {
+		try {
+			const row = rowsById.get(item.pageId)
+			if (!row) {
+				throw new Error('Page row not found')
+			}
+			const titleIndex = await titleIndexFor(row.workspace_id)
+			const linkRows = extractLinks(item.plainText).map(link => ({
+				workspace_id: row.workspace_id,
+				from_page_id: item.pageId,
+				to_page_id: titleIndex.get(normalizeTitle(link.title)) || null,
+				to_title: link.title,
+			}))
+			const tagRows = extractTags(item.plainText).map(tag => ({ page_id: item.pageId, tag }))
+			for (const tag of extractPropertyTags(row.properties || {})) {
+				if (!tagRows.some(rowTag => rowTag.tag === tag)) {
+					tagRows.push({ page_id: item.pageId, tag })
+				}
+			}
+			const { error } = await supabaseAdmin.rpc('sync_page_graph', {
+				p_page_id: item.pageId,
+				p_workspace_id: row.workspace_id,
+				p_searchable_text: item.plainText,
+				p_links: linkRows,
+				p_tags: tagRows,
+			})
+			if (error) {
+				throw error
+			}
+			indexed.push(item.pageId)
+		} catch (err) {
+			const message = err instanceof Error
+				? err.message
+				: (err && typeof err === 'object' && 'message' in err)
+					? String(err.message)
+					: String(err)
+			errors.push({
+				pageId: item.pageId,
+				error: message,
+			})
+		}
+	}
+	return { indexed, errors }
+}
+
+module.exports = { extractLinks, extractTags, extractPropertyTags, normalizeTitle, getWorkspaceForPage, indexPage, indexPages }
