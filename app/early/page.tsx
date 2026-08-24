@@ -36,8 +36,8 @@ function firstParam (value: string | string[] | undefined): string | undefined {
 const SHOTS = [
 	{
 		src: '/early/shot-editor.png',
-		alt: 'Lekhan editor showing a product roadmap page with headings, a tip callout, task list and wikilinks',
-		caption: 'Write in markdown. Links, callouts and code render as you type.',
+		alt: 'Lekhan editor showing a product roadmap page with headings, a tip callout and a task list',
+		caption: 'Callouts, task lists and markdown render as you type.',
 		width: 1280,
 		height: 800,
 	},
