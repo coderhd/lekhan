@@ -56,6 +56,10 @@ provider registry).
 | P2 — Client Cutover onto the Pages Graph | #9 | Progressive migration; app fully on the graph |
 | H0 — Global Search (index-native, keyboard-first) | #25 | Tickets #33–#36 done; shipped in PR #37 |
 
+| Epic | Issue | Blocker edges | Notes |
+|---|---|---|---|
+| H0 — Tauri Desktop Shell (vault-on-disk, llama.cpp sidecar, Model Library) | #88 | parallel with #28 | promoted from #43 (2026-08-24): delivers ADR 0003 files-on-disk promise; Model Library built once against sidecar; founding-cohort headline moment; not a beta gate |
+
 ### In progress — specced `ready-for-agent`
 
 | Epic | Issue | Tickets | Blocker edges | Delivery | Spec ref |
@@ -97,7 +101,7 @@ user's own keys or machine, so it must be live before launch and unblocks H2 age
 
 ## H1 — PKM Depth ("The Second Brain") `h1`
 
-> **Target:** opens once the H0 import pipeline lands (epics #26/#27 done ≈ **Aug 26**).
+> **Target:** opens once the H0 import pipeline lands (epics #26/#27 done ≈ **Aug 26**). Desktop shell pulled forward into H0 as #88.
 > First H1 epic is #39 (no blockers) — ~**early Oct** for the earliest H1 items once
 > H0's `needs-spec` epics and H1 speccing happen. Dates are provisional; re-baseline at
 > the H0→H1 handoff.
@@ -110,7 +114,7 @@ user's own keys or machine, so it must be live before launch and unblocks H2 age
 | H1 — Public pages + publish | #40 | ← #30 | §4 |
 | H1 — Comments + page mentions | #41 | — | §4 |
 | H1 — Templates | #42 | — | §4 |
-| H1 — Desktop app (Tauri) + mobile PWA | #43 | — | §4 |
+| H1 — Mobile apps (Tauri iOS/Android) + PWA interim | #43 | — | desktop split into #88 (H0) |
 | H1 — Plugins API v1 + open-core release | #44 | → H2 Plugin marketplace #51 (blocker) | §8 |
 | H1 — Notion importer | #45 | ← #87 (idempotent imports); import half absorbed into #78 | §13 + #78 constraints |
 | H1 — Full docs (tutorials, plugin/API ref, migration guides) | #46 | ← #32, ← #31 | §12 |
