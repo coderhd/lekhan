@@ -97,3 +97,41 @@ Named, and managed structurally rather than by reassurance:
 
 Out of scope: L2+ features beyond one L1 demonstrator (separate tickets),
 WebGPU experiment, team-shared keys (Enterprise, later).
+
+## Amendment proposal (needs owner sign-off — touches §6.2 lock)
+
+**"Lekhan Basic": one capped hosted model as the free-tier floor.**
+
+Research Aug 2026: Cloudflare Workers AI free allocation = 10k neurons/day;
+paid = $0.011/1k neurons. `llama-3.2-3b-instruct` ≈ $0.335/M output tokens →
+100 DAU × 20 msgs/day ≈ **~$8/month**; 500 DAU ≈ ~$40/month. Hard bounds:
+per-user daily message cap (start 15), monthly spend circuit-breaker ($10),
+model pinned to the cheapest viable (3B-class), quality labeled honestly.
+
+Why amend: §6.2's "no hosted inference" was set assuming GPT-class pricing;
+edge-model pricing changes unit economics ~100x. The no-cost guarantee can be
+preserved WITH hosted inference via caps + breaker.
+
+### Resulting access ladder (non-technical user's journey)
+
+| Tier | Setup | Limits | Purpose |
+|---|---|---|---|
+| 0 Lekhan Basic | none — instant | N msgs/day, basic model | ChatGPT-native expectation met |
+| 1 On-device (WebLLM/WebGPU) | one click + model download if hardware passes detection | unlimited, offline, private | capability-gated option |
+| 2 Guided free-key | wizard, ~3 min | provider quota (bigger/better models) | upgrade path from Tier 0 |
+| 3 BYOK/BYOL | user key/endpoint | none | power users |
+
+Conversion moment: Tier 0 cap exhausted → inline upgrade to Tier 1–3.
+
+### WebLLM specifics (if adopted)
+
+Phi-3.5-mini-instruct is prebuilt in MLC's catalog (q4f16, ~2.3 GB download,
+MIT). Capable hardware: 40–70 tok/s. Integrated GPUs: 10–20 tok/s — detection
+must gate the offer (WebGPU present, adapter VRAM/adapter type heuristic),
+Safari/iOS excluded initially, expect 3–10s shader-compile warmup, single
+model resident, cache-eviction re-download possible.
+
+### Rejected for this purpose
+
+GPU VPS rental ($100+/mo always-on), OCI-free ARM as production inference
+(reclaim risk), serverless GPU providers (cold starts + complexity).
