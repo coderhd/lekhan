@@ -3,12 +3,13 @@
 import Script from 'next/script'
 import { usePathname } from 'next/navigation'
 import { GA_MEASUREMENT_ID } from '@/lib/analytics'
+import { isEditorPathname } from '@/lib/routes'
 
 export function GoogleAnalytics() {
 	const pathname = usePathname()
 
-	// Gate analytics on /doc/* routes to prevent document URL/ID leakage
-	if (pathname?.startsWith('/doc')) {
+	// Gate analytics on editor routes to prevent document URL/ID leakage
+	if (isEditorPathname(pathname)) {
 		return null
 	}
 
