@@ -124,3 +124,48 @@ affiliation; no links unless directly asked.
 
 early_access_signup · invite_sent · beta_activated · referral attribution
 via `?ref=` preserved through Brevo contact tags.
+
+## Pricing & savings showcase (verified against Aug 2026 incumbent pricing)
+
+Reference points: Notion Free $0 / Plus $10 annual-$12 monthly / Business
+$20 annual-$24 monthly (full AI bundled only here; agent credits ~$10/1k
+extra) · Obsidian Sync $4 annual-$5 monthly · Publish $8.
+
+### Lekhan founding prices (locked for life)
+
+| Tier | Monthly | Annual (2 months free) | Standard from GA |
+|---|---|---|---|
+| Free | $0 / ₹0 | — | $0 |
+| Plus | $4 / ₹249 | $40 / ₹2,499 | $6 / ₹499 |
+| Pro | $8 / ₹499 | $80 / ₹4,999 | $12 / ₹999 |
+| Team | $8/seat (see volume tiers) | 2 months free convention | $10/seat |
+
+### Savings table (the landing-page block)
+
+| Your stack today | Monthly cost | With Lekhan founding | You keep |
+|---|---|---|---|
+| Obsidian + Sync | $4 | **Plus — $4** | + real-time collab, 90-day history, AI on your keys |
+| Notion Plus (no real AI) | $10 | **Plus — $4** | −60%, files on disk instead of cloud |
+| Notion Business (for AI) | $20 | **Pro — $8** + your API key (often $0–3) | −60% even after AI usage |
+| Split-brain: Obsidian Sync + Notion Plus | $14 | **Plus — $4** | −71%, one tool instead of two |
+| Split-brain + AI: Sync + Notion Business | $24 | **Pro — $8** | −67% |
+
+Line under the table: *"Every plan runs AI on your own keys — even Free."*
+
+### Team volume tiers (per seat, monthly)
+
+| Seats | Founding | Standard from GA |
+|---|---|---|
+| 2–10 | $8 | $10 |
+| 11–25 | $7 | $9 |
+| 26+ | $6 | $8 |
+
+Annual = 2 months free across all tiers. Referral credits stack on top
+(1 month per activated invitee; 2 if they convert paid).
+
+### Enterprise (deferred — placeholder, no ticket until demand signal)
+
+Self-hosted deployment · SSO/SAML · audit logs · GDPR/HIPAA compliance
+(incl. BAA licensing costs — material, priced into contract). Deliberately
+unpriced and unscheduled: enterprise sales cycles need procurement support we
+don't staff yet. Revisit when a paying team asks.
