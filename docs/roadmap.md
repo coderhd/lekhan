@@ -67,35 +67,57 @@ provider registry).
 | H0 — Markdown Import/Export (full round-trip) | #26 | MI-T1 #56 → MI-T2 #57 → MI-T3 #58 → MI-T4 #59 — **all done** | — | delivered Aug 20 · epic closed | §13 · `docs/superpowers/specs/2026-08-14-h0-markdown-import-export-design.md` |
 | H0 — Obsidian Importer | #27 | OI-T1–T4 all done (#60, #61, #62/#80, #63/PR #86) | — | delivered Aug 24 · epic closed · pipeline feeds #78 | §13 · `docs/superpowers/specs/2026-08-14-h0-obsidian-importer-design.md` |
 
-### Remaining `needs-spec` — provisional targets (spec first)
+### Delivery plan (recalibrated Aug 24 · velocity-based)
 
-| Epic | Issue | Blocker edges | Provisional target | Spec ref |
-|---|---|---|---|---|
-| H0 — AI Provider Registry | #28 | → H2 AI agents #50 (blocker) | Aug 27 – Sep 4 | §6 |
-| H0 — Real Billing (Stripe + Razorpay) | #29 | → H2 Team workspaces #49 (blocker); H3 suite pricing rides on it | Sep 5 – Sep 12 | §7 |
-| H0 — Public Pages / Publish polish | #30 | → H1 Public pages + publish #40 (blocker) | Sep 13 – Sep 17 | §4 (H1 scope note in epic) |
-| H0 — i18n Framework | #31 | → H1 localized docs (edge on #46) | Sep 18 – Sep 24 | §4 |
-| H0 — Docs Site (docs.lekhan.app) | #32 | → H1 Full docs #46 (blocker) | Sep 25 – Sep 30 | §12 |
+> **Estimation policy:** estimates are recalibrated against actual delivery at every
+> epic close. Measured basis: Aug 13–24 window = 14 merged PRs in 11 days; all six
+> hour-estimated tickets landed on time or 1–3 days early. Calibration rules:
+> familiar-pattern work ×0.9 (mirrors in-repo prior art) · novel-integration work
+> ×1.5 + named external buffers (no precedent yet: billing, Tauri, Rust sidecar,
+> encryption key mgmt). Review-round tax is included, not added on top.
+> **Recalibration checkpoints: after #81 ships (first novel item), after #29.**
 
-### H0 ticket schedule (Start → Target · hours)
+### Lane A — Beta & Public Launch `p0`
 
-| Ticket | Issue | Start | Target | Est. | Status |
+| # | Work | Priority | Est | Start → Target | Status |
 |---|---|---|---|---|---|
-| MI-T3 — MDX + HTML export | #58 | Aug 19 | Aug 19 | 6h | Done |
-| MI-T4 — Markdown import | #59 | Aug 20 | Aug 20 | 6h | Done |
-| OI-T1 — Callout node | #60 | Aug 21 | Aug 21 | 6h | Done |
-| OI-T2 — Vault ingestion → IR | #61 | Aug 22 | Aug 23 | 14h | Done |
-| OI-T3 — /api/import route | #62 | Aug 24 | Aug 25 | 12h | Done (early) |
-| OI-T4 — Import UX + report | #63 | Aug 26 | Aug 26 | 6h | Ready |
+| #85 | Early-access page + Brevo waitlist | P0 | 12h | Aug 25 → Aug 26 | Ready |
+| #83 | Analytics events | P0 | 8h | Aug 27 | Ready |
+| #81 | Encrypt-at-rest (spec + impl) | P0 | 16h | Aug 28 → Aug 29 | Ready |
+| #82 | Tier plumbing + storage caps | P0 | 16h | Aug 31 → Sep 1 | Ready |
+| — | 🔒 **Private beta opens** (gate #84 clears) | — | — | **Sep 2** | — |
+| #28 | AI Provider Registry (final spec 4h incl.) | P0 | 64h | Sep 2 → Sep 10 | In review (seed) |
+| #29 | Billing: Stripe/Razorpay + founding prices + referral credits | P0 | 60h | Sep 11 → Sep 22 | Backlog |
+| #87 | Idempotent imports | P1 | 12h | Sep 23 → Sep 24 | Backlog |
+| #31 | i18n framework | P0 | 24h | Sep 25 → Sep 29 | Backlog |
+| #32 | Docs site (agent 32h; prose content owner-driven in parallel) | P0 | 32h | Sep 30 → Oct 7 | Backlog |
+| #30 | Publish polish | P0 | 12h | Oct 8 → Oct 9 | Backlog |
+| — | 🚀 **Public launch** | — | — | **Oct 12** (aggressive Oct 8) | — |
+
+*#85 inserted ahead of beta: content funnel has no conversion target without it.*
+
+### Lane B — Founding Desktop `p1`
+
+| # | Work | Priority | Est | Start → Target | Status |
+|---|---|---|---|---|---|
+| #88 | Spec pass | P1 | 4h | Sep 2 (parallel, light) | Backlog |
+| #88-M1 | Shell + vault-on-disk + sync (ADR 0003 live) | P1 | 48h | Oct 13 → Oct 20 | Backlog |
+| #88-M2 | llama.cpp sidecar + Model Library | P1 | 64h | Oct 21 → Nov 3 | Backlog |
+| — | 💻 **Founding-cohort desktop delivery** | — | — | **~Nov 3** | — |
+
+Mobile (#43) follows desktop; PWA covers interim. #78 slices + Notion import
+begin H1-proper in November, unblocked once #87 lands.
 
 **Also shipped:** #70 — mentions in `.md`/`.mdx` export (bug, PR #71), Aug 19.
 
 **Sequencing narrative:** the import pipeline is the shared foundation — Markdown
 Import/Export (#26) establishes the `importer → IR → graph` pipeline, and Obsidian
-Importer (#27) is the first real importer on it (and lands the first-class callout node
-in the shared round-trip schema). Both must land before the H1 Notion importer (#45). Docs Site (#32) is a launch requirement and unblocks the H1 docs
-depth. AI Provider Registry (#28) is the cost-safety keystone: every tier runs on the
-user's own keys or machine, so it must be live before launch and unblocks H2 agents.
+Importer (#27) delivered it end-to-end (closed Aug 24); #78 consumes the same
+pipeline for Notion once #87 (idempotent imports) lands. Docs Site (#32) remains a
+launch requirement. AI Provider Registry (#28) is the cost-safety keystone: every
+tier runs on the user's own keys or machine, so it must be live before launch and
+unblocks H2 agents. The Tauri desktop shell (#88) delivers the files-on-disk promise
+(ADR 0003) and the Model Library as the founding-cohort moment.
 
 ---
 
