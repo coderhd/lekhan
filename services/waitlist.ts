@@ -2,9 +2,13 @@
  * Founding-cohort waitlist domain logic (#85).
  *
  * The database owns the hard invariants (unique email, monotonic spot numbers,
- * the 500 cap being soft) via the `join_waitlist` RPC; this module owns input
- * hygiene, the Brevo contract, and the guarantee that Brevo outages never
- * fail a signup (outbox row instead).
+ * the 500 cap being soft, confirm-token minting) via the `join_waitlist` and
+ * `confirm_waitlist` RPCs; this module owns input hygiene, the Brevo contract,
+ * the confirmation email, and the guarantee that neither Brevo nor SMTP
+ * outages ever fail a signup (outbox rows instead).
+ *
+ * Double opt-in is self-hosted (option B): we email the confirm link over
+ * Brevo's transactional API ourselves — Brevo-native DOU proved opaque.
  *
  * All side effects are injected so the whole flow is unit-testable.
  */
@@ -31,10 +35,19 @@ export interface BrevoContactPayload {
 	attributes: Record<string, string>
 }
 
+export interface ConfirmEmailPayload {
+	email: string
+	token: string
+	position?: number
+}
+
+export type OutboxKind = 'contact_sync' | 'confirm_email'
+
 export interface PendingBrevoRow {
 	id: number
 	waitlistId: number
-	payload: BrevoContactPayload
+	kind: OutboxKind
+	payload: BrevoContactPayload | ConfirmEmailPayload
 }
 
 export interface WaitlistJoinDeps {
@@ -43,13 +56,15 @@ export interface WaitlistJoinDeps {
 		referredBy: string | null | undefined,
 		utmSource: string | null | undefined,
 		useCase: string | null | undefined,
-	) => Promise<{ spot: number; already_joined: boolean; member_id: number }>
+	) => Promise<{ spot: number; already_joined: boolean; member_id: number; token: string | null }>
 	brevoSync: (payload: BrevoContactPayload) => Promise<void>
-	outboxEnqueue: (waitlistId: number, payload: BrevoContactPayload) => Promise<void>
+	emailSender: (payload: ConfirmEmailPayload) => Promise<void>
+	outboxEnqueue: (waitlistId: number, kind: OutboxKind, payload: BrevoContactPayload | ConfirmEmailPayload) => Promise<void>
 }
 
 export interface WaitlistOutboxDeps {
 	brevoSync: (payload: BrevoContactPayload) => Promise<void>
+	emailSender: (payload: ConfirmEmailPayload) => Promise<void>
 	listPendingBrevo: () => Promise<PendingBrevoRow[]>
 	markBrevoSynced: (rowId: number) => Promise<void>
 	recordBrevoFailure: (rowId: number, error: string) => Promise<void>
@@ -59,6 +74,7 @@ export interface WaitlistDeps extends WaitlistJoinDeps {
 	listPendingBrevo?: () => Promise<PendingBrevoRow[]>
 	markBrevoSynced?: (rowId: number) => Promise<void>
 	recordBrevoFailure?: (rowId: number, error: string) => Promise<void>
+	dbConfirm?: (token: string) => Promise<{ spot: number; email: string } | null>
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
@@ -82,7 +98,8 @@ function buildBrevoPayload (
 	return {
 		email,
 		updateEnabled: true,
-		doubleOptin: true,
+		// Brevo-native DOU is replaced by our own confirmation email (#85 option B).
+		doubleOptin: false,
 		attributes: {
 			...(utmSource ? { UTM_SOURCE: utmSource } : {}),
 			...(useCase ? { USECASE: useCase } : {}),
@@ -106,12 +123,26 @@ export async function joinWaitlist (
 	const row = await deps.dbJoin(email, referredBy, utmSource, useCase)
 
 	if (!row.already_joined) {
-		const payload = buildBrevoPayload(email, utmSource, useCase)
+		// Confirmation email first: it is the member's call to action. Failure
+		// must never fail the signup (#85 AC) — queue for the retry drain.
+		if (row.token) {
+			const emailPayload: ConfirmEmailPayload = {
+				email,
+				token: row.token,
+				position: row.spot,
+			}
+			try {
+				await deps.emailSender(emailPayload)
+			} catch {
+				await deps.outboxEnqueue(row.member_id, 'confirm_email', emailPayload)
+			}
+		}
+
+		const contactPayload = buildBrevoPayload(email, utmSource, useCase)
 		try {
-			await deps.brevoSync(payload)
+			await deps.brevoSync(contactPayload)
 		} catch {
-			// Brevo must never fail a signup (#85 AC). Queue for retry instead.
-			await deps.outboxEnqueue(row.member_id, payload)
+			await deps.outboxEnqueue(row.member_id, 'contact_sync', contactPayload)
 		}
 	}
 
@@ -122,15 +153,44 @@ export async function joinWaitlist (
 	}
 }
 
+export interface ConfirmResult {
+	position?: number
+	email?: string
+	alreadyConfirmed: boolean
+}
+
+export async function confirmByToken (
+	deps: { dbConfirm: (token: string) => Promise<{ spot: number; email: string } | null> },
+	token: string,
+): Promise<ConfirmResult> {
+	const trimmed = token.trim()
+	if (!trimmed) {
+		throw new Error('Missing confirmation token')
+	}
+
+	const row = await deps.dbConfirm(trimmed)
+	if (!row) {
+		// Unknown or already-used token — idempotent, friendly, no enumeration.
+		return { alreadyConfirmed: true }
+	}
+
+	return { position: row.spot, email: row.email, alreadyConfirmed: false }
+}
+
 /**
- * Drains the Brevo outbox: re-sends pending contacts, marking successes and
- * recording failures. Called by the retry endpoint (cron-wired in #90).
+ * Drains the outbox: re-sends pending contact syncs and confirmation emails,
+ * marking successes and recording failures. Called by the retry endpoint
+ * (cron-wired in #90).
  */
 export async function retryBrevoOutbox (deps: WaitlistOutboxDeps): Promise<void> {
 	const pending = await deps.listPendingBrevo()
 	for (const row of pending) {
 		try {
-			await deps.brevoSync(row.payload)
+			if (row.kind === 'confirm_email') {
+				await deps.emailSender(row.payload as ConfirmEmailPayload)
+			} else {
+				await deps.brevoSync(row.payload as BrevoContactPayload)
+			}
 			await deps.markBrevoSynced(row.id)
 		} catch (error) {
 			await deps.recordBrevoFailure(

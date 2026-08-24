@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { joinWaitlist, FOUNDING_COHORT_CAP, type WaitlistDeps } from '@/services/waitlist'
 import { syncBrevoContact } from '@/lib/brevo'
+import { sendConfirmationEmail } from '@/lib/brevo-email'
 import { supabase } from '@/lib/supabase'
 
 /**
@@ -47,11 +48,13 @@ function buildDeps (): WaitlistDeps {
 				spot: Number(row?.spot ?? 0),
 				already_joined: Boolean(row?.already_joined),
 				member_id: Number(row?.member_id ?? 0),
+				token: row?.token != null ? String(row.token) : null,
 			}
 		},
 		brevoSync: syncBrevoContact,
-		outboxEnqueue: async (waitlistId, payload) => {
-			await supabase.from('brevo_outbox').insert({ waitlist_id: waitlistId, payload })
+		emailSender: sendConfirmationEmail,
+		outboxEnqueue: async (waitlistId, kind, payload) => {
+			await supabase.from('brevo_outbox').insert({ waitlist_id: waitlistId, kind, payload })
 		},
 	}
 }

@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const joinWaitlist = vi.fn()
 const retryBrevoOutbox = vi.fn()
+const confirmByToken = vi.fn()
 
 vi.mock('@/services/waitlist', async importOriginal => {
 	const actual = await importOriginal<typeof import('@/services/waitlist')>()
@@ -16,6 +17,7 @@ vi.mock('@/services/waitlist', async importOriginal => {
 		...actual,
 		joinWaitlist: (...args: unknown[]) => joinWaitlist(...args),
 		retryBrevoOutbox: (...args: unknown[]) => retryBrevoOutbox(...args),
+		confirmByToken: (...args: unknown[]) => confirmByToken(...args),
 	}
 })
 
@@ -27,6 +29,7 @@ vi.mock('@/lib/supabase', () => ({
 }))
 
 import { POST } from '@/app/api/waitlist/route'
+import { GET as CONFIRM_GET } from '@/app/api/waitlist/confirm/route'
 import { FOUNDING_COHORT_CAP } from '@/services/waitlist'
 
 function jsonRequest (body: unknown, ref?: string): Request {
@@ -91,5 +94,30 @@ describe('POST /api/waitlist', () => {
 		for (let i = 0; i < 10; i++) await POST(request)
 		const response = await POST(request)
 		expect(response.status).toBe(429)
+	})
+})
+
+describe('GET /api/waitlist/confirm', () => {
+	beforeEach(() => {
+		vi.clearAllMocks()
+	})
+
+	it('renders a confirmation page with the spot number on success', async () => {
+		confirmByToken.mockResolvedValue({ position: 37, email: 'a@example.com', alreadyConfirmed: false })
+		const request = new Request('https://lekhan.app/api/waitlist/confirm?token=tok-1') as never
+		const response = await CONFIRM_GET(request)
+		expect(response.status).toBe(200)
+		const html = await response.text()
+		expect(html).toContain('№ 37 of 500')
+		expect(html).toContain('a@example.com')
+		expect(confirmByToken).toHaveBeenCalledWith(expect.anything(), 'tok-1')
+	})
+
+	it('renders a friendly already-confirmed page without leaking anything', async () => {
+		confirmByToken.mockResolvedValue({ alreadyConfirmed: true })
+		const request = new Request('https://lekhan.app/api/waitlist/confirm?token=tok-used') as never
+		const response = await CONFIRM_GET(request)
+		expect(response.status).toBe(200)
+		expect(await response.text()).toContain('Already confirmed')
 	})
 })

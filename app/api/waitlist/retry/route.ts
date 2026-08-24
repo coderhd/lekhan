@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { retryBrevoOutbox, type BrevoContactPayload } from '@/services/waitlist'
+import { retryBrevoOutbox, type BrevoContactPayload, type ConfirmEmailPayload, type OutboxKind } from '@/services/waitlist'
 import { syncBrevoContact } from '@/lib/brevo'
+import { sendConfirmationEmail } from '@/lib/brevo-email'
 
 /**
  * Outbox retry drain (#85). All decisions live in the (unit-tested) service;
  * this handler only wires Supabase rows to it. Guarded by a shared secret so
  * only the cron worker can trigger it; returns 404 (not 403) when
  * unauthenticated so the endpoint doesn't advertise itself.
+ *
+ * The confirmation-email landing lives at /api/waitlist/confirm (GET, public).
  */
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
@@ -28,7 +31,7 @@ export async function POST (request: NextRequest) {
 	try {
 		const { data: pending, error } = await admin
 			.from('brevo_outbox')
-			.select('id, waitlist_id, payload, attempts')
+			.select('id, waitlist_id, payload, kind, attempts')
 			.is('synced_at', null)
 			.order('created_at')
 			.limit(50)
@@ -39,11 +42,13 @@ export async function POST (request: NextRequest) {
 
 		await retryBrevoOutbox({
 			brevoSync: syncBrevoContact,
+			emailSender: sendConfirmationEmail,
 			listPendingBrevo: async () =>
-				(pending ?? []).map(row => ({
+				((pending ?? []) as Array<{ id: number; waitlist_id: number; payload: unknown; kind: string }>).map(row => ({
 					id: Number(row.id),
 					waitlistId: Number(row.waitlist_id),
-					payload: row.payload as BrevoContactPayload,
+					kind: (row.kind === 'confirm_email' ? 'confirm_email' : 'contact_sync') as OutboxKind,
+					payload: row.payload as BrevoContactPayload | ConfirmEmailPayload,
 				})),
 			markBrevoSynced: async rowId => {
 				await admin.from('brevo_outbox').update({ synced_at: new Date().toISOString() }).eq('id', rowId)
@@ -54,7 +59,7 @@ export async function POST (request: NextRequest) {
 				await admin
 					.from('brevo_outbox')
 					.update({
-						attempts: (Number(current?.attempts) || 0) + 1,
+						attempts: (Number((current as { attempts?: number } | undefined)?.attempts) || 0) + 1,
 						last_error: message.slice(0, 300),
 					})
 					.eq('id', rowId)
