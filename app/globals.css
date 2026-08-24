@@ -471,7 +471,7 @@ ul[data-type="taskList"] li>div {
 
 /* Tiptap Callout Styles */
 .callout {
-	border: 1px solid var(--callout-border, #d0d7de);
+	border: 1px solid var(--callout-border, rgba(127, 127, 127, 0.28));
 	border-left: 4px solid var(--callout-accent, #57606a);
 	border-radius: 6px;
 	padding: 10px 14px;

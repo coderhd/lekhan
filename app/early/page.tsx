@@ -39,7 +39,7 @@ const SHOTS = [
 		alt: 'Lekhan editor showing a product roadmap page with headings, a tip callout and a task list',
 		caption: 'Callouts, task lists and markdown render as you type.',
 		width: 1280,
-		height: 800,
+		height: 661,
 	},
 	{
 		src: '/early/shot-import.png',
