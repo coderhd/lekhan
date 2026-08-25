@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { isEditorPathname } from '@/lib/routes'
 import ThemeToggle from '../theme-toggle'
 import { supabase } from '@/lib/supabase'
 import { useGlobalHeaderSlots } from './global-header-context'
@@ -71,8 +72,7 @@ export function GlobalHeader({ children, rightActions }: GlobalHeaderProps) {
 		pathname === '/login' ||
 		pathname === '/signup' ||
 		pathname === '/forgot-password' ||
-		pathname === '/doc' ||
-		pathname?.startsWith('/doc/')
+		isEditorPathname(pathname)
 	) {
 		return null
 	}

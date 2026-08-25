@@ -45,6 +45,12 @@ export default function LandingPage() {
 						>
 							FAQ
 						</Link>
+						<Link
+							href="/early?ref=site"
+							className="hidden md:block text-xs font-semibold text-primary hover:text-primary-container transition-colors"
+						>
+							Founding Edition
+						</Link>
 						<ThemeToggle />
 						<button
 							onClick={() => router.push('/login')}
@@ -241,6 +247,12 @@ export default function LandingPage() {
 						>
 							Start Collaborating Now
 						</button>
+						<p className="relative z-10 mt-6 text-sm text-on-primary-fixed-variant">
+							Or claim a numbered founding spot:{' '}
+							<Link href="/early?ref=cta" className="font-semibold underline underline-offset-4 hover:text-on-primary">
+								500 spots, price locked for life
+							</Link>
+						</p>
 					</div>
 				</section>
 			</main>

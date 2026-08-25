@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { isEditorPathname } from '@/lib/routes'
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -89,8 +90,8 @@ export function GlobalFooter() {
 		}
 	}, [])
 
-	// Hide footer completely on editor page
-	if (pathname?.startsWith('/doc/')) {
+	// Hide footer completely on editor page (edge-to-edge editor chrome)
+	if (isEditorPathname(pathname)) {
 		return null
 	}
 
