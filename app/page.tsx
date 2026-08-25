@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import Dashboard from '@/components/dashboard'
+// Loaded on demand: the 668-line app shell must not ship in the marketing bundle.
+const Dashboard = dynamic(() => import('@/components/dashboard'))
 import GlobalLoader from '@/components/global-loader'
 import LandingPage from '@/components/landing-page'
 
