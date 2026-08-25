@@ -82,7 +82,7 @@ export default function LandingPage() {
 
 						<p className="text-md md:text-xl text-on-surface-variant mb-10 max-w-lg">
 							Local-first like Obsidian, collaborative like Notion. Your notes stay as
-							markdown files on your disk, and AI runs on your own keys — never ours.
+							markdown files on your disk, and AI runs on your own keys, never ours.
 						</p>
 
 						<div className="flex flex-col sm:flex-row w-full sm:w-auto gap-4">
