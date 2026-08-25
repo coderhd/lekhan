@@ -27,9 +27,17 @@ export function EarlyAccessForm ({ defaultRef, defaultUtm }: { defaultRef?: stri
 	async function onSubmit (event: FormEvent<HTMLFormElement>) {
 		event.preventDefault()
 		if (submittingRef.current) return
-		submittingRef.current = true
 		const form = event.currentTarget
 		const data = new FormData(form)
+		const email = String(data.get('email') ?? '').trim()
+
+		// Client-side guard: fail fast without a network roundtrip.
+		if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+			setState({ kind: 'error', message: 'Please enter a valid email address.' })
+			return
+		}
+
+		submittingRef.current = true
 		setState({ kind: 'submitting' })
 
 		try {
@@ -40,7 +48,7 @@ export function EarlyAccessForm ({ defaultRef, defaultUtm }: { defaultRef?: stri
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
-					email: String(data.get('email') ?? ''),
+					email,
 					use_case: String(data.get('use_case') ?? ''),
 					ref: String(data.get('ref') ?? ''),
 					utm_source: String(data.get('utm_source') ?? ''),

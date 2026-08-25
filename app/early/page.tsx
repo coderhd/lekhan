@@ -258,8 +258,12 @@ const STYLES = `
 .dark .ek-meter { background: rgba(240, 239, 235, 0.12); }
 .dark .ek-input, .dark .ek-textarea { background: var(--ek-paper-raised); }
 .dark .ek-input::placeholder, .dark .ek-textarea::placeholder { color: rgba(240, 239, 235, 0.35); }
-.dark .ek-button { background: var(--ek-teak-bright); color: #1a1208; }
-.dark .ek-button:hover:not(:disabled) { background: hsl(33 100% 60%); }
+/* Button inverts like light mode's black button: white surface, ink text */
+.dark .ek-button {
+	background: var(--ek-ink);
+	color: #121413;
+}
+.dark .ek-button:hover:not(:disabled) { background: #e2e1dc; }
 .dark .ek-error { color: #ff9d80; }
 
 main { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
@@ -323,19 +327,21 @@ section { padding: clamp(48px, 9vh, 88px) 0; border-bottom: 1px solid var(--ek-h
 .ek-term dd { margin: 0; color: var(--ek-muted); font-size: 15px; }
 
 .ek-form-row { display: flex; gap: 12px; align-items: stretch; max-width: 520px; }
-.ek-label { display: block; font-size: 14px; font-weight: 500; margin: 0 0 8px; }
-.ek-label[for='ek-email'] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+			.ek-label { display: block; font-size: 14px; font-weight: 500; margin: 0 0 8px; }
+			.ek-label[for='ek-email'] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+			.ek-label[for='ek-use-case'] { margin-top: 28px; color: var(--ek-muted); font-weight: 400; }
 .ek-input, .ek-textarea {
 	flex: 1; min-width: 0;
 	padding: 12px 16px; font-size: 16px; font-family: inherit;
 	border: 1.5px solid var(--ek-hairline); border-radius: 6px;
 	background: var(--ek-paper-raised); color: var(--ek-ink);
 }
-.ek-textarea { width: 100%; max-width: 520px; margin-top: 16px; resize: vertical; }
-.ek-input:focus-visible, .ek-textarea:focus-visible, .ek-button:focus-visible, .ek-chip:focus-visible {
-	outline: 2px solid var(--ek-teak-bright); outline-offset: 2px;
-}
-.ek-input-invalid { border-color: var(--ek-teak); }
+.ek-textarea { width: 100%; max-width: 520px; resize: vertical; }
+			.ek-input:focus-visible, .ek-textarea:focus-visible, .ek-button:focus-visible, .ek-chip:focus-visible {
+				outline: 2px solid var(--ek-ink);
+				outline-offset: 2px;
+			}
+.ek-input-invalid { border-color: hsl(var(--destructive)) !important; }
 .ek-input::placeholder, .ek-textarea::placeholder { color: rgba(25,23,19,0.35); }
 .ek-button {
 	padding: 12px 24px; border: none; border-radius: 6px;
@@ -384,6 +390,10 @@ section { padding: clamp(48px, 9vh, 88px) 0; border-bottom: 1px solid var(--ek-h
 @media (max-width: 320px) {
 	.ek-figure { font-size: 72px; }
 	main { padding: 0 16px; }
+}
+/* Smooth anchor scroll (hero chip → claim form); disabled for reduced motion */
+@media (prefers-reduced-motion: no-preference) {
+	html { scroll-behavior: smooth; }
 }
 @media (prefers-reduced-motion: reduce) {
 	.ek-hero { animation: none; }
