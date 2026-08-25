@@ -100,6 +100,9 @@ export default function LandingPage() {
 							>
 								How it works
 							</button>
+							<p className="text-xs text-on-surface-variant mt-1 w-full sm:w-auto text-center sm:text-left">
+								Start free · No credit card · Export anytime
+							</p>
 						</div>
 					</div>
 

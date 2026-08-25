@@ -152,7 +152,7 @@ export function EarlyAccessForm ({ defaultRef, defaultUtm }: { defaultRef?: stri
 				</p>
 			)}
 			<p className="ek-fineprint">
-				Double opt-in: you&apos;ll get one confirmation email first. No spam, ever.
+				Free to use, including after launch (free plan). Double opt-in: one confirmation email first. No spam, ever.
 			</p>
 		</form>
 	)
