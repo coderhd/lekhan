@@ -74,14 +74,8 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 		<div className="ek-page">
 			<style>{STYLES}</style>
 
-			<header className="ek-nav">
-				<a className="ek-wordmark" href="/">
-					Lekhan
-				</a>
-				<a className="ek-nav-link" href="#claim">
-					Founding spots
-				</a>
-			</header>
+			{/* Global site chrome (header/footer) wraps this page — no local nav.
+			    The hero CTA anchors to #claim for in-page navigation. */}
 
 			<main>
 				{/*
@@ -220,21 +214,12 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 							<h3>Can I import my Obsidian vault?</h3>
 							<p>Yes — that shipped first. Links, tags, callouts and folders come across intact.</p>
 						</div>
-					</div>
-				</section>
-			</main>
-
-			<footer className="ek-footer">
-				<p className="ek-footer-line">Your second brain, your files, your AI.</p>
-				<nav className="ek-footer-links" aria-label="Legal">
-					<a href="/privacy-policy">Privacy</a>
-					<a href="/terms-of-service">Terms</a>
-					<a href="/">Lekhan.app</a>
-				</nav>
-			</footer>
-		</div>
-	)
-}
+ 					</div>
+ 				</section>
+ 			</main>
+ 		</div>
+ 	)
+ }
 
 const STYLES = `
 /* Hallmark · macrostructure: Stat-Led · theme: brand-locked custom
@@ -260,17 +245,22 @@ const STYLES = `
 .ek-page .tnum { font-variant-numeric: tabular-nums; }
 .ek-page h1, .ek-page h2, .ek-page h3 { font-style: normal; overflow-wrap: anywhere; min-width: 0; }
 
-.ek-nav {
-	display: flex; justify-content: space-between; align-items: baseline;
-	max-width: 1080px; margin: 0 auto; padding: 28px 24px 0;
+/* Dark mode: blend with the site theme instead of forcing light paper */
+.dark .ek-page {
+	--ek-paper: #121413;
+	--ek-ink: #f0efeb;
+	--ek-muted: #a6a49d;
+	--ek-teak: #e08a2e;
+	--ek-teak-bright: hsl(33 100% 55%);
+	--ek-hairline: rgba(240, 239, 235, 0.14);
+	--ek-paper-raised: #1b1d1c;
 }
-.ek-wordmark {
-	font-family: var(--font-geist-mono, 'Geist Mono', ui-monospace, monospace);
-	font-weight: 500; font-size: 15px; letter-spacing: 0.08em;
-	text-transform: uppercase; color: var(--ek-ink); text-decoration: none;
-}
-.ek-nav-link { color: var(--ek-muted); text-decoration: none; font-size: 15px; white-space: nowrap; }
-.ek-nav-link:hover { color: var(--ek-ink); }
+.dark .ek-meter { background: rgba(240, 239, 235, 0.12); }
+.dark .ek-input, .dark .ek-textarea { background: var(--ek-paper-raised); }
+.dark .ek-input::placeholder, .dark .ek-textarea::placeholder { color: rgba(240, 239, 235, 0.35); }
+.dark .ek-button { background: var(--ek-teak-bright); color: #1a1208; }
+.dark .ek-button:hover:not(:disabled) { background: hsl(33 100% 60%); }
+.dark .ek-error { color: #ff9d80; }
 
 main { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 
@@ -342,8 +332,7 @@ section { padding: clamp(48px, 9vh, 88px) 0; border-bottom: 1px solid var(--ek-h
 	background: var(--ek-paper-raised); color: var(--ek-ink);
 }
 .ek-textarea { width: 100%; max-width: 520px; margin-top: 16px; resize: vertical; }
-.ek-input:focus-visible, .ek-textarea:focus-visible, .ek-button:focus-visible, .ek-chip:focus-visible,
-.ek-nav-link:focus-visible, .ek-wordmark:focus-visible, .ek-footer-links a:focus-visible {
+.ek-input:focus-visible, .ek-textarea:focus-visible, .ek-button:focus-visible, .ek-chip:focus-visible {
 	outline: 2px solid var(--ek-teak-bright); outline-offset: 2px;
 }
 .ek-input-invalid { border-color: var(--ek-teak); }
@@ -384,14 +373,6 @@ section { padding: clamp(48px, 9vh, 88px) 0; border-bottom: 1px solid var(--ek-h
 .ek-faq-item h3 { font-size: 17px; font-weight: 600; margin: 0 0 8px; }
 .ek-faq-item p { margin: 0; color: var(--ek-muted); font-size: 15px; }
 
-.ek-footer { max-width: 1080px; margin: 0 auto; padding: 40px 24px 56px; }
-.ek-footer-line {
-	font-family: Fraunces, ui-serif, Georgia, serif;
-	font-style: normal; font-size: 20px; margin: 0 0 16px;
-}
-.ek-footer-links { display: flex; gap: 24px; }
-.ek-footer-links a { color: var(--ek-muted); font-size: 14px; text-decoration: none; white-space: nowrap; }
-.ek-footer-links a:hover { color: var(--ek-ink); }
 
 @media (max-width: 768px) {
 	.ek-hero { grid-template-columns: 1fr; align-items: start; }
@@ -402,7 +383,6 @@ section { padding: clamp(48px, 9vh, 88px) 0; border-bottom: 1px solid var(--ek-h
 }
 @media (max-width: 320px) {
 	.ek-figure { font-size: 72px; }
-	.ek-nav { padding: 20px 16px 0; }
 	main { padding: 0 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
