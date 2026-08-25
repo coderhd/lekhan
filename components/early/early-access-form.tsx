@@ -66,7 +66,7 @@ export function EarlyAccessForm ({ defaultRef, defaultUtm }: { defaultRef?: stri
 			})
 		} catch {
 			submittingRef.current = false
-			setState({ kind: 'error', message: 'Network hiccup — check your connection and try again.' })
+			setState({ kind: 'error', message: 'Network hiccup. Check your connection and try again.' })
 		}
 	}
 
@@ -77,7 +77,7 @@ export function EarlyAccessForm ({ defaultRef, defaultUtm }: { defaultRef?: stri
 					<>
 						<p className="ek-plate-figure tnum">№ {state.position}</p>
 						<p className="ek-plate-note">
-							The founding edition of 500 is fully claimed — you&apos;re on the wave-two list.
+							The founding edition of 500 is fully claimed, so you&apos;re on the wave-two list.
 							We&apos;ll email your invite the moment a spot opens.
 						</p>
 					</>
@@ -89,8 +89,8 @@ export function EarlyAccessForm ({ defaultRef, defaultUtm }: { defaultRef?: stri
 						</p>
 						<p className="ek-plate-note">
 							{state.alreadyJoined
-								? 'You were already on the list — this is your spot.'
-								: 'Spot reserved. Check your inbox for the confirmation email — your invite follows once you confirm.'}
+								? 'You were already on the list. This is your spot.'
+								: 'Spot reserved. Check your inbox for the confirmation email; your invite follows once you confirm.'}
 						</p>
 					</>
 				)}
@@ -144,7 +144,7 @@ export function EarlyAccessForm ({ defaultRef, defaultUtm }: { defaultRef?: stri
 				</p>
 			)}
 			<p className="ek-fineprint">
-				Double opt-in — you&apos;ll get one confirmation email first. No spam, ever.
+				Double opt-in: you&apos;ll get one confirmation email first. No spam, ever.
 			</p>
 		</form>
 	)

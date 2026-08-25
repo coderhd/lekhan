@@ -32,7 +32,7 @@ export async function GET (request: NextRequest) {
 		}
 
 		return htmlResponse(
-			`You're in — spot № ${result.position} of 500`,
+			`You're in. Spot № ${result.position} of 500`,
 			`${escapeHtml(result.email ?? '')} is confirmed. Your invite to the private beta follows in spot-number order.`,
 			200,
 		)
@@ -56,7 +56,7 @@ function htmlResponse (title: string, body: string, status: number): NextRespons
 	const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · Lekhan</title></head>
 <body style="margin:0;padding:32px;background:#f9f8f4;font-family:Helvetica,Arial,sans-serif">
 <div style="max-width:480px;margin:48px auto;background:#fff;border:1px solid rgba(25,23,19,0.16);border-radius:8px;padding:32px">
-<p style="margin:0 0 8px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#c96a10">Lekhan — Founding Edition</p>
+<p style="margin:0 0 8px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#c96a10">Lekhan · Founding Edition</p>
 <h1 style="margin:0 0 12px;font-size:22px;color:#191713">${title}</h1>
 <p style="margin:0;color:#5d5850;line-height:1.6">${body}</p>
 </div></body></html>`

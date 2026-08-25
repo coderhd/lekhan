@@ -46,7 +46,7 @@ const SHOTS = [
 	{
 		src: '/early/shot-import.png',
 		alt: 'Obsidian vault import report showing preserved links and callouts',
-		caption: 'Move an entire Obsidian vault in minutes — links, tags and callouts survive.',
+		caption: 'Move an entire Obsidian vault in minutes. Links, tags and callouts survive.',
 		width: 1280,
 		height: 800,
 	},
@@ -89,7 +89,7 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 					<div className="ek-hero-copy">
 						<h1 className="ek-headline">numbered spots. Your second brain, your files, your AI.</h1>
 						<p className="ek-subhead">
-							Local-first like Obsidian, collaborative like Notion — and AI runs on your own keys.
+							Local-first like Obsidian, collaborative like Notion, and AI runs on your own keys.
 						</p>
 						<p className="ek-qualifier tnum">
 							{claimed == null
@@ -134,18 +134,18 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 					<dl className="ek-term-list">
 						<div className="ek-term">
 							<dt>№ your spot, kept for good</dt>
-							<dd>Your place in the edition is permanent — it appears inside the app.</dd>
+							<dd>Your place in the edition is permanent. It appears inside the app.</dd>
 						</div>
 						<div className="ek-term">
 							<dt>Founding price, locked for life</dt>
 							<dd>
-								Plus $4/mo ($40/yr) · Pro $8/mo ($80/yr) — founding members keep these forever;
+								Plus $4/mo ($40/yr) · Pro $8/mo ($80/yr). Founding members keep these forever;
 								list prices move to $6/$12 after launch.
 							</dd>
 						</div>
 						<div className="ek-term">
 							<dt>AI on your own keys</dt>
-							<dd>Bring OpenAI, Anthropic or Google keys. Requests go browser-direct — never pooled.</dd>
+							<dd>Bring OpenAI, Anthropic or Google keys. Requests go browser-direct, never pooled.</dd>
 						</div>
 						<div className="ek-term">
 							<dt>Files that stay files</dt>
@@ -164,8 +164,8 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 								<>
 									<p className="ek-plate-figure tnum">№ {joinedParam}</p>
 									<p className="ek-plate-note">
-										The founding edition of 500 is fully claimed — you&apos;re on the wave-two list.
-										We&apos;ll email your invite the moment a spot opens.
+									The founding edition of 500 is fully claimed, so you&apos;re on the wave-two list.
+									We&apos;ll email your invite the moment a spot opens.
 									</p>
 								</>
 							) : (
@@ -175,7 +175,7 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 										№ {joinedParam} <span className="ek-plate-of">of 500</span>
 									</p>
 									<p className="ek-plate-note">
-										Spot reserved. Check your inbox for the confirmation email — your invite
+										Spot reserved. Check your inbox for the confirmation email; your invite
 										follows once you confirm.
 									</p>
 								</>
@@ -200,7 +200,7 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 							<h3>How does “AI on my own keys” work?</h3>
 							<p>
 								You paste in an API key from your provider of choice. Requests go straight from
-								your browser to that provider — Lekhan never sees, stores or pools them.
+								your browser to that provider. Lekhan never sees, stores or pools them.
 							</p>
 						</div>
 						<div className="ek-faq-item">
@@ -212,7 +212,7 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 						</div>
 						<div className="ek-faq-item">
 							<h3>Can I import my Obsidian vault?</h3>
-							<p>Yes — that shipped first. Links, tags, callouts and folders come across intact.</p>
+							<p>Yes, and it shipped first. Links, tags, callouts and folders come across intact.</p>
 						</div>
  					</div>
  				</section>

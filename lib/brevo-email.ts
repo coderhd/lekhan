@@ -20,12 +20,12 @@ export function buildConfirmEmailHtml (token: string, position?: number): string
 	return `<!doctype html>
 <html><body style="margin:0;padding:32px;background:#f9f8f4;font-family:Helvetica,Arial,sans-serif">
   <div style="max-width:480px;margin:0 auto;background:#ffffff;border:1px solid rgba(25,23,19,0.16);border-radius:8px;padding:32px">
-    <p style="margin:0 0 8px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#c96a10">Lekhan — Founding Edition</p>
+    <p style="margin:0 0 8px;font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#c96a10">Lekhan · Founding Edition</p>
     <h1 style="margin:0 0 16px;font-size:22px;color:#191713">Confirm your spot</h1>
     ${spotLine}
     <p style="margin:0 0 24px;color:#191713;line-height:1.6">One click to confirm your email address. Your invite to the private beta follows in spot-number order.</p>
     <a href="${url}" style="display:inline-block;padding:12px 24px;background:#191713;color:#f9f8f4;text-decoration:none;border-radius:6px;font-weight:500">Confirm my spot</a>
-    <p style="margin:24px 0 0;font-size:13px;color:#5d5850;line-height:1.5">Didn't ask for this? Ignore this email — nothing happens until you confirm.</p>
+    <p style="margin:24px 0 0;font-size:13px;color:#5d5850;line-height:1.5">Didn't ask for this? Ignore this email. Nothing happens until you confirm.</p>
   </div>
 </body></html>`
 }
@@ -47,7 +47,7 @@ export async function sendConfirmationEmail (payload: ConfirmEmailPayload): Prom
 		body: JSON.stringify({
 			sender: { email: from, name: 'Lekhan' },
 			to: [{ email: payload.email }],
-			subject: `Confirm your founding spot${payload.position ? ` — № ${payload.position} of 500` : ''}`,
+			subject: `Confirm your founding spot${payload.position ? ` (№ ${payload.position} of 500)` : ''}`,
 			htmlContent: buildConfirmEmailHtml(payload.token, payload.position),
 		}),
 		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
