@@ -35,19 +35,19 @@ export default function LandingPage() {
 					<div className="flex items-center gap-6">
 						<Link
 							href="/#features"
-							className="hidden md:block text-xs text-on-surface-variant hover:text-on-surface transition-colors font-medium"
+							className="text-xs text-on-surface-variant hover:text-on-surface transition-colors font-medium flex items-center min-h-[44px]"
 						>
 							Features
 						</Link>
 						<Link
 							href="/faq"
-							className="hidden md:block text-xs text-on-surface-variant hover:text-on-surface transition-colors font-medium"
+							className="text-xs text-on-surface-variant hover:text-on-surface transition-colors font-medium flex items-center min-h-[44px]"
 						>
 							FAQ
 						</Link>
 						<Link
 							href="/early?ref=site"
-							className="hidden md:block text-xs font-semibold text-primary-ink hover:text-primary transition-colors"
+							className="text-xs font-semibold text-primary-ink hover:text-primary transition-colors flex items-center min-h-[44px]"
 						>
 							Founding Edition
 						</Link>
@@ -61,7 +61,7 @@ export default function LandingPage() {
 					</div>
 			</GlobalHeaderSlot>
 
-			<main className="pt-8">
+			<div className="pt-8">
 				{/* Hero Section */}
 				<section className="relative px-6 md:px-10 pt-20 pb-20 overflow-hidden flex flex-col lg:flex-row items-center justify-center lg:justify-between min-h-[90vh] lg:min-h-[100svh] max-w-[1200px] mx-auto gap-12">
 					<div className="hero-glow top-20 -left-20"></div>
@@ -256,7 +256,7 @@ export default function LandingPage() {
 						</p>
 					</div>
 				</section>
-			</main>
+			</div>
 		</div>
 	)
 }

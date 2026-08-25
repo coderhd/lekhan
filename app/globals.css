@@ -728,3 +728,12 @@ ul[data-type="taskList"] li>div {
 .dark .hljs-name {
 	color: #d2a8ff;
 }
+/* Sitewide reduced-motion: kill decorative animation, keep focus rings */
+@media (prefers-reduced-motion: reduce) {
+	*, *::before, *::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}

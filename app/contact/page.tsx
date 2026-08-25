@@ -5,6 +5,7 @@ export const metadata: Metadata = {
 	title: 'Contact — Get in Touch | Lekhan',
 	description: 'Have questions or feedback about Lekhan? Reach out via email or connect on social media. We\'d love to hear from you.',
 	openGraph: {
+			images: ['/og.png'],
 		title: 'Contact Lekhan',
 		description: 'Reach out with questions, feedback, or just to say hello.',
 	},

@@ -9,7 +9,7 @@ import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
 
 export const metadata: Metadata = {
 	title: {
-		default: 'Lekhan — Write Together, Without Limits',
+		default: 'Lekhan — Your second brain, your files, your AI',
 		template: '%s | Lekhan',
 	},
 	description: 'Write, edit, and collaborate in real-time with Lekhan. A local-first editor with zero typing latency, full offline support, and AI assistance. Start writing free.',
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 		siteName: 'Lekhan',
 		images: [
 			{
-				url: '/logo.png',
+				url: '/og.png',
 				width: 1200,
 				height: 630,
 			},
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
 		card: 'summary_large_image',
 		title: 'Lekhan — Write Together, Without Limits',
 		description: 'Local-first collaborative editor. Zero latency, full offline, AI-powered. Start writing free.',
-		images: ['/logo.png'],
+		images: ['/og.png'],
 	},
 	icons: {
 		icon: '/logo.png',
@@ -59,6 +59,7 @@ export default function RootLayout({
 				<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Montserrat:wght@600;700&family=Geist:wght@400;500;600&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
 			</head>
 			<body className='min-h-screen bg-background text-on-surface antialiased selection:bg-primary/30 dark:selection:bg-primary dark:selection:text-on-primary'>
+				<a href='#main-content' className='sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-primary focus:text-on-primary focus:px-4 focus:py-2 focus:rounded-lg'>Skip to content</a>
 				<ThemeProvider
 					attribute="class"
 					defaultTheme="dark"
@@ -69,7 +70,7 @@ export default function RootLayout({
 						<GlobalSearchPalette>
 							<GlobalHeaderProvider>
 								<GlobalHeader />
-								<div className="flex min-h-screen flex-col">
+								<div id="main-content" className="flex min-h-screen flex-col">
 									<main className="flex flex-1 flex-col">{children}</main>
 									<GlobalFooter />
 								</div>
