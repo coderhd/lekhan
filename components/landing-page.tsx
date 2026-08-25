@@ -47,7 +47,7 @@ export default function LandingPage() {
 						</Link>
 						<Link
 							href="/early?ref=site"
-							className="hidden md:block text-xs font-semibold text-primary hover:text-primary-container transition-colors"
+							className="hidden md:block text-xs font-semibold text-primary-ink hover:text-primary transition-colors"
 						>
 							Founding Edition
 						</Link>
@@ -122,7 +122,7 @@ export default function LandingPage() {
 								<img src="/step-1.svg" alt="Create & Write" className="relative w-full h-auto max-w-lg mx-auto object-contain z-10 p-4 md:p-8 rounded-[2.5rem] animate-fade-in-up" />
 							</div>
 							<div className="flex-1 flex flex-col items-center md:items-start text-center md:text-left z-10">
-								<div className="w-16 h-16 rounded-full bg-surface border-4 border-primary-container/20 flex items-center justify-center mb-6 shadow-xl text-2xl font-bold text-primary-container">
+								<div className="w-16 h-16 rounded-full bg-surface border-4 border-primary-container/20 flex items-center justify-center mb-6 shadow-xl text-2xl font-bold text-primary-ink">
 									1
 								</div>
 								<h3 className="font-headline-md text-3xl font-bold text-on-surface mb-4">Create & Write</h3>
@@ -137,7 +137,7 @@ export default function LandingPage() {
 								<img src="/step-2.svg" alt="Invite Collaborators" className="relative w-full h-auto max-w-lg mx-auto object-contain z-10 p-4 md:p-8 rounded-[2.5rem] animate-fade-in-up" style={{ animationDelay: '200ms' }} />
 							</div>
 							<div className="flex-1 flex flex-col items-center md:items-start text-center md:text-left z-10">
-								<div className="w-16 h-16 rounded-full bg-surface border-4 border-primary-container/20 flex items-center justify-center mb-6 shadow-xl text-2xl font-bold text-primary-container">
+								<div className="w-16 h-16 rounded-full bg-surface border-4 border-primary-container/20 flex items-center justify-center mb-6 shadow-xl text-2xl font-bold text-primary-ink">
 									2
 								</div>
 								<h3 className="font-headline-md text-3xl font-bold text-on-surface mb-4">Invite Collaborators</h3>
@@ -152,7 +152,7 @@ export default function LandingPage() {
 								<img src="/step-3.svg" alt="Keep writing offline and sync on reconnect" className="relative w-full h-auto max-w-lg mx-auto object-contain z-10 p-4 md:p-8 rounded-[2.5rem] animate-fade-in-up" style={{ animationDelay: '400ms' }} />
 							</div>
 							<div className="flex-1 flex flex-col items-center md:items-start text-center md:text-left z-10">
-								<div className="w-16 h-16 rounded-full bg-surface border-4 border-primary-container/20 flex items-center justify-center mb-6 shadow-xl text-2xl font-bold text-primary-container">
+								<div className="w-16 h-16 rounded-full bg-surface border-4 border-primary-container/20 flex items-center justify-center mb-6 shadow-xl text-2xl font-bold text-primary-ink">
 									3
 								</div>
 								<h3 className="font-headline-md text-3xl font-bold text-on-surface mb-4">Pick Up Anywhere</h3>
@@ -171,7 +171,7 @@ export default function LandingPage() {
 					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 						{/* Card 1 */}
 						<div className="glass p-8 rounded-2xl flex flex-col items-start transition-all hover:border-primary-container/40 hover:-translate-y-1">
-							<div className="w-14 h-14 rounded-xl bg-primary-container/10 flex items-center justify-center mb-6 text-primary-container shadow-inner">
+							<div className="w-14 h-14 rounded-xl bg-primary-container/10 flex items-center justify-center mb-6 text-primary-ink shadow-inner">
 								<DownloadCloud className="w-7 h-7" />
 							</div>
 							<h3 className="font-headline-md text-xl font-bold text-on-surface mb-3">Your Files Stay Files</h3>
@@ -179,7 +179,7 @@ export default function LandingPage() {
 						</div>
 						{/* Card 2 */}
 						<div className="glass p-8 rounded-2xl flex flex-col items-start transition-all hover:border-primary-container/40 hover:-translate-y-1">
-							<div className="w-14 h-14 rounded-xl bg-primary-container/10 flex items-center justify-center mb-6 text-primary-container shadow-inner">
+							<div className="w-14 h-14 rounded-xl bg-primary-container/10 flex items-center justify-center mb-6 text-primary-ink shadow-inner">
 								<Users className="w-7 h-7" />
 							</div>
 							<h3 className="font-headline-md text-xl font-bold text-on-surface mb-3">Real-Time Multiplayer</h3>
@@ -187,7 +187,7 @@ export default function LandingPage() {
 						</div>
 						{/* Card 3 */}
 						<div className="glass p-8 rounded-2xl flex flex-col items-start transition-all hover:border-primary-container/40 hover:-translate-y-1">
-							<div className="w-14 h-14 rounded-xl bg-primary-container/10 flex items-center justify-center mb-6 text-primary-container shadow-inner">
+							<div className="w-14 h-14 rounded-xl bg-primary-container/10 flex items-center justify-center mb-6 text-primary-ink shadow-inner">
 								<WifiOff className="w-7 h-7" />
 							</div>
 							<h3 className="font-headline-md text-xl font-bold text-on-surface mb-3">Real-Time, Offline-First</h3>
@@ -195,7 +195,7 @@ export default function LandingPage() {
 						</div>
 						{/* Card 4 */}
 						<div className="glass p-8 rounded-2xl flex flex-col items-start transition-all hover:border-primary-container/40 hover:-translate-y-1">
-							<div className="w-14 h-14 rounded-xl bg-primary-container/10 flex items-center justify-center mb-6 text-primary-container shadow-inner">
+							<div className="w-14 h-14 rounded-xl bg-primary-container/10 flex items-center justify-center mb-6 text-primary-ink shadow-inner">
 								<Lock className="w-7 h-7" />
 							</div>
 							<h3 className="font-headline-md text-xl font-bold text-on-surface mb-3">AI on Your Own Keys</h3>
@@ -210,15 +210,15 @@ export default function LandingPage() {
 						<div className="absolute inset-0 bg-gradient-to-r from-primary-container/5 to-transparent pointer-events-none"></div>
 						<div className="grid grid-cols-1 md:grid-cols-3 gap-10 max-w-4xl mx-auto relative z-10">
 							<div>
-								<div className="font-display-lg md:text-6xl text-5xl font-bold text-primary-container mb-3 drop-shadow-sm">5</div>
+								<div className="font-display-lg md:text-6xl text-5xl font-bold text-primary-ink mb-3 drop-shadow-sm">5</div>
 								<div className="text-label-md font-bold text-on-surface-variant uppercase tracking-widest">Export formats, always free</div>
 							</div>
 							<div>
-								<div className="font-display-lg md:text-6xl text-5xl font-bold text-primary-container mb-3 drop-shadow-sm">100%</div>
+								<div className="font-display-lg md:text-6xl text-5xl font-bold text-primary-ink mb-3 drop-shadow-sm">100%</div>
 								<div className="text-label-md font-bold text-on-surface-variant uppercase tracking-widest">Data Ownership</div>
 							</div>
 							<div>
-								<div className="font-display-lg md:text-6xl text-5xl font-bold text-primary-container mb-3 drop-shadow-sm">24/7</div>
+								<div className="font-display-lg md:text-6xl text-5xl font-bold text-primary-ink mb-3 drop-shadow-sm">24/7</div>
 								<div className="text-label-md font-bold text-on-surface-variant uppercase tracking-widest">Offline Access</div>
 							</div>
 						</div>
@@ -244,7 +244,7 @@ export default function LandingPage() {
 						<p className="text-lg md:text-xl text-on-primary-fixed-variant mb-10 max-w-2xl mx-auto">Import your vault, collaborate in real time, and export everything whenever you want.</p>
 						<button
 							onClick={() => router.push('/signup')}
-							className="bg-surface text-primary-container text-base md:text-lg px-6 py-4 md:px-10 md:py-5 rounded-xl font-bold active:scale-95 hover:shadow-xl transition-all relative z-10 w-full sm:w-auto"
+							className="bg-surface text-primary-ink text-base md:text-lg px-6 py-4 md:px-10 md:py-5 rounded-xl font-bold active:scale-95 hover:shadow-xl transition-all relative z-10 w-full sm:w-auto"
 						>
 							Start Collaborating Now
 						</button>
