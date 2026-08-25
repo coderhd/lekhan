@@ -149,7 +149,7 @@ export function GlobalHeader({ children, rightActions }: GlobalHeaderProps) {
 					id="mobile-nav"
 					aria-label="Main"
 					onClick={() => setMenuOpen(false)}
-					className="absolute top-full left-0 right-0 border-b border-border/40 bg-background/95 backdrop-blur-md px-6 py-4 flex flex-col md:hidden"
+					className="absolute top-full left-0 right-0 border-b border-border/40 bg-background px-6 py-4 flex flex-col md:hidden shadow-xl"
 				>
 					{mainContent}
 				</nav>

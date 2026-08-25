@@ -31,34 +31,36 @@ export default function LandingPage() {
 
 	return (
 		<div className="bg-background text-on-surface selection:bg-primary-container/30 min-h-screen relative overflow-hidden transition-colors duration-300">
+			<GlobalHeaderSlot slot="main">
+				<Link
+					href="/#features"
+					className="text-xs text-on-surface-variant hover:text-on-surface transition-colors font-medium flex items-center min-h-[44px]"
+				>
+					Features
+				</Link>
+				<Link
+					href="/faq"
+					className="text-xs text-on-surface-variant hover:text-on-surface transition-colors font-medium flex items-center min-h-[44px]"
+				>
+					FAQ
+				</Link>
+				<Link
+					href="/early?ref=site"
+					className="text-xs font-semibold text-primary-ink hover:text-primary transition-colors flex items-center min-h-[44px]"
+				>
+					Founding Edition
+				</Link>
+			</GlobalHeaderSlot>
 			<GlobalHeaderSlot slot="right">
-					<div className="flex items-center gap-6">
-						<Link
-							href="/#features"
-							className="text-xs text-on-surface-variant hover:text-on-surface transition-colors font-medium flex items-center min-h-[44px]"
-						>
-							Features
-						</Link>
-						<Link
-							href="/faq"
-							className="text-xs text-on-surface-variant hover:text-on-surface transition-colors font-medium flex items-center min-h-[44px]"
-						>
-							FAQ
-						</Link>
-						<Link
-							href="/early?ref=site"
-							className="text-xs font-semibold text-primary-ink hover:text-primary transition-colors flex items-center min-h-[44px]"
-						>
-							Founding Edition
-						</Link>
-						<ThemeToggle />
-						<button
-							onClick={() => router.push('/login')}
-							className="font-label-sm text-xs bg-primary-container text-on-primary-fixed font-bold px-4 py-2 rounded-lg hover:bg-primary transition-colors active:scale-95 shadow-sm"
-						>
-							Log In
-						</button>
-					</div>
+				<div className="flex items-center gap-4">
+					<ThemeToggle />
+					<button
+						onClick={() => router.push('/login')}
+						className="font-label-sm text-xs bg-primary-container text-on-primary-fixed font-bold px-4 py-2.5 rounded-lg hover:bg-primary transition-colors active:scale-95 shadow-sm"
+					>
+						Log In
+					</button>
+				</div>
 			</GlobalHeaderSlot>
 
 			<div className="pt-8">
