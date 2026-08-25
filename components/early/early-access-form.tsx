@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { track } from '@/lib/analytics'
 
 interface JoinResponse {
@@ -20,11 +20,14 @@ type FormState =
  * Claim form for the founding edition (#85). Progressive enhancement: works
  * as a plain POST when JS is off (the route redirects back with ?joined=N).
  */
-export function EarlyAccessForm ({ defaultRef }: { defaultRef?: string }) {
+export function EarlyAccessForm ({ defaultRef, defaultUtm }: { defaultRef?: string; defaultUtm?: string }) {
 	const [state, setState] = useState<FormState>({ kind: 'idle' })
+	const submittingRef = useRef(false)
 
 	async function onSubmit (event: FormEvent<HTMLFormElement>) {
 		event.preventDefault()
+		if (submittingRef.current) return
+		submittingRef.current = true
 		const form = event.currentTarget
 		const data = new FormData(form)
 		setState({ kind: 'submitting' })
@@ -32,16 +35,20 @@ export function EarlyAccessForm ({ defaultRef }: { defaultRef?: string }) {
 		try {
 			const params = new URLSearchParams()
 			if (defaultRef) params.set('ref', defaultRef)
+			if (defaultUtm) params.set('utm_source', defaultUtm)
 			const response = await fetch(`/api/waitlist?${params}`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({
 					email: String(data.get('email') ?? ''),
 					use_case: String(data.get('use_case') ?? ''),
+					ref: String(data.get('ref') ?? ''),
+					utm_source: String(data.get('utm_source') ?? ''),
 				}),
 			})
 			const body = (await response.json()) as JoinResponse & { error?: string }
 			if (!response.ok) {
+				submittingRef.current = false
 				setState({ kind: 'error', message: body.error ?? 'Something went wrong. Please try again.' })
 				return
 			}
@@ -58,6 +65,7 @@ export function EarlyAccessForm ({ defaultRef }: { defaultRef?: string }) {
 				foundingFull: body.foundingFull,
 			})
 		} catch {
+			submittingRef.current = false
 			setState({ kind: 'error', message: 'Network hiccup — check your connection and try again.' })
 		}
 	}
@@ -93,6 +101,7 @@ export function EarlyAccessForm ({ defaultRef }: { defaultRef?: string }) {
 	return (
 		<form method="POST" action="/api/waitlist" onSubmit={onSubmit} className="ek-form" noValidate>
 			{defaultRef != null && <input type="hidden" name="ref" value={defaultRef} />}
+			{defaultUtm != null && <input type="hidden" name="utm_source" value={defaultUtm} />}
 			<div className="ek-form-row">
 				<label className="ek-label" htmlFor="ek-email">
 					Email

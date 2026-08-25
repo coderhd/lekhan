@@ -10,6 +10,7 @@
 import type { ConfirmEmailPayload } from '@/services/waitlist'
 
 const BREVO_API_BASE = 'https://api.brevo.com/v3'
+const REQUEST_TIMEOUT_MS = 10_000
 
 export function buildConfirmEmailHtml (token: string, position?: number): string {
 	const url = `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://lekhan.online'}/api/waitlist/confirm?token=${token}`
@@ -49,6 +50,7 @@ export async function sendConfirmationEmail (payload: ConfirmEmailPayload): Prom
 			subject: `Confirm your founding spot${payload.position ? ` — № ${payload.position} of 500` : ''}`,
 			htmlContent: buildConfirmEmailHtml(payload.token, payload.position),
 		}),
+		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 	})
 
 	if (!response.ok) {

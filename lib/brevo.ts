@@ -7,6 +7,9 @@
 import type { BrevoContactPayload } from '@/services/waitlist'
 
 const BREVO_API_BASE = 'https://api.brevo.com/v3'
+// A stalled Brevo must not stall the signup request; the timeout rejection
+// routes into the outbox fallback like any other failure.
+const REQUEST_TIMEOUT_MS = 10_000
 
 export async function syncBrevoContact (payload: BrevoContactPayload): Promise<void> {
 	const apiKey = process.env.BREVO_API_KEY
@@ -24,6 +27,7 @@ export async function syncBrevoContact (payload: BrevoContactPayload): Promise<v
 			accept: 'application/json',
 		},
 		body: JSON.stringify(payload),
+		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 	})
 
 	// 409 = contact already exists; with updateEnabled:true this only happens

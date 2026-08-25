@@ -85,8 +85,56 @@ describe('POST /api/waitlist', () => {
 		expect(response.headers.get('location')).toContain('/early?joined=37')
 		expect(joinWaitlist).toHaveBeenCalledWith(
 			expect.anything(),
-			expect.objectContaining({ email: 'form@example.com', utmSource: 'instagram' }),
+			expect.objectContaining({ email: 'form@example.com', ref: 'instagram', utmSource: undefined }),
 		)
+	})
+
+	it('keeps referral and utm attribution separate from the query string', async () => {
+		const url = 'https://lekhan.app/api/waitlist?ref=linkedin&utm_source=campaign-x'
+		const response = await POST(
+			new Request(url, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ email: 'attr@example.com' }),
+			}) as never,
+		)
+		expect(response.status).toBe(200)
+		expect(joinWaitlist).toHaveBeenCalledWith(expect.anything(), {
+			email: 'attr@example.com',
+			ref: 'linkedin',
+			utmSource: 'campaign-x',
+			useCase: undefined,
+		})
+	})
+
+	it('lets body values override query attribution defaults', async () => {
+		const response = await POST(
+			new Request('https://lekhan.app/api/waitlist?ref=linkedin', {
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ email: 'override@example.com', ref: 'instagram', utm_source: 'bio' }),
+			}) as never,
+		)
+		expect(response.status).toBe(200)
+		expect(joinWaitlist).toHaveBeenCalledWith(expect.anything(), {
+			email: 'override@example.com',
+			ref: 'instagram',
+			utmSource: 'bio',
+			useCase: undefined,
+		})
+	})
+
+	it('parses separate ref and utm fields from no-JS form posts', async () => {
+		const response = await POST(
+			formRequest({ email: 'formattr@example.com', ref: 'x', utm_source: 'thread' }) as never,
+		)
+		expect(response.status).toBe(303)
+		expect(joinWaitlist).toHaveBeenCalledWith(expect.anything(), {
+			email: 'formattr@example.com',
+			ref: 'x',
+			utmSource: 'thread',
+			useCase: undefined,
+		})
 	})
 
 	it('rate-limits bursts from one ip with 429', async () => {

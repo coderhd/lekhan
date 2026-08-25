@@ -19,13 +19,15 @@ interface PageProps {
 	searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
-async function getClaimedCount (): Promise<number> {
+async function getClaimedCount (): Promise<number | null> {
 	try {
 		const { data } = await supabase.rpc('waitlist_stats')
 		const row = Array.isArray(data) ? data[0] : data
-		return Number(row?.claimed ?? 0)
+		const claimed = Number(row?.claimed)
+		return Number.isFinite(claimed) && claimed >= 0 ? claimed : null
 	} catch {
-		return 0
+		// Stats unavailable: render without the counter rather than lying "0 claimed".
+		return null
 	}
 }
 
@@ -62,9 +64,11 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 	const joinedParam = firstParam(params.joined)
 	const wave2 = firstParam(params.wave2) === '1'
 	const ref = firstParam(params.ref)
+	const utm = firstParam(params.utm_source)
 	const claimed = await getClaimedCount()
 
-	const percentFull = Math.min(100, Math.round((Math.max(claimed, 1) / FOUNDING_CAP) * 100))
+	const percentFull =
+		claimed == null ? null : Math.min(100, Math.round((Math.max(claimed, 1) / FOUNDING_CAP) * 100))
 
 	return (
 		<div className="ek-page">
@@ -94,15 +98,19 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 							Local-first like Obsidian, collaborative like Notion — and AI runs on your own keys.
 						</p>
 						<p className="ek-qualifier tnum">
-							Founding edition · {claimed} claimed · closes when full
+							{claimed == null
+								? 'Founding edition · closes when full'
+								: `Founding edition · ${claimed} claimed · closes when full`}
 						</p>
-						<div
-							className="ek-meter"
-							role="img"
-							aria-label={`${percentFull}% of founding spots claimed`}
-						>
-							<div className="ek-meter-fill" style={{ width: `${percentFull}%` }} />
-						</div>
+						{percentFull != null && (
+							<div
+								className="ek-meter"
+								role="img"
+								aria-label={`${percentFull}% of founding spots claimed`}
+							>
+								<div className="ek-meter-fill" style={{ width: `${percentFull}%` }} />
+							</div>
+						)}
 						<a className="ek-chip" href="#claim">
 							Claim your spot ↓
 						</a>
@@ -180,7 +188,7 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 							)}
 						</div>
 					) : (
-						<EarlyAccessForm defaultRef={ref} />
+						<EarlyAccessForm defaultRef={ref} defaultUtm={utm} />
 					)}
 				</section>
 

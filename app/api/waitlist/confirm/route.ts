@@ -33,12 +33,23 @@ export async function GET (request: NextRequest) {
 
 		return htmlResponse(
 			`You're in — spot № ${result.position} of 500`,
-			`${result.email} is confirmed. Your invite to the private beta follows in spot-number order.`,
+			`${escapeHtml(result.email ?? '')} is confirmed. Your invite to the private beta follows in spot-number order.`,
 			200,
 		)
 	} catch {
 		return htmlResponse('Something went wrong', 'Please try again in a minute.', 500)
 	}
+}
+
+// Email addresses are user input stored at signup; they must never reach the
+// page raw. validateEmail permits <, >, /, = and quotes.
+function escapeHtml (value: string): string {
+	return value
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;')
 }
 
 function htmlResponse (title: string, body: string, status: number): NextResponse {

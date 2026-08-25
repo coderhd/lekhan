@@ -54,7 +54,12 @@ function buildDeps (): WaitlistDeps {
 		brevoSync: syncBrevoContact,
 		emailSender: sendConfirmationEmail,
 		outboxEnqueue: async (waitlistId, kind, payload) => {
-			await supabase.from('brevo_outbox').insert({ waitlist_id: waitlistId, kind, payload })
+			const { error } = await supabase.from('brevo_outbox').insert({ waitlist_id: waitlistId, kind, payload })
+			if (error) {
+				// Must not fail the signup, but a lost outbox row means a lost
+				// email — make it visible in logs.
+				console.error('[waitlist] outbox enqueue failed:', error.message)
+			}
 		},
 	}
 }
@@ -76,27 +81,34 @@ export async function POST (request: NextRequest) {
 
 	let email = ''
 	let useCase: string | undefined
+	let bodyRef: string | undefined
+	let bodyUtm: string | undefined
 	try {
 		if (formMode) {
 			const form = await request.formData()
 			email = String(form.get('email') ?? '')
 			useCase = String(form.get('use_case') ?? '') || undefined
+			bodyRef = String(form.get('ref') ?? '') || undefined
+			bodyUtm = String(form.get('utm_source') ?? '') || undefined
 		} else {
 			const body = (await request.json().catch(() => ({}))) as Record<string, unknown>
 			email = typeof body.email === 'string' ? body.email : ''
 			useCase = typeof body.use_case === 'string' ? body.use_case : undefined
+			bodyRef = typeof body.ref === 'string' ? body.ref : undefined
+			bodyUtm = typeof body.utm_source === 'string' ? body.utm_source : undefined
 		}
 	} catch {
 		email = ''
 	}
 
-	// Attribution: ?ref=x|linkedin|instagram on campaign links; utm_source in
-	// the body wins when a widget supplies its own.
-	const utmSource =
-		url.searchParams.get('utm_source') ?? url.searchParams.get('ref') ?? undefined
+	// Attribution: campaign links carry ?ref=x|linkedin|instagram and/or
+	// ?utm_source=…; body values (widget-supplied) win over the link defaults.
+	// ref and utm_source stay separate all the way to their own columns.
+	const ref = bodyRef ?? url.searchParams.get('ref') ?? undefined
+	const utmSource = bodyUtm ?? url.searchParams.get('utm_source') ?? undefined
 
 	try {
-		const result = await joinWaitlist(buildDeps(), { email, utmSource, useCase })
+		const result = await joinWaitlist(buildDeps(), { email, ref, utmSource, useCase })
 
 		if (formMode) {
 			const target = new URL('/early', url.origin)
