@@ -81,7 +81,7 @@ provider registry).
 
 | # | Work | Priority | Est | Start → Target | Status |
 |---|---|---|---|---|---|
-| #85 | Early-access page + Brevo waitlist | P0 | 12h | Aug 25 → Aug 26 | Ready |
+| #85 | Early-access page + Brevo waitlist | P0 | 12h | Aug 24 | **Shipped** (#91, a day early) |
 | #83 | Analytics events | P0 | 8h | Aug 27 | Ready |
 | #81 | Encrypt-at-rest (spec + impl) | P0 | 16h | Aug 28 → Aug 29 | Ready |
 | #82 | Tier plumbing + storage caps | P0 | 16h | Aug 31 → Sep 1 | Ready |
@@ -94,7 +94,7 @@ provider registry).
 | #30 | Publish polish | P0 | 12h | Oct 8 → Oct 9 | Backlog |
 | — | 🚀 **Public launch** | — | — | **Oct 12** (aggressive Oct 8) | — |
 
-*#85 inserted ahead of beta: content funnel has no conversion target without it.*
+*#85 inserted ahead of beta: content funnel has no conversion target without it. Shipped Aug 24 (#91): /early live, self-hosted double opt-in over Brevo transactional, race-safe spot numbering, outbox retry drain.*
 
 ### Lane B — Founding Desktop `p1`
 
