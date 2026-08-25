@@ -266,7 +266,9 @@ const STYLES = `
 .dark .ek-button:hover:not(:disabled) { background: #e2e1dc; }
 .dark .ek-error { color: #ff9d80; }
 
-main { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+/* Direct-child scoping: these rules must not leak onto the site layout's
+   <main> wrapper or Sonner's notifications <section>. */
+.ek-page > main { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 
 .ek-hero {
 	display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr);
@@ -305,7 +307,7 @@ main { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 }
 .ek-chip:hover { background: var(--ek-ink); color: var(--ek-paper); }
 
-section { padding: clamp(48px, 9vh, 88px) 0; border-bottom: 1px solid var(--ek-hairline); }
+.ek-page > main > section { padding: clamp(48px, 9vh, 88px) 0; border-bottom: 1px solid var(--ek-hairline); }
 .ek-section-head {
 	font-family: Fraunces, ui-serif, Georgia, serif;
 	font-size: clamp(22px, 3vw, 30px); font-weight: 600;
@@ -389,7 +391,7 @@ section { padding: clamp(48px, 9vh, 88px) 0; border-bottom: 1px solid var(--ek-h
 }
 @media (max-width: 320px) {
 	.ek-figure { font-size: 72px; }
-	main { padding: 0 16px; }
+	.ek-page > main { padding: 0 16px; }
 }
 /* Smooth anchor scroll (hero chip → claim form); disabled for reduced motion */
 @media (prefers-reduced-motion: no-preference) {
