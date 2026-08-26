@@ -142,10 +142,13 @@ export default function EditorWorkspace({	pageId,
 	const [workspacePages, setWorkspacePages] = useState<WorkspacePageSummary[]>([])
 
 	useEffect(() => {
+		let isMounted = true
 		const loadMentionables = async () => {
 			try {
 				const collabs = await fetchMentionablePageCollaborators(pageId)
-				setMentionables(collabs.map(c => ({ id: c.id, name: c.full_name || c.email, email: c.email, avatarUrl: c.avatar_url })))
+				if (isMounted) {
+					setMentionables(collabs.map(c => ({ id: c.id, name: c.full_name || c.email, email: c.email, avatarUrl: c.avatar_url })))
+				}
 			} catch (err) {
 				console.error('Error fetching mentionables:', err)
 			}
@@ -153,11 +156,13 @@ export default function EditorWorkspace({	pageId,
 		const loadWorkspacePages = async () => {
 			try {
 				const details = await fetchPageDetails(pageId)
-				if (details?.workspace_id) {
+				if (details?.workspace_id && isMounted) {
 					setWorkspaceId(details.workspace_id)
 					const pages = await fetchWorkspacePages(details.workspace_id)
-					const summaries: WorkspacePageSummary[] = pages.map(p => ({ id: p.id, title: p.title }))
-					setWorkspacePages(summaries)
+					if (isMounted) {
+						const summaries: WorkspacePageSummary[] = pages.map(p => ({ id: p.id, title: p.title }))
+						setWorkspacePages(summaries)
+					}
 				}
 			} catch (err) {
 				console.error('Error fetching workspace pages for wikilinks:', err)
@@ -166,6 +171,9 @@ export default function EditorWorkspace({	pageId,
 		if (pageId) {
 			loadMentionables()
 			loadWorkspacePages()
+		}
+		return () => {
+			isMounted = false
 		}
 	}, [pageId])
 
