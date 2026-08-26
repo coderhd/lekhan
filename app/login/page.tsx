@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Mail, Lock } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { track } from '@/lib/analytics'
 
 export default function LoginPage() {
 	const router = useRouter()
@@ -27,6 +28,7 @@ export default function LoginPage() {
 
 			if (error) throw error
 
+			track('login_completed', { method: 'email' })
 			router.push('/')
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err)

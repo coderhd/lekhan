@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Key, ShieldCheck, Eye, EyeOff, Loader2, CheckCircle2, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { saveEncryptedApiKey, getDecryptedApiKey, clearApiKey } from '@/lib/crypto'
+import { track } from '@/lib/analytics'
 
 export default function BYOKSettings() {
 	const [apiKey, setApiKey] = useState('')
@@ -46,6 +47,7 @@ export default function BYOKSettings() {
 
 			await saveEncryptedApiKey(apiKey.trim())
 			setIsConnected(true)
+			track('ai_provider_connected', { kind: 'byok' })
 			toast.success('Sarvam API Key connected & AES-256 encrypted successfully!')
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : String(err)

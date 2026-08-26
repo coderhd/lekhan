@@ -40,6 +40,7 @@ import { DragContextMenu } from './drag-context-menu'
 import { exportToDocx, exportToPdf, downloadBlob } from '@/lib/export-utils'
 import { buildMarkdownExport, exportFilename, serializeExportBodyMarkdown, serializeExportBodyHtml, buildStandaloneHtml } from '@/lib/markdown-export'
 import { Download, FileText, FileSpreadsheet, FileCode, Globe, type LucideIcon } from 'lucide-react'
+import { track } from '@/lib/analytics'
 
 type ExportType = 'markdown' | 'mdx' | 'html' | 'docx' | 'pdf'
 
@@ -153,6 +154,7 @@ export default function EditorWorkspace({	pageId,
 	const handleExport = async (type: ExportType) => {
 		if (!editor) return
 		setIsExporting(true)
+		track('export_triggered', { format: type })
 		try {
 			if (type === 'markdown' || type === 'mdx') {
 				const [pageDetails, pageTags] = await Promise.all([
@@ -485,6 +487,7 @@ export default function EditorWorkspace({	pageId,
 				const kind = decideMarkdownPaste(plainText, htmlText)
 
 				if (kind === 'markdown') {
+					track('paste_in_resolved', { kind: 'markdown' })
 					const parser = (currentEditor as any).storage?.markdown?.parser
 					if (parser) {
 						const parsedHtml = parser.parse(plainText)
@@ -501,6 +504,7 @@ export default function EditorWorkspace({	pageId,
 				}
 
 				if (kind === 'codeBlock') {
+					track('paste_in_resolved', { kind: 'codeBlock' })
 					event.preventDefault()
 					currentEditor.commands.insertContent({
 						type: 'codeBlock',
@@ -511,6 +515,18 @@ export default function EditorWorkspace({	pageId,
 
 				return false
 			},
+		},
+		onUpdate: () => {
+			try {
+				const today = new Date().toISOString().slice(0, 10)
+				const lastEdit = localStorage.getItem('lekhan_last_edit_date')
+				if (lastEdit !== today) {
+					localStorage.setItem('lekhan_last_edit_date', today)
+					track('daily_active_edit')
+				}
+			} catch {
+				// Safe ignore
+			}
 		},
 		editable: !isViewer,
 		immediatelyRender: false,
@@ -1032,6 +1048,7 @@ export default function EditorWorkspace({	pageId,
 				placeholder="https://example.com"
 				onSubmit={(url) => {
 					if (url) {
+						track('link_created')
 						editor?.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
 					} else {
 						editor?.chain().focus().unsetLink().run()

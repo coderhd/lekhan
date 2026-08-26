@@ -7,6 +7,7 @@ import { fetchPageDetails, updatePagePublicStatus, createPageInvitation, fetchPa
 import { fetchPastCollaborators } from '@/services/db'
 import { PageMember } from '@/types'
 import { CustomSelect } from './ui/custom-select'
+import { track } from '@/lib/analytics'
 
 interface ShareModalProps {
 	isOpen: boolean
@@ -113,6 +114,9 @@ export default function ShareModal({
 			toast.success(`Invite link generated for ${email}!`)
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err)
+			if (message.toLowerCase().includes('collaborator limit') || message.toLowerCase().includes('upgrade plan')) {
+				track('paywall_hit', { gate: 'collaborators' })
+			}
 			toast.error(`Failed to send invite: ${message}`)
 		} finally {
 			setLoading(false)

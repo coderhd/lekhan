@@ -44,6 +44,7 @@ export const metadata: Metadata = {
 import { SessionReauthProvider } from '@/components/session-reauth-provider'
 import { SessionInfoBanner } from '@/components/session-info-banner'
 import GlobalSearchPalette from '@/components/global-search-palette'
+import { AnalyticsProvider } from '@/components/analytics/analytics-provider'
 
 export default function RootLayout({
 	children,
@@ -66,19 +67,21 @@ export default function RootLayout({
 					enableSystem={false}
 					disableTransitionOnChange
 				>
-					<SessionReauthProvider>
-						<GlobalSearchPalette>
-							<GlobalHeaderProvider>
-								<GlobalHeader />
-								<div id="main-content" className="flex min-h-screen flex-col">
-									<main className="flex flex-1 flex-col">{children}</main>
-									<GlobalFooter />
-								</div>
-								<SessionInfoBanner />
-								<Toaster />
-							</GlobalHeaderProvider>
-						</GlobalSearchPalette>
-					</SessionReauthProvider>
+					<AnalyticsProvider>
+						<SessionReauthProvider>
+							<GlobalSearchPalette>
+								<GlobalHeaderProvider>
+									<GlobalHeader />
+									<div id="main-content" className="flex min-h-screen flex-col">
+										<main className="flex flex-1 flex-col">{children}</main>
+										<GlobalFooter />
+									</div>
+									<SessionInfoBanner />
+									<Toaster />
+								</GlobalHeaderProvider>
+							</GlobalSearchPalette>
+						</SessionReauthProvider>
+					</AnalyticsProvider>
 				</ThemeProvider>
 			</body>
 		</html>

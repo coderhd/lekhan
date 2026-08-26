@@ -6,9 +6,9 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { Mail, Lock, User } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { track } from '@/lib/analytics'
 
 export default function SignupPage() {
-
 	const [fullName, setFullName] = useState('')
 	const [email, setEmail] = useState('')
 	const [password, setPassword] = useState('')
@@ -21,6 +21,7 @@ export default function SignupPage() {
 		setError(null)
 		setSuccessMessage(null)
 		setLoading(true)
+		track('signup_started', { method: 'email' })
 
 		try {
 			const { error } = await supabase.auth.signUp({
@@ -35,6 +36,7 @@ export default function SignupPage() {
 
 			if (error) throw error
 
+			track('signup_completed', { method: 'email' })
 			setSuccessMessage('Your account has been created! Please check your email to verify your account before logging in. You may close this window.')
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err)

@@ -21,6 +21,7 @@ import {
 } from '@/services/obsidian-import'
 import { importVaultIR } from '@/services/vault-import'
 import { ImportReportCard } from '@/components/import-report-card'
+import { track } from '@/lib/analytics'
 
 type Phase = 'choose' | 'picking' | 'ingesting' | 'writing' | 'done' | 'error'
 
@@ -116,6 +117,11 @@ export function ImportDialog ({
 			setServerWarnings(outcome.warnings)
 			setCreatedPages(outcome.createdPages)
 			setPhase('done')
+			track('import_completed', {
+				source: 'obsidian',
+				pages_count: result.report.pages,
+				folder_pages_count: result.report.folderPages,
+			})
 			onImportComplete?.()
 		} catch (err) {
 			fail(err instanceof Error ? err.message : String(err))

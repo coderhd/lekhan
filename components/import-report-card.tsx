@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import type { ObsidianImportReport } from '@/services/obsidian-import'
+import { track } from '@/lib/analytics'
 
 interface ImportReportCardProps {
 	report: ObsidianImportReport
@@ -17,6 +19,17 @@ export function ImportReportCard ({ report, serverWarnings, createdPages, onOpen
 	const unresolved = Math.max(0, report.linksUnresolved)
 	const previewPages = createdPages.slice(0, 8)
 	const hiddenPages = createdPages.length - previewPages.length
+
+	useEffect(() => {
+		track('import_report_viewed', {
+			pages: report.pages,
+			folder_pages: report.folderPages,
+			links_resolved: report.linksResolved,
+			links_unresolved: report.linksUnresolved,
+			degraded_blocks: report.degradedBlocks,
+			warnings_count: serverWarnings.length,
+		})
+	}, [report, serverWarnings.length])
 
 	return (
 		<div className="w-full rounded-lg border border-black/10 dark:border-white/10 bg-surface-container p-md text-sm" data-testid="import-report">

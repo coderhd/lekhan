@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Check } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { track } from '@/lib/analytics'
 
 export interface PricingPlan {
 	id: string
@@ -123,6 +124,10 @@ export default function PricingMatrix({
 
 	const handleUpgrade = (plan: PricingPlan) => {
 		if (!isLandingPage && plan.id === currentPlan) return
+		track('upgrade_clicked', {
+			plan: plan.id,
+			billing_cycle: isYearly ? 'yearly' : 'monthly',
+		})
 		// Real billing ships with #29 (Stripe + Razorpay). Until then every plan
 		// CTA routes to signup — the page must never fake a purchase.
 		if (plan.id === 'enterprise') {
