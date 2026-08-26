@@ -131,4 +131,57 @@ describe('wikilink parsing and normalization', () => {
 
 		editor.destroy()
 	})
+
+	it('triggers onCreatePage with target when unresolved wikilink element is clicked', () => {
+		let createdTitle: string | null = null
+		let currentWorkspaceId: string | null = null
+
+		// Simulate stable ref pattern used in editor-workspace
+		const handleCreate = (title: string) => {
+			if (currentWorkspaceId) {
+				createdTitle = `${currentWorkspaceId}:${title}`
+			}
+		}
+
+		const editor = new Editor({
+			extensions: [
+				StarterKit,
+				Wikilink.configure({
+					workspacePages: [],
+					onCreatePage: (title) => handleCreate(title),
+				}),
+			],
+			content: '<p>Click [[New Topic]] to start.</p>',
+		})
+
+		// 1. Initially workspace is not yet loaded
+		const mockEl = document.createElement('span')
+		mockEl.setAttribute('data-wikilink-target', 'New Topic')
+		mockEl.setAttribute('data-wikilink-resolved', 'false')
+
+		const mockEvent = {
+			target: mockEl,
+			preventDefault: () => {},
+		} as unknown as MouseEvent
+
+		const plugins = editor.view.state.plugins
+		const wikilinkPlugin = plugins.find((p: any) => p.key === (wikilinkPluginKey as any).key)
+		expect(wikilinkPlugin).toBeDefined()
+
+		// Click before workspace loaded
+		const handledBefore = (wikilinkPlugin as any)?.props.handleClick?.(editor.view, 1, mockEvent)
+		expect(handledBefore).toBe(true)
+		expect(createdTitle).toBeNull()
+
+		// 2. Workspace loads asynchronously
+		currentWorkspaceId = 'ws-456'
+		editor.commands.setWorkspacePages([{ id: 'other-page', title: 'Other Page' }])
+
+		// Click after workspace loaded
+		const handledAfter = (wikilinkPlugin as any)?.props.handleClick?.(editor.view, 1, mockEvent)
+		expect(handledAfter).toBe(true)
+		expect(createdTitle).toBe('ws-456:New Topic')
+
+		editor.destroy()
+	})
 })

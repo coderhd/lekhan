@@ -34,7 +34,7 @@ import * as Y from 'yjs'
 import { Mention } from '@tiptap/extension-mention'
 import MentionList, { MentionItem } from './mention-list'
 import { fetchPageDetails, fetchPageMemberRole, updatePageTitle, fetchMentionablePageCollaborators, fetchPageTags, fetchWorkspacePages, createPage } from '@/services/graph'
-import { Wikilink, type WorkspacePageSummary } from '@/lib/wikilink'
+import { Wikilink, type WorkspacePageSummary, normalizeWikilinkTarget } from '@/lib/wikilink'
 
 import { TableToolbar } from './table-toolbar'
 import { CodeBlockLanguageSelect } from './code-block-language-select'
@@ -177,12 +177,17 @@ export default function EditorWorkspace({	pageId,
 		}
 	}, [pageId])
 
+	const inFlightPageCreationsRef = useRef<Set<string>>(new Set())
+
 	const handleNavigateToPage = useCallback((targetPageId: string) => {
 		router.push(`/page/${targetPageId}`)
 	}, [router])
 
 	const handleCreateWikilinkPage = useCallback(async (targetTitle: string) => {
 		if (!workspaceId) return
+		const normalized = normalizeWikilinkTarget(targetTitle)
+		if (inFlightPageCreationsRef.current.has(normalized)) return
+		inFlightPageCreationsRef.current.add(normalized)
 		try {
 			const newPage = await createPage(workspaceId, currentUser.id, null, { title: targetTitle })
 			toast.success(`Created page "${targetTitle}"`)
@@ -190,8 +195,16 @@ export default function EditorWorkspace({	pageId,
 		} catch (err) {
 			console.error('Error creating page from wikilink:', err)
 			toast.error(`Failed to create page "${targetTitle}"`)
+		} finally {
+			inFlightPageCreationsRef.current.delete(normalized)
 		}
 	}, [workspaceId, currentUser.id, router])
+
+	const handleNavigateToPageRef = useRef(handleNavigateToPage)
+	handleNavigateToPageRef.current = handleNavigateToPage
+
+	const handleCreateWikilinkPageRef = useRef(handleCreateWikilinkPage)
+	handleCreateWikilinkPageRef.current = handleCreateWikilinkPage
 
 	const handleExport = async (type: ExportType) => {
 		if (!editor) return
@@ -344,8 +357,8 @@ export default function EditorWorkspace({	pageId,
 				if (ext.name === 'wikilink') {
 					return Wikilink.configure({
 						workspacePages,
-						onNavigateToPage: handleNavigateToPage,
-						onCreatePage: handleCreateWikilinkPage,
+						onNavigateToPage: (targetPageId) => handleNavigateToPageRef.current(targetPageId),
+						onCreatePage: (targetTitle) => handleCreateWikilinkPageRef.current(targetTitle),
 					})
 				}
 				return ext

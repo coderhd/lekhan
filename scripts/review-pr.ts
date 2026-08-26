@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { execSync } from 'node:child_process'
+import { execSync, execFileSync } from 'node:child_process'
 
 /**
  * Independent Clean-Room AI PR Reviewer for Lekhan.
@@ -38,7 +38,12 @@ function loadEnv(): Record<string, string> {
 			}
 		}
 	}
-	return { ...env, ...process.env }
+	for (const [k, v] of Object.entries(process.env)) {
+		if (typeof v === 'string') {
+			env[k] = v
+		}
+	}
+	return env
 }
 
 function getGhPath(): string {
@@ -55,11 +60,21 @@ function getGhPath(): string {
 }
 
 function getPRDetails(prNumber: string, gh: string) {
+	if (!/^\d+$/.test(prNumber)) {
+		console.error(`[Error] Invalid pull request number: "${prNumber}". Expected numeric ID.`)
+		process.exit(1)
+	}
+
 	try {
-		const metaJson = execSync(`${gh} pr view ${prNumber} --json number,title,body,baseRefName,headRefName,url`, {
+		const metaJson = execFileSync(
+			gh,
+			['pr', 'view', prNumber, '--json', 'number,title,body,baseRefName,headRefName,url'],
+			{ encoding: 'utf8' }
+		)
+		const diff = execFileSync(gh, ['pr', 'diff', prNumber], {
 			encoding: 'utf8',
+			maxBuffer: 10 * 1024 * 1024,
 		})
-		const diff = execSync(`${gh} pr diff ${prNumber}`, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 })
 		const meta = JSON.parse(metaJson)
 		return { ...meta, diff }
 	} catch (err) {
@@ -150,12 +165,24 @@ async function callOpenRouter(
 
 			if (response.status === 200) {
 				const choice = data.choices?.[0]
-				let content = choice?.message?.content
-				if (!content && choice?.message?.reasoning) {
-					content = choice.message.reasoning
-				}
-				if (content && content.trim().length > 0) {
-					return content.trim()
+				const finishReason = choice?.finish_reason || choice?.native_finish_reason
+				const isNormalCompletion =
+					!finishReason || finishReason === 'stop' || finishReason === 'end_turn'
+
+				if (isNormalCompletion) {
+					let content = choice?.message?.content
+					if (!content && choice?.message?.reasoning) {
+						content = choice.message.reasoning
+					}
+					if (content && content.trim().length > 0) {
+						return content.trim()
+					}
+				} else {
+					console.warn(
+						`[Reviewer] Model ${currentModel} returned incomplete finish_reason: "${finishReason}". Falling back to next model...`
+					)
+					lastError = new Error(`Incomplete response with finish_reason: ${finishReason}`)
+					continue
 				}
 			}
 
@@ -278,7 +305,7 @@ Provide your structured code review now:`
 	if (shouldPostComment && prNumber) {
 		console.log(`[Reviewer] Posting review to GitHub PR #${prNumber}...`)
 		try {
-			execSync(`${gh} pr comment ${prNumber} --body-file "${reviewFile}"`, {
+			execFileSync(gh, ['pr', 'comment', prNumber, '--body-file', reviewFile], {
 				encoding: 'utf8',
 				stdio: 'inherit',
 			})
