@@ -5,6 +5,7 @@ export const metadata: Metadata = {
 	title: 'Contact — Get in Touch | Lekhan',
 	description: 'Have questions or feedback about Lekhan? Reach out via email or connect on social media. We\'d love to hear from you.',
 	openGraph: {
+			images: ['/og.png'],
 		title: 'Contact Lekhan',
 		description: 'Reach out with questions, feedback, or just to say hello.',
 	},
@@ -92,7 +93,7 @@ export default function ContactPage () {
 								<p className="text-sm text-muted-foreground mb-2">
 									{channel.description}
 								</p>
-								<span className="text-sm text-primary font-medium">
+								<span className="text-sm text-primary-ink font-medium">
 									{channel.value}
 								</span>
 							</div>
@@ -106,7 +107,7 @@ export default function ContactPage () {
 						Open Source & Community Driven
 					</h2>
 					<p className="text-muted-foreground leading-relaxed max-w-lg mx-auto">
-						Lekhan is an open-source project. The best way to report bugs or request features is through our <a href="https://github.com/coderhd" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">GitHub repository</a>. For everything else, email works great.
+						Lekhan is an open-source project. The best way to report bugs or request features is through our <a href="https://github.com/coderhd" target="_blank" rel="noopener noreferrer" className="text-primary-ink hover:underline">GitHub repository</a>. For everything else, email works great.
 					</p>
 				</div>
 
@@ -117,7 +118,7 @@ export default function ContactPage () {
 					</p>
 					<Link
 						href="/faq"
-						className="text-primary font-semibold hover:underline"
+						className="text-primary-ink font-semibold hover:underline"
 					>
 						Check out our FAQ →
 					</Link>

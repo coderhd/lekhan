@@ -18,6 +18,7 @@ export function GlobalHeader({ children, rightActions }: GlobalHeaderProps) {
 	const { slots } = useGlobalHeaderSlots()
 	const [user, setUser] = useState<any | null>(null)
 	const [loading, setLoading] = useState(true)
+	const [menuOpen, setMenuOpen] = useState(false)
 	const [isVisible, setIsVisible] = useState(true)
 	const lastScrollY = useRef(0)
 	const frame = useRef<number | null>(null)
@@ -100,10 +101,23 @@ export function GlobalHeader({ children, rightActions }: GlobalHeaderProps) {
 					<img alt="Lekhan Logo" className="h-6 w-6 md:h-7 md:w-7 object-contain cursor-pointer hover:scale-110 transition-transform" src="/logo.png" />
 					<span className="font-display-lg text-xl md:text-2xl font-bold text-primary-container transition-colors group-hover:text-primary leading-none translate-y-[1px]">ekhan</span>
 				</Link>
-				{mainContent}
+				{/* Desktop nav — slot content renders twice (desktop row + mobile panel) */}
+				{mainContent && <div className="hidden md:flex items-center gap-6">{mainContent}</div>}
 			</div>
 
 			<div className="flex items-center gap-4">
+				{mainContent && (
+					<button
+						type="button"
+						aria-expanded={menuOpen}
+						aria-controls="mobile-nav"
+						aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+						onClick={() => setMenuOpen(v => !v)}
+						className="md:hidden flex items-center justify-center min-w-[44px] min-h-[44px] rounded-lg text-on-surface hover:bg-surface transition-colors text-lg"
+					>
+						{menuOpen ? '✕' : '☰'}
+					</button>
+				)}
 				{rightContent ? (
 					rightContent
 				) : (
@@ -129,6 +143,17 @@ export function GlobalHeader({ children, rightActions }: GlobalHeaderProps) {
 					</>
 				)}
 			</div>
+
+			{menuOpen && mainContent && (
+				<nav
+					id="mobile-nav"
+					aria-label="Main"
+					onClick={() => setMenuOpen(false)}
+					className="absolute top-full left-0 right-0 border-b border-border/40 bg-background px-6 py-4 flex flex-col md:hidden shadow-xl"
+				>
+					{mainContent}
+				</nav>
+			)}
 		</header>
 	)
 }

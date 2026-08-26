@@ -43,6 +43,7 @@ module.exports = {
 				"outline": "hsl(var(--outline))",
 				"outline-variant": "hsl(var(--outline-variant))",
 				"primary": "hsl(var(--primary))",
+				"primary-ink": "hsl(var(--primary-ink))",
 				"primary-container": "hsl(var(--primary-container))",
 				"primary-fixed": "hsl(var(--primary-fixed))",
 				"primary-fixed-dim": "hsl(var(--primary-fixed-dim))",

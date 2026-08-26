@@ -5,6 +5,7 @@ export const metadata: Metadata = {
 	title: 'Frequently Asked Questions | Lekhan',
 	description: 'Find answers about Lekhan — the local-first collaborative editor. Learn about offline support, real-time collaboration, AI features, security, and more.',
 	openGraph: {
+			images: ['/og.png'],
 		title: 'FAQ — Lekhan',
 		description: 'Everything you need to know about Lekhan, the collaborative local-first writing tool.',
 	},
@@ -143,7 +144,7 @@ export default function FaqPage () {
 						Frequently Asked Questions
 					</h1>
 					<p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-						Everything you need to know about Lekhan. Can&apos;t find what you&apos;re looking for? <Link href="/contact" className="text-primary hover:underline">Reach out directly</Link>.
+						Everything you need to know about Lekhan. Can&apos;t find what you&apos;re looking for? <Link href="/contact" className="text-primary-ink hover:underline">Reach out directly</Link>.
 					</p>
 				</div>
 

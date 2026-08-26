@@ -5,6 +5,7 @@ export const metadata: Metadata = {
 	title: 'About Lekhan — The Story Behind the Editor',
 	description: 'Learn why Lekhan was built, the problems it solves, and the person behind the project. A local-first editor designed for teams who value speed, privacy, and focus.',
 	openGraph: {
+			images: ['/og.png'],
 		title: 'About Lekhan',
 		description: 'The story behind the local-first collaborative editor built for focused teams.',
 	},

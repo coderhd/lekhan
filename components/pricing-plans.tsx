@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { Check } from 'lucide-react'
-import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 
 export interface PricingPlan {
@@ -123,16 +122,14 @@ export default function PricingMatrix({
 	const [isYearly, setIsYearly] = useState(true)
 
 	const handleUpgrade = (plan: PricingPlan) => {
-		if (isLandingPage && plan.id === 'free') {
-			router.push('/signup')
-			return
-		}
 		if (!isLandingPage && plan.id === currentPlan) return
+		// Real billing ships with #29 (Stripe + Razorpay). Until then every plan
+		// CTA routes to signup — the page must never fake a purchase.
 		if (plan.id === 'enterprise') {
-			toast.info('Thank you for your interest! Our enterprise team will reach out shortly.')
+			router.push('/contact')
 			return
 		}
-		toast.success(`Upgraded to ${plan.name} plan successfully!`)
+		router.push('/signup')
 	}
 
 	const plansToDisplay = category === 'individual' ? INDIVIDUAL_PLANS : TEAM_ENTERPRISE_PLANS

@@ -5,7 +5,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: '*',
       allow: '/',
-      disallow: ['/api/', '/doc/', '/settings/'],
+      disallow: ['/api/', '/doc/', '/settings'],
     },
     sitemap: 'https://lekhan.online/sitemap.xml',
   }

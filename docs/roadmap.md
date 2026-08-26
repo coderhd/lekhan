@@ -6,6 +6,8 @@
 > and keeps the full product picture survivable across sessions. If tracker state
 > and this file disagree, the tracker wins — update this file to match.
 >
+> **Scheduling policy (2026-08-24, owner call):** the public beta is **quality-gated, not date-gated** — it opens when the first-ten-minutes path (signup → import → collaborate → export) passes the #79 UX-parity bar, and invites roll gradually from the /early waitlist. All dates below are directional planning aids, not commitments. "Free" is a permanent positioning pillar: the free tier survives billing (#29).
+>
 > **Strategy:** `docs/superpowers/specs/2026-08-12-global-pkm-suite-strategy-design.md`
 > (approved, §4 horizons; §11 future specs). Labels: `epic` + horizon (`h0`/`h1`/`h2`/`h3`);
 > `needs-spec` marks epics without a written spec yet; `done` marks delivered epics.
