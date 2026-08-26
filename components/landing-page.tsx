@@ -75,8 +75,8 @@ export default function LandingPage() {
 						</div>
 
 						<h1 className="font-display-lg-mobile md:text-display-lg text-4xl sm:text-5xl md:text-6xl lg:text-[64px] font-bold text-on-surface mb-6 leading-[1.1]">
-							Your second brain, <br className="hidden md:block" />
-							your files, your AI.
+							Your notes, <br className="hidden md:block" />
+							on your disk. Now multiplayer.
 						</h1>
 
 						<p className="text-md md:text-xl text-on-surface-variant mb-10 max-w-lg">
@@ -237,7 +237,7 @@ export default function LandingPage() {
 						<div className="absolute inset-0 opacity-10 pointer-events-none">
 							<div className="absolute top-0 left-0 w-full h-full" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1.5px, transparent 0)', backgroundSize: '32px 32px' }}></div>
 						</div>
-						<h2 className="font-display-md text-3xl sm:text-4xl md:text-5xl font-bold text-on-primary mb-6">Your second brain deserves files, not a walled garden.</h2>
+						<h2 className="font-display-md text-3xl sm:text-4xl md:text-5xl font-bold text-on-primary mb-6">Your notes deserve files, not a walled garden.</h2>
 						<p className="text-lg md:text-xl text-on-primary-fixed-variant mb-10 max-w-2xl mx-auto">Import your vault, collaborate in real time, and export everything whenever you want.</p>
 						<button
 							onClick={() => router.push('/signup')}

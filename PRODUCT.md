@@ -44,7 +44,7 @@ Real, demonstrable: vault import with fidelity report; live multiplayer editing;
 ## Product Principles
 
 1. Files stay files — leaving is an export button, not a migration project.
-2. Keys stay yours — AI runs browser-direct on the user's provider keys or local models.
+2. User ownership is non-negotiable — data and keys stay under the user's control in every architecture we ship (the AI layer must earn this, provider epic #28).
 3. Honest scarcity and honest claims — real caps, real numbers, nothing invented. Claims must match shipped implementation; strategy targets are labelled as such.
 4. Local-first is architectural, not a checkbox.
 5. Developer-respectful plain speech over marketing gloss.

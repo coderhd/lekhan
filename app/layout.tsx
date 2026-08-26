@@ -9,7 +9,7 @@ import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
 
 export const metadata: Metadata = {
 	title: {
-		default: 'Lekhan — Your second brain, your files, your AI',
+		default: 'Lekhan — Your notes, on your disk. Now multiplayer',
 		template: '%s | Lekhan',
 	},
 	description: 'Write, edit, and collaborate in real-time with Lekhan. A local-first editor with zero typing latency, full offline support, and AI assistance. Start writing free.',
