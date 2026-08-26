@@ -40,6 +40,7 @@ import { DragContextMenu } from './drag-context-menu'
 import { exportToDocx, exportToPdf, downloadBlob } from '@/lib/export-utils'
 import { buildMarkdownExport, exportFilename, serializeExportBodyMarkdown, serializeExportBodyHtml, buildStandaloneHtml } from '@/lib/markdown-export'
 import { Download, FileText, FileSpreadsheet, FileCode, Globe, type LucideIcon } from 'lucide-react'
+import { track } from '@/lib/analytics'
 
 type ExportType = 'markdown' | 'mdx' | 'html' | 'docx' | 'pdf'
 
@@ -153,6 +154,7 @@ export default function EditorWorkspace({	pageId,
 	const handleExport = async (type: ExportType) => {
 		if (!editor) return
 		setIsExporting(true)
+		track('export_triggered', { format: type })
 		try {
 			if (type === 'markdown' || type === 'mdx') {
 				const [pageDetails, pageTags] = await Promise.all([
@@ -490,6 +492,7 @@ export default function EditorWorkspace({	pageId,
 						const parsedHtml = parser.parse(plainText)
 						if (parsedHtml) {
 							event.preventDefault()
+							track('paste_in_resolved', { kind: 'markdown' })
 							// parsedHtml is already HTML — see lib/insert-parsed-html.ts:
 							// the markdown command overrides would re-parse it as markdown.
 							const replaceDocument = currentEditor.isEmpty || currentEditor.getText().trim() === ''
@@ -502,6 +505,7 @@ export default function EditorWorkspace({	pageId,
 
 				if (kind === 'codeBlock') {
 					event.preventDefault()
+					track('paste_in_resolved', { kind: 'codeBlock' })
 					currentEditor.commands.insertContent({
 						type: 'codeBlock',
 						content: [{ type: 'text', text: plainText }],
@@ -511,6 +515,19 @@ export default function EditorWorkspace({	pageId,
 
 				return false
 			},
+		},
+		onUpdate: () => {
+			try {
+				const today = new Date().toISOString().slice(0, 10)
+				const storageKey = currentUser?.id ? `lekhan_last_edit_date_${currentUser.id}` : 'lekhan_last_edit_date'
+				const lastEdit = localStorage.getItem(storageKey)
+				if (lastEdit !== today) {
+					localStorage.setItem(storageKey, today)
+					track('daily_active_edit')
+				}
+			} catch {
+				// Safe ignore
+			}
 		},
 		editable: !isViewer,
 		immediatelyRender: false,
@@ -1032,6 +1049,7 @@ export default function EditorWorkspace({	pageId,
 				placeholder="https://example.com"
 				onSubmit={(url) => {
 					if (url) {
+						track('link_created')
 						editor?.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
 					} else {
 						editor?.chain().focus().unsetLink().run()

@@ -12,6 +12,7 @@ import {
 
 import { getUserAICredits } from '@/services/db'
 import { supabase } from '@/lib/supabase'
+import { track } from '@/lib/analytics'
 
 interface LekhanBotBarProps {
 	editor: any
@@ -88,6 +89,9 @@ export default function LekhanBotBar({
 	}, [isVisible, onClose])
 
 	const callAPI = async (body: Record<string, string>) => {
+		track('ai_message_sent', {
+			action: body.action || 'custom_prompt',
+		})
 		const res = await fetch('/api/ai', {
 			method: 'POST',
 			headers: {
@@ -197,6 +201,7 @@ export default function LekhanBotBar({
 			return
 		}
 		setIsLoading(true)
+		track('ai_message_sent', { action: 'tts' })
 		fetch('/api/ai', {
 			method: 'POST',
 			headers: {

@@ -279,6 +279,14 @@ export async function updatePageMemberRole (pageId: string, userId: string, role
 	}
 }
 
+export class CollaboratorLimitError extends Error {
+	readonly code = 'COLLABORATOR_LIMIT_REACHED'
+	constructor (message: string) {
+		super(message)
+		this.name = 'CollaboratorLimitError'
+	}
+}
+
 export async function createPageInvitation (
 	pageId: string,
 	inviterId: string,
@@ -310,7 +318,7 @@ export async function createPageInvitation (
 	const totalCount = (memberCount || 0) + (inviteCount || 0)
 
 	if (totalCount >= allowedLimit) {
-		throw new Error(`Collaborator limit reached for page owner's ${ownerCredits.plan.toUpperCase()} plan (max ${allowedLimit}). Upgrade plan to add more collaborators.`)
+		throw new CollaboratorLimitError(`Collaborator limit reached for page owner's ${ownerCredits.plan.toUpperCase()} plan (max ${allowedLimit}). Upgrade plan to add more collaborators.`)
 	}
 
 	const { error } = await supabase

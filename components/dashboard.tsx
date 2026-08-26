@@ -17,6 +17,7 @@ import { InlineEdit } from '@/components/inline-edit'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { ImportDialog } from '@/components/import-dialog'
+import { track } from '@/lib/analytics'
 
 interface DashboardProps {
 	user: {
@@ -150,6 +151,7 @@ export default function Dashboard({ user }: DashboardProps) {
 		try {
 			const workspace = await ensureWorkspace(user.id)
 			const page = await createPage(workspace.id, user.id)
+			track('page_created', { is_first: myPages.length === 0, count: myPages.length + 1 })
 			router.push(`/page/${page.id}`)
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err)
@@ -172,6 +174,7 @@ export default function Dashboard({ user }: DashboardProps) {
 				ownerId: user.id,
 				filename: file.name,
 			})
+			track('import_completed', { source: 'markdown', pages_count: 1 })
 			toast.success(`Imported "${page.title}"`)
 			router.push(`/page/${page.id}`)
 		} catch (err: unknown) {

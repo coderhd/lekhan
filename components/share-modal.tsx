@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react'
 import { X, Copy, Mail, Globe, Lock } from 'lucide-react'
 import { toast } from 'sonner'
-import { fetchPageDetails, updatePagePublicStatus, createPageInvitation, fetchPageMembers, removePageMember, updatePageMemberRole } from '@/services/graph'
+import { fetchPageDetails, updatePagePublicStatus, createPageInvitation, fetchPageMembers, removePageMember, updatePageMemberRole, CollaboratorLimitError } from '@/services/graph'
 import { fetchPastCollaborators } from '@/services/db'
 import { PageMember } from '@/types'
 import { CustomSelect } from './ui/custom-select'
+import { track } from '@/lib/analytics'
 
 interface ShareModalProps {
 	isOpen: boolean
@@ -112,6 +113,13 @@ export default function ShareModal({
 			setEmail('')
 			toast.success(`Invite link generated for ${email}!`)
 		} catch (err: unknown) {
+			const isCollabLimit =
+				err instanceof CollaboratorLimitError ||
+				(typeof err === 'object' && err !== null && (err as { code?: string }).code === 'COLLABORATOR_LIMIT_REACHED') ||
+				(err instanceof Error && err.message.toLowerCase().includes('collaborator limit'))
+			if (isCollabLimit) {
+				track('paywall_hit', { gate: 'collaborators' })
+			}
 			const message = err instanceof Error ? err.message : String(err)
 			toast.error(`Failed to send invite: ${message}`)
 		} finally {
