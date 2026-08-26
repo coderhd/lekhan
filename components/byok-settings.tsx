@@ -144,7 +144,7 @@ export default function BYOKSettings() {
 
 			<div className="p-3.5 rounded-xl bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 text-[11px] text-on-surface-variant flex items-center gap-2.5">
 				<Lock className="w-4 h-4 text-primary shrink-0" />
-				<span>Zero-Knowledge Storage: Your key is encrypted locally via AES-256-GCM and never sent to our servers.</span>
+				<span>Encrypted Storage: Your key is stored on this device via AES-256-GCM and used only to process your AI requests.</span>
 			</div>
 		</div>
 	)

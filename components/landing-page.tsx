@@ -81,7 +81,7 @@ export default function LandingPage() {
 
 						<p className="text-md md:text-xl text-on-surface-variant mb-10 max-w-lg">
 							Local-first like Obsidian, collaborative like Notion. Your notes stay as
-							markdown files on your disk, and AI runs on your own keys, never ours.
+							markdown files on your disk.
 						</p>
 
 						<div className="flex flex-col sm:flex-row w-full sm:w-auto gap-4">
@@ -202,8 +202,8 @@ export default function LandingPage() {
 							<div className="w-14 h-14 rounded-xl bg-primary-container/10 flex items-center justify-center mb-6 text-primary-ink shadow-inner">
 								<Lock className="w-7 h-7" />
 							</div>
-							<h3 className="font-headline-md text-xl font-bold text-on-surface mb-3">AI on Your Own Keys</h3>
-							<p className="font-body-md text-body-md text-on-surface-variant leading-relaxed">Bring OpenAI, Anthropic or Google keys. Requests go browser-direct. We never see, store or pool them.</p>
+							<h3 className="font-headline-md text-xl font-bold text-on-surface mb-3">Search That Follows Links</h3>
+							<p className="font-body-md text-body-md text-on-surface-variant leading-relaxed">Find notes by what they reference, not just keywords. The link graph is the index.</p>
 						</div>
 					</div>
 				</section>

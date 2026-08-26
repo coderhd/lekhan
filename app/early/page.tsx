@@ -89,7 +89,7 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 					<div className="ek-hero-copy">
 						<h1 className="ek-headline">numbered spots. Your second brain, your files, your AI.</h1>
 						<p className="ek-subhead">
-							Local-first like Obsidian, collaborative like Notion, and AI runs on your own keys.
+							Local-first like Obsidian, collaborative like Notion.
 						</p>
 						<p className="ek-qualifier tnum">
 							{claimed == null
@@ -144,10 +144,6 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 							</dd>
 						</div>
 						<div className="ek-term">
-							<dt>AI on your own keys</dt>
-							<dd>Bring OpenAI, Anthropic or Google keys. Requests go browser-direct, never pooled.</dd>
-						</div>
-						<div className="ek-term">
 							<dt>Files that stay files</dt>
 							<dd>Markdown export any time. Joining is not a lock-in.</dd>
 						</div>
@@ -194,13 +190,6 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 							<p>
 								Your notes live as files you control. The app works without a network and syncs
 								when you have one. Leaving is an export button, not a migration project.
-							</p>
-						</div>
-						<div className="ek-faq-item">
-							<h3>How does “AI on my own keys” work?</h3>
-							<p>
-								You paste in an API key from your provider of choice. Requests go straight from
-								your browser to that provider. Lekhan never sees, stores or pools them.
 							</p>
 						</div>
 						<div className="ek-faq-item">

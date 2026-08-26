@@ -17,11 +17,11 @@ Secondary (later waves): Notion refugees (after Notion import ships, H1); teams 
 
 ## Product Purpose
 
-Lekhan is a local-first collaborative knowledge workspace. Pages live as a graph (backlinks, tags, search), sync offline-first via CRDT, support real-time multiplayer editing, and every AI feature runs on the user's own keys or local models — never on our servers. Success: founding cohort (500 numbered spots) filled with users who stay; public launch ~Oct 12; $50k ARR via ~500 paying workspaces.
+Lekhan is a local-first collaborative knowledge workspace. Pages live as a graph (backlinks, tags, search), sync offline-first via CRDT, and support real-time multiplayer editing. The AI layer is being rebuilt by the provider epic (#28) — strategic target: user-owned keys; marketing makes no AI architecture claims until it ships. Success: founding cohort (500 numbered spots) filled with users who stay; public launch ~Oct 12; $50k ARR via ~500 paying workspaces.
 
 ## Positioning
 
-"Your second brain, your files, your AI. Local-first like Obsidian, collaborative like Notion — AI runs on your own keys." The mechanism a neighbor could not truthfully copy: notes live as files on the user's disk (architectural, not a checkbox) while real-time CRDT collaboration runs over them, and AI calls go browser-direct on user-supplied keys — never hosted, never pooled, never metered.
+"Your second brain, your files, your AI. Local-first like Obsidian, collaborative like Notion — AI runs on your own keys." The mechanism a neighbor could not truthfully copy: notes live as files on the user's disk (architectural, not a checkbox) while real-time CRDT collaboration runs over them, and AI ownership is the strategic target (provider epic #28, in redesign — not marketed until shipped).
 
 ## Operating Context
 
@@ -29,7 +29,7 @@ Individuals and small teams evaluating PKM tools against Obsidian and Notion. Tr
 
 ## Capabilities and Constraints
 
-Shipped today: Obsidian vault import preserving wikilinks/callouts/frontmatter/tags; markdown round-trip export (.md/.mdx/.html/.pdf/.docx); real-time CRDT collaboration on shared pages; global search across the link graph; BYOK AI (OpenAI/Anthropic/Google keys, browser-direct); encrypted at rest by default (E2E tier in build, #81); founding waitlist with numbered spots (#85).
+Shipped today: Obsidian vault import preserving wikilinks/callouts/frontmatter/tags; markdown round-trip export (.md/.mdx/.html/.pdf/.docx); real-time CRDT collaboration on shared pages; global search across the link graph; AI assistance (chat/translate/TTS via a single provider integration) — being redesigned by #28; no AI architecture claims in marketing until it lands; encrypted at rest by default (E2E tier in build, #81); founding waitlist with numbered spots (#85).
 
 Constraints: no hosted AI inference ever (positioning bright line); no invented metrics or testimonials; interop ≤25% of any delivery horizon; Reddit is replies-only (account ban history).
 
@@ -45,7 +45,7 @@ Real, demonstrable: vault import with fidelity report; live multiplayer editing;
 
 1. Files stay files — leaving is an export button, not a migration project.
 2. Keys stay yours — AI runs browser-direct on the user's provider keys or local models.
-3. Honest scarcity and honest claims — real caps, real numbers, nothing invented.
+3. Honest scarcity and honest claims — real caps, real numbers, nothing invented. Claims must match shipped implementation; strategy targets are labelled as such.
 4. Local-first is architectural, not a checkbox.
 5. Developer-respectful plain speech over marketing gloss.
 
