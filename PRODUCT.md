@@ -29,7 +29,7 @@ Individuals and small teams evaluating PKM tools against Obsidian and Notion. Tr
 
 ## Capabilities and Constraints
 
-Shipped today: Obsidian vault import preserving wikilinks/callouts/frontmatter/tags; markdown round-trip export (.md/.mdx/.html/.pdf/.docx); real-time CRDT collaboration on shared pages; global search across the link graph; AI assistance (chat/translate/TTS via a single provider integration) — being redesigned by #28; no AI architecture claims in marketing until it lands; encrypted at rest by default (E2E tier in build, #81); founding waitlist with numbered spots (#85).
+Shipped today: Obsidian vault import preserving wikilinks/callouts/frontmatter/tags; markdown round-trip export (.md/.html/.pdf/.docx); real-time CRDT collaboration on shared pages; global search across the link graph; AI assistance (chat/translate/TTS via a single provider integration) — being redesigned by #28; no AI architecture claims in marketing until it lands; encrypted at rest by default (E2E tier in build, #81); founding waitlist with numbered spots (#85).
 
 Constraints: no hosted AI inference ever (positioning bright line); no invented metrics or testimonials; interop ≤25% of any delivery horizon; Reddit is replies-only (account ban history).
 

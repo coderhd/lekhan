@@ -32,7 +32,7 @@ export function slugifyTitle(title: string): string {
 		.replace(/^-+|-+$/g, '')
 }
 
-export function exportFilename(title: string, extension: 'md' | 'mdx' | 'html'): string {
+export function exportFilename(title: string, extension: 'md' | 'html'): string {
 	const slug = slugifyTitle(title)
 	return `${slug || 'untitled'}.${extension}`
 }
@@ -76,8 +76,7 @@ export function stripAutoHeading(doc: JSONContent): JSONContent {
 /**
  * Serialize a page doc for export to markdown, dropping the placeholder
  * leading heading. HTML the editor represents as marks/nodes (color spans,
- * links, code, …) round-trips into the output; the same body is saved as
- * both `.md` and `.mdx`.
+ * links, code, …) round-trips into the output; saved as `.md`.
  */
 export function serializeExportBodyMarkdown(doc: JSONContent): string {
 	return serializeMarkdown(stripAutoHeading(doc), exportExtensions())

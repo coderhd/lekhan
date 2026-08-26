@@ -42,11 +42,10 @@ import { buildMarkdownExport, exportFilename, serializeExportBodyMarkdown, seria
 import { Download, FileText, FileSpreadsheet, FileCode, Globe, type LucideIcon } from 'lucide-react'
 import { track } from '@/lib/analytics'
 
-type ExportType = 'markdown' | 'mdx' | 'html' | 'docx' | 'pdf'
+type ExportType = 'markdown' | 'html' | 'docx' | 'pdf'
 
 const EXPORT_MENU_ITEMS: { type: ExportType; label: string; icon: LucideIcon; iconClass: string }[] = [
 	{ type: 'markdown', label: 'Download as Markdown (.md)', icon: FileCode, iconClass: 'text-emerald-500' },
-	{ type: 'mdx', label: 'Download as MDX (.mdx)', icon: FileCode, iconClass: 'text-purple-500' },
 	{ type: 'html', label: 'Download as HTML (.html)', icon: Globe, iconClass: 'text-orange-500' },
 	{ type: 'docx', label: 'Download as DOCX', icon: FileSpreadsheet, iconClass: 'text-blue-500' },
 	{ type: 'pdf', label: 'Download as PDF', icon: FileText, iconClass: 'text-red-500' },
@@ -156,7 +155,7 @@ export default function EditorWorkspace({	pageId,
 		setIsExporting(true)
 		track('export_triggered', { format: type })
 		try {
-			if (type === 'markdown' || type === 'mdx') {
+			if (type === 'markdown') {
 				const [pageDetails, pageTags] = await Promise.all([
 					fetchPageDetails(pageId),
 					fetchPageTags(pageId),
@@ -167,8 +166,7 @@ export default function EditorWorkspace({	pageId,
 					pageTags: pageTags.map((t) => t.tag),
 					body: serializeExportBodyMarkdown(editor.getJSON()),
 				})
-				const extension = type === 'mdx' ? 'mdx' : 'md'
-				downloadBlob(new Blob([file], { type: 'text/markdown;charset=utf-8' }), exportFilename(title, extension))
+				downloadBlob(new Blob([file], { type: 'text/markdown;charset=utf-8' }), exportFilename(title, 'md'))
 			} else if (type === 'html') {
 				const html = buildStandaloneHtml(serializeExportBodyHtml(editor.getJSON()), title)
 				downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), exportFilename(title, 'html'))
