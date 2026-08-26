@@ -7,6 +7,7 @@ import {
 	resetAnalytics,
 	isFeatureEnabled,
 	_resetStateForTesting,
+	sanitizeProps,
 	GA_MEASUREMENT_ID,
 	POSTHOG_EU_HOST,
 } from '@/lib/analytics'
@@ -60,7 +61,7 @@ describe('analytics module', () => {
 		})
 	})
 
-	describe('track seam', () => {
+	describe('track seam & sanitizeProps', () => {
 		it('fans out events with props to both gtag and posthog', () => {
 			const gtag = vi.fn()
 			;(window as unknown as { gtag?: unknown }).gtag = gtag
@@ -71,19 +72,39 @@ describe('analytics module', () => {
 			expect(posthog.capture).toHaveBeenCalledWith('page_created', { is_first: true, count: 3 })
 		})
 
-		it('strips forbidden content keys to enforce privacy invariant', () => {
+		it('strips forbidden content keys and aliased keys to enforce privacy invariant', () => {
 			const gtag = vi.fn()
 			;(window as unknown as { gtag?: unknown }).gtag = gtag
 
 			track('page_created', {
 				is_first: true,
 				title: 'Secret Note Title',
-				content: 'Private document text',
+				noteTitle: 'Alias Title',
+				page_content: 'Private document text',
+				custom_body: 'Private body',
+				markdown_text: '### md',
 				plaintext: 'Private document text',
-			})
+			} as any)
 
 			expect(gtag).toHaveBeenCalledWith('event', 'page_created', { is_first: true })
 			expect(posthog.capture).toHaveBeenCalledWith('page_created', { is_first: true })
+		})
+
+		it('drops non-allowlisted properties for supported events', () => {
+			const sanitized = sanitizeProps('page_created', {
+				is_first: true,
+				count: 5,
+				unauthorized_extra_prop: 'some value',
+			} as any)
+
+			expect(sanitized).toEqual({ is_first: true, count: 5 })
+		})
+
+		it('returns empty props for unsupported event names', () => {
+			const sanitized = sanitizeProps('arbitrary_unsupported_event', {
+				some_prop: 'val',
+			})
+			expect(sanitized).toEqual({})
 		})
 
 		it('is safe when gtag or posthog fail or are not available', () => {
@@ -92,9 +113,17 @@ describe('analytics module', () => {
 	})
 
 	describe('identifyUser & resetAnalytics', () => {
-		it('identifies user in posthog', () => {
-			identifyUser('user-123', { email: 'user@example.com' })
-			expect(posthog.identify).toHaveBeenCalledWith('user-123', { email: 'user@example.com' })
+		it('identifies user in posthog with only allowed identity traits', () => {
+			identifyUser('user-123', {
+				email: 'user@example.com',
+				plan: 'pro',
+				disallowed_secret: 'secret_value',
+				token: 'token_123',
+			})
+			expect(posthog.identify).toHaveBeenCalledWith('user-123', {
+				email: 'user@example.com',
+				plan: 'pro',
+			})
 		})
 
 		it('resets analytics on logout', () => {

@@ -201,6 +201,7 @@ export default function LekhanBotBar({
 			return
 		}
 		setIsLoading(true)
+		track('ai_message_sent', { action: 'tts' })
 		fetch('/api/ai', {
 			method: 'POST',
 			headers: {

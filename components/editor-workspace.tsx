@@ -487,12 +487,12 @@ export default function EditorWorkspace({	pageId,
 				const kind = decideMarkdownPaste(plainText, htmlText)
 
 				if (kind === 'markdown') {
-					track('paste_in_resolved', { kind: 'markdown' })
 					const parser = (currentEditor as any).storage?.markdown?.parser
 					if (parser) {
 						const parsedHtml = parser.parse(plainText)
 						if (parsedHtml) {
 							event.preventDefault()
+							track('paste_in_resolved', { kind: 'markdown' })
 							// parsedHtml is already HTML — see lib/insert-parsed-html.ts:
 							// the markdown command overrides would re-parse it as markdown.
 							const replaceDocument = currentEditor.isEmpty || currentEditor.getText().trim() === ''
@@ -504,8 +504,8 @@ export default function EditorWorkspace({	pageId,
 				}
 
 				if (kind === 'codeBlock') {
-					track('paste_in_resolved', { kind: 'codeBlock' })
 					event.preventDefault()
+					track('paste_in_resolved', { kind: 'codeBlock' })
 					currentEditor.commands.insertContent({
 						type: 'codeBlock',
 						content: [{ type: 'text', text: plainText }],
@@ -519,9 +519,10 @@ export default function EditorWorkspace({	pageId,
 		onUpdate: () => {
 			try {
 				const today = new Date().toISOString().slice(0, 10)
-				const lastEdit = localStorage.getItem('lekhan_last_edit_date')
+				const storageKey = currentUser?.id ? `lekhan_last_edit_date_${currentUser.id}` : 'lekhan_last_edit_date'
+				const lastEdit = localStorage.getItem(storageKey)
 				if (lastEdit !== today) {
-					localStorage.setItem('lekhan_last_edit_date', today)
+					localStorage.setItem(storageKey, today)
 					track('daily_active_edit')
 				}
 			} catch {

@@ -126,7 +126,7 @@ export default function PricingMatrix({
 		if (!isLandingPage && plan.id === currentPlan) return
 		track('upgrade_clicked', {
 			plan: plan.id,
-			billing_cycle: isYearly ? 'yearly' : 'monthly',
+			...(plan.id !== 'enterprise' ? { billing_cycle: isYearly ? 'yearly' : 'monthly' } : {}),
 		})
 		// Real billing ships with #29 (Stripe + Razorpay). Until then every plan
 		// CTA routes to signup — the page must never fake a purchase.
