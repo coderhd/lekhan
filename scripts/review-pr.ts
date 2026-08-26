@@ -253,10 +253,16 @@ Provide your structured code review now:`
 
 	const reviewOutput = await callOpenRouter(apiKey, customModel, userPrompt, systemPrompt)
 
+	// Clean up any internal reasoning/thinking tags from reasoning models
+	let cleanOutput = reviewOutput
+	if (cleanOutput.includes('</think>')) {
+		cleanOutput = cleanOutput.split('</think>').pop()!.trim()
+	}
+
 	console.log('\n' + '='.repeat(80))
 	console.log(`REVIEW RESULT FOR: ${prData.title}`)
 	console.log('='.repeat(80) + '\n')
-	console.log(reviewOutput)
+	console.log(cleanOutput)
 	console.log('\n' + '='.repeat(80))
 
 	// Save review to file
@@ -265,18 +271,16 @@ Provide your structured code review now:`
 		fs.mkdirSync(reviewsDir, { recursive: true })
 	}
 	const reviewFile = path.resolve(reviewsDir, `pr-${prData.number || 'local'}-review.md`)
-	const fileContent = `# Code Review: PR #${prData.number || 'LOCAL'} - ${prData.title}\n\n**Reviewer**: Clean-Room OpenRouter (${customModel})\n**Date**: ${new Date().toISOString()}\n\n${reviewOutput}\n`
-	fs.writeFileSync(reviewFile, fileContent, 'utf8')
+	const formattedReview = `### 🤖 Lekhan Independent Clean-Room Review (${customModel})\n\n${cleanOutput}\n`
+	fs.writeFileSync(reviewFile, formattedReview, 'utf8')
 	console.log(`[Reviewer] Review saved locally to: ${reviewFile}`)
 
 	if (shouldPostComment && prNumber) {
 		console.log(`[Reviewer] Posting review to GitHub PR #${prNumber}...`)
 		try {
-			const formattedComment = `### 🤖 Lekhan Independent Clean-Room Review (${customModel})\n\n${reviewOutput}`
-			execSync(`${gh} pr comment ${prNumber} --body-file -`, {
-				input: formattedComment,
+			execSync(`${gh} pr comment ${prNumber} --body-file "${reviewFile}"`, {
 				encoding: 'utf8',
-				stdio: ['pipe', 'inherit', 'inherit'],
+				stdio: 'inherit',
 			})
 			console.log(`[Reviewer] Successfully commented on PR #${prNumber}!`)
 		} catch (err) {
