@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { readJsonWithLimit, PayloadTooLargeError } from '@/lib/request-limits'
+import { encryptSnapshot } from '@/lib/server-crypto'
 import graphIndex from '../../../server/graph-index.js'
 
 // The import payload is the base64-encoded IR. A 64 MB ceiling keeps peak
@@ -286,10 +287,11 @@ export async function POST(request: NextRequest) {
 				const index = cursor++
 				const leaf = createdLeaves[index]
 				try {
-					const buffer = Buffer.from(leaf.source.contentYjsBase64, 'base64')
+					const rawBuffer = Buffer.from(leaf.source.contentYjsBase64, 'base64')
+					const encryptedBuffer = encryptSnapshot(rawBuffer)
 					const { error: uploadError } = await supabaseAdmin.storage
 						.from('documents')
-						.upload(`${leaf.id}/main_state.bin`, buffer, {
+						.upload(`${leaf.id}/main_state.bin`, encryptedBuffer, {
 							contentType: 'application/octet-stream',
 							upsert: true,
 						})
