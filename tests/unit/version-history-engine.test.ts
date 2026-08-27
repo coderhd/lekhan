@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import * as Y from 'yjs'
 import { VersionHistoryEngine } from '../../lib/version-history/engine'
 import { VersionHistoryStorageAdapter, DocumentCheckpoint } from '../../lib/version-history/types'
@@ -25,7 +25,9 @@ class MockStorageAdapter implements VersionHistoryStorageAdapter {
 	}
 
 	async pruneAutoCheckpoints(pageId: string, maxStorageBytes: number): Promise<number> {
-		this.prunedCount++
+		if (pageId && maxStorageBytes >= 0) {
+			this.prunedCount++
+		}
 		return 1
 	}
 }

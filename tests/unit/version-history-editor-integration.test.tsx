@@ -1,11 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import EditorWorkspace from '../../components/editor-workspace'
 import GlobalSearchPalette from '../../components/global-search-palette'
 import * as Y from 'yjs'
 import { VersionHistoryEngine } from '../../lib/version-history/engine'
-import { IndexedDBHistoryAdapter } from '../../lib/version-history/adapters/indexeddb'
-import { toast } from 'sonner'
 
 // Mock toast
 vi.mock('sonner', () => ({

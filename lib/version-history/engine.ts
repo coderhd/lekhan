@@ -68,7 +68,6 @@ export class VersionHistoryEngine {
 			for (const [key, type] of targetYdoc.share.entries()) {
 				if (type instanceof Y.Text) {
 					const tempType = tempDoc.getText(key)
-					const targetStr = type.toString()
 					const tempStr = tempType.toString()
 					
 					type.delete(0, type.length)
