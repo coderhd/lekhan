@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 
 // Mock the environment variables needed for server scripts
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'

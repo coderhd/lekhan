@@ -23,27 +23,6 @@ describe('POST /api/cron/retention-prune', () => {
 	})
 
 	it('executes global retention pruning when authorized with valid CRON_SECRET', async () => {
-		const selectVersionsMock = vi.fn().mockReturnValue({
-			order: vi.fn().mockResolvedValue({
-				data: [{ document_id: 'doc-1' }],
-				error: null,
-			}),
-		})
-
-		const selectLtMock = vi.fn().mockReturnValue({
-			select: vi.fn().mockReturnValue({
-				eq: vi.fn().mockReturnValue({
-					lt: vi.fn().mockResolvedValue({
-						data: [{ id: 'v1' }, { id: 'v2' }],
-						error: null,
-					}),
-				}),
-			}),
-			delete: vi.fn().mockReturnValue({
-				in: vi.fn().mockResolvedValue({ error: null }),
-			}),
-		})
-
 		const mockSupabase = {
 			from: vi.fn().mockImplementation((table: string) => {
 				if (table === 'document_versions') {

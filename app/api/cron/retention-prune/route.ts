@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-const { getDocumentOwnerPlan } = require('../../../../server/auth.js')
-const { pruneExpiredDocumentVersions } = require('../../../../server/retention.js')
+import auth from '@/server/auth.js'
+import retention from '@/server/retention.js'
+
+const { getDocumentOwnerPlan } = auth
+const { pruneExpiredDocumentVersions } = retention
 
 export const dynamic = 'force-dynamic'
 

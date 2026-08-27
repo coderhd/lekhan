@@ -78,4 +78,18 @@ describe('Collaborator Ledger Service', () => {
 		const count = await getDistinctCollaboratorsCount(mockSupabase, 'doc-123')
 		expect(count).toBe(0)
 	})
+
+	it('returns list of distinct collaborator IDs', async () => {
+		mockSupabase.from.mockReturnValue({
+			select: vi.fn().mockReturnValue({
+				eq: vi.fn().mockResolvedValue({
+					data: [{ user_id: 'user-1' }, { user_id: 'user-2' }],
+					error: null,
+				}),
+			}),
+		})
+
+		const ids = await getDistinctCollaboratorIds(mockSupabase, 'doc-123')
+		expect(ids).toEqual(['user-1', 'user-2'])
+	})
 })

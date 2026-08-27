@@ -82,6 +82,7 @@ async function getDistinctCollaboratorIds (supabaseAdmin, documentId) {
 
 		return data.map(row => row.user_id)
 	} catch (err) {
+		console.error(`[Ledger] Unexpected error in getDistinctCollaboratorIds for ${documentId}:`, err)
 		return []
 	}
 }
