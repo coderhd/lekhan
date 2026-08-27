@@ -6,6 +6,7 @@ import { useEditor, EditorContent, Editor, ReactNodeViewRenderer } from '@tiptap
 import Collaboration from '@tiptap/extension-collaboration'
 import { CollaborationCursor } from '@/lib/collaboration-cursor'
 import { EyeOff } from 'lucide-react'
+import { toast } from 'sonner'
 import tippy from 'tippy.js'
 import { createRoot } from 'react-dom/client'
 import { useEditorCollab } from '@/hooks/use-editor-collab'
@@ -32,7 +33,8 @@ import { PromptDialog } from './ui/prompt-dialog'
 import * as Y from 'yjs'
 import { Mention } from '@tiptap/extension-mention'
 import MentionList, { MentionItem } from './mention-list'
-import { fetchPageDetails, fetchPageMemberRole, updatePageTitle, fetchMentionablePageCollaborators, fetchPageTags } from '@/services/graph'
+import { fetchPageDetails, fetchPageMemberRole, updatePageTitle, fetchMentionablePageCollaborators, fetchPageTags, fetchWorkspacePages, createPage } from '@/services/graph'
+import { Wikilink, type WorkspacePageSummary, normalizeWikilinkTarget } from '@/lib/wikilink'
 
 import { TableToolbar } from './table-toolbar'
 import { CodeBlockLanguageSelect } from './code-block-language-select'
@@ -135,20 +137,73 @@ export default function EditorWorkspace({	pageId,
 	const [mentionables, setMentionables] = useState<MentionItem[]>([])
 	const [isExporting, setIsExporting] = useState(false)
 	const [isExportOpen, setIsExportOpen] = useState(false)
+	const [workspaceId, setWorkspaceId] = useState<string | null>(null)
+	const [workspacePages, setWorkspacePages] = useState<WorkspacePageSummary[]>([])
 
 	useEffect(() => {
+		let isMounted = true
 		const loadMentionables = async () => {
 			try {
 				const collabs = await fetchMentionablePageCollaborators(pageId)
-				setMentionables(collabs.map(c => ({ id: c.id, name: c.full_name || c.email, email: c.email, avatarUrl: c.avatar_url })))
+				if (isMounted) {
+					setMentionables(collabs.map(c => ({ id: c.id, name: c.full_name || c.email, email: c.email, avatarUrl: c.avatar_url })))
+				}
 			} catch (err) {
 				console.error('Error fetching mentionables:', err)
 			}
 		}
+		const loadWorkspacePages = async () => {
+			try {
+				const details = await fetchPageDetails(pageId)
+				if (details?.workspace_id && isMounted) {
+					setWorkspaceId(details.workspace_id)
+					const pages = await fetchWorkspacePages(details.workspace_id)
+					if (isMounted) {
+						const summaries: WorkspacePageSummary[] = pages.map(p => ({ id: p.id, title: p.title }))
+						setWorkspacePages(summaries)
+					}
+				}
+			} catch (err) {
+				console.error('Error fetching workspace pages for wikilinks:', err)
+			}
+		}
 		if (pageId) {
 			loadMentionables()
+			loadWorkspacePages()
+		}
+		return () => {
+			isMounted = false
 		}
 	}, [pageId])
+
+	const inFlightPageCreationsRef = useRef<Set<string>>(new Set())
+
+	const handleNavigateToPage = useCallback((targetPageId: string) => {
+		router.push(`/page/${targetPageId}`)
+	}, [router])
+
+	const handleCreateWikilinkPage = useCallback(async (targetTitle: string) => {
+		if (!workspaceId) return
+		const normalized = normalizeWikilinkTarget(targetTitle)
+		if (inFlightPageCreationsRef.current.has(normalized)) return
+		inFlightPageCreationsRef.current.add(normalized)
+		try {
+			const newPage = await createPage(workspaceId, currentUser.id, null, { title: targetTitle })
+			toast.success(`Created page "${targetTitle}"`)
+			router.push(`/page/${newPage.id}`)
+		} catch (err) {
+			console.error('Error creating page from wikilink:', err)
+			toast.error(`Failed to create page "${targetTitle}"`)
+		} finally {
+			inFlightPageCreationsRef.current.delete(normalized)
+		}
+	}, [workspaceId, currentUser.id, router])
+
+	const handleNavigateToPageRef = useRef(handleNavigateToPage)
+	handleNavigateToPageRef.current = handleNavigateToPage
+
+	const handleCreateWikilinkPageRef = useRef(handleCreateWikilinkPage)
+	handleCreateWikilinkPageRef.current = handleCreateWikilinkPage
 
 	const handleExport = async (type: ExportType) => {
 		if (!editor) return
@@ -295,7 +350,17 @@ export default function EditorWorkspace({	pageId,
 
 	const editor = useEditor({
 		extensions: [
-			...getSharedExtensions().map((ext) => (ext.name === 'callout' ? LiveCallout : ext)),
+			...getSharedExtensions().map((ext) => {
+				if (ext.name === 'callout') return LiveCallout
+				if (ext.name === 'wikilink') {
+					return Wikilink.configure({
+						workspacePages,
+						onNavigateToPage: (targetPageId) => handleNavigateToPageRef.current(targetPageId),
+						onCreatePage: (targetTitle) => handleCreateWikilinkPageRef.current(targetTitle),
+					})
+				}
+				return ext
+			}),
 			...(ydoc ? [
 				Collaboration.configure({
 					document: ydoc,
@@ -565,6 +630,12 @@ export default function EditorWorkspace({	pageId,
 			hydratedRef.current = true
 		}
 	}, [editor, ydoc, isLocalSynced, initialContent])
+
+	useEffect(() => {
+		if (editor && workspacePages.length > 0) {
+			editor.commands.setWorkspacePages(workspacePages)
+		}
+	}, [editor, workspacePages])
 
 	const handleLekhanBotResult = useCallback((
 		actionId: string,

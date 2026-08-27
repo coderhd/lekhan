@@ -21,6 +21,7 @@ import { Image } from '@tiptap/extension-image'
 import { Link } from '@tiptap/extension-link'
 import { PersistentSelection } from '@/lib/persistent-selection'
 import { Callout } from '@/lib/callout'
+import { Wikilink } from '@/lib/wikilink'
 
 const lowlight = createLowlight(common)
 
@@ -81,6 +82,7 @@ export const getSharedExtensions = (options?: { document?: AnyExtension }): AnyE
 	TaskList,
 	TaskItem.configure({ nested: true }),
 	Callout,
+	Wikilink,
 	Image.configure({
 		inline: true,
 		allowBase64: true,
