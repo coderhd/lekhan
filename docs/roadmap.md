@@ -58,6 +58,7 @@ provider registry).
 | P2 — Client Cutover onto the Pages Graph | #9 | Progressive migration; app fully on the graph |
 | H0 — Global Search (index-native, keyboard-first) | #25 | Tickets #33–#36 done; shipped in PR #37 |
 | H0 — Product analytics: event instrumentation for PMF funnel | #83 | Dual-destination PostHog EU + GA4, privacy sanitization, PMF funnel events |
+| H0 — Encrypt page snapshots at rest (ADR 0001) | #81 | AES-256-GCM envelope encryption with magic header LK_ENC_V1, key rotation, backfill script |
 
 | Epic | Issue | Blocker edges | Notes |
 |---|---|---|---|
@@ -86,7 +87,7 @@ provider registry).
 |---|---|---|---|---|---|
 | #85 | Early-access page + Brevo waitlist | P0 | 12h | Aug 24 | **Shipped** (#91, a day early) |
 | #83 | Analytics events | P0 | 8h | Aug 27 | **Shipped** (PR #95) |
-| #81 | Encrypt-at-rest (spec + impl) | P0 | 16h | Aug 28 → Aug 29 | Ready |
+| #81 | Encrypt-at-rest (spec + impl) | P0 | 16h | Aug 28 → Aug 29 | **Shipped** (PR #96) |
 | #82 | Tier plumbing + storage caps | P0 | 16h | Aug 31 → Sep 1 | Ready |
 | — | 🔒 **Private beta opens** (gate #84 clears) | — | — | **Sep 2** | — |
 | #28 | AI Provider Registry (final spec 4h incl.) | P0 | 64h | Sep 2 → Sep 10 | In review (seed) |
