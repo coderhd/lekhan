@@ -54,9 +54,9 @@ The `persist` method executes the following pipeline:
    *Failure Domain: If any of these fail, the `persist` operation throws (or returns success: false), and the WebSocket layer is notified of a failed sync.*
 
 2. **Non-Critical Path (Isolated Failures)**:
-   - **Graph Indexing**: If `isE2EEnabled` is false, extract text content and invoke `indexer.indexPage`. If true, skip indexing.
+   - **Graph Indexing**: If `isE2EEnabled` is false (or per-call option `options.isE2EEnabled` is false), extract text content and invoke `indexer.indexPage`. If true, skip indexing.
    - **Retention Sweeps**: Invoke `retentionEngine.pruneExpiredDocumentVersions` based on the owner's plan limits.
-   *Failure Domain: Failures in indexing or retention are caught, logged, and returned in `nonCriticalResults`. They DO NOT fail the overall save operation.*
+   *Failure Domain: Failures in indexing or retention (whether a thrown exception or a resolved `{ success: false }` result) are caught, logged, and returned in `nonCriticalResults`. They DO NOT fail the overall save operation.*
 
 ## 4. Seam Placement & Testability
 

@@ -28,7 +28,7 @@ Build order: persistence-orchestration → error-isolation → hub-seam
 
 ## Acceptance Criteria
 
-- **Given** a dirty Yjs document in the WebSocket hub, **when** `PagePersister.persist(pageId, ydoc)` is called, **then** it performs encryption, storage upload, DB update, graph index update, and retention in one awaitable call.
+- **Given** a dirty Yjs document in the WebSocket hub, **when** `PagePersister.persist(pageId, ydoc)` is called, **then** it performs encryption, storage upload, DB update, graph index update (when E2E encryption is disabled), and retention in one awaitable call.
 - **Given** the persistence orchestration runs, **when** non-critical systems (like graph index or version retention) fail, **then** the failures are logged but do not fail the overall document snapshot save.
 - **Given** the WebSocket connection handlers in `server/index.js`, **when** a document state needs saving, **then** they only interact with `PagePersister.persist`, with zero leakage of Yjs encoding, crypto, storage, or indexing details.
 - **Given** the `PagePersister` module, **when** running unit/integration tests, **then** the persistence engine can be fully tested using mock storage/db adapters without running the WebSocket server.

@@ -13,19 +13,20 @@ const { getDocumentOwnerPlan } = require('./auth.js')
  * @param {Object} [config.indexer] - Optional graph indexer service
  * @param {Object} [config.retentionEngine] - Optional retention pruner service
  * @param {Object} [config.authService] - Optional plan lookup service
- * @returns {{ persist: (documentId: string, ydoc: import('yjs').Doc) => Promise<{ success: boolean, documentId: string, nonCriticalResults: { indexingSuccess: boolean, retentionSuccess: boolean } }> }}
+ * @returns {{ persist: (documentId: string, ydoc: import('yjs').Doc, options?: { isE2EEnabled?: boolean }) => Promise<{ success: boolean, documentId: string, nonCriticalResults: { indexingSuccess: boolean, retentionSuccess: boolean } }> }}
  */
 function createPagePersister({
 	supabaseAdmin,
-	isE2EEnabled = false,
+	isE2EEnabled: defaultE2EEnabled = false,
 	indexer = graphIndex,
 	retentionEngine = { pruneExpiredDocumentVersions },
 	authService = { getDocumentOwnerPlan },
 }) {
 	return {
-		persist: async (documentId, ydoc) => {
+		persist: async (documentId, ydoc, options = {}) => {
 			let indexingSuccess = true
 			let retentionSuccess = true
+			const isE2EEnabled = options.isE2EEnabled !== undefined ? options.isE2EEnabled : defaultE2EEnabled
 
 			try {
 				// 1. Encode Yjs state to binary and encrypt at rest
@@ -78,7 +79,10 @@ function createPagePersister({
 					try {
 						const ownerPlan = await authService.getDocumentOwnerPlan(supabaseAdmin, documentId)
 						if (ownerPlan) {
-							await retentionEngine.pruneExpiredDocumentVersions(supabaseAdmin, documentId, ownerPlan, new Date())
+							const pruneResult = await retentionEngine.pruneExpiredDocumentVersions(supabaseAdmin, documentId, ownerPlan, new Date())
+							if (pruneResult && pruneResult.success === false) {
+								retentionSuccess = false
+							}
 						}
 					} catch (planError) {
 						console.warn('[Persister] Retention error:', planError)
