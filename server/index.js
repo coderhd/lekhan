@@ -7,8 +7,8 @@ const { getSupabaseClient, verifyUserRole, getDocumentOwnerPlan } = require('./a
 const { getPlanLimits } = require('../lib/tier-limits.ts')
 const { pruneExpiredDocumentVersions } = require('./retention.js')
 const { admitCollaborator } = require('./ledger.js')
-const graphIndex = require('./graph-index')
-const { encryptSnapshot, decryptSnapshot } = require('./crypto')
+const { decryptSnapshot } = require('./crypto')
+const { createPagePersister } = require('./persister')
 
 const port = process.env.PORT || 8080
 const MAX_CONNECTIONS = 1500
@@ -28,6 +28,8 @@ const supabaseAdmin = createClient(
 		},
 	}
 )
+
+const pagePersister = createPagePersister({ supabaseAdmin })
 
 const wss = new WebSocket.Server({
 	noServer: true,
@@ -127,63 +129,9 @@ const server = http.createServer((req, res) => {
 // Helper to save document state to Supabase Storage and update text index
 async function saveDocumentState (documentId, ydoc) {
 	try {
-		console.log(`[Sync] Saving document ${documentId} to Supabase...`)
-
-		// 1. Encode Yjs state to binary and encrypt at rest (ADR 0001)
-		const stateUpdate = Y.encodeStateAsUpdate(ydoc)
-		const encryptedBuffer = encryptSnapshot(stateUpdate)
-
-		// 2. Upload encrypted binary to Supabase Storage documents bucket
-		const { error: uploadError } = await supabaseAdmin.storage
-			.from('documents')
-			.upload(`${documentId}/main_state.bin`, encryptedBuffer, {
-				contentType: 'application/octet-stream',
-				upsert: true,
-			})
-
-		if (uploadError) {
-			throw uploadError
-		}
-
-		// 3. Extract text content; update pages first, fall back to legacy documents
-		const textContent = ydoc.getText('default').toString()
-		const { data: pageRow } = await supabaseAdmin
-			.from('pages')
-			.select('id')
-			.eq('id', documentId)
-			.maybeSingle()
-
-		if (pageRow) {
-			await graphIndex.indexPage(supabaseAdmin, documentId, textContent)
-		} else {
-			const { error: dbError } = await supabaseAdmin
-				.from('documents')
-				.update({
-					searchable_text: textContent,
-					updated_at: new Date().toISOString(),
-				})
-				.eq('id', documentId)
-
-			if (dbError) {
-				throw dbError
-			}
-		}
-
-		console.log(`[Sync] Document ${documentId} successfully synced to Supabase.`)
-
-		// 4. Prune expired versions
-		try {
-			const ownerPlan = await getDocumentOwnerPlan(supabaseAdmin, documentId)
-			if (ownerPlan) {
-				const { prunedCount } = await pruneExpiredDocumentVersions(supabaseAdmin, documentId, ownerPlan, new Date())
-				if (prunedCount > 0) {
-					console.log(`[Retention] Pruned ${prunedCount} expired versions for doc ${documentId}`)
-				}
-			}
-		} catch (planError) {
-			console.warn(`[Retention] Skipping retention pruning for doc ${documentId} due to plan resolution failure:`, planError)
-		}
-
+		console.log(`[Sync] Saving document ${documentId} to Supabase via persister...`)
+		await pagePersister.persist(documentId, ydoc)
+		console.log(`[Sync] Document ${documentId} successfully synced.`)
 	} catch (error) {
 		console.error(`[Sync Error] Failed to save document ${documentId}:`, error)
 		throw error
