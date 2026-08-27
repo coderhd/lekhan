@@ -14,10 +14,13 @@ const port = process.env.PORT || 8080
 const MAX_CONNECTIONS = 1500
 const MAX_PAYLOAD_BYTES = 10 * 1024 * 1024 // 10 MB payload guard
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
+const supabaseKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-key'
+
 // Initialize privileged Supabase client for backend operations
 const supabaseAdmin = createClient(
-	process.env.NEXT_PUBLIC_SUPABASE_URL,
-	process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY,
+	supabaseUrl,
+	supabaseKey,
 	{
 		auth: {
 			persistSession: false,
@@ -353,8 +356,10 @@ async function gracefulShutdown () {
 process.on('SIGINT', gracefulShutdown)
 process.on('SIGTERM', gracefulShutdown)
 
-server.listen(port, () => {
-	console.log(`Sync Server listening on port ${port}`)
-})
+if (require.main === module || (!process.env.VITEST && process.env.NODE_ENV !== 'test')) {
+	server.listen(port, () => {
+		console.log(`Sync Server listening on port ${port}`)
+	})
+}
 
 module.exports = { server, wss, saveDocumentState, clearSaveTimers, getServerMetrics }
