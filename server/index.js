@@ -28,6 +28,7 @@ const server = http.createServer((req, res) => {
 })
 
 const wss = new WebSocket.Server({ noServer: true })
+const { encryptSnapshot, decryptSnapshot } = require('./crypto')
 
 // Cache save timers
 const saveDebounceTimers = new Map()
@@ -37,14 +38,14 @@ async function saveDocumentState (documentId, ydoc) {
 	try {
 		console.log(`[Sync] Saving document ${documentId} to Supabase...`)
 		
-		// 1. Encode Yjs state to binary
+		// 1. Encode Yjs state to binary and encrypt at rest (ADR 0001)
 		const stateUpdate = Y.encodeStateAsUpdate(ydoc)
-		const buffer = Buffer.from(stateUpdate)
+		const encryptedBuffer = encryptSnapshot(stateUpdate)
 
-		// 2. Upload binary to Supabase Storage documents bucket
+		// 2. Upload encrypted binary to Supabase Storage documents bucket
 		const { error: uploadError } = await supabaseAdmin.storage
 			.from('documents')
-			.upload(`${documentId}/main_state.bin`, buffer, {
+			.upload(`${documentId}/main_state.bin`, encryptedBuffer, {
 				contentType: 'application/octet-stream',
 				upsert: true,
 			})
@@ -93,14 +94,15 @@ setPersistence({
 		try {
 			console.log(`[Persist] Loading document ${documentId}...`)
 
-			// 1. Fetch base Yjs state from Supabase Storage
+			// 1. Fetch base Yjs state from Supabase Storage and decrypt at rest (ADR 0001)
 			const { data, error } = await supabaseAdmin.storage
 				.from('documents')
 				.download(`${documentId}/main_state.bin`)
 
 			if (data) {
 				const arrayBuffer = await data.arrayBuffer()
-				const uint8Array = new Uint8Array(arrayBuffer)
+				const decrypted = decryptSnapshot(Buffer.from(arrayBuffer))
+				const uint8Array = new Uint8Array(decrypted.buffer, decrypted.byteOffset, decrypted.byteLength)
 				Y.applyUpdate(ydoc, uint8Array, 'supabase-load')
 				console.log(`[Persist] Base state applied for ${documentId}`)
 			} else if (error && error.status !== 404) {

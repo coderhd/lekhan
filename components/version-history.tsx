@@ -27,6 +27,7 @@ export default function VersionHistory({
 	onClose,
 	documentId,
 	ydoc,
+	token,
 	isViewer = false,
 	plan = 'free',
 	onPreviewVersion = () => { },
@@ -69,32 +70,32 @@ export default function VersionHistory({
 
 		setSaving(true)
 		try {
-			const { data: { user }, error: userError } = await supabase.auth.getUser()
-			if (userError || !user?.id) {
+			const { data: { session } } = await supabase.auth.getSession()
+			const effectiveToken = token || session?.access_token
+			if (!effectiveToken) {
 				throw new Error('Authentication required to save version checkpoint')
 			}
 
-			const versionId = crypto.randomUUID()
 			const update = Y.encodeStateAsUpdate(ydoc)
-			const blob = new Blob([update.buffer as ArrayBuffer], { type: 'application/octet-stream' })
+			const base64State = Buffer.from(update).toString('base64')
 
-			const { error: storageError } = await supabase.storage
-				.from('documents')
-				.upload(`${documentId}/versions/${versionId}.bin`, blob)
+			const res = await fetch('/api/version', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${effectiveToken}`,
+				},
+				body: JSON.stringify({
+					documentId,
+					versionName: newVersionName.trim(),
+					base64State,
+				}),
+			})
 
-			if (storageError) throw storageError
-
-			const { error: dbError } = await supabase
-				.from('document_versions')
-				.insert({
-					id: versionId,
-					page_id: documentId,
-					version_name: newVersionName.trim(),
-					storage_path: `${documentId}/versions/${versionId}.bin`,
-					created_by: user.id,
-				})
-
-			if (dbError) throw dbError
+			if (!res.ok) {
+				const errData = await res.json().catch(() => ({}))
+				throw new Error(errData.error || 'Failed to save version checkpoint')
+			}
 
 			toast.success('Version checkpoint saved!')
 			setNewVersionName('')
@@ -116,15 +117,27 @@ export default function VersionHistory({
 
 		setLoading(true)
 		try {
-			const { data, error } = await supabase.storage
-				.from('documents')
-				.download(`${documentId}/versions/${version.id}.bin`)
-
-			if (error || !data) {
-				throw error || new Error('No data returned')
+			const { data: { session } } = await supabase.auth.getSession()
+			const effectiveToken = token || session?.access_token
+			if (!effectiveToken) {
+				throw new Error('Authentication required to load version')
 			}
 
-			const buffer = await data.arrayBuffer()
+			const res = await fetch(
+				`/api/version?documentId=${encodeURIComponent(documentId)}&versionId=${encodeURIComponent(version.id)}`,
+				{
+					headers: {
+						Authorization: `Bearer ${effectiveToken}`,
+					},
+				}
+			)
+
+			if (!res.ok) {
+				const errData = await res.json().catch(() => ({}))
+				throw new Error(errData.error || 'Failed to load version snapshot')
+			}
+
+			const buffer = await res.arrayBuffer()
 			const uint8Array = new Uint8Array(buffer)
 
 			const tempDoc = new Y.Doc()
@@ -154,15 +167,27 @@ export default function VersionHistory({
 
 		setLoading(true)
 		try {
-			const { data, error } = await supabase.storage
-				.from('documents')
-				.download(`${documentId}/versions/${version.id}.bin`)
-
-			if (error || !data) {
-				throw error || new Error('No data returned')
+			const { data: { session } } = await supabase.auth.getSession()
+			const effectiveToken = token || session?.access_token
+			if (!effectiveToken) {
+				throw new Error('Authentication required to restore version')
 			}
 
-			const buffer = await data.arrayBuffer()
+			const res = await fetch(
+				`/api/version?documentId=${encodeURIComponent(documentId)}&versionId=${encodeURIComponent(version.id)}`,
+				{
+					headers: {
+						Authorization: `Bearer ${effectiveToken}`,
+					},
+				}
+			)
+
+			if (!res.ok) {
+				const errData = await res.json().catch(() => ({}))
+				throw new Error(errData.error || 'Failed to restore version snapshot')
+			}
+
+			const buffer = await res.arrayBuffer()
 			const uint8Array = new Uint8Array(buffer)
 
 			const targetDoc = new Y.Doc()
