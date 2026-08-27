@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Users, CreditCard, Sparkles, AlertTriangle, Zap } from 'lucide-react'
+import { User, Users, CreditCard, Sparkles, AlertTriangle, Zap, Bot } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import {
@@ -13,6 +13,7 @@ import { removePageMember, updatePageMemberRole, fetchOwnedPagesWithMembers } fr
 import BYOKSettings from '@/components/byok-settings'
 import PricingMatrix from '@/components/pricing-plans'
 import { CustomSelect } from './ui/custom-select'
+import { AIProviderSettings } from './settings/ai-provider-settings'
 
 const EMPTY_PAGES: any[] = []
 
@@ -27,7 +28,7 @@ export default function SettingsClient({
 	setPages?: React.Dispatch<React.SetStateAction<any[]>>
 }) {
 	const router = useRouter()
-	const [activeTab, setActiveTab] = useState<'profile' | 'collaborators' | 'usage' | 'billing'>('profile')
+	const [activeTab, setActiveTab] = useState<'profile' | 'collaborators' | 'usage' | 'billing' | 'ai'>('profile')
 	const [password, setPassword] = useState('')
 	const [confirmPassword, setConfirmPassword] = useState('')
 	const [passwordError, setPasswordError] = useState('')
@@ -153,6 +154,16 @@ export default function SettingsClient({
 					<aside className="w-full lg:w-64 shrink-0 flex flex-row lg:flex-col gap-2 overflow-x-auto border-b lg:border-b-0 lg:border-r border-black/10 dark:border-white/10 pb-4 lg:pb-0 lg:pr-6">
 						<button
 							type="button"
+							onClick={() => setActiveTab('ai')}
+							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'ai'
+								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
+								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
+								}`}
+						>
+							<Bot className="w-4 h-4" /> AI & Models
+						</button>
+						<button
+							type="button"
 							onClick={() => setActiveTab('profile')}
 							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'profile'
 								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
@@ -195,6 +206,14 @@ export default function SettingsClient({
 
 					{/* Main Tab Content */}
 					<div className="flex-1 h-full overflow-y-auto hide-scrollbar pb-16">
+						{activeTab === 'ai' && (
+							<div className="space-y-8 w-full max-w-4xl">
+								<h2 className="text-2xl font-display-lg text-on-surface mb-2">AI & Models</h2>
+								<p className="text-sm text-on-surface-variant mb-6">Manage your connected AI providers, local models, and billing tiers.</p>
+								<AIProviderSettings user={user} />
+							</div>
+						)}
+
 						{activeTab === 'profile' && (
 							<div className="space-y-8 max-w-3xl">
 								{/* Profile Section */}
