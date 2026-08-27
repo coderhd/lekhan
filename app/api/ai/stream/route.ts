@@ -1,12 +1,10 @@
-import { AIProviderType } from '../../../../lib/ai/types'
-
 export async function POST(req: Request) {
 	try {
 		const body = await req.json()
 		const { provider, model, apiKey, baseUrl, messages, temperature, maxTokens } = body
 
 		let upstreamUrl = ''
-		let upstreamHeaders: Record<string, string> = {
+		const upstreamHeaders: Record<string, string> = {
 			'Content-Type': 'application/json'
 		}
 		let upstreamBody: any = {

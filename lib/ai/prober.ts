@@ -82,10 +82,8 @@ export async function probeLocalRuntime(runtime: LocalRuntime = 'ollama', custom
 		const data = await response.json()
 		let models: string[] = []
 		if (runtime === 'ollama' && data.models) {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			models = data.models.map((m: any) => m.name)
 		} else if ((runtime === 'lmstudio' || runtime === 'llamacpp') && data.data) {
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			models = data.data.map((m: any) => m.id)
 		}
 

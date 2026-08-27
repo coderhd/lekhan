@@ -33,7 +33,6 @@ export default function LekhanBotBar({
 	isVisible,
 	onClose,
 	onResult,
-	detectedLanguage,
 	creditsRemaining,
 }: LekhanBotBarProps) {
 	const [prompt, setPrompt] = useState('')

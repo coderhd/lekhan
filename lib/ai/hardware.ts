@@ -38,7 +38,7 @@ export async function detectHardwareProfile(): Promise<HardwareProfile> {
 				gpuVendor = adapter.vendor || (adapter as any).info?.vendor
 				gpuRenderer = adapter.architecture || (adapter as any).info?.architecture || (adapter as any).info?.device
 			}
-		} catch (e) {
+		} catch {
 			// WebGPU not available or permission denied
 		}
 	}

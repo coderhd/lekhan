@@ -29,7 +29,10 @@ export function AIActionsMenu({ isOpen, onAction, onClose, position }: AIActions
 			{actions.map((action) => (
 				<button
 					key={action.id}
-					onClick={() => onAction(action.id)}
+					onClick={() => {
+						onAction(action.id)
+						onClose()
+					}}
 					className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors whitespace-nowrap"
 				>
 					<action.icon className="w-4 h-4 text-purple-500" />

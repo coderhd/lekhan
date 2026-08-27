@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Activity, Server, Zap, Lock, Eye, EyeOff, CheckCircle2, AlertTriangle, CloudOff, KeyRound, Cpu } from 'lucide-react'
+import { Activity, Lock, Eye, EyeOff, CheckCircle2, AlertTriangle, CloudOff, KeyRound, Cpu } from 'lucide-react'
 import { AIRegistryState } from '../../lib/ai/types'
 import { getDefaultAIRegistryState } from '../../lib/ai/catalog'
 import { HardwareProfile, detectHardwareProfile } from '../../lib/ai/hardware'
@@ -13,7 +13,7 @@ interface AIProviderSettingsProps {
 	user?: { id?: string; email?: string }
 }
 
-export function AIProviderSettings({ registryState = getDefaultAIRegistryState(), onSaveRegistry, user }: AIProviderSettingsProps) {
+export function AIProviderSettings({ registryState = getDefaultAIRegistryState(), onSaveRegistry }: AIProviderSettingsProps) {
 	const [activeTier, setActiveTier] = useState<1 | 2 | 3 | 'catalog'>(3)
 	const [hardware, setHardware] = useState<HardwareProfile | null>(null)
 	const [localProbe, setLocalProbe] = useState<LocalProbeResult | null>(null)

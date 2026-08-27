@@ -19,7 +19,7 @@ export class AIClient {
 		const attempt = async (config: AIProviderConfig, fallbacks: AIProviderConfig[]) => {
 			try {
 				let url = '/api/ai/stream'
-				let body: any = {
+				const body: any = {
 					provider: config.provider,
 					model: config.defaultModel,
 					apiKey: config.apiKey,
@@ -32,7 +32,7 @@ export class AIClient {
 				}
 				body.messages.push({ role: 'user', content: prompt })
 
-				let fetchOpts: RequestInit = {
+				const fetchOpts: RequestInit = {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify(body),
@@ -72,7 +72,6 @@ export class AIClient {
 				if (reader) {
 					const decoder = new TextDecoder()
 					let buffer = ''
-					// eslint-disable-next-line no-constant-condition
 					while (true) {
 						const { done, value } = await reader.read()
 						if (done) break

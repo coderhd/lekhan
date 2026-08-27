@@ -2,8 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
 	probeLocalRuntime,
 	probeAllLocalRuntimes,
-	getOsSpecificCorsCommand,
-	type LocalRuntime
+	getOsSpecificCorsCommand
 } from '../../lib/ai/prober'
 
 describe('AI Prober', () => {
