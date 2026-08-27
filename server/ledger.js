@@ -4,43 +4,33 @@
  */
 
 async function getDistinctCollaboratorsCount (supabaseAdmin, documentId) {
-	try {
-		const { data, error } = await supabaseAdmin
-			.from('document_collaborators_ledger')
-			.select('user_id')
-			.eq('document_id', documentId)
+	const { data, error } = await supabaseAdmin
+		.from('document_collaborators_ledger')
+		.select('user_id')
+		.eq('document_id', documentId)
 
-		if (error) {
-			console.error(`[Ledger] Error fetching distinct collaborators for ${documentId}:`, error)
-			return 0
-		}
-
-		return (data && Array.isArray(data)) ? data.length : 0
-	} catch (err) {
-		console.error(`[Ledger] Unexpected error in getDistinctCollaboratorsCount for ${documentId}:`, err)
-		return 0
+	if (error) {
+		console.error(`[Ledger] Error fetching distinct collaborators for ${documentId}:`, error)
+		throw error
 	}
+
+	return (data && Array.isArray(data)) ? data.length : 0
 }
 
 async function isCollaboratorRegistered (supabaseAdmin, documentId, userId) {
-	try {
-		const { data, error } = await supabaseAdmin
-			.from('document_collaborators_ledger')
-			.select('user_id')
-			.eq('document_id', documentId)
-			.eq('user_id', userId)
-			.maybeSingle()
+	const { data, error } = await supabaseAdmin
+		.from('document_collaborators_ledger')
+		.select('user_id')
+		.eq('document_id', documentId)
+		.eq('user_id', userId)
+		.maybeSingle()
 
-		if (error) {
-			console.error(`[Ledger] Error checking registration for ${documentId} / ${userId}:`, error)
-			return false
-		}
-
-		return !!data
-	} catch (err) {
-		console.error(`[Ledger] Unexpected error in isCollaboratorRegistered for ${documentId}:`, err)
-		return false
+	if (error) {
+		console.error(`[Ledger] Error checking registration for ${documentId} / ${userId}:`, error)
+		throw error
 	}
+
+	return !!data
 }
 
 async function recordCollaboratorAccess (supabaseAdmin, documentId, userId) {

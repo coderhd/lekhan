@@ -65,7 +65,7 @@ describe('Collaborator Ledger Service', () => {
 		)
 	})
 
-	it('handles database errors gracefully and returns fallback', async () => {
+	it('propagates database errors instead of returning permissive fallbacks', async () => {
 		mockSupabase.from.mockReturnValue({
 			select: vi.fn().mockReturnValue({
 				eq: vi.fn().mockResolvedValue({
@@ -75,8 +75,9 @@ describe('Collaborator Ledger Service', () => {
 			}),
 		})
 
-		const count = await getDistinctCollaboratorsCount(mockSupabase, 'doc-123')
-		expect(count).toBe(0)
+		await expect(getDistinctCollaboratorsCount(mockSupabase, 'doc-123')).rejects.toThrow(
+			'Postgres connection failed'
+		)
 	})
 
 	it('returns list of distinct collaborator IDs', async () => {
