@@ -73,20 +73,19 @@ describe('Collaborator Ledger Service', () => {
 			data: null,
 			error: { message: 'Could not find function in schema cache', code: 'PGRST202' },
 		})
+		const eqResult: any = Promise.resolve({ data: [], error: null })
+		eqResult.eq = vi.fn().mockReturnValue({
+			maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+		})
 		mockSupabase.from.mockReturnValue({
 			select: vi.fn().mockReturnValue({
-				eq: vi.fn().mockReturnValue({
-					eq: vi.fn().mockReturnValue({
-						maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-					}),
-					mockResolvedValue: vi.fn().mockResolvedValue({ data: [], error: null }),
-				}),
+				eq: vi.fn().mockReturnValue(eqResult),
 			}),
 			upsert: vi.fn().mockResolvedValue({ error: null }),
 		})
 
 		const result = await admitCollaborator(mockSupabase, 'doc-123', 'user-fallback', 2)
-		expect(result).toHaveProperty('allowed')
+		expect(result).toEqual({ allowed: true, is_registered: false, current_count: 1 })
 	})
 
 	it('returns distinct collaborator count from database', async () => {

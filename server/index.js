@@ -424,11 +424,13 @@ setInterval(async () => {
 			}
 
 			for (const page of batchPages) {
-				const ownerPlan = await getDocumentOwnerPlan(supabaseAdmin, page.id)
-				if (ownerPlan) {
-					await pruneExpiredDocumentVersions(supabaseAdmin, page.id, ownerPlan, new Date()).catch((err) => {
-						console.warn(`[Retention Sweep] Pruning failed for doc ${page.id}:`, err)
-					})
+				try {
+					const ownerPlan = await getDocumentOwnerPlan(supabaseAdmin, page.id)
+					if (ownerPlan) {
+						await pruneExpiredDocumentVersions(supabaseAdmin, page.id, ownerPlan, new Date())
+					}
+				} catch (err) {
+					console.warn(`[Retention Sweep] Plan lookup failed for doc ${page.id}:`, err)
 				}
 			}
 
