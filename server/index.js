@@ -6,7 +6,7 @@ const { createClient } = require('@supabase/supabase-js')
 const { getSupabaseClient, verifyUserRole, getDocumentOwnerPlan } = require('./auth')
 const { getPlanLimits } = require('../lib/tier-limits.ts')
 const { pruneExpiredDocumentVersions } = require('./retention.js')
-const { getDistinctCollaboratorsCount, isCollaboratorRegistered, recordCollaboratorAccess } = require('./ledger.js')
+const { admitCollaborator } = require('./ledger.js')
 const graphIndex = require('./graph-index')
 const { encryptSnapshot, decryptSnapshot } = require('./crypto')
 
@@ -29,7 +29,10 @@ const supabaseAdmin = createClient(
 	}
 )
 
-const wss = new WebSocket.Server({ noServer: true })
+const wss = new WebSocket.Server({
+	noServer: true,
+	maxPayload: MAX_PAYLOAD_BYTES,
+})
 
 // Cache save timers
 const saveDebounceTimers = new Map()
@@ -46,18 +49,55 @@ function clearSaveTimers (documentId) {
 	}
 }
 
+// In-flight save serialization per document to avoid concurrent writes to main_state.bin
+const inFlightSaves = new Map()
+const queuedFollowUpSaves = new Map()
+
+async function triggerSerializedSave (documentId, ydoc) {
+	if (inFlightSaves.has(documentId)) {
+		queuedFollowUpSaves.set(documentId, ydoc)
+		return inFlightSaves.get(documentId)
+	}
+
+	const savePromise = (async () => {
+		try {
+			await saveDocumentState(documentId, ydoc)
+		} finally {
+			inFlightSaves.delete(documentId)
+			if (queuedFollowUpSaves.has(documentId)) {
+				const nextYdoc = queuedFollowUpSaves.get(documentId)
+				queuedFollowUpSaves.delete(documentId)
+				// Defer follow-up save asynchronously
+				triggerSerializedSave(documentId, nextYdoc).catch((err) => {
+					console.error(`[Sync] Follow-up save error for ${documentId}:`, err)
+				})
+			}
+		}
+	})()
+
+	inFlightSaves.set(documentId, savePromise)
+	return savePromise
+}
+
+// Track pending asynchronous WebSocket upgrade reservations
+let pendingUpgrades = 0
+
 // Health and metrics helper
 function getServerMetrics () {
 	const mem = process.memoryUsage()
 	const heapTotal = mem.heapTotal || 1
 	const heapUsed = mem.heapUsed || 0
 	const heapUtilizationPct = Math.round((heapUsed / heapTotal) * 100)
+	const isMemoryExhausted = mem.heapTotal > 0 && (heapUsed / heapTotal) > 0.85
+	const totalConnections = wss.clients.size + pendingUpgrades
+	const isShedding = totalConnections >= MAX_CONNECTIONS || isMemoryExhausted
 
 	return {
-		status: 'ok',
+		status: isShedding ? 'shedding' : 'ok',
 		uptimeSeconds: Math.floor(process.uptime()),
 		activeDocuments: docs.size,
 		activeConnections: wss.clients.size,
+		pendingUpgrades,
 		memory: {
 			rssMb: Math.round((mem.rss / (1024 * 1024)) * 10) / 10,
 			heapUsedMb: Math.round((heapUsed / (1024 * 1024)) * 10) / 10,
@@ -66,14 +106,17 @@ function getServerMetrics () {
 		limits: {
 			maxConnections: MAX_CONNECTIONS,
 			heapUtilizationPct,
+			isShedding,
 		},
 	}
 }
 
 const server = http.createServer((req, res) => {
 	if (req.url === '/health' || req.url === '/metrics') {
-		res.writeHead(200, { 'Content-Type': 'application/json' })
-		res.end(JSON.stringify(getServerMetrics(), null, 2))
+		const metrics = getServerMetrics()
+		const statusCode = metrics.status === 'shedding' ? 503 : 200
+		res.writeHead(statusCode, { 'Content-Type': 'application/json' })
+		res.end(JSON.stringify(metrics, null, 2))
 		return
 	}
 
@@ -143,6 +186,7 @@ async function saveDocumentState (documentId, ydoc) {
 
 	} catch (error) {
 		console.error(`[Sync Error] Failed to save document ${documentId}:`, error)
+		throw error
 	}
 }
 
@@ -175,7 +219,7 @@ setPersistence({
 			console.error(`[Persist Error] Failed to bind state for ${documentId}:`, err)
 		}
 
-		// 2. Attach change listener to trigger capped debounced saves
+		// 2. Attach change listener to trigger capped debounced serialized saves
 		ydoc.on('update', (update, origin) => {
 			// Skip saving if the update originated from the server loading base state
 			if (origin === 'supabase-load') {
@@ -191,7 +235,9 @@ setPersistence({
 			if (!saveMaxThrottleTimers.has(documentId)) {
 				const maxThrottleTimer = setTimeout(async () => {
 					clearSaveTimers(documentId)
-					await saveDocumentState(documentId, ydoc)
+					await triggerSerializedSave(documentId, ydoc).catch((err) => {
+						console.error(`[Sync Error] Max throttle save failed for ${documentId}:`, err)
+					})
 				}, 10000)
 				saveMaxThrottleTimers.set(documentId, maxThrottleTimer)
 			}
@@ -199,7 +245,9 @@ setPersistence({
 			// Set 2-second idle debounce save
 			const debounceTimer = setTimeout(async () => {
 				clearSaveTimers(documentId)
-				await saveDocumentState(documentId, ydoc)
+				await triggerSerializedSave(documentId, ydoc).catch((err) => {
+					console.error(`[Sync Error] Idle debounce save failed for ${documentId}:`, err)
+				})
 			}, 2000)
 
 			saveDebounceTimers.set(documentId, debounceTimer)
@@ -207,16 +255,32 @@ setPersistence({
 	},
 	writeState: async (documentId, ydoc) => {
 		clearSaveTimers(documentId)
-		await saveDocumentState(documentId, ydoc)
+		await triggerSerializedSave(documentId, ydoc)
 	},
 })
 
 server.on('upgrade', async (request, socket, head) => {
+	// Synchronous pending-upgrade reservation
+	pendingUpgrades++
+	let reservationReleased = false
+	const releaseUpgradeReservation = () => {
+		if (!reservationReleased) {
+			reservationReleased = true
+			pendingUpgrades = Math.max(0, pendingUpgrades - 1)
+		}
+	}
+
+	socket.once('close', releaseUpgradeReservation)
+	socket.once('error', releaseUpgradeReservation)
+
 	// 1. Concurrency & Load-Shedding Protection
 	const mem = process.memoryUsage()
 	const isMemoryExhausted = mem.heapTotal > 0 && (mem.heapUsed / mem.heapTotal) > 0.85
-	if (wss.clients.size >= MAX_CONNECTIONS || isMemoryExhausted) {
-		console.warn(`[LoadShedding] Connection rejected: connections=${wss.clients.size}/${MAX_CONNECTIONS}, memExhausted=${isMemoryExhausted}`)
+	const totalLoad = wss.clients.size + pendingUpgrades
+
+	if (totalLoad > MAX_CONNECTIONS || isMemoryExhausted) {
+		console.warn(`[LoadShedding] Connection rejected: totalLoad=${totalLoad}/${MAX_CONNECTIONS} (active=${wss.clients.size}, pending=${pendingUpgrades}), memExhausted=${isMemoryExhausted}`)
+		releaseUpgradeReservation()
 		socket.write('HTTP/1.1 503 Service Unavailable\r\nRetry-After: 5\r\n\r\n')
 		socket.destroy()
 		return
@@ -228,6 +292,7 @@ server.on('upgrade', async (request, socket, head) => {
 	const documentId = url.searchParams.get('documentId')
 
 	if (!token || !documentId) {
+		releaseUpgradeReservation()
 		socket.write('HTTP/1.1 400 Bad Request\r\n\r\n')
 		socket.destroy()
 		return
@@ -240,37 +305,41 @@ server.on('upgrade', async (request, socket, head) => {
 
 		if (!role) {
 			console.log(`[Connection] Access denied for doc ${documentId}`)
+			releaseUpgradeReservation()
 			socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n')
 			socket.destroy()
 			return
 		}
 
-		// Enforce distinct collaborator limit based on document owner plan via Postgres ledger
+		// Enforce distinct collaborator limit atomically via Postgres ledger
 		const ownerPlan = await getDocumentOwnerPlan(supabaseAdmin, documentId)
 		const limits = getPlanLimits(ownerPlan)
 
-		const isRegistered = await isCollaboratorRegistered(supabaseAdmin, documentId, userId)
-		const currentCount = await getDistinctCollaboratorsCount(supabaseAdmin, documentId)
+		const { allowed } = await admitCollaborator(
+			supabaseAdmin,
+			documentId,
+			userId,
+			limits.maxDistinctCollaborators
+		)
 
-		if (!isRegistered && currentCount >= limits.maxDistinctCollaborators) {
+		if (!allowed) {
 			console.log(`[Connection] Rejected: Document ${documentId} reached max distinct collaborators (${limits.maxDistinctCollaborators}) for plan ${ownerPlan}`)
-			socket.write('HTTP/1.1 4403 Forbidden\r\nX-Reason: Upgrade Required\r\n\r\n')
+			releaseUpgradeReservation()
+			socket.write('HTTP/1.1 403 Forbidden\r\nX-Reason: Upgrade Required\r\n\r\n')
 			socket.destroy()
 			return
 		}
 
-		if (!isRegistered && userId !== 'anonymous') {
-			await recordCollaboratorAccess(supabaseAdmin, documentId, userId)
-		}
-
-		console.log(`[Connection] User role: ${role} on doc ${documentId} (${currentCount}/${limits.maxDistinctCollaborators} distinct)`)
+		console.log(`[Connection] User role: ${role} on doc ${documentId} (${userId})`)
 
 		wss.handleUpgrade(request, socket, head, (ws) => {
+			releaseUpgradeReservation()
 			ws.isViewer = role === 'viewer'
 			wss.emit('connection', ws, request)
 		})
 	} catch (err) {
 		console.error('[Upgrade Error]', err)
+		releaseUpgradeReservation()
 		socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n')
 		socket.destroy()
 	}
@@ -346,9 +415,13 @@ async function gracefulShutdown () {
 	const promises = []
 	for (const [docName, doc] of docs.entries()) {
 		clearSaveTimers(docName)
-		promises.push(saveDocumentState(docName, doc))
+		promises.push(triggerSerializedSave(docName, doc))
 	}
-	await Promise.allSettled(promises)
+	const results = await Promise.allSettled(promises)
+	const rejected = results.filter((r) => r.status === 'rejected')
+	if (rejected.length > 0) {
+		console.error(`[Shutdown] Warning: ${rejected.length} document saves failed during shutdown flush.`)
+	}
 	console.log('[Shutdown] All states flushed. Exiting.')
 	process.exit(0)
 }
@@ -362,4 +435,13 @@ if (require.main === module || (!process.env.VITEST && process.env.NODE_ENV !== 
 	})
 }
 
-module.exports = { server, wss, saveDocumentState, clearSaveTimers, getServerMetrics }
+module.exports = {
+	server,
+	wss,
+	saveDocumentState,
+	triggerSerializedSave,
+	clearSaveTimers,
+	getServerMetrics,
+	MAX_CONNECTIONS,
+	MAX_PAYLOAD_BYTES,
+}

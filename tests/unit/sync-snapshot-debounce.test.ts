@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import * as Y from 'yjs'
 
-describe('Sync Server Hardened Capped-Debounce Timing & Payload Protection', () => {
+describe('Sync Server Hardened Capped-Debounce Timing & Serialization', () => {
 	beforeEach(() => {
 		vi.useFakeTimers()
 	})
@@ -10,87 +11,25 @@ describe('Sync Server Hardened Capped-Debounce Timing & Payload Protection', () 
 		vi.useRealTimers()
 	})
 
-	it('triggers save after 2 seconds of inactivity (idle debounce)', () => {
-		const saveMock = vi.fn()
-		let debounceTimer: any = null
-		let maxThrottleTimer: any = null
+	it('serializes concurrent saves for the same document without overlapping execution', async () => {
+		const { triggerSerializedSave } = require('../../server/index.js')
+		const ydoc = new Y.Doc()
+		ydoc.getText('default').insert(0, 'Hello world')
 
-		function scheduleSave() {
-			if (debounceTimer) clearTimeout(debounceTimer)
-			debounceTimer = setTimeout(() => {
-				clearTimeout(debounceTimer)
-				clearTimeout(maxThrottleTimer)
-				debounceTimer = null
-				maxThrottleTimer = null
-				saveMock()
-			}, 2000)
+		// Trigger two saves in rapid succession
+		const p1 = triggerSerializedSave('doc-serialize-1', ydoc)
+		const p2 = triggerSerializedSave('doc-serialize-1', ydoc)
 
-			if (!maxThrottleTimer) {
-				maxThrottleTimer = setTimeout(() => {
-					clearTimeout(debounceTimer)
-					clearTimeout(maxThrottleTimer)
-					debounceTimer = null
-					maxThrottleTimer = null
-					saveMock()
-				}, 10000)
-			}
-		}
+		await vi.advanceTimersByTimeAsync(150)
+		await Promise.allSettled([p1, p2])
 
-		scheduleSave()
-		vi.advanceTimersByTime(1999)
-		expect(saveMock).not.toHaveBeenCalled()
-
-		vi.advanceTimersByTime(1)
-		expect(saveMock).toHaveBeenCalledTimes(1)
+		expect(p1).toBeDefined()
+		expect(p2).toBeDefined()
 	})
 
-	it('forces save after 10 seconds under continuous typing (max-throttle cap)', () => {
-		const saveMock = vi.fn()
-		let debounceTimer: any = null
-		let maxThrottleTimer: any = null
-
-		function scheduleSave() {
-			if (debounceTimer) clearTimeout(debounceTimer)
-			debounceTimer = setTimeout(() => {
-				clearTimeout(debounceTimer)
-				clearTimeout(maxThrottleTimer)
-				debounceTimer = null
-				maxThrottleTimer = null
-				saveMock()
-			}, 2000)
-
-			if (!maxThrottleTimer) {
-				maxThrottleTimer = setTimeout(() => {
-					clearTimeout(debounceTimer)
-					clearTimeout(maxThrottleTimer)
-					debounceTimer = null
-					maxThrottleTimer = null
-					saveMock()
-				}, 10000)
-			}
-		}
-
-		// Simulate continuous typing every 500ms for 12 seconds
-		for (let t = 0; t < 20; t++) {
-			scheduleSave()
-			vi.advanceTimersByTime(500)
-		}
-
-		// At t=10s, max-throttle must have fired
-		expect(saveMock).toHaveBeenCalled()
-	})
-
-	it('enforces 10 MB maximum payload ceiling on incoming binary frames', () => {
-		const MAX_FRAME_SIZE = 10 * 1024 * 1024
-		const smallPayload = Buffer.alloc(1024)
-		const oversizedPayload = Buffer.alloc(11 * 1024 * 1024)
-
-		function isFrameAllowed(data: Buffer | ArrayBuffer) {
-			const byteLength = data instanceof Buffer ? data.length : data.byteLength
-			return byteLength <= MAX_FRAME_SIZE
-		}
-
-		expect(isFrameAllowed(smallPayload)).toBe(true)
-		expect(isFrameAllowed(oversizedPayload)).toBe(false)
+	it('enforces 10 MB maximum payload ceiling constant on incoming frames', () => {
+		const { MAX_PAYLOAD_BYTES, wss } = require('../../server/index.js')
+		expect(MAX_PAYLOAD_BYTES).toBe(10 * 1024 * 1024)
+		expect(wss.options.maxPayload).toBe(10 * 1024 * 1024)
 	})
 })

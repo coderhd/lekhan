@@ -10,8 +10,7 @@
 
 ## Global Constraints
 - Strictly adhere to `AGENTS.md` and `CONTEXT.md` terminology (Hub, Replica, Workspace, Page, Tier).
-- Retain tabs for indentation, single quotes for strings, no semicolons.
-- Zero data loss guarantee: Client-side CRDTs (`y-indexeddb`) reconcile with server snapshots on reconnect.
+- Bounded recovery point: Server saves snapshots within 2s idle / 10s max-throttle windows; client replicas (y-indexeddb) preserve full edit history and sync missed state on reconnect. Process crashes before snapshot flush recover from reconnecting client replicas.
 - Local import always succeeds; cloud sync soft-caps at 20 MB for Free tier.
 
 ---

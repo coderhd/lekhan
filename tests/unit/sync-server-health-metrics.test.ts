@@ -5,10 +5,11 @@ describe('Sync Server Health, Metrics & Load Shedding', () => {
 	it('returns formatted health metrics matching the schema', () => {
 		const metrics = getServerMetrics()
 
-		expect(metrics).toHaveProperty('status', 'ok')
+		expect(metrics).toHaveProperty('status')
 		expect(metrics).toHaveProperty('uptimeSeconds')
 		expect(metrics).toHaveProperty('activeDocuments')
 		expect(metrics).toHaveProperty('activeConnections')
+		expect(metrics).toHaveProperty('pendingUpgrades')
 		expect(metrics).toHaveProperty('memory')
 		expect(metrics.memory).toHaveProperty('rssMb')
 		expect(metrics.memory).toHaveProperty('heapUsedMb')
@@ -16,6 +17,7 @@ describe('Sync Server Health, Metrics & Load Shedding', () => {
 		expect(metrics).toHaveProperty('limits')
 		expect(metrics.limits).toHaveProperty('maxConnections', 1500)
 		expect(metrics.limits).toHaveProperty('heapUtilizationPct')
+		expect(metrics.limits).toHaveProperty('isShedding')
 	})
 
 	it('computes heap utilization percentage correctly', () => {

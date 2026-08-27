@@ -8,14 +8,15 @@ const { pruneExpiredDocumentVersions } = retention
 
 export const dynamic = 'force-dynamic'
 
+const BATCH_SIZE = 100
+
 async function handleRetentionPrune(req: NextRequest) {
 	const startTime = Date.now()
 	const authHeader = req.headers.get('authorization')
 	const cronSecret = process.env.CRON_SECRET
 
-	const isAuthorized =
-		(cronSecret && authHeader === `Bearer ${cronSecret}`) ||
-		(cronSecret && req.nextUrl.searchParams.get('key') === cronSecret)
+	// Authenticate strictly via Authorization Bearer header
+	const isAuthorized = Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`)
 
 	if (!isAuthorized) {
 		return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -40,55 +41,92 @@ async function handleRetentionPrune(req: NextRequest) {
 	})
 
 	try {
-		// Fetch distinct document_ids with recorded versions
-		const { data: versionRows, error: fetchError } = await supabaseAdmin
-			.from('document_versions')
-			.select('document_id')
-			.order('created_at', { ascending: false })
-
-		if (fetchError) {
-			console.error('[Retention Cron] Error querying document_versions:', fetchError)
-			return NextResponse.json(
-				{ error: 'Database query failed', details: fetchError.message },
-				{ status: 500 }
-			)
-		}
-
-		const distinctDocIds = Array.from(
-			new Set((versionRows || []).map((row: any) => row.document_id).filter(Boolean))
-		)
-
+		let totalScannedDocuments = 0
 		let totalPrunedDocuments = 0
 		let totalPrunedVersions = 0
+		const failedDocumentIds: string[] = []
 		const referenceNow = new Date()
 
-		for (const docId of distinctDocIds) {
-			try {
-				const ownerPlan = await getDocumentOwnerPlan(supabaseAdmin, docId)
-				const result = await pruneExpiredDocumentVersions(
-					supabaseAdmin,
-					docId,
-					ownerPlan,
-					referenceNow
-				)
+		// Process documents in bounded cursor-based batches across pages
+		let pageOffset = 0
+		let hasMore = true
 
-				if (result.success && result.prunedCount > 0) {
-					totalPrunedDocuments += 1
-					totalPrunedVersions += result.prunedCount
+		while (hasMore) {
+			const { data: pageRows, error: fetchError } = await supabaseAdmin
+				.from('pages')
+				.select('id')
+				.range(pageOffset, pageOffset + BATCH_SIZE - 1)
+
+			if (fetchError) {
+				console.error('[Retention Cron] Error querying pages batch:', fetchError)
+				return NextResponse.json(
+					{ error: 'Database query failed', details: fetchError.message },
+					{ status: 500 }
+				)
+			}
+
+			if (!pageRows || pageRows.length === 0) {
+				hasMore = false
+				break
+			}
+
+			totalScannedDocuments += pageRows.length
+
+			for (const page of pageRows) {
+				const docId = page.id
+				try {
+					const ownerPlan = await getDocumentOwnerPlan(supabaseAdmin, docId)
+					const result = await pruneExpiredDocumentVersions(
+						supabaseAdmin,
+						docId,
+						ownerPlan,
+						referenceNow
+					)
+
+					if (result && result.success) {
+						if (result.prunedCount > 0) {
+							totalPrunedDocuments += 1
+							totalPrunedVersions += result.prunedCount
+						}
+					} else {
+						failedDocumentIds.push(docId)
+					}
+				} catch (docErr) {
+					console.warn(`[Retention Cron] Failed pruning for doc ${docId}:`, docErr)
+					failedDocumentIds.push(docId)
 				}
-			} catch (docErr) {
-				console.warn(`[Retention Cron] Failed pruning for doc ${docId}:`, docErr)
+			}
+
+			if (pageRows.length < BATCH_SIZE) {
+				hasMore = false
+			} else {
+				pageOffset += BATCH_SIZE
 			}
 		}
 
 		const durationMs = Date.now() - startTime
 		console.log(
-			`[Retention Cron] Completed sweep: ${totalPrunedDocuments} documents pruned, ${totalPrunedVersions} total versions removed in ${durationMs}ms.`
+			`[Retention Cron] Completed sweep: ${totalPrunedDocuments} documents pruned, ${totalPrunedVersions} total versions removed, ${failedDocumentIds.length} failures in ${durationMs}ms.`
 		)
+
+		if (failedDocumentIds.length > 0) {
+			return NextResponse.json(
+				{
+					success: false,
+					error: 'Partial retention prune failure',
+					scannedDocumentsCount: totalScannedDocuments,
+					prunedDocumentsCount: totalPrunedDocuments,
+					prunedVersionsCount: totalPrunedVersions,
+					failedDocumentIds,
+					durationMs,
+				},
+				{ status: 500 }
+			)
+		}
 
 		return NextResponse.json({
 			success: true,
-			scannedDocumentsCount: distinctDocIds.length,
+			scannedDocumentsCount: totalScannedDocuments,
 			prunedDocumentsCount: totalPrunedDocuments,
 			prunedVersionsCount: totalPrunedVersions,
 			durationMs,

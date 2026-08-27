@@ -4,7 +4,7 @@
 - **Epic**: #77 (H0 — Sync Server Hardening)
 - **Author**: Antigravity Pair Programming Engine
 - **Target Launch**: H0 Foundation & Pre-Beta Gate
-- **Related ADRs**: [ADR 0001](file:///Users/harshdave/Desktop/projects/Lekhan/docs/adr/0001-encryption-at-rest-by-default-e2e-as-plus.md), [ADR 0002](file:///Users/harshdave/Desktop/projects/Lekhan/docs/adr/0002-free-history-retention-one-day.md), [ADR 0004](file:///Users/harshdave/Desktop/projects/Lekhan/docs/adr/0004-server-hub-crdt-sync-topology.md)
+- **Related ADRs**: [ADR 0001](docs/adr/0001-encryption-at-rest-by-default-e2e-as-plus.md), [ADR 0002](docs/adr/0002-free-history-retention-one-day.md), [ADR 0004](docs/adr/0004-server-hub-crdt-sync-topology.md)
 
 ---
 
@@ -16,7 +16,7 @@ The sync hub (`server/index.js`) is the load-bearing backend infrastructure for 
 1. **Uncapped Debounce Save Vulnerability**: The existing save debounce in `server/index.js` resets on every keystroke without an enforced maximum throttle. Continuous typing could delay cloud saves indefinitely.
 2. **Ephemeral Disk I/O**: `server/wal.js` writes binary updates to local ephemeral disk (`wal_logs/`), which is wiped on container restarts (e.g. Render spin-downs) while adding unnecessary file I/O complexity.
 3. **Volatile Collaborator Ledger**: `.collaborators-ledger.json` is stored on local disk, resetting distinct collaborator tier limits on every deploy or server restart.
-4. **Unbounded Version Growth for Dormant Documents**: Version retention pruning ([ADR 0002](file:///Users/harshdave/Desktop/projects/Lekhan/docs/adr/0002-free-history-retention-one-day.md)) only ran when an active document was saved; dormant/untouched documents never pruned expired versions.
+4. **Unbounded Version Growth for Dormant Documents**: Version retention pruning ([ADR 0002](docs/adr/0002-free-history-retention-one-day.md)) only ran when an active document was saved; dormant/untouched documents never pruned expired versions.
 5. **Storage Quota Drift**: `lib/tier-limits.ts` set Free tier storage to 1000 MB (1 GB), which matched our *entire* backend free infrastructure budget rather than a safe per-workspace quota.
 
 ---
@@ -73,13 +73,13 @@ The sync hub (`server/index.js`) is the load-bearing backend infrastructure for 
 - **Max Throttle Cap**: If continuous updates arrive, force a save after at most 10,000 ms from the first un-flushed update.
 - **Save Sequence**:
   1. Encode Yjs state via `Y.encodeStateAsUpdate(ydoc)`.
-  2. Encrypt binary state with AES-256-GCM ([ADR 0001](file:///Users/harshdave/Desktop/projects/Lekhan/docs/adr/0001-encryption-at-rest-by-default-e2e-as-plus.md)).
+  2. Encrypt binary state with AES-256-GCM ([ADR 0001](docs/adr/0001-encryption-at-rest-by-default-e2e-as-plus.md)).
   3. Upload encrypted snapshot to `documents/${documentId}/main_state.bin`.
   4. Extract text and update `graphIndex.indexPage` for `pages` (or update `documents` table).
 - **Graceful Shutdown**:
   - Intercept `SIGTERM` and `SIGINT`.
   - Flush all dirty in-memory Ydocs to Supabase Storage concurrently using `Promise.allSettled`.
-  - Clear timers and exit process cleanly with code 0.
+  - Propagate snapshot errors so `Promise.allSettled` catches rejected saves and logs warnings before exiting with code 0.
 - **Retirement of `server/wal.js`**:
   - Remove ephemeral filesystem writes and `wal_logs/` directory.
 
@@ -94,15 +94,12 @@ The sync hub (`server/index.js`) is the load-bearing backend infrastructure for 
     PRIMARY KEY (document_id, user_id)
   );
 
-  CREATE INDEX IF NOT EXISTS idx_collab_ledger_doc_id 
-    ON public.document_collaborators_ledger(document_id);
-
   ALTER TABLE public.document_collaborators_ledger ENABLE ROW LEVEL SECURITY;
   ```
 - **Connection Handshake Logic**:
-  - Query `document_collaborators_ledger` for distinct `user_id` count for `document_id`.
-  - If user is new and count >= `limits.maxDistinctCollaborators`, reject handshake with `HTTP 4403 Forbidden` (`X-Reason: Upgrade Required`).
-  - If allowed and new, upsert row into `document_collaborators_ledger`.
+  - Execute atomic `record_collaborator_if_capacity` RPC to verify and record access under lock.
+  - If distinct registered collaborators reach capacity, reject handshake with `HTTP 403 Forbidden` (`X-Reason: Upgrade Required`).
+  - Anonymous users do not consume distinct registered collaborator quotas.
 
 ### 3.3 Storage Quota & Payload Safeguards
 - **Per-Frame Payload Cap**: Reject WebSocket binary messages > 10 MB to prevent memory saturation and malformed buffer attacks.
@@ -120,10 +117,11 @@ The sync hub (`server/index.js`) is the load-bearing backend infrastructure for 
 
 ### 3.4 Automated Version Retention Pruner
 - **Serverless Endpoint**: `app/api/cron/retention-prune/route.ts`
-  - Secured via `Authorization: Bearer ${CRON_SECRET}`.
-  - Queries all `document_versions` older than plan cutoff date ([ADR 0002](file:///Users/harshdave/Desktop/projects/Lekhan/docs/adr/0002-free-history-retention-one-day.md)).
+  - Secured exclusively via `Authorization: Bearer ${CRON_SECRET}`.
+  - Queries `pages` in bounded cursor-based batches.
+  - Prunes expired `document_versions` older than plan cutoff date ([ADR 0002](docs/adr/0002-free-history-retention-one-day.md)).
   - Deletes expired binary files from Supabase Storage (`documents/<docId>/versions/<versionId>.bin`) and deletes database rows.
-  - Returns execution summary: `{ success: true, prunedDocumentsCount, prunedVersionsCount, durationMs }`.
+  - Tracks failed document IDs and returns 500 when any error occurs, returning execution summary with status 200 when all succeed.
 - **Sync Server Fallback Interval**:
   - Run background retention sweep every 12 hours in `server/index.js` to catch any missed crons.
 
@@ -136,6 +134,7 @@ The sync hub (`server/index.js`) is the load-bearing backend infrastructure for 
       "uptimeSeconds": 1420,
       "activeDocuments": 12,
       "activeConnections": 18,
+      "pendingUpgrades": 0,
       "memory": {
         "rssMb": 48.5,
         "heapUsedMb": 28.2,
@@ -143,12 +142,13 @@ The sync hub (`server/index.js`) is the load-bearing backend infrastructure for 
       },
       "limits": {
         "maxConnections": 1500,
-        "heapUtilizationPct": 80.3
+        "heapUtilizationPct": 80.3,
+        "isShedding": false
       }
     }
     ```
 - **Load Shedding**:
-  - If active WebSocket connections > 1500 or heap usage > 85%, new WebSocket upgrade requests receive `HTTP 503 Service Unavailable / Server Busy`.
+  - If active WebSocket connections + pending upgrades >= 1500 or heap usage > 85%, new WebSocket upgrade requests receive `HTTP 503 Service Unavailable / Server Busy`.
 
 ---
 
@@ -158,6 +158,6 @@ The sync hub (`server/index.js`) is the load-bearing backend infrastructure for 
 - [ ] **Idle Debounce**: Updates flush 2 seconds after typing pauses.
 - [ ] **Collaborator Ledger Persistence**: Distinct collaborator limits survive server restart and are verified via Postgres tests.
 - [ ] **Payload Guard**: Binary WebSocket frames > 10 MB are cleanly rejected.
-- [ ] **Retention Cron**: `POST /api/cron/retention-prune` correctly purges expired versions with valid `CRON_SECRET` and rejects unauthorized requests with 401.
+- [ ] **Retention Cron**: `POST /api/cron/retention-prune` correctly purges expired versions with valid `CRON_SECRET` Bearer header and rejects unauthorized requests with 401.
 - [ ] **Health Endpoint**: `GET /health` and `GET /metrics` return live server stats and load limits.
 - [ ] **Verification**: `npm run typecheck && npm run lint && npm test && npm run build` pass cleanly.
