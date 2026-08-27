@@ -130,8 +130,11 @@ async function callOpenRouter(
 	const modelsToTry = [
 		model,
 		'z-ai/glm-5.2:free',
-		'nvidia/nemotron-3-ultra-550b-a55b:free',
+		'meta-llama/llama-3.3-70b-instruct:free',
+		'google/gemini-2.0-flash-exp:free',
 		'nvidia/nemotron-3-super-120b-a12b:free',
+		'nvidia/nemotron-3-ultra-550b-a55b:free',
+		'deepseek/deepseek-r1:free',
 		'dots-studio/dots-3-note-preview:free',
 		'openrouter/free',
 	].filter((m, i, arr) => m && arr.indexOf(m) === i)
@@ -149,7 +152,7 @@ async function callOpenRouter(
 					'HTTP-Referer': 'https://github.com/coderhd/lekhan',
 					'X-Title': 'Lekhan Clean-Room Reviewer',
 				},
-				signal: AbortSignal.timeout(45000),
+				signal: AbortSignal.timeout(60000),
 				body: JSON.stringify({
 					model: currentModel,
 					messages: [
@@ -157,7 +160,7 @@ async function callOpenRouter(
 						{ role: 'user', content: prompt },
 					],
 					temperature: 0.1,
-					max_tokens: 4000,
+					max_tokens: 6000,
 				}),
 			})
 
@@ -166,20 +169,19 @@ async function callOpenRouter(
 			if (response.status === 200) {
 				const choice = data.choices?.[0]
 				const finishReason = choice?.finish_reason || choice?.native_finish_reason
-				const isNormalCompletion =
-					!finishReason || finishReason === 'stop' || finishReason === 'end_turn'
+				let content = choice?.message?.content
+				if (!content && choice?.message?.reasoning) {
+					content = choice.message.reasoning
+				}
 
-				if (isNormalCompletion) {
-					let content = choice?.message?.content
-					if (!content && choice?.message?.reasoning) {
-						content = choice.message.reasoning
-					}
-					if (content && content.trim().length > 0) {
-						return content.trim()
-					}
+				const isNormalCompletion =
+					!finishReason || finishReason === 'stop' || finishReason === 'end_turn' || (finishReason === 'length' && (content?.trim()?.length || 0) > 800)
+
+				if (isNormalCompletion && content && content.trim().length > 0) {
+					return content.trim()
 				} else {
 					console.warn(
-						`[Reviewer] Model ${currentModel} returned incomplete finish_reason: "${finishReason}". Falling back to next model...`
+						`[Reviewer] Model ${currentModel} returned finish_reason: "${finishReason}". Falling back to next model...`
 					)
 					lastError = new Error(`Incomplete response with finish_reason: ${finishReason}`)
 					continue

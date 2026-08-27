@@ -14,7 +14,9 @@ import SyncIndicator from './sync-indicator'
 import OfflineBanner from './offline-banner'
 import { InlineEdit } from './inline-edit'
 import ShareModal from './share-modal'
-import VersionHistory from './version-history'
+import { VersionDrawer } from './version-history/version-drawer'
+import { VersionHistoryEngine } from '@/lib/version-history/engine'
+import { IndexedDBHistoryAdapter } from '@/lib/version-history/adapters/indexeddb'
 import MobileHeaderMenu from './mobile-header-menu'
 import AISettingsPanel from './ai-settings-panel'
 import AIBubbleMenu from './ai-bubble-menu'
@@ -333,6 +335,35 @@ export default function EditorWorkspace({	pageId,
 		provider,
 		isLocalSynced,
 	} = useEditorCollab(pageId, token, collabUser)
+
+	const engineRef = useRef<VersionHistoryEngine | null>(null)
+	
+	useEffect(() => {
+		const adapter = new IndexedDBHistoryAdapter()
+		engineRef.current = new VersionHistoryEngine(adapter)
+	}, [])
+
+	useEffect(() => {
+		if (!engineRef.current || !ydoc || !workspaceId || isViewer) return
+
+		const CHECKPOINT_INTERVAL = 15 * 60 * 1000 // 15 mins
+		const DEFAULT_MAX_STORAGE_BYTES = 100 * 1024 * 1024 // 100MB local history cap
+
+		const timer = setInterval(() => {
+			if (hasUnsyncedChanges) {
+				engineRef.current?.createAutoCheckpoint({
+					pageId,
+					workspaceId,
+					authorName: currentUser.full_name || currentUser.email || 'Unknown User',
+					authorId: currentUser.id,
+					ydoc,
+					maxStorageBytes: DEFAULT_MAX_STORAGE_BYTES
+				}).catch(console.error)
+			}
+		}, CHECKPOINT_INTERVAL)
+
+		return () => clearInterval(timer)
+	}, [hasUnsyncedChanges, pageId, workspaceId, currentUser, ydoc, isViewer])
 
 	useEffect(() => {
 		const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -704,6 +735,10 @@ export default function EditorWorkspace({	pageId,
 				e.preventDefault()
 				handleOpenLekhanBot()
 			}
+			if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 's' || e.key === 'S')) {
+				e.preventDefault()
+				setIsHistoryOpen(true)
+			}
 		}
 		document.addEventListener('keydown', handleKeyDown)
 		return () => document.removeEventListener('keydown', handleKeyDown)
@@ -1073,32 +1108,25 @@ export default function EditorWorkspace({	pageId,
 				/>
 
 
-				<VersionHistory
-					isOpen={isHistoryOpen}
-					onClose={() => setIsHistoryOpen(false)}
-					documentId={pageId}
-					ydoc={ydoc}
-					token={token}
-					isViewer={isViewer}
-					onPreviewVersion={(tempDoc, versionName) => {
-						setPreviewDoc(tempDoc)
-						setPreviewVersionName(versionName || null)
-					}}
-					onRestoreVersion={(tempDoc) => {
-						if (!editor) return
-						const headlessEditor = new Editor({
-							extensions: [
-								...getSharedExtensions(),
-								Collaboration.configure({
-									document: tempDoc,
-								}),
-							],
-						})
-						const content = headlessEditor.getHTML()
-						editor.commands.setContent(content)
-						headlessEditor.destroy()
-					}}
-				/>
+				{engineRef.current && workspaceId && (
+					<VersionDrawer
+						isOpen={isHistoryOpen}
+						onClose={() => setIsHistoryOpen(false)}
+						pageId={pageId}
+						workspaceId={workspaceId}
+						engine={engineRef.current}
+						currentYdoc={ydoc}
+						currentUser={{
+							id: currentUser.id,
+							name: currentUser.full_name || currentUser.email || 'Unknown User'
+						}}
+						isReadOnly={isViewer}
+						onRestored={(checkpoint) => {
+							toast.success(`Restored version: ${checkpoint.title}`)
+							setIsHistoryOpen(false)
+						}}
+					/>
+				)}
 			</div>
 
 			<ShareModal

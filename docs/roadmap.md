@@ -88,7 +88,7 @@ provider registry).
 | #85 | Early-access page + Brevo waitlist | P0 | 12h | Aug 24 | **Shipped** (#91, a day early) |
 | #83 | Analytics events | P0 | 8h | Aug 27 | **Shipped** (PR #95) |
 | #81 | Encrypt-at-rest (spec + impl) | P0 | 16h | Aug 28 → Aug 29 | **Shipped** (PR #96) |
-| #82 | Tier plumbing + storage caps | P0 | 16h | Aug 31 → Sep 1 | Ready |
+| #82 | Tier plumbing + local-first version history | P0 | 16h | Aug 31 → Sep 1 | **Shipped** (PR #99) |
 | — | 🔒 **Private beta opens** (gate #84 clears) | — | — | **Sep 2** | — |
 | #28 | AI Provider Registry (final spec 4h incl.) | P0 | 64h | Sep 2 → Sep 10 | In review (seed) |
 | #29 | Billing: Stripe/Razorpay + founding prices + referral credits | P0 | 60h | Sep 11 → Sep 22 | Backlog |

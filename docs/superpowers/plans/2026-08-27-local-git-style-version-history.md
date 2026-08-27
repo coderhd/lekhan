@@ -6,7 +6,7 @@
 
 **Architecture:** A pluggable `VersionHistoryStorageAdapter` interface powering local delta compression in IndexedDB/FS, integrated with a React slide-out timeline drawer featuring word-level diffing and Git-style non-destructive restores. Cloud retention is gated per workspace plan.
 
-**Tech Stack:** TypeScript, React 19, Tiptap 2 / Yjs CRDTs, IndexedDB (`idb`), `fflate` / browser compression, Tailwind CSS, Shadcn UI / Radix UI, Vitest.
+**Tech Stack:** TypeScript, React 19, Tiptap 3 / Yjs CRDTs, IndexedDB (`idb`), `fflate` / browser compression, Tailwind CSS, Shadcn UI / Radix UI, Vitest.
 
 ## Global Constraints
 

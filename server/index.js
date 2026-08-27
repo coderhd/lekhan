@@ -3,7 +3,9 @@ const WebSocket = require('ws')
 const Y = require('yjs')
 const { setupWSConnection, docs } = require('y-websocket/bin/utils')
 const { createClient } = require('@supabase/supabase-js')
-const { getSupabaseClient, verifyUserRole, getDocumentOwnerPlanLimit } = require('./auth')
+const { getSupabaseClient, verifyUserRole, getDocumentOwnerPlan } = require('./auth')
+const { getPlanLimits } = require('../lib/tier-limits.ts')
+const { pruneExpiredDocumentVersions } = require('./retention.js')
 
 const { appendUpdate, getPendingUpdates, clearUpdates } = require('./wal')
 const graphIndex = require('./graph-index')
@@ -30,8 +32,42 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocket.Server({ noServer: true })
 const { encryptSnapshot, decryptSnapshot } = require('./crypto')
 
+const fs = require('fs')
+const path = require('path')
+
 // Cache save timers
 const saveDebounceTimers = new Map()
+
+// Persistent distinct collaborator ledger
+const LEDGER_FILE = path.join(process.cwd(), '.collaborators-ledger.json')
+const documentDistinctCollaborators = new Map()
+
+try {
+	if (fs.existsSync(LEDGER_FILE)) {
+		const raw = fs.readFileSync(LEDGER_FILE, 'utf8')
+		const parsed = JSON.parse(raw)
+		for (const [docId, users] of Object.entries(parsed)) {
+			if (Array.isArray(users)) {
+				documentDistinctCollaborators.set(docId, new Set(users))
+			}
+		}
+		console.log(`[Ledger] Loaded distinct collaborators for ${documentDistinctCollaborators.size} documents.`)
+	}
+} catch (e) {
+	console.warn('[Ledger] Failed to load collaborators ledger from disk:', e)
+}
+
+function persistCollaboratorsLedger() {
+	try {
+		const serializable = {}
+		for (const [docId, usersSet] of documentDistinctCollaborators.entries()) {
+			serializable[docId] = Array.from(usersSet)
+		}
+		fs.writeFileSync(LEDGER_FILE, JSON.stringify(serializable, null, 2), 'utf8')
+	} catch (e) {
+		console.error('[Ledger] Failed to persist collaborators ledger to disk:', e)
+	}
+}
 
 // Helper to save document state to Supabase Storage and update text index
 async function saveDocumentState (documentId, ydoc) {
@@ -78,9 +114,24 @@ async function saveDocumentState (documentId, ydoc) {
 			}
 		}
 
+		
 		// 4. Clear pending local WAL logs now that Supabase is synced
 		clearUpdates(documentId)
 		console.log(`[Sync] Document ${documentId} successfully synced to Supabase.`)
+
+		// 5. Prune expired versions
+		try {
+			const ownerPlan = await getDocumentOwnerPlan(supabaseAdmin, documentId)
+			if (ownerPlan) {
+				const { prunedCount } = await pruneExpiredDocumentVersions(supabaseAdmin, documentId, ownerPlan, new Date())
+				if (prunedCount > 0) {
+					console.log(`[Retention] Pruned ${prunedCount} expired versions for doc ${documentId}`)
+				}
+			}
+		} catch (planError) {
+			console.warn(`[Retention] Skipping retention pruning for doc ${documentId} due to plan resolution failure:`, planError)
+		}
+
 	} catch (error) {
 		console.error(`[Sync Error] Failed to save document ${documentId}:`, error)
 	}
@@ -173,7 +224,7 @@ server.on('upgrade', async (request, socket, head) => {
 	try {
 		// Authenticate and verify role using client JWT
 		const supabaseClient = getSupabaseClient(token)
-		const role = await verifyUserRole(supabaseClient, documentId, token)
+		const { role, userId } = await verifyUserRole(supabaseClient, documentId, token)
 
 		if (!role) {
 			console.log(`[Connection] Access denied for doc ${documentId}`)
@@ -182,18 +233,30 @@ server.on('upgrade', async (request, socket, head) => {
 			return
 		}
 
-		// Enforce concurrent collaborator limit based on document owner plan
-		const activeConns = docs.get(documentId)?.conns.size || 0
-		const maxConcurrent = await getDocumentOwnerPlanLimit(supabaseAdmin, documentId)
+		// Enforce distinct collaborator limit based on document owner plan
+		const ownerPlan = await getDocumentOwnerPlan(supabaseAdmin, documentId)
+		const limits = getPlanLimits(ownerPlan)
 
-		if (activeConns >= maxConcurrent) {
-			console.log(`[Connection] Rejected: Document ${documentId} reached max active connections (${maxConcurrent}) for owner plan`)
-			socket.write('HTTP/1.1 403 Forbidden\r\nX-Reason: Concurrent collaborator limit reached\r\n\r\n')
+		let distinctUsers = documentDistinctCollaborators.get(documentId)
+		if (!distinctUsers) {
+			distinctUsers = new Set()
+			documentDistinctCollaborators.set(documentId, distinctUsers)
+		}
+
+		const isNewUser = !distinctUsers.has(userId)
+		if (isNewUser && distinctUsers.size >= limits.maxDistinctCollaborators) {
+			console.log(`[Connection] Rejected: Document ${documentId} reached max distinct collaborators (${limits.maxDistinctCollaborators}) for plan ${ownerPlan}`)
+			socket.write('HTTP/1.1 4403 Forbidden\r\nX-Reason: Upgrade Required\r\n\r\n')
 			socket.destroy()
 			return
 		}
 
-		console.log(`[Connection] User role: ${role} on doc ${documentId} (${activeConns + 1}/${maxConcurrent} active)`)
+		if (isNewUser) {
+			distinctUsers.add(userId)
+			persistCollaboratorsLedger()
+		}
+
+		console.log(`[Connection] User role: ${role} on doc ${documentId} (${distinctUsers.size}/${limits.maxDistinctCollaborators} distinct)`)
 
 		wss.handleUpgrade(request, socket, head, (ws) => {
 			ws.isViewer = role === 'viewer'
@@ -246,6 +309,7 @@ setInterval(() => {
 			console.log(`[LRU] Evicting idle document ${docName} from server memory`)
 			// Persistence writeState is automatically called when document is removed
 			docs.delete(docName)
+			documentDistinctCollaborators.delete(docName)
 		}
 	}
 }, 60000) // Run check every minute

@@ -65,7 +65,7 @@ describe('Server Authentication & Role Verification System', () => {
 		} as any
 
 		const role = await auth.verifyUserRole(mockSupabase, 'doc-id')
-		expect(role).toBeNull()
+		expect(role.role).toBeNull()
 	})
 
 	it('should return "owner" when user matches document owner_id', async () => {
@@ -84,7 +84,7 @@ describe('Server Authentication & Role Verification System', () => {
 		} as any
 
 		const role = await auth.verifyUserRole(mockSupabase, 'doc-id')
-		expect(role).toBe('owner')
+		expect(role.role).toBe('owner')
 	})
 
 	it('should return member role when user is collaborator but not owner', async () => {
@@ -127,7 +127,7 @@ describe('Server Authentication & Role Verification System', () => {
 		} as any
 
 		const role = await auth.verifyUserRole(mockSupabase, 'doc-id')
-		expect(role).toBe('editor')
+		expect(role.role).toBe('editor')
 	})
 })
 
@@ -150,7 +150,7 @@ describe('Server Pages Cutover & Graph Index Integration', () => {
 		} as any
 
 		const role = await auth.verifyUserRole(mockSupabase, 'page-1', 'token-1')
-		expect(role).toBe('owner')
+		expect(role.role).toBe('owner')
 	})
 
 	it('verifyUserRole falls back to documents when no page exists', async () => {
@@ -173,7 +173,7 @@ describe('Server Pages Cutover & Graph Index Integration', () => {
 		} as any
 
 		const role = await auth.verifyUserRole(mockSupabase, 'doc-legacy', 'token-1')
-		expect(role).toBe('owner')
+		expect(role.role).toBe('owner')
 	})
 
 	it('verifyUserRole returns member role from page_members', async () => {
@@ -210,7 +210,7 @@ describe('Server Pages Cutover & Graph Index Integration', () => {
 		} as any
 
 		const role = await auth.verifyUserRole(mockSupabase, 'page-1', 'token-1')
-		expect(role).toBe('editor')
+		expect(role.role).toBe('editor')
 	})
 
 	it('verifyUserRole ignores document_members grants on mapped pages (page-only authority)', async () => {
@@ -258,7 +258,7 @@ describe('Server Pages Cutover & Graph Index Integration', () => {
 		} as any
 
 		const role = await auth.verifyUserRole(mockSupabase, 'page-1', 'token-1')
-		expect(role).toBeNull()
+		expect(role.role).toBeNull()
 	})
 
 	it('verifyUserRole grants "viewer" to an authenticated non-member on a public page', async () => {
@@ -295,10 +295,10 @@ describe('Server Pages Cutover & Graph Index Integration', () => {
 		} as any
 
 		const role = await auth.verifyUserRole(mockSupabase, 'page-1', 'token-1')
-		expect(role).toBe('viewer')
+		expect(role.role).toBe('viewer')
 	})
 
-	it('getDocumentOwnerPlanLimit reads the owner plan via pages', async () => {
+	it('getDocumentOwnerPlan reads the owner plan via pages', async () => {
 		const mockAdmin = {
 			from: vi.fn().mockImplementation((table: string) => {
 				if (table === 'pages') {
@@ -326,8 +326,8 @@ describe('Server Pages Cutover & Graph Index Integration', () => {
 			}),
 		} as any
 
-		const limit = await auth.getDocumentOwnerPlanLimit(mockAdmin, 'page-1')
-		expect(limit).toBe(25)
+		const limit = await auth.getDocumentOwnerPlan(mockAdmin, 'page-1')
+		expect(limit).toBe('pro')
 	})
 
 	it('indexPage writes links, tags and searchable_text via the admin client', async () => {
@@ -390,6 +390,6 @@ describe('Server Pages Cutover & Graph Index Integration', () => {
 		} as any
 
 		const role = await auth.verifyUserRole(mockSupabase, 'page-1', 'anonymous')
-		expect(role).toBe('viewer')
+		expect(role.role).toBe('viewer')
 	})
 })
