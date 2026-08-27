@@ -12,6 +12,9 @@ Canonical roles: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-hum
 ### Domain docs
 Single-context — `CONTEXT.md` at repo root plus `docs/adr/` for decisions. See `docs/agents/domain.md`.
 
+### Virtual Startup Organization (Role Roster & Handoffs)
+Enterprise multi-agent protocol: `po_pm`, `tech_lead`, `qa_engineer`, `dev_engineer`, `devops_engineer`, `marketing_growth`. See `docs/agents/organization.md`.
+
 ---
 
 ## 6-Stage Engineering Lifecycle (Mandatory Anti-Drift Engine)
