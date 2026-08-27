@@ -5,6 +5,7 @@ import { VersionHistoryEngine } from '../../lib/version-history/engine'
 import { DocumentCheckpoint } from '../../lib/version-history/types'
 import { VisualDiffViewer } from './visual-diff-viewer'
 import { RestoreConfirmDialog } from './restore-confirm-dialog'
+import { toast } from 'sonner'
 
 export interface VersionDrawerProps {
 	isOpen: boolean
@@ -78,33 +79,44 @@ export function VersionDrawer({
 
 	const handleCreateMilestone = async () => {
 		if (!newMilestoneTitle.trim()) return
-		await engine.createMilestone({
-			pageId,
-			workspaceId,
-			title: newMilestoneTitle,
-			authorName: currentUser.name,
-			authorId: currentUser.id,
-			ydoc: currentYdoc
-		})
-		setNewMilestoneTitle('')
-		loadVersions()
+		try {
+			await engine.createMilestone({
+				pageId,
+				workspaceId,
+				title: newMilestoneTitle.trim(),
+				authorName: currentUser.name,
+				authorId: currentUser.id,
+				ydoc: currentYdoc
+			})
+			setNewMilestoneTitle('')
+			loadVersions()
+			toast.success(`Created milestone "${newMilestoneTitle.trim()}"`)
+		} catch (err) {
+			console.error('Failed to create milestone:', err)
+			toast.error('Failed to create milestone checkpoint')
+		}
 	}
 
 	const handleRestore = async () => {
 		if (!selectedVersion) return
-		const checkpoint = await engine.restoreCheckpoint({
-			pageId,
-			workspaceId,
-			checkpointId: selectedVersion.id,
-			targetYdoc: currentYdoc,
-			authorName: currentUser.name,
-			authorId: currentUser.id
-		})
-		if (onRestored) {
-			onRestored(checkpoint)
+		try {
+			const checkpoint = await engine.restoreCheckpoint({
+				pageId,
+				workspaceId,
+				checkpointId: selectedVersion.id,
+				targetYdoc: currentYdoc,
+				authorName: currentUser.name,
+				authorId: currentUser.id
+			})
+			if (onRestored) {
+				onRestored(checkpoint)
+			}
+			loadVersions()
+			setSelectedVersion(null)
+		} catch (err) {
+			console.error('Failed to restore checkpoint:', err)
+			toast.error('Failed to restore version checkpoint')
 		}
-		loadVersions()
-		setSelectedVersion(null)
 	}
 
 	const filteredVersions = useMemo(() => {

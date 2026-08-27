@@ -62,12 +62,16 @@ export class IndexedDBHistoryAdapter implements VersionHistoryStorageAdapter {
 
 	async pruneAutoCheckpoints(pageId: string, maxStorageBytes: number): Promise<number> {
 		const db = await this.getDB()
-		const checkpoints = await db.getAllFromIndex(STORE_NAME, 'pageId', pageId)
+		const tx = db.transaction(STORE_NAME, 'readwrite')
+		const store = tx.objectStore(STORE_NAME)
+		const index = store.index('pageId')
+		const checkpoints = await index.getAll(pageId)
 		
 		let totalBytes = checkpoints.reduce((sum, cp) => sum + cp.byteSize, 0)
 		let prunedCount = 0
 
 		if (totalBytes <= maxStorageBytes) {
+			await tx.done
 			return 0
 		}
 
@@ -79,11 +83,12 @@ export class IndexedDBHistoryAdapter implements VersionHistoryStorageAdapter {
 			if (totalBytes <= maxStorageBytes) {
 				break
 			}
-			await db.delete(STORE_NAME, cp.id)
+			await store.delete(cp.id)
 			totalBytes -= cp.byteSize
 			prunedCount++
 		}
 
+		await tx.done
 		return prunedCount
 	}
 }
