@@ -113,6 +113,37 @@ describe('VersionHistoryEngine', () => {
 		expect(adapter.checkpoints.has(cp2.id)).toBe(true)
 	})
 
+	it('restoreCheckpoint restores absent roots and removes extraneous roots', async () => {
+		const ydoc1 = new Y.Doc()
+		ydoc1.getText('rootA').insert(0, 'Content A')
+		ydoc1.getArray('rootB').insert(0, ['item1', 'item2'])
+
+		const cp = await engine.createMilestone({
+			pageId: 'page1',
+			workspaceId: 'ws1',
+			title: 'Multi-root V1',
+			authorName: 'Alice',
+			authorId: 'a1',
+			ydoc: ydoc1
+		})
+
+		const ydoc2 = new Y.Doc()
+		ydoc2.getText('rootC').insert(0, 'Extra root')
+
+		await engine.restoreCheckpoint({
+			pageId: 'page1',
+			workspaceId: 'ws1',
+			checkpointId: cp.id,
+			targetYdoc: ydoc2,
+			authorName: 'Bob',
+			authorId: 'b1'
+		})
+
+		expect(ydoc2.getText('rootA').toString()).toBe('Content A')
+		expect(ydoc2.getArray('rootB').toArray()).toEqual(['item1', 'item2'])
+		expect(ydoc2.getText('rootC').toString()).toBe('')
+	})
+
 	it('getSnapshotText returns extracted plain text', async () => {
 		const ydoc = new Y.Doc()
 		ydoc.getText('default').insert(0, 'Snapshot text content')

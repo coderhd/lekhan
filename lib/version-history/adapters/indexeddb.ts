@@ -57,7 +57,13 @@ export class IndexedDBHistoryAdapter implements VersionHistoryStorageAdapter {
 
 	async deleteCheckpoint(pageId: string, checkpointId: string): Promise<void> {
 		const db = await this.getDB()
-		await db.delete(STORE_NAME, checkpointId)
+		const tx = db.transaction(STORE_NAME, 'readwrite')
+		const store = tx.objectStore(STORE_NAME)
+		const existing = await store.get(checkpointId)
+		if (existing && existing.pageId === pageId) {
+			await store.delete(checkpointId)
+		}
+		await tx.done
 	}
 
 	async pruneAutoCheckpoints(pageId: string, maxStorageBytes: number): Promise<number> {

@@ -182,5 +182,38 @@ describe('VersionHistory UI', () => {
 				expect(onRestored).toHaveBeenCalled()
 			})
 		})
+
+		it('hides milestone creation and restore actions when isReadOnly is true', async () => {
+			render(
+				<VersionDrawer
+					isOpen={true}
+					onClose={vi.fn()}
+					pageId="page1"
+					workspaceId="ws1"
+					engine={engineMock}
+					currentYdoc={currentYdoc}
+					currentUser={{ id: 'user1', name: 'Alice' }}
+					isReadOnly={true}
+				/>
+			)
+
+			await waitFor(() => {
+				expect(screen.getByText('Milestone 1')).toBeInTheDocument()
+			})
+
+			// New Milestone form should not be present
+			expect(screen.queryByPlaceholderText(/milestone name/i)).not.toBeInTheDocument()
+			expect(screen.queryByRole('button', { name: /new milestone/i })).not.toBeInTheDocument()
+
+			// Click milestone to select
+			fireEvent.click(screen.getByText('Milestone 1'))
+
+			await waitFor(() => {
+				expect(engineMock.getSnapshotText).toHaveBeenCalled()
+			})
+
+			// Restore button should not be present
+			expect(screen.queryByRole('button', { name: /^restore$/i })).not.toBeInTheDocument()
+		})
 	})
 })

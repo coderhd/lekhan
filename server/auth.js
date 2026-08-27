@@ -101,37 +101,48 @@ async function verifyUserRole(supabase, entityId, token) {
 }
 
 async function getDocumentOwnerPlan(supabaseAdmin, entityId) {
-	try {
-		const { data: page } = await supabaseAdmin
-			.from('pages')
+	const { data: page, error: pageError } = await supabaseAdmin
+		.from('pages')
+		.select('owner_id')
+		.eq('id', entityId)
+		.maybeSingle()
+
+	if (pageError && pageError.code !== 'PGRST116') {
+		throw pageError
+	}
+
+	let ownerId = null
+	if (page && page.owner_id) {
+		ownerId = page.owner_id
+	} else {
+		const { data: doc, error: docError } = await supabaseAdmin
+			.from('documents')
 			.select('owner_id')
 			.eq('id', entityId)
 			.maybeSingle()
 
-		let ownerId = null
-		if (page && page.owner_id) {
-			ownerId = page.owner_id
-		} else {
-			const { data: doc } = await supabaseAdmin
-				.from('documents')
-				.select('owner_id')
-				.eq('id', entityId)
-				.maybeSingle()
-			ownerId = doc ? doc.owner_id : null
+		if (docError && docError.code !== 'PGRST116') {
+			throw docError
 		}
-
-		if (!ownerId) return 'free'
-
-		const { data: profile } = await supabaseAdmin
-			.from('profiles')
-			.select('plan')
-			.eq('id', ownerId)
-			.single()
-
-		return (profile && profile.plan) ? profile.plan.toLowerCase() : 'free'
-	} catch {
-		return 'free'
+		ownerId = doc ? doc.owner_id : null
 	}
+
+	if (!ownerId) return 'free'
+
+	const query = supabaseAdmin
+		.from('profiles')
+		.select('plan')
+		.eq('id', ownerId)
+
+	const { data: profile, error: profileError } = typeof query.maybeSingle === 'function'
+		? await query.maybeSingle()
+		: await query.single()
+
+	if (profileError && profileError.code !== 'PGRST116') {
+		throw profileError
+	}
+
+	return (profile && profile.plan) ? profile.plan.toLowerCase() : 'free'
 }
 
 module.exports = { getSupabaseClient, getEntityOwner, verifyUserRole, getDocumentOwnerPlan }

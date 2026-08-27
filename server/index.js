@@ -32,9 +32,42 @@ const server = http.createServer((req, res) => {
 const wss = new WebSocket.Server({ noServer: true })
 const { encryptSnapshot, decryptSnapshot } = require('./crypto')
 
+const fs = require('fs')
+const path = require('path')
+
 // Cache save timers
 const saveDebounceTimers = new Map()
+
+// Persistent distinct collaborator ledger
+const LEDGER_FILE = path.join(process.cwd(), '.collaborators-ledger.json')
 const documentDistinctCollaborators = new Map()
+
+try {
+	if (fs.existsSync(LEDGER_FILE)) {
+		const raw = fs.readFileSync(LEDGER_FILE, 'utf8')
+		const parsed = JSON.parse(raw)
+		for (const [docId, users] of Object.entries(parsed)) {
+			if (Array.isArray(users)) {
+				documentDistinctCollaborators.set(docId, new Set(users))
+			}
+		}
+		console.log(`[Ledger] Loaded distinct collaborators for ${documentDistinctCollaborators.size} documents.`)
+	}
+} catch (e) {
+	console.warn('[Ledger] Failed to load collaborators ledger from disk:', e)
+}
+
+function persistCollaboratorsLedger() {
+	try {
+		const serializable = {}
+		for (const [docId, usersSet] of documentDistinctCollaborators.entries()) {
+			serializable[docId] = Array.from(usersSet)
+		}
+		fs.writeFileSync(LEDGER_FILE, JSON.stringify(serializable, null, 2), 'utf8')
+	} catch (e) {
+		console.error('[Ledger] Failed to persist collaborators ledger to disk:', e)
+	}
+}
 
 // Helper to save document state to Supabase Storage and update text index
 async function saveDocumentState (documentId, ydoc) {
@@ -87,10 +120,16 @@ async function saveDocumentState (documentId, ydoc) {
 		console.log(`[Sync] Document ${documentId} successfully synced to Supabase.`)
 
 		// 5. Prune expired versions
-		const ownerPlan = await getDocumentOwnerPlan(supabaseAdmin, documentId)
-		const { prunedCount } = await pruneExpiredDocumentVersions(supabaseAdmin, documentId, ownerPlan, new Date())
-		if (prunedCount > 0) {
-			console.log(`[Retention] Pruned ${prunedCount} expired versions for doc ${documentId}`)
+		try {
+			const ownerPlan = await getDocumentOwnerPlan(supabaseAdmin, documentId)
+			if (ownerPlan) {
+				const { prunedCount } = await pruneExpiredDocumentVersions(supabaseAdmin, documentId, ownerPlan, new Date())
+				if (prunedCount > 0) {
+					console.log(`[Retention] Pruned ${prunedCount} expired versions for doc ${documentId}`)
+				}
+			}
+		} catch (planError) {
+			console.warn(`[Retention] Skipping retention pruning for doc ${documentId} due to plan resolution failure:`, planError)
 		}
 
 	} catch (error) {
@@ -214,6 +253,7 @@ server.on('upgrade', async (request, socket, head) => {
 
 		if (isNewUser) {
 			distinctUsers.add(userId)
+			persistCollaboratorsLedger()
 		}
 
 		console.log(`[Connection] User role: ${role} on doc ${documentId} (${distinctUsers.size}/${limits.maxDistinctCollaborators} distinct)`)

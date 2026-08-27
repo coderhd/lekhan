@@ -22,7 +22,7 @@ export class VersionHistoryEngine {
 			authorId,
 			createdAt: new Date().toISOString(),
 			isPinned: true,
-			byteSize: payload.byteLength,
+			byteSize: compressedPayload.byteLength,
 			compressedPayload
 		}
 		await this.storageAdapter.saveCheckpoint(checkpoint)
@@ -42,7 +42,7 @@ export class VersionHistoryEngine {
 			authorId,
 			createdAt: new Date().toISOString(),
 			isPinned: false,
-			byteSize: payload.byteLength,
+			byteSize: compressedPayload.byteLength,
 			compressedPayload
 		}
 		await this.storageAdapter.saveCheckpoint(checkpoint)
@@ -65,42 +65,56 @@ export class VersionHistoryEngine {
 		Y.applyUpdate(tempDoc, decompressed)
 
 		targetYdoc.transact(() => {
-			for (const [key, type] of targetYdoc.share.entries()) {
-				if (type instanceof Y.Text) {
+			for (const [key, raw] of tempDoc.share.entries()) {
+				const targetExisting = targetYdoc.share.get(key)
+				const isMap = (targetExisting instanceof Y.Map) || ((raw as any)._map && (raw as any)._map.size > 0)
+				const isArray = (targetExisting instanceof Y.Array) || ((raw as any)._start && (raw as any)._start.content && (raw as any)._start.content.constructor.name === 'ContentAny')
+				const isXmlFragment = (targetExisting instanceof Y.XmlFragment) || ((raw as any)._start && (raw as any)._start.content && (raw as any)._start.content.constructor.name === 'ContentType')
+				const isText = (targetExisting instanceof Y.Text) || (!isMap && !isArray && !isXmlFragment)
+
+				if (isText) {
 					const tempType = tempDoc.getText(key)
-					const tempStr = tempType.toString()
-					
+					const type = targetYdoc.getText(key)
 					type.delete(0, type.length)
+					const tempStr = tempType.toString()
 					if (tempStr.length > 0) {
 						type.insert(0, tempStr)
 					}
-				} else if (type instanceof Y.Map) {
+				} else if (isMap) {
 					const tempType = tempDoc.getMap(key)
+					const type = targetYdoc.getMap(key)
 					for (const k of Array.from(type.keys())) {
 						type.delete(k)
 					}
 					for (const [k, v] of tempType.entries()) {
 						type.set(k, v)
 					}
-				} else if (type instanceof Y.Array) {
+				} else if (isArray) {
 					const tempType = tempDoc.getArray(key)
+					const type = targetYdoc.getArray(key)
 					type.delete(0, type.length)
 					if (tempType.length > 0) {
 						type.insert(0, tempType.toArray())
 					}
-				} else if (type instanceof Y.XmlElement) {
-					const tempType = tempDoc.getXmlElement(key)
+				} else if (isXmlFragment) {
+					const tempType = tempDoc.getXmlFragment(key)
+					const type = targetYdoc.getXmlFragment(key)
 					type.delete(0, type.length)
 					if (tempType.length > 0) {
 						const items = tempType.toArray().filter((el: any): el is (Y.XmlElement | Y.XmlText) => el instanceof Y.XmlElement || el instanceof Y.XmlText).map((el: any) => el.clone())
 						type.insert(0, items)
 					}
-				} else if (type instanceof Y.XmlFragment) {
-					const tempType = tempDoc.getXmlFragment(key)
-					type.delete(0, type.length)
-					if (tempType.length > 0) {
-						const items = tempType.toArray().filter((el: any): el is (Y.XmlElement | Y.XmlText) => el instanceof Y.XmlElement || el instanceof Y.XmlText).map((el: any) => el.clone())
-						type.insert(0, items)
+				}
+			}
+
+			for (const [key, type] of targetYdoc.share.entries()) {
+				if (!tempDoc.share.has(key)) {
+					if (type instanceof Y.Text || type instanceof Y.Array || type instanceof Y.XmlElement || type instanceof Y.XmlFragment) {
+						type.delete(0, type.length)
+					} else if (type instanceof Y.Map) {
+						for (const k of Array.from(type.keys())) {
+							type.delete(k)
+						}
 					}
 				}
 			}
@@ -137,13 +151,14 @@ export class VersionHistoryEngine {
 
 	async getSnapshotText(checkpoint: DocumentCheckpoint, fieldName: string = 'default'): Promise<string> {
 		const doc = await this.getSnapshotDoc(checkpoint)
-		const textType = doc.getText(fieldName)
-		if (textType && textType.length > 0) {
-			return textType.toString()
+		const existing = doc.share.get(fieldName)
+		if (!existing) {
+			return ''
 		}
-		
-		const xmlFragment = doc.getXmlFragment(fieldName)
-		if (xmlFragment && xmlFragment.length > 0) {
+
+		const isXml = existing instanceof Y.XmlFragment || ((existing as any)._start && (existing as any)._start.content && (existing as any)._start.content.constructor.name === 'ContentType')
+		if (isXml) {
+			const xmlFragment = doc.getXmlFragment(fieldName)
 			let text = ''
 			for (let i = 0; i < xmlFragment.length; i++) {
 				const el = xmlFragment.get(i)
@@ -153,7 +168,8 @@ export class VersionHistoryEngine {
 			}
 			return text
 		}
-		
-		return ''
+
+		const textType = doc.getText(fieldName)
+		return textType.toString()
 	}
 }

@@ -103,8 +103,8 @@ describe('server/retention', () => {
 		mockSupabase.in.mockResolvedValue({ error: null })
 
 		const result = await pruneExpiredDocumentVersions(mockSupabase, documentId, 'free', now)
-		
-		expect(result).toEqual({ prunedCount: 2, prunedIds: ['v1', 'v2'] })
+
+		expect(result).toEqual({ success: true, prunedCount: 2, prunedIds: ['v1', 'v2'] })
 		
 		// Verify DB select call
 		expect(mockSupabase.from).toHaveBeenCalledWith('document_versions')
@@ -125,8 +125,35 @@ describe('server/retention', () => {
 	it('returns 0 when no expired versions found', async () => {
 		mockSupabase.lt.mockResolvedValue({ data: [], error: null })
 		const result = await pruneExpiredDocumentVersions(mockSupabase, 'doc-123', 'free', new Date())
-		expect(result).toEqual({ prunedCount: 0, prunedIds: [] })
+		expect(result).toEqual({ success: true, prunedCount: 0, prunedIds: [] })
 		expect(mockSupabase.storage.from).not.toHaveBeenCalled()
 		expect(mockSupabase.delete).not.toHaveBeenCalled()
+	})
+
+	it('returns failure and does not delete DB rows when storage deletion fails', async () => {
+		const mockVersions = [{ id: 'v1' }]
+		mockSupabase.lt.mockResolvedValue({ data: mockVersions, error: null })
+		mockSupabase.storage.from.mockReturnValue({
+			remove: vi.fn().mockResolvedValue({ error: new Error('Storage network timeout') })
+		})
+
+		const result = await pruneExpiredDocumentVersions(mockSupabase, 'doc-123', 'free', new Date())
+		expect(result.success).toBe(false)
+		expect(result.prunedCount).toBe(0)
+		expect(mockSupabase.delete).not.toHaveBeenCalled()
+	})
+
+	it('returns failure when database deletion fails', async () => {
+		const mockVersions = [{ id: 'v1' }]
+		mockSupabase.lt.mockResolvedValue({ data: mockVersions, error: null })
+		mockSupabase.storage.from.mockReturnValue({
+			remove: vi.fn().mockResolvedValue({ data: null, error: null })
+		})
+		mockSupabase.delete.mockReturnThis()
+		mockSupabase.in.mockResolvedValue({ error: new Error('DB write conflict') })
+
+		const result = await pruneExpiredDocumentVersions(mockSupabase, 'doc-123', 'free', new Date())
+		expect(result.success).toBe(false)
+		expect(result.prunedCount).toBe(0)
 	})
 })

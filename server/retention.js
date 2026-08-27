@@ -19,11 +19,11 @@ async function pruneExpiredDocumentVersions(supabaseAdmin, documentId, plan, ref
 
 	if (fetchError) {
 		console.error(`[Retention] Error fetching expired versions for doc ${documentId}:`, fetchError)
-		return { prunedCount: 0, prunedIds: [] }
+		return { success: false, error: fetchError, prunedCount: 0, prunedIds: [] }
 	}
 
 	if (!versions || versions.length === 0) {
-		return { prunedCount: 0, prunedIds: [] }
+		return { success: true, prunedCount: 0, prunedIds: [] }
 	}
 
 	const prunedIds = versions.map(v => v.id)
@@ -36,8 +36,7 @@ async function pruneExpiredDocumentVersions(supabaseAdmin, documentId, plan, ref
 
 	if (storageError) {
 		console.error(`[Retention] Error deleting storage files for doc ${documentId}:`, storageError)
-		// We still try to delete the db rows if storage delete fails? Wait, usually we fail or proceed.
-		// Let's assume we proceed or maybe we should throw. The spec says delete storage, then delete rows.
+		return { success: false, error: storageError, prunedCount: 0, prunedIds: [] }
 	}
 
 	// Delete from database
@@ -48,9 +47,11 @@ async function pruneExpiredDocumentVersions(supabaseAdmin, documentId, plan, ref
 
 	if (dbError) {
 		console.error(`[Retention] Error deleting db rows for doc ${documentId}:`, dbError)
+		return { success: false, error: dbError, prunedCount: 0, prunedIds: [] }
 	}
 
 	return {
+		success: true,
 		prunedCount: prunedIds.length,
 		prunedIds
 	}

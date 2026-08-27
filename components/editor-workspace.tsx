@@ -347,6 +347,7 @@ export default function EditorWorkspace({	pageId,
 		if (!engineRef.current || !ydoc || !workspaceId || isViewer) return
 
 		const CHECKPOINT_INTERVAL = 15 * 60 * 1000 // 15 mins
+		const DEFAULT_MAX_STORAGE_BYTES = 100 * 1024 * 1024 // 100MB local history cap
 
 		const timer = setInterval(() => {
 			if (hasUnsyncedChanges) {
@@ -355,7 +356,8 @@ export default function EditorWorkspace({	pageId,
 					workspaceId,
 					authorName: currentUser.full_name || currentUser.email || 'Unknown User',
 					authorId: currentUser.id,
-					ydoc
+					ydoc,
+					maxStorageBytes: DEFAULT_MAX_STORAGE_BYTES
 				}).catch(console.error)
 			}
 		}, CHECKPOINT_INTERVAL)
@@ -1118,6 +1120,7 @@ export default function EditorWorkspace({	pageId,
 							id: currentUser.id,
 							name: currentUser.full_name || currentUser.email || 'Unknown User'
 						}}
+						isReadOnly={isViewer}
 						onRestored={(checkpoint) => {
 							toast.success(`Restored version: ${checkpoint.title}`)
 							setIsHistoryOpen(false)

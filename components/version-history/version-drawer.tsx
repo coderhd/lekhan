@@ -5,6 +5,7 @@ import { VersionHistoryEngine } from '../../lib/version-history/engine'
 import { DocumentCheckpoint } from '../../lib/version-history/types'
 import { VisualDiffViewer } from './visual-diff-viewer'
 import { RestoreConfirmDialog } from './restore-confirm-dialog'
+import { getPlanLimits } from '@/lib/tier-limits'
 import { toast } from 'sonner'
 
 export interface VersionDrawerProps {
@@ -17,6 +18,7 @@ export interface VersionDrawerProps {
 	currentUser: { id: string; name: string }
 	onRestored?: (checkpoint: DocumentCheckpoint) => void
 	userPlan?: 'free' | 'plus' | 'pro'
+	isReadOnly?: boolean
 }
 
 export function VersionDrawer({
@@ -28,7 +30,8 @@ export function VersionDrawer({
 	currentYdoc,
 	currentUser,
 	onRestored,
-	userPlan = 'free'
+	userPlan = 'free',
+	isReadOnly = false
 }: VersionDrawerProps) {
 	const [versions, setVersions] = useState<DocumentCheckpoint[]>([])
 	const [filter, setFilter] = useState<'all' | 'milestones'>('all')
@@ -37,6 +40,7 @@ export function VersionDrawer({
 	const [currentText, setCurrentText] = useState<string>('')
 	const [newMilestoneTitle, setNewMilestoneTitle] = useState('')
 	const [isRestoreDialogOpen, setIsRestoreDialogOpen] = useState(false)
+	const [isRestoring, setIsRestoring] = useState(false)
 
 	const loadVersions = async () => {
 		const list = await engine.listVersions(pageId)
@@ -70,15 +74,30 @@ export function VersionDrawer({
 	}, [isOpen, pageId])
 
 	useEffect(() => {
+		let isMounted = true
 		if (selectedVersion) {
-			engine.getSnapshotText(selectedVersion).then(setSnapshotText)
+			engine.getSnapshotText(selectedVersion)
+				.then((text) => {
+					if (isMounted) {
+						setSnapshotText(text)
+					}
+				})
+				.catch((err) => {
+					if (isMounted) {
+						console.error(err)
+						setSnapshotText('')
+					}
+				})
 		} else {
 			setSnapshotText('')
+		}
+		return () => {
+			isMounted = false
 		}
 	}, [selectedVersion, engine])
 
 	const handleCreateMilestone = async () => {
-		if (!newMilestoneTitle.trim()) return
+		if (!newMilestoneTitle.trim() || isReadOnly) return
 		try {
 			await engine.createMilestone({
 				pageId,
@@ -98,7 +117,8 @@ export function VersionDrawer({
 	}
 
 	const handleRestore = async () => {
-		if (!selectedVersion) return
+		if (!selectedVersion || isRestoring || isReadOnly) return
+		setIsRestoring(true)
 		try {
 			const checkpoint = await engine.restoreCheckpoint({
 				pageId,
@@ -111,11 +131,15 @@ export function VersionDrawer({
 			if (onRestored) {
 				onRestored(checkpoint)
 			}
-			loadVersions()
+			await loadVersions()
+			setIsRestoreDialogOpen(false)
 			setSelectedVersion(null)
+			toast.success(`Restored checkpoint "${selectedVersion.title}"`)
 		} catch (err) {
 			console.error('Failed to restore checkpoint:', err)
 			toast.error('Failed to restore version checkpoint')
+		} finally {
+			setIsRestoring(false)
 		}
 	}
 
@@ -123,10 +147,10 @@ export function VersionDrawer({
 		return versions.filter(v => filter === 'all' || v.isPinned)
 	}, [versions, filter])
 
-	const retentionMap = {
-		free: '7 days',
-		plus: '30 days',
-		pro: 'Unlimited'
+	const retentionMap: Record<string, string> = {
+		free: `${getPlanLimits('free').historyRetentionDays} day`,
+		plus: `${getPlanLimits('plus').historyRetentionDays} days`,
+		pro: `${getPlanLimits('pro').historyRetentionDays} days`
 	}
 
 	if (!isOpen) return null
@@ -141,7 +165,7 @@ export function VersionDrawer({
 			</div>
 			
 			<div className="p-4 bg-muted/50 text-xs text-muted-foreground">
-				Local: Unlimited &middot; Cloud: {retentionMap[userPlan]}
+				Local: Unlimited &middot; Cloud: {retentionMap[userPlan] || retentionMap.free}
 			</div>
 
 			<div className="p-4 border-b">
@@ -162,30 +186,33 @@ export function VersionDrawer({
 					</button>
 				</div>
 				
-				<div className="flex space-x-2">
-					<input
-						type="text"
-						value={newMilestoneTitle}
-						onChange={(e) => setNewMilestoneTitle(e.target.value)}
-						placeholder="Milestone name..."
-						className="flex-1 px-3 py-1 text-sm border rounded"
-					/>
-					<button
-						onClick={handleCreateMilestone}
-						disabled={!newMilestoneTitle.trim()}
-						className="px-3 py-1 text-sm bg-primary text-primary-foreground rounded disabled:opacity-50"
-					>
-						New Milestone
-					</button>
-				</div>
+				{!isReadOnly && (
+					<div className="flex space-x-2">
+						<input
+							type="text"
+							value={newMilestoneTitle}
+							onChange={(e) => setNewMilestoneTitle(e.target.value)}
+							placeholder="Milestone name..."
+							className="flex-1 px-3 py-1 text-sm border rounded"
+						/>
+						<button
+							onClick={handleCreateMilestone}
+							disabled={!newMilestoneTitle.trim()}
+							className="px-3 py-1 text-sm bg-primary text-primary-foreground rounded disabled:opacity-50"
+						>
+							New Milestone
+						</button>
+					</div>
+				)}
 			</div>
 
 			<div className="flex-1 overflow-hidden flex flex-col md:flex-row">
 				<div className="w-full md:w-1/2 border-r overflow-y-auto p-4 space-y-4">
 					{filteredVersions.map(v => (
-						<div
+						<button
+							type="button"
 							key={v.id}
-							className={`p-3 border rounded cursor-pointer ${selectedVersion?.id === v.id ? 'border-primary ring-1 ring-primary' : 'hover:border-primary/50'}`}
+							className={`w-full text-left p-3 border rounded transition-colors ${selectedVersion?.id === v.id ? 'border-primary ring-1 ring-primary bg-primary/5' : 'hover:border-primary/50'}`}
 							onClick={() => setSelectedVersion(v)}
 						>
 							<div className="flex justify-between items-start mb-1">
@@ -201,7 +228,7 @@ export function VersionDrawer({
 								<span>{v.authorName}</span>
 								<span>{new Date(v.createdAt).toLocaleDateString()}</span>
 							</div>
-						</div>
+						</button>
 					))}
 					{filteredVersions.length === 0 && (
 						<div className="text-center text-sm text-muted-foreground py-8">
@@ -215,12 +242,14 @@ export function VersionDrawer({
 						<>
 							<div className="p-4 border-b bg-background flex justify-between items-center">
 								<h3 className="font-semibold text-sm truncate pr-2">{selectedVersion.title}</h3>
-								<button
-									onClick={() => setIsRestoreDialogOpen(true)}
-									className="px-3 py-1 text-xs bg-primary text-primary-foreground rounded"
-								>
-									Restore
-								</button>
+								{!isReadOnly && (
+									<button
+										onClick={() => setIsRestoreDialogOpen(true)}
+										className="px-3 py-1 text-xs bg-primary text-primary-foreground rounded"
+									>
+										Restore
+									</button>
+								)}
 							</div>
 							<div className="flex-1 overflow-y-auto p-4 text-sm font-mono bg-background">
 								<VisualDiffViewer previousText={snapshotText} currentText={currentText} />
@@ -238,6 +267,7 @@ export function VersionDrawer({
 				isOpen={isRestoreDialogOpen}
 				onCancel={() => setIsRestoreDialogOpen(false)}
 				onConfirm={handleRestore}
+				isLoading={isRestoring}
 			/>
 		</div>
 	)
