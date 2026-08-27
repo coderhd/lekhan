@@ -27,6 +27,10 @@ DECLARE
 	v_is_registered BOOLEAN;
 	v_current_count INT;
 BEGIN
+	-- Serialize admissions per document so the capacity check
+	-- and insert below are atomic against concurrent callers
+	PERFORM pg_advisory_xact_lock(hashtext(p_document_id::text));
+
 	-- Anonymous users do not count towards distinct registered collaborator quotas
 	IF p_user_id = 'anonymous' THEN
 		RETURN jsonb_build_object('allowed', true, 'is_registered', false);

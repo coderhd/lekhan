@@ -27,7 +27,7 @@ describe('Sync Server Hardened Capped-Debounce Timing & Serialization', () => {
 		await Promise.allSettled([p1, p2])
 	})
 
-	it('schedules 2-second idle debounce and 10-second max-throttle timers on document changes', () => {
+	it('pins 2-second idle debounce duration exactly', async () => {
 		const {
 			scheduleDebouncedSave,
 			saveDebounceTimers,
@@ -35,21 +35,53 @@ describe('Sync Server Hardened Capped-Debounce Timing & Serialization', () => {
 			clearSaveTimers,
 		} = require('../../server/index.js')
 
-		const docId = 'doc-timer-test-1'
+		const docId = 'doc-idle-timer-test'
 		const ydoc = new Y.Doc()
 		ydoc.getText('default').insert(0, 'Typing...')
 
 		clearSaveTimers(docId)
-		expect(saveDebounceTimers.has(docId)).toBe(false)
-		expect(saveMaxThrottleTimers.has(docId)).toBe(false)
-
 		scheduleDebouncedSave(docId, ydoc)
+
+		// At 1999ms, timers must still be active
+		await vi.advanceTimersByTimeAsync(1999)
 		expect(saveDebounceTimers.has(docId)).toBe(true)
 		expect(saveMaxThrottleTimers.has(docId)).toBe(true)
 
-		clearSaveTimers(docId)
+		// At 2000ms, idle debounce fires and clears both timers
+		await vi.advanceTimersByTimeAsync(1)
 		expect(saveDebounceTimers.has(docId)).toBe(false)
 		expect(saveMaxThrottleTimers.has(docId)).toBe(false)
+	})
+
+	it('pins 10-second max-throttle cap duration under continuous updates', async () => {
+		const {
+			scheduleDebouncedSave,
+			saveDebounceTimers,
+			saveMaxThrottleTimers,
+			clearSaveTimers,
+		} = require('../../server/index.js')
+
+		const docId = 'doc-max-throttle-test'
+		const ydoc = new Y.Doc()
+
+		clearSaveTimers(docId)
+
+		// Simulate continuous typing every 1s for 9 seconds (resets idle debounce each second)
+		for (let s = 0; s < 9; s++) {
+			scheduleDebouncedSave(docId, ydoc)
+			await vi.advanceTimersByTimeAsync(1000)
+			expect(saveMaxThrottleTimers.has(docId)).toBe(true)
+		}
+
+		// Re-trigger at second 9 (advance 999ms) -> at 9999ms max throttle has not fired yet
+		scheduleDebouncedSave(docId, ydoc)
+		await vi.advanceTimersByTimeAsync(999)
+		expect(saveMaxThrottleTimers.has(docId)).toBe(true)
+
+		// Advance 1ms to reach t = 10,000ms -> max throttle fires and clears timers
+		await vi.advanceTimersByTimeAsync(1)
+		expect(saveMaxThrottleTimers.has(docId)).toBe(false)
+		expect(saveDebounceTimers.has(docId)).toBe(false)
 	})
 
 	it('enforces 10 MB maximum payload ceiling constant on incoming frames', () => {

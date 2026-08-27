@@ -57,6 +57,38 @@ describe('Collaborator Ledger Service', () => {
 		await expect(admitCollaborator(mockSupabase, 'doc-123', 'user-1', 2)).rejects.toThrow()
 	})
 
+	it('throws fail-closed error if RPC returns 2xx with malformed data object', async () => {
+		mockSupabase.rpc.mockResolvedValue({
+			data: { invalid_key: true },
+			error: null,
+		})
+
+		await expect(admitCollaborator(mockSupabase, 'doc-123', 'user-1', 2)).rejects.toThrow(
+			'Malformed RPC response from record_collaborator_if_capacity'
+		)
+	})
+
+	it('falls back to check-and-upsert sequence when RPC is undefined (PGRST202 / 42883)', async () => {
+		mockSupabase.rpc.mockResolvedValue({
+			data: null,
+			error: { message: 'Could not find function in schema cache', code: 'PGRST202' },
+		})
+		mockSupabase.from.mockReturnValue({
+			select: vi.fn().mockReturnValue({
+				eq: vi.fn().mockReturnValue({
+					eq: vi.fn().mockReturnValue({
+						maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+					}),
+					mockResolvedValue: vi.fn().mockResolvedValue({ data: [], error: null }),
+				}),
+			}),
+			upsert: vi.fn().mockResolvedValue({ error: null }),
+		})
+
+		const result = await admitCollaborator(mockSupabase, 'doc-123', 'user-fallback', 2)
+		expect(result).toHaveProperty('allowed')
+	})
+
 	it('returns distinct collaborator count from database', async () => {
 		mockSupabase.from.mockReturnValue({
 			select: vi.fn().mockReturnValue({

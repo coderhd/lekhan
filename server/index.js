@@ -397,14 +397,45 @@ setInterval(() => {
 	}
 }, 60000) // Run check every minute
 
-// Background Retention Sweep (12-hour fallback interval)
+// Background Retention Sweep (12-hour fallback interval across all documents)
 setInterval(async () => {
 	console.log('[Retention Sweep] Starting periodic background version cleanup...')
 	try {
-		for (const [docName] of docs.entries()) {
-			const ownerPlan = await getDocumentOwnerPlan(supabaseAdmin, docName)
-			if (ownerPlan) {
-				await pruneExpiredDocumentVersions(supabaseAdmin, docName, ownerPlan, new Date())
+		const BATCH_SIZE = 100
+		let lastSeenId = null
+		let hasMore = true
+
+		while (hasMore) {
+			let query = supabaseAdmin
+				.from('pages')
+				.select('id')
+				.order('id', { ascending: true })
+				.limit(BATCH_SIZE)
+
+			if (lastSeenId) {
+				query = query.gt('id', lastSeenId)
+			}
+
+			const { data: batchPages, error: batchError } = await query
+
+			if (batchError || !batchPages || batchPages.length === 0) {
+				hasMore = false
+				break
+			}
+
+			for (const page of batchPages) {
+				const ownerPlan = await getDocumentOwnerPlan(supabaseAdmin, page.id)
+				if (ownerPlan) {
+					await pruneExpiredDocumentVersions(supabaseAdmin, page.id, ownerPlan, new Date()).catch((err) => {
+						console.warn(`[Retention Sweep] Pruning failed for doc ${page.id}:`, err)
+					})
+				}
+			}
+
+			if (batchPages.length < BATCH_SIZE) {
+				hasMore = false
+			} else {
+				lastSeenId = batchPages[batchPages.length - 1].id
 			}
 		}
 	} catch (sweepErr) {

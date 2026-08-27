@@ -16,11 +16,14 @@ async function admitCollaborator (supabaseAdmin, documentId, userId, maxCollabor
 			p_max_collaborators: maxCollaborators,
 		})
 
-		if (!error && data && typeof data.allowed === 'boolean') {
-			return data
+		if (!error) {
+			if (data && typeof data.allowed === 'boolean') {
+				return data
+			}
+			throw new Error(`Malformed RPC response from record_collaborator_if_capacity for ${documentId} / ${userId}`)
 		}
 
-		if (error && error.code !== '42883' && error.code !== 'PGRST202') { // 42883 / PGRST202 = undefined RPC
+		if (error.code !== '42883' && error.code !== 'PGRST202') { // 42883 / PGRST202 = undefined RPC
 			console.error(`[Ledger] Error in admitCollaborator RPC for ${documentId} / ${userId}:`, error)
 			throw error
 		}
