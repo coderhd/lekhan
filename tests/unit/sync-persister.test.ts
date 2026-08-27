@@ -61,8 +61,15 @@ describe('Hub Page Persister (server/persister.js)', () => {
 		expect(result.nonCriticalResults.retentionSuccess).toBe(true)
 
 		expect(supabaseAdmin.storage.from).toHaveBeenCalledWith('documents')
-		const uploadArgs = supabaseAdmin.storage.from().upload.mock.calls[0]
-		expect(uploadArgs[0]).toBe('doc-123/main_state.bin')
+		const uploadCalls = supabaseAdmin.storage.from().upload.mock.calls
+		expect(uploadCalls.length).toBe(1)
+		expect(uploadCalls[0][0]).toBe('doc-123/main_state.bin')
+		// Explicitly verify binary payload is passed
+		expect(uploadCalls[0][1]).toBeDefined()
+		expect(uploadCalls[0][2]).toEqual({
+			contentType: 'application/octet-stream',
+			upsert: true,
+		})
 		
 		expect(indexPageMock).toHaveBeenCalledWith(supabaseAdmin, 'doc-123', 'Hello from persister')
 		expect(getDocumentOwnerPlanMock).toHaveBeenCalledWith(supabaseAdmin, 'doc-123')
@@ -79,22 +86,60 @@ describe('Hub Page Persister (server/persister.js)', () => {
 		expect(result.success).toBe(true)
 		expect(result.nonCriticalResults.indexingSuccess).toBe(false)
 		expect(result.nonCriticalResults.retentionSuccess).toBe(false)
+
+		// Assert storage upload and DB query still executed successfully
+		expect(supabaseAdmin.storage.from().upload).toHaveBeenCalled()
+		expect(supabaseAdmin.from).toHaveBeenCalledWith('pages')
 	})
 
-	it('TC03: Storage failure handling aborts the pipeline', async () => {
-		supabaseAdmin.storage.from().upload.mockResolvedValueOnce({ error: new Error('Storage down') })
+	it('TC02 (Variant): Handles resolved { success: false } from retention pruner', async () => {
+		pruneExpiredMock.mockResolvedValueOnce({ success: false, error: 'Database timeout' })
 
+		const persister = createTestPersister()
+		const result = await persister.persist('doc-123', ydoc)
+
+		expect(result.success).toBe(true)
+		expect(result.nonCriticalResults.retentionSuccess).toBe(false)
+		expect(result.nonCriticalResults.indexingSuccess).toBe(true)
+	})
+
+	it('TC03: Critical path failure handling for storage or database errors', async () => {
+		// 1. Storage upload error rejects
+		supabaseAdmin.storage.from().upload.mockResolvedValueOnce({ error: new Error('Storage down') })
 		const persister = createTestPersister()
 		
 		await expect(persister.persist('doc-123', ydoc)).rejects.toThrow('Storage down')
 		expect(indexPageMock).not.toHaveBeenCalled()
+
+		// 2. Database update error rejects (on legacy doc fallback)
+		supabaseAdmin.from = vi.fn().mockReturnValue({
+			select: vi.fn().mockReturnValue({
+				eq: vi.fn().mockReturnValue({
+					maybeSingle: vi.fn().mockResolvedValue({ data: null })
+				})
+			}),
+			update: vi.fn().mockReturnValue({
+				eq: vi.fn().mockResolvedValue({ error: new Error('DB write failed') })
+			})
+		})
+		supabaseAdmin.storage.from().upload.mockResolvedValueOnce({ error: null })
+		
+		await expect(persister.persist('doc-123', ydoc)).rejects.toThrow('DB write failed')
 	})
 
 	it('TC04: E2E mode awareness skips indexing', async () => {
+		// Constructor-level E2E toggle
 		const persister = createTestPersister({ isE2EEnabled: true })
 		const result = await persister.persist('doc-123', ydoc)
 
 		expect(result.success).toBe(true)
+		expect(indexPageMock).not.toHaveBeenCalled()
+
+		// Per-call E2E toggle override
+		const standardPersister = createTestPersister({ isE2EEnabled: false })
+		const perCallResult = await standardPersister.persist('doc-123', ydoc, { isE2EEnabled: true })
+
+		expect(perCallResult.success).toBe(true)
 		expect(indexPageMock).not.toHaveBeenCalled()
 	})
 

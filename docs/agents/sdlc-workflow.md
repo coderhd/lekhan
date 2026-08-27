@@ -47,12 +47,13 @@ Separation of duties only works if the agent that approves a thing is not the sa
 3. **In progress → In review** (`dev`):
    - `dev` implements Red-Green-Refactor against the interface contract and QA test plan in an isolated worktree.
    - `dev` opens PR, moves issue to `In review`.
-4. **In review → Done** (`qa`):
-   - `qa` runs full automation suite and evaluates against the pre-committed test plan.
-   - Pass $\rightarrow$ move to `Done`.
-   - Fail $\rightarrow$ open `defect` issue (`Defect of #<story>`), move story back to `In progress`, block merge.
-5. **Release** (`devops`):
-   - Promotes a batch of `Done` work to staging/production, validates DB migrations, checks logs.
+4. **In review (PR Open & Review Gates)** (`qa` + CodeRabbit + Pullfrog + Human):
+   - `qa` runs full automation suite, executes Clean-Room review, and posts formal sign-off comment on the PR.
+   - External automated reviewers (CodeRabbit, Pullfrog CI) complete review checks and post feedback.
+   - PR remains `In review` until approved and merged to `main`.
+5. **Merged → Done** (GitHub / `devops`):
+   - Merging the PR to `main` (with `Closes #<id>`) automatically closes the issue and moves it to `Done`.
+   - `devops` promotes the batch of `Done` work to staging/production.
 
 ---
 

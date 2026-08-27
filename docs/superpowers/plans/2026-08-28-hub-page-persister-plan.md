@@ -1,77 +1,71 @@
-# Implementation Plan: Collapse the Hub Page Persistence Pipeline
+# Technical Design Plan: Hub Page Persister
 
-## Objective
-Refactor the WebSocket sync hub (`server/index.js`) to extract the document state saving logic into a dedicated, deepened domain module `server/persister.js`. This resolves tangled WebSocket connection handlers, isolates errors in non-critical paths, and significantly improves testability.
+## 1. Context & Motivation
+Currently, in `server/index.js`, the WebSocket sync handlers are tangled with persistence logic. They manage Yjs encoding, encryption, Supabase storage uploads, database updates, graph indexing, and version retention. This violates the principles of Deep Modules (as defined in `codebase-design`) by exposing a shallow interface where the caller manages the orchestration. It also tightly couples the network transport (WebSockets) with the data persistence layer, making it difficult to test persistence in isolation and risking the entire snapshot save if a non-critical subsystem (like indexing) fails.
 
-## Interface Contract (`server/persister.js`)
+We will deepen page persistence behind a `PagePersister` module that presents a single, cohesive `persist(pageId, ydoc)` interface, effectively creating a clean seam.
 
-```javascript
-/**
- * @typedef {Object} PersistenceResult
- * @property {boolean} success - Whether the critical persistence path succeeded
- * @property {Error} [error] - The error if the critical path failed
- * @property {Object} nonCriticalResults - Outcomes of non-blocking steps
- * @property {boolean} nonCriticalResults.indexingSuccess
- * @property {boolean} nonCriticalResults.retentionSuccess
- */
+## 2. Interface Contract (`types.ts` representation)
 
-/**
- * Creates a configured PagePersister instance.
- *
- * @param {Object} config
- * @param {import('@supabase/supabase-js').SupabaseClient} config.supabaseAdmin
- * @param {boolean} [config.isE2EEnabled=false] - If true, skips server-side indexing
- * @returns {{ persist: (documentId: string, ydoc: import('yjs').Doc) => Promise<PersistenceResult> }}
- */
-function createPagePersister({ supabaseAdmin, isE2EEnabled = false }) {
-    return {
-        /**
-         * Persists the given Yjs document to storage and database,
-         * then triggers non-blocking indexing and retention.
-         */
-        persist: async (documentId, ydoc) => {
-            // Pipeline steps...
-        }
-    };
+```typescript
+export interface PersisterConfig {
+  supabaseAdmin: SupabaseClient;
+  isE2EEnabled?: boolean; // Controls whether server-side indexing is skipped (ADR 0001)
+  indexer?: GraphIndexer;
+  retentionEngine?: RetentionEngine;
+  authService?: AuthService;
 }
 
-module.exports = { createPagePersister };
+export interface PersistResult {
+  success: boolean;
+  documentId: string;
+  nonCriticalResults: {
+    indexingSuccess: boolean;
+    retentionSuccess: boolean;
+  };
+}
+
+export interface PagePersister {
+  /**
+   * Persists a Yjs document. Orchestrates encoding, encryption, storage upload,
+   * database updates, graph indexing, and version retention.
+   * 
+   * Non-critical failures (e.g. indexing, retention) are caught and logged,
+   * allowing the primary snapshot save to succeed.
+   */
+  persist(documentId: string, ydoc: Y.Doc): Promise<PersistResult>;
+}
+
+// Factory function defining the seam
+export function createPagePersister(config: PersisterConfig): PagePersister;
 ```
 
-## Step-by-step Execution Plan
+*Note: While `isE2EEnabled` is currently part of the module configuration, in a multi-tenant environment this flag may eventually need to be resolved dynamically per-workspace (or passed into `persist()`) to strictly adhere to ADR-0001's opt-in nature.*
 
-### Step 1: Create `server/persister.js`
-1. Initialize the file and export the `createPagePersister` factory.
-2. Require necessary dependencies: `yjs`, `server/crypto.js` (`encryptSnapshot`), `server/graph-index.js` (`indexPage`), `server/retention.js` (`pruneExpiredDocumentVersions`), and auth helpers (`getDocumentOwnerPlan`).
+## 3. Pipeline Steps & Failure Domains
 
-### Step 2: Implement the Critical Persistence Path (Blocking)
-Inside the `persist` function, execute the critical path steps sequentially:
-1. **Yjs state encoding**: Call `Y.encodeStateAsUpdate(ydoc)`.
-2. **Encryption**: Pass the encoded buffer to `encryptSnapshot(buffer)` (from `crypto.js`) to encrypt at rest.
-3. **Storage Upload**: Upload the encrypted binary to the `pages-encrypted` bucket at `${documentId}/main_state.bin`.
-4. **Database Update**: Update the `pages` table with `updated_at` (now) and `storage_path` (`${documentId}/main_state.bin`).
-   *If any of these steps fail, catch the error, log it, and return `{ success: false, error }` (or throw, based on consumer expectation).*
+The `persist` method executes the following pipeline:
 
-### Step 3: Implement Error-Isolated Follow-on Operations (Non-blocking)
-After the critical path succeeds, spawn non-blocking tasks.
-1. **Graph Indexing**: 
-   - Extract plain text via `ydoc.getText('default').toString()`.
-   - Call `graphIndex.indexPage(supabaseAdmin, documentId, text)`.
-   - Append `.catch(...)` to isolate failures. Only run if `isE2EEnabled` is false (since E2E encryption hides content from the server).
-2. **Retention Version Pruning**:
-   - Fetch the document owner plan.
-   - Call `pruneExpiredDocumentVersions(supabaseAdmin, documentId, plan, new Date())`.
-   - Append `.catch(...)` to isolate failures.
-3. **Return Result**: Wait for the background promises to finish or just fire-and-forget them. Wait is safer for graceful shutdown. Return `{ success: true, nonCriticalResults: ... }`.
+1. **Critical Path (Must Succeed)**:
+   - **Encode**: Convert the `Y.Doc` to a binary state update.
+   - **Encrypt**: Apply server-side encryption at rest (ADR-0001).
+   - **Storage Upload**: Upload the encrypted binary to Supabase Storage (`documents/<id>/main_state.bin`).
+   - **Database Update**: Update the text content in `documents` / `pages` table.
+   *Failure Domain: If any of these fail, the `persist` operation throws (or returns success: false), and the WebSocket layer is notified of a failed sync.*
 
-### Step 4: Refactor `server/index.js`
-1. Remove `saveDocumentState` and its tangled inline logic.
-2. Import `createPagePersister` and instantiate it with the global `supabaseAdmin`.
-3. In `triggerSerializedSave` (or the equivalent save execution path), call `pagePersister.persist(documentId, ydoc)`.
-4. Ensure any test mocks in `server/index.test.js` or equivalent are updated to mock `server/persister.js` rather than testing inline logic.
+2. **Non-Critical Path (Isolated Failures)**:
+   - **Graph Indexing**: If `isE2EEnabled` is false (or per-call option `options.isE2EEnabled` is false), extract text content and invoke `indexer.indexPage`. If true, skip indexing.
+   - **Retention Sweeps**: Invoke `retentionEngine.pruneExpiredDocumentVersions` based on the owner's plan limits.
+   *Failure Domain: Failures in indexing or retention (whether a thrown exception or a resolved `{ success: false }` result) are caught, logged, and returned in `nonCriticalResults`. They DO NOT fail the overall save operation.*
 
-## Technical Feasibility & Risks
-- **Feasibility:** High. The existing code inside `server/index.js` already performs these steps, so extracting it is purely organizational. 
-- **Bucket Change:** The prompt indicates a change to the `pages-encrypted` bucket (currently `documents`). We need to ensure Supabase migrations or provisioning create this bucket.
-- **Backward Compatibility:** Need to verify if the client relies on the bucket name for downloads or if they fetch via the server WebSocket.
-- **E2E Toggle:** Exposing `isE2EEnabled` cleanly bridges the gap called out in ADR 0001 where server-side search is disabled when E2E is active.
+## 4. Seam Placement & Testability
+
+The seam is placed directly between the WebSocket handlers (`server/index.js`) and the persistence orchestration (`server/persister.js`). 
+- **WebSocket Handlers**: Deal only with connection limits, message validation, and invoking `pagePersister.persist()`. Zero leakage of Yjs encoding, crypto, or Supabase logic.
+- **Testability**: Because `createPagePersister` accepts its dependencies (`supabaseAdmin`, `indexer`, `retentionEngine`, etc.), the entire persistence engine can be unit tested without spinning up the WebSocket server. We can pass mock storage adapters and verify error isolation.
+
+## 5. Deletion Test & Leverage/Locality Evaluation
+
+- **Deletion Test**: If we imagine deleting `PagePersister`, the orchestration of 5 distinct operations (encode, encrypt, upload, index, prune) and their respective `try/catch` boundaries would spill back into `server/index.js`. The complexity re-appears exactly where we don't want it, proving the module earns its keep.
+- **Leverage**: The caller (WS hub) gets a massive capability (a fully encrypted, indexed, and pruned storage save) in a single method call: `await pagePersister.persist(docId, ydoc)`.
+- **Locality**: A developer changing the indexing strategy, modifying encryption algorithms, or altering retention rules only needs to look at `server/persister.js`. Fix once, fixed everywhere.
