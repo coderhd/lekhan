@@ -4,13 +4,24 @@ import { AIClient } from '../../lib/ai/client'
 const mockFetch = vi.fn()
 globalThis.fetch = mockFetch
 
+function createMockStream(chunks: string[] = ['data: {"text":"hello"}\n\n']) {
+	return new ReadableStream({
+		start(controller) {
+			for (const chunk of chunks) {
+				controller.enqueue(new TextEncoder().encode(chunk))
+			}
+			controller.close()
+		}
+	})
+}
+
 describe('AIClient.streamChat', () => {
 	beforeEach(() => {
 		mockFetch.mockReset()
 	})
 
 	it('should directly fetch for local providers', async () => {
-		mockFetch.mockResolvedValueOnce(new Response(new ReadableStream(), { status: 200 }))
+		mockFetch.mockResolvedValueOnce(new Response(createMockStream(), { status: 200 }))
 		
 		const client = new AIClient()
 		const onChunk = vi.fn()
@@ -36,7 +47,7 @@ describe('AIClient.streamChat', () => {
 		// First call returns 429
 		mockFetch.mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Rate limit' }), { status: 429 }))
 		// Second call returns 200
-		mockFetch.mockResolvedValueOnce(new Response(new ReadableStream(), { status: 200 }))
+		mockFetch.mockResolvedValueOnce(new Response(createMockStream(), { status: 200 }))
 		
 		const client = new AIClient()
 		const onChunk = vi.fn()

@@ -67,18 +67,42 @@ export class AIClient {
 					return
 				}
 
-				// Dummy stream reader implementation for tests
+				// Stream reader implementation
 				const reader = res.body?.getReader()
 				if (reader) {
+					const decoder = new TextDecoder()
+					let buffer = ''
 					// eslint-disable-next-line no-constant-condition
 					while (true) {
 						const { done, value } = await reader.read()
 						if (done) break
-						// Decode and pass chunks...
-						onChunk(new TextDecoder().decode(value))
+						const text = decoder.decode(value, { stream: true })
+						buffer += text
+						const lines = buffer.split('\n')
+						buffer = lines.pop() || ''
+						for (const line of lines) {
+							const trimmed = line.trim()
+							if (trimmed.startsWith('data: ')) {
+								const dataStr = trimmed.slice(6)
+								if (dataStr === '[DONE]') continue
+								try {
+									const parsed = JSON.parse(dataStr)
+									if (parsed.text) onChunk(parsed.text)
+									if (parsed.message?.content) onChunk(parsed.message.content)
+									if (parsed.totalTokens !== undefined) onDone(parsed)
+								} catch {
+									onChunk(dataStr)
+								}
+							} else if (trimmed && !trimmed.startsWith('event:')) {
+								onChunk(trimmed)
+							}
+						}
+					}
+					if (buffer.trim()) {
+						onChunk(buffer.trim())
 					}
 				}
-				onDone({})
+				onDone({ totalTokens: 0, latencyMs: 0, model: config.defaultModel })
 
 			} catch (err: any) {
 				if (err.name === 'AbortError') return
@@ -86,7 +110,7 @@ export class AIClient {
 			}
 		}
 
-		attempt(providerConfig, fallbackConfigs || [])
+		await attempt(providerConfig, fallbackConfigs || [])
 
 		return {
 			unsubscribe: () => abortController.abort()
