@@ -53,7 +53,7 @@ function clearSaveTimers (documentId) {
 const inFlightSaves = new Map()
 const queuedFollowUpSaves = new Map()
 
-async function triggerSerializedSave (documentId, ydoc) {
+function triggerSerializedSave (documentId, ydoc) {
 	if (inFlightSaves.has(documentId)) {
 		queuedFollowUpSaves.set(documentId, ydoc)
 		return inFlightSaves.get(documentId)
@@ -193,6 +193,34 @@ async function saveDocumentState (documentId, ydoc) {
 // Hook into Yjs document initialization
 const { setPersistence } = require('y-websocket/bin/utils')
 
+function scheduleDebouncedSave (documentId, ydoc) {
+	// Clear previous idle debounce timer
+	if (saveDebounceTimers.has(documentId)) {
+		clearTimeout(saveDebounceTimers.get(documentId))
+	}
+
+	// Schedule hard 10-second max-throttle if not already running
+	if (!saveMaxThrottleTimers.has(documentId)) {
+		const maxThrottleTimer = setTimeout(async () => {
+			clearSaveTimers(documentId)
+			await triggerSerializedSave(documentId, ydoc).catch((err) => {
+				console.error(`[Sync Error] Max throttle save failed for ${documentId}:`, err)
+			})
+		}, 10000)
+		saveMaxThrottleTimers.set(documentId, maxThrottleTimer)
+	}
+
+	// Set 2-second idle debounce save
+	const debounceTimer = setTimeout(async () => {
+		clearSaveTimers(documentId)
+		await triggerSerializedSave(documentId, ydoc).catch((err) => {
+			console.error(`[Sync Error] Idle debounce save failed for ${documentId}:`, err)
+		})
+	}, 2000)
+
+	saveDebounceTimers.set(documentId, debounceTimer)
+}
+
 setPersistence({
 	bindState: async (documentId, ydoc) => {
 		try {
@@ -225,32 +253,7 @@ setPersistence({
 			if (origin === 'supabase-load') {
 				return
 			}
-
-			// Clear previous idle debounce timer
-			if (saveDebounceTimers.has(documentId)) {
-				clearTimeout(saveDebounceTimers.get(documentId))
-			}
-
-			// Schedule hard 10-second max-throttle if not already running
-			if (!saveMaxThrottleTimers.has(documentId)) {
-				const maxThrottleTimer = setTimeout(async () => {
-					clearSaveTimers(documentId)
-					await triggerSerializedSave(documentId, ydoc).catch((err) => {
-						console.error(`[Sync Error] Max throttle save failed for ${documentId}:`, err)
-					})
-				}, 10000)
-				saveMaxThrottleTimers.set(documentId, maxThrottleTimer)
-			}
-
-			// Set 2-second idle debounce save
-			const debounceTimer = setTimeout(async () => {
-				clearSaveTimers(documentId)
-				await triggerSerializedSave(documentId, ydoc).catch((err) => {
-					console.error(`[Sync Error] Idle debounce save failed for ${documentId}:`, err)
-				})
-			}, 2000)
-
-			saveDebounceTimers.set(documentId, debounceTimer)
+			scheduleDebouncedSave(documentId, ydoc)
 		})
 	},
 	writeState: async (documentId, ydoc) => {
@@ -440,6 +443,9 @@ module.exports = {
 	wss,
 	saveDocumentState,
 	triggerSerializedSave,
+	scheduleDebouncedSave,
+	saveDebounceTimers,
+	saveMaxThrottleTimers,
 	clearSaveTimers,
 	getServerMetrics,
 	MAX_CONNECTIONS,

@@ -6,27 +6,14 @@ process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'mock-anon-key'
 
 const auth = require('../../server/auth')
 
-describe('Server Metrics & Health System', () => {
-	it('provides valid server metrics format', () => {
-		const metrics = {
-			status: 'ok',
-			uptimeSeconds: 100,
-			activeDocuments: 0,
-			activeConnections: 0,
-			memory: {
-				rssMb: 50,
-				heapUsedMb: 25,
-				heapTotalMb: 35,
-			},
-			limits: {
-				maxConnections: 1500,
-				heapUtilizationPct: 71,
-			},
-		}
+const { getServerMetrics } = require('../../server/index.js')
 
-		expect(metrics.status).toBe('ok')
+describe('Server Metrics & Health System', () => {
+	it('provides valid server metrics format from production getServerMetrics', () => {
+		const metrics = getServerMetrics()
+		expect(metrics).toHaveProperty('status')
 		expect(metrics.limits.maxConnections).toBe(1500)
-		expect(metrics.memory.heapUsedMb).toBeGreaterThan(0)
+		expect(typeof metrics.limits.heapUtilizationPct).toBe('number')
 	})
 })
 

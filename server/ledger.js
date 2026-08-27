@@ -20,12 +20,12 @@ async function admitCollaborator (supabaseAdmin, documentId, userId, maxCollabor
 			return data
 		}
 
-		if (error && error.code !== '42883') { // 42883 = undefined_function (e.g. if RPC is missing)
+		if (error && error.code !== '42883' && error.code !== 'PGRST202') { // 42883 / PGRST202 = undefined RPC
 			console.error(`[Ledger] Error in admitCollaborator RPC for ${documentId} / ${userId}:`, error)
 			throw error
 		}
 	} catch (rpcErr) {
-		if (rpcErr && rpcErr.code !== '42883') {
+		if (rpcErr && rpcErr.code !== '42883' && rpcErr.code !== 'PGRST202') {
 			throw rpcErr
 		}
 	}
