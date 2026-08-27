@@ -116,6 +116,33 @@ export async function generateEncryptionKey(): Promise<CryptoKey> {
 	)
 }
 
+export async function getOrCreateUserVaultKey(userId?: string): Promise<CryptoKey> {
+	if (typeof window === 'undefined' || !window.crypto?.subtle) {
+		throw new Error('WebCrypto unavailable')
+	}
+	const storageKeyName = userId ? `lekhan_vault_key_${userId}` : 'lekhan_vault_key_default'
+	const existingRaw = localStorage.getItem(storageKeyName)
+	if (existingRaw) {
+		try {
+			const rawBytes = new Uint8Array(existingRaw.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || [])
+			return await window.crypto.subtle.importKey(
+				'raw',
+				rawBytes,
+				{ name: 'AES-GCM', length: 256 },
+				true,
+				['encrypt', 'decrypt']
+			)
+		} catch (err) {
+			console.error('Failed to import stored vault key:', err)
+		}
+	}
+	const newKey = await generateEncryptionKey()
+	const exported = await window.crypto.subtle.exportKey('raw', newKey)
+	const hex = Array.from(new Uint8Array(exported)).map(b => b.toString(16).padStart(2, '0')).join('')
+	localStorage.setItem(storageKeyName, hex)
+	return newKey
+}
+
 export async function encryptDocumentState(data: Uint8Array, key: CryptoKey): Promise<Uint8Array> {
 	const iv = window.crypto.getRandomValues(new Uint8Array(12))
 	const encrypted = await window.crypto.subtle.encrypt(

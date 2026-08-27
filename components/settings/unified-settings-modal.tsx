@@ -1,16 +1,54 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { X, Bot, Settings, Paintbrush, CreditCard, Shield } from 'lucide-react'
 import { AIProviderSettings } from './ai-provider-settings'
+import { AIRegistryState } from '../../lib/ai/types'
 
 interface UnifiedSettingsModalProps {
 	isOpen: boolean
 	onClose: () => void
+	registryState?: AIRegistryState
+	onSaveRegistry?: (state: AIRegistryState) => Promise<void>
+	user?: { id?: string; email?: string }
 }
 
-export function UnifiedSettingsModal({ isOpen, onClose }: UnifiedSettingsModalProps) {
+const MODAL_TABS = [
+	{ id: 'ai', label: 'AI & Models', icon: Bot },
+	{ id: 'general', label: 'General & Profile', icon: Settings },
+	{ id: 'editor', label: 'Editor & Preferences', icon: Paintbrush },
+	{ id: 'plan', label: 'Plan & Usage', icon: CreditCard },
+	{ id: 'privacy', label: 'Privacy & Vault', icon: Shield },
+] as const
+
+export function UnifiedSettingsModal({ isOpen, onClose, registryState, onSaveRegistry, user }: UnifiedSettingsModalProps) {
 	const [activeTab, setActiveTab] = useState<'ai' | 'general' | 'editor' | 'plan' | 'privacy'>('ai')
 
+	// Escape key dismissal
+	useEffect(() => {
+		if (!isOpen) return
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (e.key === 'Escape') {
+				onClose()
+			}
+		}
+		document.addEventListener('keydown', handleKeyDown)
+		return () => document.removeEventListener('keydown', handleKeyDown)
+	}, [isOpen, onClose])
+
 	if (!isOpen) return null
+
+	const handleTabKeyDown = (e: React.KeyboardEvent) => {
+		const tabs = MODAL_TABS.map(t => t.id)
+		const currentIndex = tabs.indexOf(activeTab)
+		if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+			e.preventDefault()
+			const nextIndex = (currentIndex + 1) % tabs.length
+			setActiveTab(tabs[nextIndex])
+		} else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+			e.preventDefault()
+			const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length
+			setActiveTab(tabs[prevIndex])
+		}
+	}
 
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-12 animate-in fade-in duration-200">
@@ -34,67 +72,29 @@ export function UnifiedSettingsModal({ isOpen, onClose }: UnifiedSettingsModalPr
 						<h2 id="settings-modal-title" className="text-xl font-display-md font-bold text-on-surface">Workspace Settings</h2>
 					</div>
 					
-					<nav className="flex-1 overflow-y-auto px-4 pb-4 space-y-1" role="tablist" aria-orientation="vertical">
-						<button
-							role="tab"
-							aria-selected={activeTab === 'ai'}
-							onClick={() => setActiveTab('ai')}
-							className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-								activeTab === 'ai' 
-								? 'bg-primary-container text-on-primary-container font-bold shadow-sm' 
-								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5 hover:text-on-surface'
-							}`}
-						>
-							<Bot className="w-4 h-4" /> AI & Models
-						</button>
-						<button
-							role="tab"
-							aria-selected={activeTab === 'general'}
-							onClick={() => setActiveTab('general')}
-							className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-								activeTab === 'general' 
-								? 'bg-primary-container text-on-primary-container font-bold shadow-sm' 
-								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5 hover:text-on-surface'
-							}`}
-						>
-							<Settings className="w-4 h-4" /> General & Profile
-						</button>
-						<button
-							role="tab"
-							aria-selected={activeTab === 'editor'}
-							onClick={() => setActiveTab('editor')}
-							className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-								activeTab === 'editor' 
-								? 'bg-primary-container text-on-primary-container font-bold shadow-sm' 
-								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5 hover:text-on-surface'
-							}`}
-						>
-							<Paintbrush className="w-4 h-4" /> Editor & Preferences
-						</button>
-						<button
-							role="tab"
-							aria-selected={activeTab === 'plan'}
-							onClick={() => setActiveTab('plan')}
-							className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-								activeTab === 'plan' 
-								? 'bg-primary-container text-on-primary-container font-bold shadow-sm' 
-								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5 hover:text-on-surface'
-							}`}
-						>
-							<CreditCard className="w-4 h-4" /> Plan & Usage
-						</button>
-						<button
-							role="tab"
-							aria-selected={activeTab === 'privacy'}
-							onClick={() => setActiveTab('privacy')}
-							className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-								activeTab === 'privacy' 
-								? 'bg-primary-container text-on-primary-container font-bold shadow-sm' 
-								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5 hover:text-on-surface'
-							}`}
-						>
-							<Shield className="w-4 h-4" /> Privacy & Vault
-						</button>
+					<nav 
+						className="flex-1 overflow-y-auto px-4 pb-4 space-y-1" 
+						role="tablist" 
+						aria-orientation="vertical"
+						onKeyDown={handleTabKeyDown}
+					>
+						{MODAL_TABS.map(tab => (
+							<button
+								key={tab.id}
+								id={`modal-tab-${tab.id}`}
+								role="tab"
+								aria-selected={activeTab === tab.id}
+								aria-controls={`modal-panel-${tab.id}`}
+								onClick={() => setActiveTab(tab.id)}
+								className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+									activeTab === tab.id 
+									? 'bg-primary-container text-on-primary-container font-bold shadow-sm' 
+									: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5 hover:text-on-surface'
+								}`}
+							>
+								<tab.icon className="w-4 h-4" /> {tab.label}
+							</button>
+						))}
 					</nav>
 				</div>
 				
@@ -108,16 +108,20 @@ export function UnifiedSettingsModal({ isOpen, onClose }: UnifiedSettingsModalPr
 						<X className="w-5 h-5" />
 					</button>
 					
-					<div className="flex-1 overflow-y-auto p-6 md:p-10 hide-scrollbar" role="tabpanel">
+					<div className="flex-1 overflow-y-auto p-6 md:p-10 hide-scrollbar">
 						{activeTab === 'ai' && (
-							<div className="animate-in fade-in slide-in-from-right-4 duration-300">
+							<div id="modal-panel-ai" role="tabpanel" aria-labelledby="modal-tab-ai" className="animate-in fade-in slide-in-from-right-4 duration-300">
 								<h2 className="text-2xl font-display-lg text-on-surface mb-2">AI & Models</h2>
 								<p className="text-sm text-on-surface-variant mb-8">Manage your connected AI providers, local models, and billing tiers.</p>
-								<AIProviderSettings />
+								<AIProviderSettings 
+									registryState={registryState} 
+									onSaveRegistry={onSaveRegistry} 
+									user={user} 
+								/>
 							</div>
 						)}
 						{activeTab === 'general' && (
-							<div className="animate-in fade-in slide-in-from-right-4 duration-300">
+							<div id="modal-panel-general" role="tabpanel" aria-labelledby="modal-tab-general" className="animate-in fade-in slide-in-from-right-4 duration-300">
 								<h2 className="text-2xl font-display-lg text-on-surface mb-2">General Settings</h2>
 								<p className="text-sm text-on-surface-variant mb-8">Manage your profile and workspace basics.</p>
 								<div className="p-8 border border-dashed border-black/10 dark:border-white/10 rounded-2xl flex items-center justify-center text-on-surface-variant">
@@ -126,7 +130,7 @@ export function UnifiedSettingsModal({ isOpen, onClose }: UnifiedSettingsModalPr
 							</div>
 						)}
 						{activeTab === 'editor' && (
-							<div className="animate-in fade-in slide-in-from-right-4 duration-300">
+							<div id="modal-panel-editor" role="tabpanel" aria-labelledby="modal-tab-editor" className="animate-in fade-in slide-in-from-right-4 duration-300">
 								<h2 className="text-2xl font-display-lg text-on-surface mb-2">Editor Preferences</h2>
 								<p className="text-sm text-on-surface-variant mb-8">Customize your writing environment.</p>
 								<div className="p-8 border border-dashed border-black/10 dark:border-white/10 rounded-2xl flex items-center justify-center text-on-surface-variant">
@@ -135,7 +139,7 @@ export function UnifiedSettingsModal({ isOpen, onClose }: UnifiedSettingsModalPr
 							</div>
 						)}
 						{activeTab === 'plan' && (
-							<div className="animate-in fade-in slide-in-from-right-4 duration-300">
+							<div id="modal-panel-plan" role="tabpanel" aria-labelledby="modal-tab-plan" className="animate-in fade-in slide-in-from-right-4 duration-300">
 								<h2 className="text-2xl font-display-lg text-on-surface mb-2">Plan & Usage</h2>
 								<p className="text-sm text-on-surface-variant mb-8">View your current billing and credit usage.</p>
 								<div className="p-8 border border-dashed border-black/10 dark:border-white/10 rounded-2xl flex items-center justify-center text-on-surface-variant">
@@ -144,7 +148,7 @@ export function UnifiedSettingsModal({ isOpen, onClose }: UnifiedSettingsModalPr
 							</div>
 						)}
 						{activeTab === 'privacy' && (
-							<div className="animate-in fade-in slide-in-from-right-4 duration-300">
+							<div id="modal-panel-privacy" role="tabpanel" aria-labelledby="modal-tab-privacy" className="animate-in fade-in slide-in-from-right-4 duration-300">
 								<h2 className="text-2xl font-display-lg text-on-surface mb-2">Privacy & Vault</h2>
 								<p className="text-sm text-on-surface-variant mb-8">Manage end-to-end encryption and local data.</p>
 								<div className="p-8 border border-dashed border-black/10 dark:border-white/10 rounded-2xl flex items-center justify-center text-on-surface-variant">

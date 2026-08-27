@@ -35,7 +35,7 @@ item_id="$("$GH" api graphql -f query='
 query($number: Int!) {
   repository(owner: "coderhd", name: "lekhan") {
     issue(number: $number) {
-      projectItems(first: 10) {
+      projectItems(first: 50) {
         nodes {
           id
           project { id }

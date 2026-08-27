@@ -31,12 +31,12 @@ describe('SettingsClient Tabbed Navigation', () => {
 				<SettingsClient user={user} token="mock" pages={documents} setPages={vi.fn()} />
 			</GlobalHeaderProvider>
 		)
-		expect(screen.getByRole('button', { name: /Profile & Security/i })).toBeInTheDocument()
-		expect(screen.getByRole('button', { name: /Collaborators & Access/i })).toBeInTheDocument()
-		expect(screen.getByRole('button', { name: /Usage & Credits/i })).toBeInTheDocument()
-		expect(screen.getByRole('button', { name: /Billing & Subscription/i })).toBeInTheDocument()
+		expect(screen.getByRole('tab', { name: /Profile & Security/i })).toBeInTheDocument()
+		expect(screen.getByRole('tab', { name: /Collaborators & Access/i })).toBeInTheDocument()
+		expect(screen.getByRole('tab', { name: /Usage & Credits/i })).toBeInTheDocument()
+		expect(screen.getByRole('tab', { name: /Billing & Subscription/i })).toBeInTheDocument()
 
-		fireEvent.click(screen.getByRole('button', { name: /Billing & Subscription/i }))
+		fireEvent.click(screen.getByRole('tab', { name: /Billing & Subscription/i }))
 		expect(screen.getByText(/Subscription & Plan/i)).toBeInTheDocument()
 	})
 })

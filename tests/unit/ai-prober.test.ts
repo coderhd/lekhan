@@ -14,9 +14,9 @@ describe('AI Prober', () => {
 	describe('getOsSpecificCorsCommand', () => {
 		it('returns correct commands for ollama', () => {
 			const cmds = getOsSpecificCorsCommand('ollama')
-			expect(cmds.macos).toBe('OLLAMA_ORIGINS="*" ollama serve')
-			expect(cmds.linux).toBe('OLLAMA_ORIGINS="*" ollama serve')
-			expect(cmds.windows).toBe('$env:OLLAMA_ORIGINS="*" ; ollama serve')
+			expect(cmds.macos).toBe('OLLAMA_ORIGINS="http://localhost:3000,https://lekhan.app,app://*" ollama serve')
+			expect(cmds.linux).toBe('OLLAMA_ORIGINS="http://localhost:3000,https://lekhan.app,app://*" ollama serve')
+			expect(cmds.windows).toBe('$env:OLLAMA_ORIGINS="http://localhost:3000,https://lekhan.app,app://*" ; ollama serve')
 		})
 
 		it('returns instructions for lmstudio', () => {

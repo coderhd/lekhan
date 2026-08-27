@@ -177,8 +177,8 @@ export const DEFAULT_MODEL_CATALOG: ModelCard[] = [
 		isPreset: true
 	},
 	{
-		id: 'gemini-3.1-pro',
-		name: 'Gemini 3.1 Pro',
+		id: 'gemini-3.1-pro-preview',
+		name: 'Gemini 3.1 Pro Preview',
 		provider: 'gemini',
 		contextWindow: 2000000,
 		costTier: 'paid',

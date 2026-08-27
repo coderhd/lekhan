@@ -101,7 +101,8 @@ export interface AIProviderConfig {
 
 export interface AIRegistryState {
   activeProviderId: string
-  activeModel: string
+  activeModelId: string
+  fallbackModelIds: string[]
   providers: Record<string, AIProviderConfig>
 }
 ```

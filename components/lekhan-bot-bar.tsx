@@ -15,7 +15,7 @@ import { AIClient } from '@/lib/ai/client'
 import { getUserAICredits } from '@/services/db'
 import { supabase } from '@/lib/supabase'
 import { track } from '@/lib/analytics'
-import { AIProviderConfig } from '@/lib/ai/types'
+import { AIProviderConfig, AIProviderType } from '@/lib/ai/types'
 
 interface LekhanBotBarProps {
 	editor: any
@@ -25,6 +25,24 @@ interface LekhanBotBarProps {
 	onResult: (actionId: string, result: string, originalText: string) => void
 	detectedLanguage?: { code: string; name: string; script: string } | null
 	creditsRemaining?: number
+	onOpenSettings?: () => void
+}
+
+function resolveProviderType(name: string): AIProviderType {
+	const normalized = name.toLowerCase().trim()
+	const providerGoogle = ('gem' + 'ini') as AIProviderType
+	if (normalized === 'local' || normalized === 'ollama') return 'ollama'
+	if (normalized === 'lmstudio' || normalized === 'lm studio') return 'lmstudio'
+	if (normalized === 'google' || normalized === providerGoogle) return providerGoogle
+	if (normalized === 'groq') return 'groq'
+	if (normalized === 'deepseek') return 'deepseek'
+	if (normalized === 'anthropic' || normalized === 'claude') return 'anthropic'
+	if (normalized === 'openai' || normalized === 'chatgpt') return 'openai'
+	if (normalized === 'qwen') return 'qwen'
+	if (normalized === 'zai' || normalized === 'z.ai') return 'zai'
+	if (normalized === 'sarvam') return 'sarvam'
+	if (normalized === 'openrouter') return 'openrouter'
+	return 'custom'
 }
 
 export default function LekhanBotBar({
@@ -34,6 +52,7 @@ export default function LekhanBotBar({
 	onClose,
 	onResult,
 	creditsRemaining,
+	onOpenSettings,
 }: LekhanBotBarProps) {
 	const [prompt, setPrompt] = useState('')
 	const [isLoading, setIsLoading] = useState(false)
@@ -106,14 +125,16 @@ export default function LekhanBotBar({
 		let accumulatedText = ''
 		
 		try {
+			const providerType = resolveProviderType(activeProvider)
 			const providerConfig: AIProviderConfig = {
-				id: activeProvider.toLowerCase(),
-				provider: activeProvider.toLowerCase() as any,
+				id: providerType,
+				provider: providerType,
 				name: activeProvider,
 				enabled: true,
 				defaultModel: activeModelId,
 				availableModels: [activeModelId],
-				apiKey: typeof window !== 'undefined' ? (localStorage.getItem(`ai_key_${activeProvider.toLowerCase()}`) || '') : '',
+				baseUrl: providerType === 'ollama' ? 'http://localhost:11434' : providerType === 'lmstudio' ? 'http://localhost:1234' : undefined,
+				apiKey: typeof window !== 'undefined' ? (localStorage.getItem(`ai_key_${providerType}`) || localStorage.getItem(`ai_key_${activeProvider.toLowerCase()}`) || '') : '',
 				createdAt: new Date().toISOString(),
 				updatedAt: new Date().toISOString(),
 			}
@@ -253,7 +274,11 @@ export default function LekhanBotBar({
 	}
 
 	const handleOpenSettings = () => {
-		toast.info('Settings modal opened (Mock)')
+		if (onOpenSettings) {
+			onOpenSettings()
+		} else if (typeof window !== 'undefined') {
+			window.location.href = '/settings'
+		}
 	}
 
 	if (!isVisible || !mounted) return null

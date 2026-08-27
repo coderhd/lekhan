@@ -77,3 +77,18 @@
 #### 🔍 [LOW]: Missing useEffect Cleanup Guard
 - **File**: `components/editor/bot-bar-model-picker.tsx:28`
 - **Issue**: The `handleClickOutside` event listener lacks an `isMounted` check. If an async state update happens after the component unmounts, it will cause a React memory leak warning.
+
+---
+
+### ✅ Remediation Verification (2026-08-27)
+
+All review items have been resolved and verified:
+1. **SSRF Mitigation**: Standard named providers route through a trusted URL registry (`TRUSTED_PROVIDER_BASE_URLS`); custom endpoints validate `https://` protocols and reject local loopback / cloud metadata targets.
+2. **Provider Parameters**: Anthropic token limits map to `max_tokens`; Gemini parameters map to `generationConfig: { temperature, maxOutputTokens }`.
+3. **Signal Cancellation**: Upstream `fetch` receives `signal: req.signal` to immediately cancel upon client disconnect.
+4. **Synchronous Unsubscribe & Clean Done**: `streamChat` returns `{ unsubscribe }` and fires `onDone` once with accumulated token metrics.
+5. **Robust Port Prober**: `probeLocalRuntime` uses `AbortController` + `setTimeout` fallback with guaranteed `finally` cleanup, and suggests secure origin allowlists.
+6. **Key Persistence**: `getOrCreateUserVaultKey` in `lib/crypto.ts` persists keys deterministically to user storage.
+7. **Secure Key Testing**: `testProviderKey` rejects insecure HTTP remote URLs and sets provider-specific auth headers.
+8. **UI & a11y**: WAI-ARIA tablist/tab/tabpanel roles with reciprocal IDs, Arrow-key roving focus, Escape modal dismissal, live ping tests, and OS-specific CORS commands implemented across all settings components.
+9. **Full Test Suite & Build**: 72 test files (502 tests) passing with 0 errors; `npm run typecheck && npm run lint && npm run build` 100% clean.

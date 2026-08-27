@@ -76,6 +76,8 @@ export class AIClient {
 
 				// Stream reader implementation
 				const reader = res.body?.getReader()
+				let lastStats: any = null
+
 				if (reader) {
 					const decoder = new TextDecoder()
 					let buffer = ''
@@ -95,7 +97,9 @@ export class AIClient {
 									const parsed = JSON.parse(dataStr)
 									if (parsed.text) onChunk(parsed.text)
 									if (parsed.message?.content) onChunk(parsed.message.content)
-									if (parsed.totalTokens !== undefined) onDone(parsed)
+									if (parsed.totalTokens !== undefined) {
+										lastStats = parsed
+									}
 								} catch {
 									onChunk(dataStr)
 								}
@@ -108,7 +112,7 @@ export class AIClient {
 						onChunk(buffer.trim())
 					}
 				}
-				onDone({ totalTokens: 0, latencyMs: 0, model: config.defaultModel })
+				onDone(lastStats || { totalTokens: 0, latencyMs: 0, model: config.defaultModel })
 
 			} catch (err: any) {
 				if (err.name === 'AbortError') return

@@ -15,9 +15,9 @@ export interface LocalProbeResult {
 export function getOsSpecificCorsCommand(runtime: LocalRuntime): { macos: string; linux: string; windows: string } {
 	if (runtime === 'ollama') {
 		return {
-			macos: 'OLLAMA_ORIGINS="*" ollama serve',
-			linux: 'OLLAMA_ORIGINS="*" ollama serve',
-			windows: '$env:OLLAMA_ORIGINS="*" ; ollama serve'
+			macos: 'OLLAMA_ORIGINS="http://localhost:3000,https://lekhan.app,app://*" ollama serve',
+			linux: 'OLLAMA_ORIGINS="http://localhost:3000,https://lekhan.app,app://*" ollama serve',
+			windows: '$env:OLLAMA_ORIGINS="http://localhost:3000,https://lekhan.app,app://*" ; ollama serve'
 		}
 	}
 	if (runtime === 'lmstudio') {
@@ -60,9 +60,18 @@ export async function probeLocalRuntime(runtime: LocalRuntime = 'ollama', custom
 	const osCommand = getOsSpecificCorsCommand(runtime)
 
 	const start = performance.now()
+	let fallbackTimer: any = null
+
 	try {
-		// Use AbortSignal.timeout if available, otherwise just use fetch without it
-		const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(3000) : undefined
+		let signal: AbortSignal | undefined
+		if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+			signal = AbortSignal.timeout(3000)
+		} else if (typeof AbortController !== 'undefined') {
+			const controller = new AbortController()
+			signal = controller.signal
+			fallbackTimer = setTimeout(() => controller.abort(), 3000)
+		}
+
 		const response = await fetch(url, { signal })
 		const latencyMs = performance.now() - start
 
@@ -121,6 +130,10 @@ export async function probeLocalRuntime(runtime: LocalRuntime = 'ollama', custom
 			latencyMs,
 			osCommand,
 			error: error.message
+		}
+	} finally {
+		if (fallbackTimer !== null) {
+			clearTimeout(fallbackTimer)
 		}
 	}
 }

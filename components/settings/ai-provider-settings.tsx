@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react'
-import { Activity, Lock, Eye, EyeOff, CheckCircle2, AlertTriangle, CloudOff, KeyRound, Cpu } from 'lucide-react'
-import { AIRegistryState } from '../../lib/ai/types'
+import React, { useState, useEffect, useRef } from 'react'
+import { Activity, Lock, Eye, EyeOff, CheckCircle2, AlertTriangle, CloudOff, KeyRound, Cpu, Loader2 } from 'lucide-react'
+import { AIRegistryState, AIProviderType } from '../../lib/ai/types'
 import { getDefaultAIRegistryState } from '../../lib/ai/catalog'
 import { HardwareProfile, detectHardwareProfile } from '../../lib/ai/hardware'
 import { LocalProbeResult, probeLocalRuntime } from '../../lib/ai/prober'
+import { testProviderKey } from '../../lib/ai/vault'
 import { ModelLibrary } from './model-library'
 import { Button } from '../ui/button'
+import { toast } from 'sonner'
 
 interface AIProviderSettingsProps {
 	registryState?: AIRegistryState
@@ -13,12 +15,33 @@ interface AIProviderSettingsProps {
 	user?: { id?: string; email?: string }
 }
 
+const FREE_PRESETS = [
+	{ id: 'gemini', label: 'Google Gemini (3.7 Flash)', defaultModel: 'gemini-3.7-flash' },
+	{ id: 'groq', label: 'Groq (Llama 4 Maverick)', defaultModel: 'llama-4-maverick' },
+	{ id: 'deepseek', label: 'DeepSeek (V4 Flash)', defaultModel: 'deepseek-v4-flash' },
+	{ id: 'zai', label: 'Z.AI (GLM-5.3 Flash)', defaultModel: 'glm-5.3-flash' }
+] as const
+
+const CLOUD_PROVIDERS = [
+	{ id: 'openai', label: 'OpenAI (GPT-5.6)' },
+	{ id: 'anthropic', label: 'Anthropic (Claude 5)' },
+	{ id: 'gemini', label: 'Google Gemini' },
+	{ id: 'deepseek', label: 'DeepSeek' },
+	{ id: 'sarvam', label: 'Sarvam AI' },
+	{ id: 'qwen', label: 'Alibaba Qwen' },
+	{ id: 'zai', label: 'Zhipu AI (GLM)' }
+] as const
+
 export function AIProviderSettings({ registryState = getDefaultAIRegistryState(), onSaveRegistry }: AIProviderSettingsProps) {
 	const [activeTier, setActiveTier] = useState<1 | 2 | 3 | 'catalog'>(3)
 	const [hardware, setHardware] = useState<HardwareProfile | null>(null)
 	const [localProbe, setLocalProbe] = useState<LocalProbeResult | null>(null)
 	const [showKeys, setShowKeys] = useState<Record<string, boolean>>({})
 	const [apiKeys, setApiKeys] = useState<Record<string, string>>({})
+	const [testingKey, setTestingKey] = useState<Record<string, boolean>>({})
+	const [isPingTesting, setIsPingTesting] = useState(false)
+	const [pingResult, setPingResult] = useState<{ latencyMs?: number; success?: boolean } | null>(null)
+	const tabListRef = useRef<HTMLDivElement>(null)
 	
 	const state = registryState || getDefaultAIRegistryState()
 
@@ -27,22 +50,78 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 		probeLocalRuntime('ollama').then(setLocalProbe)
 	}, [])
 
-	const toggleKeyVisibility = (provider: string) => {
-		setShowKeys(prev => ({ ...prev, [provider]: !prev[provider] }))
+	const toggleKeyVisibility = (providerId: string) => {
+		setShowKeys(prev => ({ ...prev, [providerId]: !prev[providerId] }))
 	}
 
-	const handleKeyChange = (provider: string, val: string) => {
-		setApiKeys(prev => ({ ...prev, [provider]: val }))
+	const handleKeyChange = (providerId: string, val: string) => {
+		setApiKeys(prev => ({ ...prev, [providerId]: val }))
 	}
 
-	const handleSaveKey = async (provider: string) => {
-		// Mock save to vault
+	const handleSaveKey = async (providerId: string) => {
+		const keyVal = apiKeys[providerId] || ''
+		if (typeof window !== 'undefined') {
+			localStorage.setItem(`ai_key_${providerId}`, keyVal)
+		}
 		if (onSaveRegistry) {
 			const newState = { ...state }
-			if (newState.providers[provider]) {
-				newState.providers[provider].apiKey = apiKeys[provider] || ''
-				await onSaveRegistry(newState)
+			if (!newState.providers[providerId]) {
+				newState.providers[providerId] = {
+					id: providerId,
+					provider: providerId as AIProviderType,
+					name: providerId,
+					enabled: true,
+					defaultModel: state.activeModelId,
+					availableModels: [state.activeModelId],
+					apiKey: keyVal,
+					createdAt: new Date().toISOString(),
+					updatedAt: new Date().toISOString()
+				}
+			} else {
+				newState.providers[providerId].apiKey = keyVal
+				newState.providers[providerId].enabled = true
 			}
+			await onSaveRegistry(newState)
+			toast.success(`Saved key for ${providerId}`)
+		} else {
+			toast.success(`Saved key for ${providerId} (local)`)
+		}
+	}
+
+	const handleTestKey = async (providerId: string) => {
+		const keyToTest = apiKeys[providerId] || state.providers[providerId]?.apiKey || ''
+		setTestingKey(prev => ({ ...prev, [providerId]: true }))
+		try {
+			const result = await testProviderKey(providerId as AIProviderType, keyToTest)
+			if (result.success) {
+				toast.success(`Connected to ${providerId}! Latency: ${result.latencyMs}ms`)
+			} else {
+				toast.error(`Failed to connect to ${providerId}: ${result.error || 'Unknown error'}`)
+			}
+		} catch (err: any) {
+			toast.error(`Test error: ${err.message}`)
+		} finally {
+			setTestingKey(prev => ({ ...prev, [providerId]: false }))
+		}
+	}
+
+	const handleLivePing = async () => {
+		setIsPingTesting(true)
+		setPingResult(null)
+		try {
+			const providerId = (state.activeProviderId || 'openai') as AIProviderType
+			const key = apiKeys[providerId] || state.providers[providerId]?.apiKey || ''
+			const result = await testProviderKey(providerId, key)
+			setPingResult(result)
+			if (result.success) {
+				toast.success(`Ping success! Latency: ${result.latencyMs}ms`)
+			} else {
+				toast.error(`Ping failed: ${result.error || 'Unreachable'}`)
+			}
+		} catch (err: any) {
+			toast.error(`Ping error: ${err.message}`)
+		} finally {
+			setIsPingTesting(false)
 		}
 	}
 
@@ -52,6 +131,31 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 			onSaveRegistry(newState)
 		}
 	}
+
+	const handleTabKeyDown = (e: React.KeyboardEvent) => {
+		const tabs: Array<1 | 2 | 3 | 'catalog'> = [1, 2, 3, 'catalog']
+		const currentIndex = tabs.indexOf(activeTier)
+		if (e.key === 'ArrowRight') {
+			e.preventDefault()
+			const nextIndex = (currentIndex + 1) % tabs.length
+			setActiveTier(tabs[nextIndex])
+		} else if (e.key === 'ArrowLeft') {
+			e.preventDefault()
+			const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length
+			setActiveTier(tabs[prevIndex])
+		}
+	}
+
+	const getDetectedPlatform = () => {
+		if (typeof navigator === 'undefined') return 'macos'
+		const ua = navigator.userAgent?.toLowerCase() || ''
+		if (ua.includes('win')) return 'windows'
+		if (ua.includes('linux')) return 'linux'
+		return 'macos'
+	}
+
+	const platform = getDetectedPlatform()
+	const corsCommand = localProbe?.osCommand[platform] || localProbe?.osCommand.macos || ''
 
 	return (
 		<div className="space-y-8 max-w-4xl w-full">
@@ -90,43 +194,65 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 					<p className="text-xs font-bold uppercase tracking-widest opacity-80 mb-2">Active AI Model</p>
 					<h2 className="text-3xl font-display-lg mb-1">{state.activeModelId}</h2>
 					<p className="text-sm opacity-90 capitalize">Provider: {state.activeProviderId}</p>
+					{pingResult && pingResult.success && (
+						<p className="text-xs font-medium opacity-80 mt-1">Live Latency: {pingResult.latencyMs}ms</p>
+					)}
 				</div>
 				<div className="z-10 shrink-0">
-					<Button className="bg-on-primary-container text-primary-container hover:bg-on-primary-container/90 font-bold px-6 py-5 rounded-xl shadow-lg flex items-center gap-2">
-						<Activity className="w-4 h-4" /> Live Ping Test
+					<Button 
+						onClick={handleLivePing}
+						disabled={isPingTesting}
+						className="bg-on-primary-container text-primary-container hover:bg-on-primary-container/90 font-bold px-6 py-5 rounded-xl shadow-lg flex items-center gap-2"
+					>
+						{isPingTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
+						Live Ping Test
 					</Button>
 				</div>
 			</section>
 
 			{/* Tier Navigation Tabs */}
-			<div role="tablist" aria-label="AI Provider Tiers" className="flex border-b border-black/10 dark:border-white/10 overflow-x-auto hide-scrollbar">
+			<div 
+				ref={tabListRef}
+				role="tablist" 
+				aria-label="AI Provider Tiers" 
+				onKeyDown={handleTabKeyDown}
+				className="flex border-b border-black/10 dark:border-white/10 overflow-x-auto hide-scrollbar"
+			>
 				<button 
+					id="ai-tab-tier-1"
 					role="tab"
 					aria-selected={activeTier === 1}
+					aria-controls="ai-panel-tier-1"
 					onClick={() => setActiveTier(1)}
 					className={`px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${activeTier === 1 ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
 				>
 					Tier 1: Local Offline Hub
 				</button>
 				<button 
+					id="ai-tab-tier-2"
 					role="tab"
 					aria-selected={activeTier === 2}
+					aria-controls="ai-panel-tier-2"
 					onClick={() => setActiveTier(2)}
 					className={`px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${activeTier === 2 ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
 				>
 					Tier 2: Free On-Ramp
 				</button>
 				<button 
+					id="ai-tab-tier-3"
 					role="tab"
 					aria-selected={activeTier === 3}
+					aria-controls="ai-panel-tier-3"
 					onClick={() => setActiveTier(3)}
 					className={`px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${activeTier === 3 ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
 				>
 					Tier 3: Cloud BYOK
 				</button>
 				<button 
+					id="ai-tab-tier-catalog"
 					role="tab"
 					aria-selected={activeTier === 'catalog'}
+					aria-controls="ai-panel-tier-catalog"
 					onClick={() => setActiveTier('catalog')}
 					className={`px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${activeTier === 'catalog' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
 				>
@@ -137,7 +263,7 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 			{/* Tier Content */}
 			<div className="min-h-[400px]">
 				{activeTier === 1 && (
-					<div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+					<div id="ai-panel-tier-1" role="tabpanel" aria-labelledby="ai-tab-tier-1" className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
 						<div className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 backdrop-blur-md shadow-sm">
 							<div className="flex items-start justify-between mb-6">
 								<div>
@@ -163,10 +289,10 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 
 							{localProbe?.status === 'cors_blocked' && (
 								<div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6">
-									<h4 className="text-amber-600 dark:text-amber-500 font-bold text-sm mb-2">Fix CORS Issue</h4>
-									<p className="text-xs text-amber-600/80 dark:text-amber-500/80 mb-3">To allow Lekhan to connect to your local Ollama, you must start it with CORS allowed.</p>
+									<h4 className="text-amber-600 dark:text-amber-500 font-bold text-sm mb-2">Fix CORS Issue ({platform.toUpperCase()})</h4>
+									<p className="text-xs text-amber-600/80 dark:text-amber-500/80 mb-3">To allow Lekhan to connect to your local Ollama, restart it with allowed origins:</p>
 									<code className="block w-full bg-black/10 dark:bg-black/50 p-3 rounded-lg text-xs font-mono text-on-surface break-all select-all">
-										{localProbe.osCommand.macos}
+										{corsCommand}
 									</code>
 								</div>
 							)}
@@ -193,29 +319,41 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 				)}
 
 				{activeTier === 2 && (
-					<div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+					<div id="ai-panel-tier-2" role="tabpanel" aria-labelledby="ai-tab-tier-2" className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
 						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-							{['Gemini 3.7 Flash', 'Groq Llama 4 Maverick', 'DeepSeek V4 Flash'].map(preset => (
-								<div key={preset} className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-5 backdrop-blur-md shadow-sm">
-									<h3 className="font-bold text-base text-on-surface mb-1">{preset}</h3>
+							{FREE_PRESETS.map(preset => (
+								<div key={preset.id} className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-5 backdrop-blur-md shadow-sm">
+									<h3 className="font-bold text-base text-on-surface mb-1">{preset.label}</h3>
 									<p className="text-xs text-on-surface-variant mb-4">Fast, capable, and free API tier available.</p>
 									<div className="space-y-3">
 										<div className="relative">
 											<KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
 											<input 
-												type={showKeys[preset] ? "text" : "password"}
-												placeholder="API Key"
-												value={apiKeys[preset] || ''}
-												onChange={e => handleKeyChange(preset, e.target.value)}
+												type={showKeys[preset.id] ? "text" : "password"}
+												placeholder={`${preset.label} API Key`}
+												value={apiKeys[preset.id] || ''}
+												onChange={e => handleKeyChange(preset.id, e.target.value)}
 												className="w-full pl-9 pr-10 py-2 bg-black/5 dark:bg-black/20 border border-black/10 dark:border-white/10 rounded-lg text-sm focus:ring-1 focus:ring-primary focus:outline-none"
 											/>
-											<button onClick={() => toggleKeyVisibility(preset)} className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface">
-												{showKeys[preset] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+											<button 
+												type="button"
+												aria-label={`Toggle visibility for ${preset.label}`}
+												onClick={() => toggleKeyVisibility(preset.id)} 
+												className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
+											>
+												{showKeys[preset.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
 											</button>
 										</div>
 										<div className="flex gap-2">
-											<Button variant="secondary" className="w-full text-xs" onClick={() => handleSaveKey(preset)}>Save Key</Button>
-											<Button variant="default" className="w-full text-xs">Test Key</Button>
+											<Button variant="secondary" className="w-full text-xs" onClick={() => handleSaveKey(preset.id)}>Save Key</Button>
+											<Button 
+												variant="default" 
+												className="w-full text-xs" 
+												disabled={testingKey[preset.id]}
+												onClick={() => handleTestKey(preset.id)}
+											>
+												{testingKey[preset.id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Test Key'}
+											</Button>
 										</div>
 									</div>
 								</div>
@@ -225,7 +363,7 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 				)}
 
 				{activeTier === 3 && (
-					<div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+					<div id="ai-panel-tier-3" role="tabpanel" aria-labelledby="ai-tab-tier-3" className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
 						<div className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 backdrop-blur-md shadow-sm">
 							<div className="flex items-center gap-3 mb-6">
 								<Lock className="w-5 h-5 text-primary" />
@@ -236,28 +374,41 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 							</div>
 
 							<div className="space-y-6">
-								{['OpenAI', 'Anthropic', 'Google Gemini', 'DeepSeek', 'Sarvam'].map(provider => (
-									<div key={provider} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-black/5 dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5">
+								{CLOUD_PROVIDERS.map(provider => (
+									<div key={provider.id} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-black/5 dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5">
 										<div className="sm:w-1/3">
-											<h4 className="font-bold text-sm text-on-surface">{provider}</h4>
+											<h4 className="font-bold text-sm text-on-surface">{provider.label}</h4>
 										</div>
 										<div className="flex-1 space-y-3">
 											<div className="relative">
 												<KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
 												<input 
-													type={showKeys[provider] ? "text" : "password"}
-													placeholder={`${provider} API Key`}
-													value={apiKeys[provider] || ''}
-													onChange={e => handleKeyChange(provider, e.target.value)}
+													type={showKeys[provider.id] ? "text" : "password"}
+													placeholder={`${provider.label} API Key`}
+													value={apiKeys[provider.id] || ''}
+													onChange={e => handleKeyChange(provider.id, e.target.value)}
 													className="w-full pl-9 pr-10 py-2.5 bg-white dark:bg-black/50 border border-black/10 dark:border-white/10 rounded-lg text-sm focus:ring-1 focus:ring-primary focus:outline-none"
 												/>
-												<button onClick={() => toggleKeyVisibility(provider)} className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface">
-													{showKeys[provider] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+												<button 
+													type="button"
+													aria-label={`Toggle key visibility for ${provider.label}`}
+													onClick={() => toggleKeyVisibility(provider.id)} 
+													className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
+												>
+													{showKeys[provider.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
 												</button>
 											</div>
 											<div className="flex gap-2 justify-end">
-												<Button variant="secondary" size="sm" className="text-xs font-semibold">Test Connection</Button>
-												<Button size="sm" className="text-xs font-semibold" onClick={() => handleSaveKey(provider)}>Save to Vault</Button>
+												<Button 
+													variant="secondary" 
+													size="sm" 
+													className="text-xs font-semibold"
+													disabled={testingKey[provider.id]}
+													onClick={() => handleTestKey(provider.id)}
+												>
+													{testingKey[provider.id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Test Connection'}
+												</Button>
+												<Button size="sm" className="text-xs font-semibold" onClick={() => handleSaveKey(provider.id)}>Save to Vault</Button>
 											</div>
 										</div>
 									</div>
@@ -268,7 +419,7 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 				)}
 
 				{activeTier === 'catalog' && (
-					<div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+					<div id="ai-panel-tier-catalog" role="tabpanel" aria-labelledby="ai-tab-tier-catalog" className="animate-in fade-in slide-in-from-bottom-4 duration-300">
 						<ModelLibrary 
 							activeModelId={state.activeModelId} 
 							onSelectModel={handleSelectModel}
