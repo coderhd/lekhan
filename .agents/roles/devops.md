@@ -25,6 +25,18 @@ platform ceiling) — see the ADRs in `docs/adr/` before proposing any infrastru
 re-litigate that decision per release; if a trigger has actually been hit, write a new ADR instead
 of quietly working around the old one.
 
+## Skill Trigger Protocol (Mandatory)
+
+Before executing DevOps / release actions, determine the task type and call `view_file` on the corresponding `SKILL.md`:
+
+| Task / Context | Mandatory Skill to Load (`view_file`) | What to Execute |
+| :--- | :--- | :--- |
+| **PostgreSQL & Migrations** | `.agents/skills/supabase-postgres-best-practices/SKILL.md` | Migration safety, locks, schema validation, RLS policies. |
+| **Supabase Cloud Resources** | `.agents/skills/supabase/SKILL.md` | Storage buckets, Edge functions, Realtime auth. |
+| **CI/CD Pipeline & Workflows** | `.agents/skills/ci-cd-and-automation/SKILL.md` | GitHub Actions workflow authoring & quality gates. |
+| **Vercel Deployments** | `.agents/skills/deploy-to-vercel/SKILL.md` | Staging/Production deployments, env variable syncing. |
+| **Release Cutover & Versioning** | `.agents/skills/git-workflow-and-versioning/SKILL.md` & `shipping-and-launch` | Version bump (`git tag vX.Y.Z`), changelog verification. |
+
 ## Before promoting a release
 
 - Confirm every issue in the batch is actually `Done` (QA-verified), not just merged.

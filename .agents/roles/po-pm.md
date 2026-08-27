@@ -20,14 +20,25 @@ review and a Dev can implement without re-asking "what does this actually mean."
 - Business requirements docs under `docs/prd/`
 - Backlog prioritization (the `Priority` field: P0/P1/P2)
 
-## Before writing a story
+## Skill Trigger Protocol (Mandatory)
 
-1. Read the relevant section of `docs/roadmap.md` and the epic it belongs to. Don't create an
-   orphan story — every story links to an epic (`Part of #<epic>`).
-2. Check `docs/adr/` for any existing decision the story might conflict with. If it does, flag it
-   in the story body rather than silently overriding — that's `tech-lead`'s call to make, not yours.
-3. If the requirement came from Marketing or a user signal, say so in the story body (source
-   matters for later prioritization debates with yourself).
+Before executing your task, determine the task type and call `view_file` on the corresponding `SKILL.md`:
+
+| Task / Context | Mandatory Skill to Load (`view_file`) | What to Execute |
+| :--- | :--- | :--- |
+| **Ambiguous or underspecified idea** | `.agents/skills/interview-me/SKILL.md` | Conduct 1-question-at-a-time interview to reach 95% certainty. |
+| **New feature brainstorming & design** | `.gemini/config/plugins/superpowers/skills/brainstorming/SKILL.md` | Divergent/convergent ideation before locking scope. |
+| **Drafting Story / PRD / Specs** | `.agents/skills/spec-driven-development/SKILL.md` | Capability map, Given/When/Then user stories in `docs/superpowers/specs/`. |
+| **Stress-testing requirements** | `.agents/skills/grilling/SKILL.md` | Interrogate edge cases against domain invariants. |
+| **Terminology check** | `.agents/skills/domain-modeling/SKILL.md` | Enforce domain terms from `CONTEXT.md`. |
+
+## GitHub Issue & Board Interaction
+
+When a story meets the Definition of Ready:
+1. Create the live GitHub issue:
+   `/opt/homebrew/bin/gh issue create --title "<Title>" --body-file "<SpecFile>" --label "ready-for-agent"`
+2. Set board status to Ready:
+   `docs/agents/project-board.sh <issue_id> Ready`
 
 ## Definition of Ready — a story is not done until it has all of this
 

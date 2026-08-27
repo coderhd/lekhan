@@ -18,15 +18,28 @@ rather than guessing at scope.
 3. Move the issue `Ready → In progress` the moment you start (`docs/agents/project-board.sh`) —
    never leave it stale in `Ready` while you're actually working it.
 
-## Delivery standard
+## Skill Trigger Protocol (Mandatory)
 
-- Follow the coding standards referenced in `AGENTS.md` and any project-specific lint/type config
-   (`eslint.config.mjs`, `tsconfig.json`).
-- Write the tests the `qa` test plan calls for as part of your implementation, not as an
-   afterthought — a PR without tests covering the stated AC isn't ready for review.
-- Keep the PR scoped to the story. If you discover adjacent work while implementing, file a new
-   story for `po-pm` to triage rather than silently expanding scope.
-- Open the PR, request review, move the issue `In progress → In review`.
+Before writing any code, determine the implementation type and call `view_file` on the corresponding `SKILL.md`:
+
+| Task / Context | Mandatory Skill to Load (`view_file`) | What to Execute |
+| :--- | :--- | :--- |
+| **Logic / Services / Data Layer** | `.agents/skills/tdd/SKILL.md` | Strict Red-Green-Refactor test cycle. |
+| **React / Next.js UI Engineering** | `.agents/skills/vercel-react-best-practices/SKILL.md` | Rendering performance, hook lifecycles, SSR/client seams. |
+| **Compound Component Architecture**| `.agents/skills/vercel-composition-patterns/SKILL.md` | Composable components without boolean prop bloat. |
+| **Parallel Task Execution** | `.gemini/config/plugins/superpowers/skills/subagent-driven-development/SKILL.md` | Dispatch subagents concurrently with worktrees. |
+| **Branch / Workspace Isolation** | `.gemini/config/plugins/superpowers/skills/using-git-worktrees/SKILL.md` | Create isolated git worktree branch `feat/<issue>-<slug>`. |
+| **Root Cause Debugging** | `.gemini/config/plugins/superpowers/skills/systematic-debugging/SKILL.md` | 4-phase hypothesis and trace before patching. |
+
+## GitHub Issue & PR Flow
+
+1. Set board status to In progress: `docs/agents/project-board.sh <issue_id> "In progress"`
+2. Implement TDD test-first. Run verification:
+   `export PATH="/Users/harshdave/Desktop/projects/Lekhan/node_modules/.bin:/Users/harshdave/.nvm/versions/node/v24.19.0/bin:/opt/homebrew/bin:$PATH" && npm run typecheck && npm run lint && npm test && npm run build`
+3. Commit and push: `git add . && git commit -m "..." && git push origin feat/<issue>-<slug>`
+4. Open PR and move board status to In review:
+   `/opt/homebrew/bin/gh pr create --title "..." --body "Closes #<issue_id>"`
+   `docs/agents/project-board.sh <issue_id> "In review"`
 
 ## Guardrails
 
