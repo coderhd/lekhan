@@ -1,3 +1,5 @@
+import { describe, it, expect, vi } from 'vitest'
+import '@testing-library/jest-dom'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ModelLibrary } from '../../components/settings/model-library'
 import { DEFAULT_MODEL_CATALOG } from '../../lib/ai/catalog'
@@ -40,7 +42,6 @@ describe('ModelLibrary UI', () => {
 			/>
 		)
 		
-		// The default catalog should have some models. Let's assume there is one called "GPT-5.6 Luna" or similar
 		const firstModel = DEFAULT_MODEL_CATALOG[0]
 		if (firstModel) {
 			expect(screen.getAllByText(firstModel.name)[0]).toBeInTheDocument()
@@ -49,7 +50,7 @@ describe('ModelLibrary UI', () => {
 	})
 
 	it('calls onSelectModel when "Select as Active" is clicked', () => {
-		const onSelectModel = jest.fn()
+		const onSelectModel = vi.fn()
 		render(
 			<ModelLibrary 
 				activeModelId="none" 

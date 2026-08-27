@@ -1,9 +1,11 @@
+import { describe, it, expect, vi } from 'vitest'
+import '@testing-library/jest-dom'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { UnifiedSettingsModal } from '../../components/settings/unified-settings-modal'
 
 describe('UnifiedSettingsModal UI', () => {
 	it('renders tabs and switches content', () => {
-		render(<UnifiedSettingsModal isOpen={true} onClose={jest.fn()} />)
+		render(<UnifiedSettingsModal isOpen={true} onClose={vi.fn()} />)
 		
 		const aiTab = screen.getByRole('tab', { name: /ai & models/i })
 		const generalTab = screen.getByRole('tab', { name: /general & profile/i })

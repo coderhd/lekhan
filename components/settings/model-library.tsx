@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { Search, CheckCircle2, Cpu, Zap, DollarSign } from 'lucide-react'
-import { DEFAULT_MODEL_CATALOG, ModelCategory, CostTier, ModelCard } from '../../lib/ai/catalog'
+import { DEFAULT_MODEL_CATALOG } from '../../lib/ai/catalog'
+import { ModelCategory, CostTier, ModelCard } from '../../lib/ai/types'
 import { HardwareProfile, getHardwareRecommendation } from '../../lib/ai/hardware'
 import { Button } from '../ui/button'
 

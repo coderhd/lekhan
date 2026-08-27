@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Activity, Server, Zap, Lock, Eye, EyeOff, CheckCircle2, AlertTriangle, CloudOff, KeyRound, Cpu } from 'lucide-react'
-import { AIRegistryState, getDefaultAIRegistryState } from '../../lib/ai/catalog'
+import { AIRegistryState } from '../../lib/ai/types'
+import { getDefaultAIRegistryState } from '../../lib/ai/catalog'
 import { HardwareProfile, detectHardwareProfile } from '../../lib/ai/hardware'
 import { LocalProbeResult, probeLocalRuntime } from '../../lib/ai/prober'
 import { ModelLibrary } from './model-library'
