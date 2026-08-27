@@ -66,6 +66,18 @@ Every ticket, feature, bug, or refactor moves strictly through these 6 stages:
 
 ---
 
+## Parallel Subagent & Git Worktree Execution Protocol
+
+To maximize velocity without degrading code quality or creating file conflicts:
+1. **Interface Contract First**: Before parallel dispatch, the Lead Agent defines the shared TypeScript interfaces and API schemas (`types.ts`).
+2. **Parallel Worktree Dispatch**: Dispatch independent tasks concurrently via `invoke_subagent` using `Workspace: 'branch'` or `Workspace: 'share'` (linked Git worktrees).
+3. **Isolated TDD**: Each subagent implements Red-Green-Refactor within its isolated workspace, ensuring its specific test suite passes before reporting back.
+4. **Integration & Rebase**: The Lead Agent merges/rebases subagent branches into the epic branch.
+5. **Full Suite Verification**: The Lead Agent runs `npm run typecheck && npm run lint && npm test && npm run build` across the entire codebase.
+6. **Clean-Room Review Gate**: Mandatory adversarial review subagent (`invoke_subagent(Model: 'pro', Role: 'Clean-Room Reviewer')`) audits `git diff origin/main...HEAD` before PR creation.
+
+---
+
 ## Multi-Session Resumption Protocol (Zero Context Drift)
 
 When starting a new session or after context compaction, execute this protocol immediately:
