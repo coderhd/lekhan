@@ -27,7 +27,7 @@ describe('Settings Usage & Credits Tab', () => {
 				<SettingsClient user={{ email: 'test@example.com' }} token="mock" />
 			</GlobalHeaderProvider>
 		)
-		const usageTab = screen.getByRole('button', { name: /Usage & Credits/i })
+		const usageTab = screen.getByRole('tab', { name: /Usage & Credits/i })
 		expect(usageTab).toBeInTheDocument()
 
 		fireEvent.click(usageTab)

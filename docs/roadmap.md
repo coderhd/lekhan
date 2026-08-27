@@ -59,6 +59,8 @@ provider registry).
 | H0 — Global Search (index-native, keyboard-first) | #25 | Tickets #33–#36 done; shipped in PR #37 |
 | H0 — Product analytics: event instrumentation for PMF funnel | #83 | Dual-destination PostHog EU + GA4, privacy sanitization, PMF funnel events |
 | H0 — Encrypt page snapshots at rest (ADR 0001) | #81 | AES-256-GCM envelope encryption with magic header LK_ENC_V1, key rotation, backfill script |
+| H0 — Tier limits & local-first version history | #82 | Git-style milestones, non-destructive restore, visual word-diff viewer, quota pruning |
+| H0 — AI Provider Registry & Unified Settings Suite | #28 | 3-tier access ladder (local BYOL, free presets, cloud BYOK), zero-knowledge encrypted vault, 5-tab settings |
 
 | Epic | Issue | Blocker edges | Notes |
 |---|---|---|---|
@@ -90,7 +92,7 @@ provider registry).
 | #81 | Encrypt-at-rest (spec + impl) | P0 | 16h | Aug 28 → Aug 29 | **Shipped** (PR #96) |
 | #82 | Tier plumbing + local-first version history | P0 | 16h | Aug 31 → Sep 1 | **Shipped** (PR #99) |
 | — | 🔒 **Private beta opens** (gate #84 clears) | — | — | **Sep 2** | — |
-| #28 | AI Provider Registry (final spec 4h incl.) | P0 | 64h | Sep 2 → Sep 10 | In review (seed) |
+| #28 | AI Provider Registry (final spec 4h incl.) | P0 | 64h | Sep 2 → Sep 10 | **Shipped** (PR #107) |
 | #29 | Billing: Stripe/Razorpay + founding prices + referral credits | P0 | 60h | Sep 11 → Sep 22 | Backlog |
 | #87 | Idempotent imports | P1 | 12h | Sep 23 → Sep 24 | Backlog |
 | #31 | i18n framework | P0 | 24h | Sep 25 → Sep 29 | Backlog |

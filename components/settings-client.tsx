@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Users, CreditCard, Sparkles, AlertTriangle, Zap } from 'lucide-react'
+import { User, Users, CreditCard, Sparkles, AlertTriangle, Zap, Bot } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import {
@@ -13,6 +13,11 @@ import { removePageMember, updatePageMemberRole, fetchOwnedPagesWithMembers } fr
 import BYOKSettings from '@/components/byok-settings'
 import PricingMatrix from '@/components/pricing-plans'
 import { CustomSelect } from './ui/custom-select'
+import { AIProviderSettings } from './settings/ai-provider-settings'
+import { AIRegistryState } from '@/lib/ai/types'
+import { getDefaultAIRegistryState } from '@/lib/ai/catalog'
+import { encryptAIRegistry, syncVaultToSupabase, loadVaultFromSupabase } from '@/lib/ai/vault'
+import { getOrCreateUserVaultKey } from '@/lib/crypto'
 
 const EMPTY_PAGES: any[] = []
 
@@ -27,13 +32,40 @@ export default function SettingsClient({
 	setPages?: React.Dispatch<React.SetStateAction<any[]>>
 }) {
 	const router = useRouter()
-	const [activeTab, setActiveTab] = useState<'profile' | 'collaborators' | 'usage' | 'billing'>('profile')
+	const [activeTab, setActiveTab] = useState<'profile' | 'collaborators' | 'usage' | 'billing' | 'ai'>('profile')
+	const [registryState, setRegistryState] = useState<AIRegistryState>(getDefaultAIRegistryState())
 	const [password, setPassword] = useState('')
 	const [confirmPassword, setConfirmPassword] = useState('')
 	const [passwordError, setPasswordError] = useState('')
 	const [passwordSuccess, setPasswordSuccess] = useState('')
 	const [loading, setLoading] = useState(false)
 	const [currentPage, setCurrentPage] = useState(1)
+
+	// Load encrypted AI vault on mount
+	useEffect(() => {
+		if (user?.id) {
+			getOrCreateUserVaultKey(user.id).then(key => {
+				loadVaultFromSupabase(supabase, user.id!, key).then(loadedState => {
+					if (loadedState) {
+						setRegistryState(loadedState)
+					}
+				}).catch(err => console.error('Failed to load vault:', err))
+			}).catch(err => console.error('Failed to get vault key:', err))
+		}
+	}, [user?.id])
+
+	const handleSaveRegistry = async (newState: AIRegistryState) => {
+		setRegistryState(newState)
+		if (user?.id) {
+			try {
+				const key = await getOrCreateUserVaultKey(user.id)
+				const encrypted = await encryptAIRegistry(newState, key)
+				await syncVaultToSupabase(supabase, user.id, encrypted)
+			} catch (err: any) {
+				console.error('Failed to sync AI vault:', err)
+			}
+		}
+	}
 
 	// Pages State for Collaborators tab
 	const [pagesState, setPagesState] = useState<any[]>(initialPages)
@@ -145,14 +177,51 @@ export default function SettingsClient({
 		currentPage * itemsPerPage
 	)
 
+	const handleTabKeyDown = (e: React.KeyboardEvent) => {
+		const tabs: Array<'ai' | 'profile' | 'collaborators' | 'usage' | 'billing'> = ['ai', 'profile', 'collaborators', 'usage', 'billing']
+		const currentIndex = tabs.indexOf(activeTab)
+		if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+			e.preventDefault()
+			const nextIndex = (currentIndex + 1) % tabs.length
+			setActiveTab(tabs[nextIndex])
+		} else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+			e.preventDefault()
+			const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length
+			setActiveTab(tabs[prevIndex])
+		}
+	}
+
 	return (
 		<div className="h-screen bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container flex flex-col font-body-md overflow-hidden">
 			<main className="flex-1 overflow-hidden flex justify-center px-6 md:px-10">
 				<div className="w-full max-w-[1400px] h-full flex flex-col lg:flex-row gap-8 py-8">
 					{/* Sidebar Navigation */}
-					<aside className="w-full lg:w-64 shrink-0 flex flex-row lg:flex-col gap-2 overflow-x-auto border-b lg:border-b-0 lg:border-r border-black/10 dark:border-white/10 pb-4 lg:pb-0 lg:pr-6">
+					<aside 
+						role="tablist" 
+						aria-label="Settings navigation" 
+						onKeyDown={handleTabKeyDown}
+						className="w-full lg:w-64 shrink-0 flex flex-row lg:flex-col gap-2 overflow-x-auto border-b lg:border-b-0 lg:border-r border-black/10 dark:border-white/10 pb-4 lg:pb-0 lg:pr-6"
+					>
 						<button
+							id="settings-tab-ai"
 							type="button"
+							role="tab"
+							aria-selected={activeTab === 'ai'}
+							aria-controls="settings-panel-ai"
+							onClick={() => setActiveTab('ai')}
+							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'ai'
+								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
+								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
+								}`}
+						>
+							<Bot className="w-4 h-4" /> AI & Models
+						</button>
+						<button
+							id="settings-tab-profile"
+							type="button"
+							role="tab"
+							aria-selected={activeTab === 'profile'}
+							aria-controls="settings-panel-profile"
 							onClick={() => setActiveTab('profile')}
 							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'profile'
 								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
@@ -162,7 +231,11 @@ export default function SettingsClient({
 							<User className="w-4 h-4" /> Profile & Security
 						</button>
 						<button
+							id="settings-tab-collaborators"
 							type="button"
+							role="tab"
+							aria-selected={activeTab === 'collaborators'}
+							aria-controls="settings-panel-collaborators"
 							onClick={() => setActiveTab('collaborators')}
 							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'collaborators'
 								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
@@ -172,7 +245,11 @@ export default function SettingsClient({
 							<Users className="w-4 h-4" /> Collaborators & Access
 						</button>
 						<button
+							id="settings-tab-usage"
 							type="button"
+							role="tab"
+							aria-selected={activeTab === 'usage'}
+							aria-controls="settings-panel-usage"
 							onClick={() => setActiveTab('usage')}
 							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'usage'
 								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
@@ -182,7 +259,11 @@ export default function SettingsClient({
 							<Sparkles className="w-4 h-4" /> Usage & Credits
 						</button>
 						<button
+							id="settings-tab-billing"
 							type="button"
+							role="tab"
+							aria-selected={activeTab === 'billing'}
+							aria-controls="settings-panel-billing"
 							onClick={() => setActiveTab('billing')}
 							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'billing'
 								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
@@ -195,8 +276,20 @@ export default function SettingsClient({
 
 					{/* Main Tab Content */}
 					<div className="flex-1 h-full overflow-y-auto hide-scrollbar pb-16">
+						{activeTab === 'ai' && (
+							<div id="settings-panel-ai" role="tabpanel" aria-labelledby="settings-tab-ai" className="space-y-8 w-full max-w-4xl">
+								<h2 className="text-2xl font-display-lg text-on-surface mb-2">AI & Models</h2>
+								<p className="text-sm text-on-surface-variant mb-6">Manage your connected AI providers, local models, and billing tiers.</p>
+								<AIProviderSettings 
+									user={user} 
+									registryState={registryState} 
+									onSaveRegistry={handleSaveRegistry} 
+								/>
+							</div>
+						)}
+
 						{activeTab === 'profile' && (
-							<div className="space-y-8 max-w-3xl">
+							<div id="settings-panel-profile" role="tabpanel" aria-labelledby="settings-tab-profile" className="space-y-8 max-w-3xl">
 								{/* Profile Section */}
 								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
 									<h2 className="text-2xl font-display-lg text-on-surface mb-6">Profile</h2>
@@ -266,7 +359,7 @@ export default function SettingsClient({
 						)}
 
 						{activeTab === 'collaborators' && (
-							<div className="space-y-8 max-w-3xl">
+							<div id="settings-panel-collaborators" role="tabpanel" aria-labelledby="settings-tab-collaborators" className="space-y-8 max-w-3xl">
 								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
 									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Manage Collaborators</h2>
 									<p className="text-sm text-on-surface-variant mb-6">View and manage access to pages you own.</p>
@@ -371,7 +464,7 @@ export default function SettingsClient({
 
 						{/* Dedicated Usage & Credits Tab */}
 						{activeTab === 'usage' && (
-							<div className="space-y-8 max-w-3xl">
+							<div id="settings-panel-usage" role="tabpanel" aria-labelledby="settings-tab-usage" className="space-y-8 max-w-3xl">
 								{/* Credit Progress Card */}
 								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm space-y-6">
 									<div className="flex justify-between items-start">
@@ -479,7 +572,7 @@ export default function SettingsClient({
 
 						{/* Full Pricing & Subscription Matrix inside Billing Tab */}
 						{activeTab === 'billing' && (
-							<div className="space-y-8 max-w-5xl">
+							<div id="settings-panel-billing" role="tabpanel" aria-labelledby="settings-tab-billing" className="space-y-8 max-w-5xl">
 								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
 									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Subscription & Plan</h2>
 									<p className="text-sm text-on-surface-variant mb-6">Manage your plan billing and compare plan tiers.</p>

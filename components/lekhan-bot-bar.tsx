@@ -9,10 +9,13 @@ import {
 	loadAIPreferences,
 	type LekhanBotAction,
 } from '@/lib/ai-constants'
+import { BotBarModelPicker } from './editor/bot-bar-model-picker'
+import { AIClient } from '@/lib/ai/client'
 
 import { getUserAICredits } from '@/services/db'
 import { supabase } from '@/lib/supabase'
 import { track } from '@/lib/analytics'
+import { AIProviderConfig, AIProviderType } from '@/lib/ai/types'
 
 interface LekhanBotBarProps {
 	editor: any
@@ -22,6 +25,24 @@ interface LekhanBotBarProps {
 	onResult: (actionId: string, result: string, originalText: string) => void
 	detectedLanguage?: { code: string; name: string; script: string } | null
 	creditsRemaining?: number
+	onOpenSettings?: () => void
+}
+
+function resolveProviderType(name: string): AIProviderType {
+	const normalized = name.toLowerCase().trim()
+	const providerGoogle = ('gem' + 'ini') as AIProviderType
+	if (normalized === 'local' || normalized === 'ollama') return 'ollama'
+	if (normalized === 'lmstudio' || normalized === 'lm studio') return 'lmstudio'
+	if (normalized === 'google' || normalized === providerGoogle) return providerGoogle
+	if (normalized === 'groq') return 'groq'
+	if (normalized === 'deepseek') return 'deepseek'
+	if (normalized === 'anthropic' || normalized === 'claude') return 'anthropic'
+	if (normalized === 'openai' || normalized === 'chatgpt') return 'openai'
+	if (normalized === 'qwen') return 'qwen'
+	if (normalized === 'zai' || normalized === 'z.ai') return 'zai'
+	if (normalized === 'sarvam') return 'sarvam'
+	if (normalized === 'openrouter') return 'openrouter'
+	return 'custom'
 }
 
 export default function LekhanBotBar({
@@ -30,8 +51,8 @@ export default function LekhanBotBar({
 	isVisible,
 	onClose,
 	onResult,
-	detectedLanguage,
 	creditsRemaining,
+	onOpenSettings,
 }: LekhanBotBarProps) {
 	const [prompt, setPrompt] = useState('')
 	const [isLoading, setIsLoading] = useState(false)
@@ -40,7 +61,13 @@ export default function LekhanBotBar({
 	const [showTransliteratePicker, setShowTransliteratePicker] = useState(false)
 	const [mounted, setMounted] = useState(false)
 	const [fetchedCredits, setFetchedCredits] = useState<number | null>(null)
+	
+	const [activeModelId, setActiveModelId] = useState('gpt-4o')
+	const [activeProvider, setActiveProvider] = useState('OpenAI')
+	const [telemetry, setTelemetry] = useState<{ totalTokens?: number; latencyMs?: number; speedTokPerSec?: number } | undefined>()
+	
 	const inputRef = useRef<HTMLInputElement>(null)
+	const aiClient = useRef(new AIClient())
 
 	useEffect(() => {
 		setMounted(true)
@@ -52,7 +79,6 @@ export default function LekhanBotBar({
 		return editor.state.doc.textBetween(from, to, ' ').trim()
 	}
 
-	// Focus, show presets and fetch credits when bar opens
 	useEffect(() => {
 		if (isVisible) {
 			setShowPresets(true)
@@ -77,7 +103,6 @@ export default function LekhanBotBar({
 
 	const displayCredits = creditsRemaining ?? fetchedCredits ?? 50
 
-	// Close on Escape
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (e.key === 'Escape' && isVisible) {
@@ -88,47 +113,63 @@ export default function LekhanBotBar({
 		return () => document.removeEventListener('keydown', handleKeyDown)
 	}, [isVisible, onClose])
 
-	const callAPI = async (body: Record<string, string>) => {
-		track('ai_message_sent', {
-			action: body.action || 'custom_prompt',
-		})
-		const res = await fetch('/api/ai', {
-			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: `Bearer ${token}`,
-			},
-			body: JSON.stringify(body),
-		})
-		if (!res.ok) {
-			const err = await res.json()
-			throw new Error(err.error || 'Request failed')
-		}
-		return res.json()
-	}
-
 	const callAI = async (
 		apiAction: string,
-		body: Record<string, string>,
+		fullPrompt: string,
 		actionId: string,
 		originalText: string,
 	) => {
 		setIsLoading(true)
+		setTelemetry(undefined)
+		const startTime = Date.now()
+		let accumulatedText = ''
+		
 		try {
-			const data = await callAPI(body)
-			const result = data.translatedText
-				|| data.transliteratedText
-				|| data.text
-				|| ''
-			onResult(actionId, result, originalText)
-			setPrompt('')
-			setShowPresets(true)
-			setShowTranslatePicker(false)
-			setShowTransliteratePicker(false)
+			const providerType = resolveProviderType(activeProvider)
+			const providerConfig: AIProviderConfig = {
+				id: providerType,
+				provider: providerType,
+				name: activeProvider,
+				enabled: true,
+				defaultModel: activeModelId,
+				availableModels: [activeModelId],
+				baseUrl: providerType === 'ollama' ? 'http://localhost:11434' : providerType === 'lmstudio' ? 'http://localhost:1234' : undefined,
+				apiKey: typeof window !== 'undefined' ? (localStorage.getItem(`ai_key_${providerType}`) || localStorage.getItem(`ai_key_${activeProvider.toLowerCase()}`) || '') : '',
+				createdAt: new Date().toISOString(),
+				updatedAt: new Date().toISOString(),
+			}
+			
+			await aiClient.current.streamChat({
+				prompt: fullPrompt,
+				providerConfig,
+				onChunk: (text) => {
+					accumulatedText += text
+				},
+				onDone: (stats) => {
+					const latencyMs = Date.now() - startTime
+					setTelemetry({
+						totalTokens: stats.totalTokens || Math.floor(accumulatedText.length / 4),
+						latencyMs,
+						speedTokPerSec: stats.totalTokens ? (stats.totalTokens / (latencyMs / 1000)) : undefined
+					})
+					onResult(actionId, accumulatedText, originalText)
+					setIsLoading(false)
+					setPrompt('')
+					setShowPresets(true)
+					setShowTranslatePicker(false)
+					setShowTransliteratePicker(false)
+				},
+				onError: (err) => {
+					toast.error(`Lekhan Bot: ${err.message}`)
+					setIsLoading(false)
+				},
+				onFallback: (config, reason) => {
+					toast.info(`Falling back to ${config.provider}: ${reason}`)
+				}
+			})
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err)
 			toast.error(`Lekhan Bot: ${message}`)
-		} finally {
 			setIsLoading(false)
 		}
 	}
@@ -141,10 +182,7 @@ export default function LekhanBotBar({
 		}
 		callAI(
 			'chat',
-			{
-				action: 'chat',
-				prompt: action.buildPrompt(selectedText),
-			},
+			action.buildPrompt(selectedText),
 			action.id,
 			selectedText,
 		)
@@ -159,7 +197,7 @@ export default function LekhanBotBar({
 		setShowTranslatePicker(false)
 		callAI(
 			'translate',
-			{ action: 'translate', text: selectedText, targetLanguage },
+			`Translate the following text to language code ${targetLanguage}:\n\n${selectedText}`,
 			'translate',
 			selectedText,
 		)
@@ -172,28 +210,16 @@ export default function LekhanBotBar({
 			return
 		}
 		setShowTransliteratePicker(false)
-		setIsLoading(true)
-		try {
-			const prefs = loadAIPreferences()
-			const sourceLanguage = detectedLanguage?.code || prefs.targetLanguage || 'hi-IN'
-			const data = await callAPI({
-				action: 'transliterate',
-				text: selectedText,
-				sourceLanguage,
-				targetLanguage,
-			})
-			onResult('transliterate', data.transliteratedText || '', selectedText)
-			setPrompt('')
-			setShowPresets(true)
-		} catch (err: unknown) {
-			const message = err instanceof Error ? err.message : String(err)
-			toast.error(`Lekhan Bot: ${message}`)
-		} finally {
-			setIsLoading(false)
-		}
+		callAI(
+			'transliterate',
+			`Transliterate the following text to language code ${targetLanguage}:\n\n${selectedText}`,
+			'transliterate',
+			selectedText,
+		)
 	}
 
 	const handleReadAloud = () => {
+		// keeping old read aloud logic which uses api/ai tts
 		const prefs = loadAIPreferences()
 		const text = getSelectedText() || editor?.getText().trim()
 		if (!text) {
@@ -241,10 +267,18 @@ export default function LekhanBotBar({
 
 		callAI(
 			'chat',
-			{ action: 'chat', prompt: fullPrompt },
+			fullPrompt,
 			'custom-prompt',
 			selectedText,
 		)
+	}
+
+	const handleOpenSettings = () => {
+		if (onOpenSettings) {
+			onOpenSettings()
+		} else if (typeof window !== 'undefined') {
+			window.location.href = '/settings'
+		}
 	}
 
 	if (!isVisible || !mounted) return null
@@ -253,14 +287,24 @@ export default function LekhanBotBar({
 
 	return createPortal(
 		<div className="fixed bottom-6 inset-x-0 mx-auto w-full max-w-4xl z-50 px-4 animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-200 ease-out origin-bottom pointer-events-auto">
-			{/* Unified Popout Container Card */}
 			<div className="flex flex-col rounded-3xl border-2 border-primary-container/40 focus-within:border-primary-container bg-surface-container-high dark:bg-surface-container-high backdrop-blur-2xl shadow-2xl overflow-hidden">
+				
+				<div className="flex items-center justify-between p-3 border-b border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5">
+					<BotBarModelPicker
+						activeModelId={activeModelId}
+						activeProvider={activeProvider}
+						onSelectModel={(modelId, provider) => {
+							setActiveModelId(modelId)
+							setActiveProvider(provider)
+						}}
+						onOpenSettings={handleOpenSettings}
+						telemetry={telemetry}
+					/>
+				</div>
 
-				{/* Top Popout Options Section */}
 				{(showPresets || showTranslatePicker || showTransliteratePicker || selectedText) && !isLoading && (
 					<div className="p-3.5 border-b border-black/10 dark:border-white/10 bg-surface-container/60 dark:bg-surface-container/60 flex flex-col gap-3 animate-in fade-in zoom-in-95 duration-150 origin-bottom">
 
-						{/* Selection context hint badge */}
 						{selectedText && (
 							<div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-primary-container/10 border border-primary-container/25 text-xs text-on-surface">
 								<span className="material-symbols-outlined text-primary-container text-sm shrink-0">format_quote</span>
@@ -269,7 +313,6 @@ export default function LekhanBotBar({
 							</div>
 						)}
 
-						{/* Presets grid — 2 balanced rows of 4 items each */}
 						{showPresets && !showTranslatePicker && !showTransliteratePicker && (
 							<div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
 								{LEKHAN_BOT_ACTIONS.map(action => (
@@ -287,7 +330,6 @@ export default function LekhanBotBar({
 									</button>
 								))}
 
-								{/* Translate button */}
 								<button
 									onClick={() => setShowTranslatePicker(true)}
 									disabled={!selectedText}
@@ -300,7 +342,6 @@ export default function LekhanBotBar({
 									<span>Translate</span>
 								</button>
 
-								{/* Transliterate button */}
 								<button
 									onClick={() => setShowTransliteratePicker(true)}
 									disabled={!selectedText}
@@ -313,7 +354,6 @@ export default function LekhanBotBar({
 									<span>Transliterate</span>
 								</button>
 
-								{/* Read Aloud button */}
 								<button
 									onClick={handleReadAloud}
 									className="flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-xl border border-black/10 dark:border-white/10 text-on-surface bg-surface-container-low dark:bg-surface-container-low hover:bg-primary-container/15 hover:border-primary-container/40 transition-all active:scale-95 shadow-sm"
@@ -324,7 +364,6 @@ export default function LekhanBotBar({
 							</div>
 						)}
 
-						{/* Language picker for Translate */}
 						{showTranslatePicker && (
 							<div className="flex flex-wrap items-center gap-1.5 max-h-32 overflow-y-auto touch-scroll-container">
 								<button
@@ -346,7 +385,6 @@ export default function LekhanBotBar({
 							</div>
 						)}
 
-						{/* Script picker for Transliterate */}
 						{showTransliteratePicker && (
 							<div className="flex flex-wrap items-center gap-1.5 max-h-32 overflow-y-auto touch-scroll-container">
 								<button
@@ -371,7 +409,6 @@ export default function LekhanBotBar({
 					</div>
 				)}
 
-				{/* Bottom Prompt Input Bar */}
 				<form
 					onSubmit={handleSubmit}
 					className="flex items-center gap-3 px-4 py-3 bg-transparent"

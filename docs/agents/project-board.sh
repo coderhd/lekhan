@@ -30,20 +30,20 @@ case "$target" in
   *) echo "unknown status '$target' (expected: Backlog|Ready|In progress|In review|Done)" >&2; exit 1 ;;
 esac
 
-# Resolve the project item id for this issue number.
+# Resolve the project item id for this issue number directly from the issue.
 item_id="$("$GH" api graphql -f query='
-query($project: ID!) {
-  node(id: $project) {
-    ... on ProjectV2 {
-      items(first: 100) {
+query($number: Int!) {
+  repository(owner: "coderhd", name: "lekhan") {
+    issue(number: $number) {
+      projectItems(first: 50) {
         nodes {
           id
-          content { ... on Issue { number } }
+          project { id }
         }
       }
     }
   }
-}' -F "project=$PROJECT_ID" --jq ".data.node.items.nodes[] | select(.content.number == $issue_number) | .id")"
+}' -F "number=$issue_number" --jq ".data.repository.issue.projectItems.nodes[] | select(.project.id == \"$PROJECT_ID\") | .id")"
 
 if [[ -z "$item_id" ]]; then
   echo "issue #$issue_number is not on the Lekhan project board" >&2
