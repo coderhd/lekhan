@@ -17,12 +17,12 @@ Separation of duties only works if the agent that approves a thing is not the sa
 
 | Role | Agent File | Owns | Can Touch | Cannot Touch | Local Skills Used |
 |---|---|---|---|---|---|
-| `po-pm` | `.claude/agents/po-pm.md` | `docs/roadmap.md`, Epics, Stories, PRDs | Docs, `gh issue`/`gh project` | App code | `interview-me`, `brainstorming`, `idea-refine`, `grilling`, `spec-driven-development`, `writing-plans` |
-| `tech-lead` | `.claude/agents/tech-lead.md` | `docs/adr/`, `CONTEXT.md`, Coding Standards | Docs, read-only code | App code writes | `codebase-design`, `api-and-interface-design`, `domain-modeling`, `documentation-and-adrs`, `improve-codebase-architecture` |
-| `qa` | `.claude/agents/qa.md` | Test plans, automation suite, defects, QA Sign-off | Test code, `gh issue` (defects), run tests | App/feature code | `clean-room-review`, `code-review`, `code-review-and-quality`, `a11y-debugging`, `web-design-guidelines`, `browser-testing-with-devtools` |
-| `dev` | `.claude/agents/dev.md` | Implementation, atomic TDD, PRs | App code, unit tests, PRs | Merging without QA Sign-off | `tdd`, `test-driven-development`, `vercel-react-best-practices`, `subagent-driven-development`, `using-git-worktrees`, `frontend-ui-engineering` |
-| `devops` | `.claude/agents/devops.md` | Env config, deploy pipeline, DB migrations | Infra/deploy config, `project-board.sh` | App feature code | `deploy-to-vercel`, `supabase`, `supabase-postgres-best-practices`, `ci-cd-and-automation`, `wizard`, `git-workflow-and-versioning` |
-| `marketing` | `.claude/agents/marketing.md` | `docs/marketing/`, positioning, changelogs | Docs, web search, landing copy | Code, issue state | `writing-website-content`, `hallmark`, `impeccable` |
+| `po-pm` | `.agents/roles/po-pm.md` | `docs/roadmap.md`, Epics, Stories, PRDs | Docs, `gh issue`/`gh project` | App code | `interview-me`, `brainstorming`, `idea-refine`, `grilling`, `spec-driven-development`, `writing-plans` |
+| `tech-lead` | `.agents/roles/tech-lead.md` | `docs/adr/`, `CONTEXT.md`, Coding Standards | Docs, read-only code | App code writes | `codebase-design`, `api-and-interface-design`, `domain-modeling`, `documentation-and-adrs`, `improve-codebase-architecture` |
+| `qa` | `.agents/roles/qa.md` | Test plans, automation suite, defects, QA Sign-off | Test code, `gh issue` (defects), run tests | App/feature code | `clean-room-review`, `code-review`, `code-review-and-quality`, `a11y-debugging`, `web-design-guidelines`, `browser-testing-with-devtools` |
+| `dev` | `.agents/roles/dev.md` | Implementation, atomic TDD, PRs | App code, unit tests, PRs | Merging without QA Sign-off | `tdd`, `test-driven-development`, `vercel-react-best-practices`, `subagent-driven-development`, `using-git-worktrees`, `frontend-ui-engineering` |
+| `devops` | `.agents/roles/devops.md` | Env config, deploy pipeline, DB migrations | Infra/deploy config, `project-board.sh` | App feature code | `deploy-to-vercel`, `supabase`, `supabase-postgres-best-practices`, `ci-cd-and-automation`, `wizard`, `git-workflow-and-versioning` |
+| `marketing` | `.agents/roles/marketing.md` | `docs/marketing/`, positioning, changelogs | Docs, web search, landing copy | Code, issue state | `writing-website-content`, `hallmark`, `impeccable` |
 
 ---
 
