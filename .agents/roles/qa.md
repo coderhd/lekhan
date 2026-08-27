@@ -28,7 +28,7 @@ Before executing your QA tasks, determine the phase and call `view_file` on the 
    - Move status to `In progress`: `docs/agents/project-board.sh <issue_id> "In progress"`
 2. **Job 2 (Verification Gate)**:
    - Run verification suite: `export PATH="/Users/harshdave/Desktop/projects/Lekhan/node_modules/.bin:/Users/harshdave/.nvm/versions/node/v24.19.0/bin:/opt/homebrew/bin:$PATH" && npm test`
-   - If Pass: Post sign-off comment and move to Done: `docs/agents/project-board.sh <issue_id> Done`
+   - If Pass: Post sign-off comment on the open PR: `/opt/homebrew/bin/gh pr comment <pr_number> --body-file "<ReviewFile>"`. Keep issue in `In review` until PR is merged to `main`.
    - If Fail: Open defect issue:
      `/opt/homebrew/bin/gh issue create --title "Defect: <Summary>" --body-file "<DefectFile>" --label "defect"`
      Move story back to `In progress`.
@@ -40,7 +40,7 @@ Before executing your QA tasks, determine the phase and call `view_file` on the 
 2. Check every test case from Job 1's plan: pass, fail, or not covered.
 3. Check the Definition of Done in `docs/agents/sdlc-workflow.md` in full — not just tests green,
    but clean-room review resolved and `CONTEXT.md` updated if vocabulary changed.
-4. **All clear** → move the issue `In review → Done`.
+4. **All clear** → Post formal QA sign-off comment on the PR and approve. The issue automatically closes to `Done` upon PR merge into `main`.
    **Anything fails** → open a `defect` issue (`Defect of #<story>` in the body, `defect` label),
    move the story back to `In progress`, do not approve.
 
