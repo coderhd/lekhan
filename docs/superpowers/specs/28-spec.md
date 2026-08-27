@@ -37,6 +37,7 @@ Lekhan requires a **config-driven AI Provider Registry** and **Unified Settings 
 │                                                                             │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
 │  │ 🏠 TIER 1: Local & Offline (BYOL / Sidecar)                           │  │
+│  │ • Llama 4 Scout (17B), Qwen 3.8 (27B), Ministral 3 (14B), Llama 3.2   │  │
 │  │ • Ollama, LM Studio, llama.cpp sidecar                                │  │
 │  │ • Zero cost, 100% private, client-direct (http://localhost:11434)     │  │
 │  │ • Live localhost port prober & 1-click CORS setup helper              │  │
@@ -45,18 +46,23 @@ Lekhan requires a **config-driven AI Provider Registry** and **Unified Settings 
 │                                     ▼                                       │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
 │  │ ⚡ TIER 2: Free-Key On-Ramp Presets (Zero Cost)                       │  │
-│  │ • OpenRouter Free (Llama 3.3 70B, Gemini 2.0 Flash)                   │  │
-│  │ • Google Gemini API (Free 15 RPM tier)                                │  │
-│  │ • Groq (Free fast Llama inference)                                    │  │
+│  │ • Gemini 3.7 Flash (Google AI Studio Free 15 RPM)                     │  │
+│  │ • Llama 4 Maverick (Groq Free Fast Tier)                              │  │
+│  │ • DeepSeek-V4-Flash & OpenRouter Free Models                          │  │
+│  │ • GLM-5.3-Flash (Z.AI Free Tier)                                      │  │
 │  │ • 3-minute guided on-ramp: Deep Link ↗ ➔ Paste Key ➔ Live Test        │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
 │                                     │                                       │
 │                                     ▼                                       │
 │  ┌───────────────────────────────────────────────────────────────────────┐  │
 │  │ 💎 TIER 3: Premium BYOK Cloud & Custom Endpoints                      │  │
-│  │ • Anthropic (Claude 3.7 Sonnet, 3.5 Haiku)                            │  │
-│  │ • OpenAI (GPT-4o, o3-mini)                                            │  │
-│  │ • Sarvam AI (Indian multilingual models: Saarathi / Sarvam-2B)        │  │
+│  │ • OpenAI: GPT-5.6 Sol, GPT-5.6 Terra, GPT-5.6 Luna, o3-pro, o4-mini   │  │
+│  │ • Anthropic: Claude Opus 5, Claude Sonnet 5, Claude Haiku 4.5         │  │
+│  │ • Google: Gemini 3.1 Pro, Gemini 2.5 Pro (2M Context)                 │  │
+│  │ • DeepSeek: DeepSeek-V4-Pro (1M Context)                              │  │
+│  │ • Alibaba: Qwen 3.8 Max (2.4T Dense)                                  │  │
+│  │ • Z.AI: GLM-5.3 & GLM-5.2 (1M Context)                                │  │
+│  │ • Sarvam AI: Sarvam-2B & Saarathi (Indic Multilingual)                │  │
 │  │ • Custom OpenAI-compatible endpoints (Self-hosted vLLM, Together AI)  │  │
 │  │ • Deep links to provider developer consoles ("Get Key ↗")             │  │
 │  └───────────────────────────────────────────────────────────────────────┘  │
