@@ -1,49 +1,83 @@
 # AGENTS.md
 
-## Agent skills
+## Agent skills & Domain Model
 
-### Issue tracker
-
-Issues, specs, and roadmap tickets for this repo live as GitHub issues, tracked via the `gh` CLI (`gh` is installed at `/opt/homebrew/bin/gh` — not on the default PATH in this shell). See `docs/agents/issue-tracker.md`.
-
-Every item on the Lekhan GitHub project board moves through `Backlog → Ready → In progress → In review → Done`, and the board's Status column is always kept truthful to the work actually being done — move items with `docs/agents/project-board.sh <issue> <status>`. See the "Project board lifecycle" section of `docs/agents/issue-tracker.md`.
+### Issue tracker & Project Board
+- Issues, specs, and roadmap tickets live as GitHub issues via `gh` CLI (`/opt/homebrew/bin/gh`). See `docs/agents/issue-tracker.md`.
+- Project board status: `Backlog → Ready → In progress → In review → Done`. Move items with `docs/agents/project-board.sh <issue> <status>`.
 
 ### Triage labels
-
-Five canonical roles, each label string equal to its name: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+Canonical roles: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
+Single-context — `CONTEXT.md` at repo root plus `docs/adr/` for decisions. See `docs/agents/domain.md`.
 
-Single-context — one `CONTEXT.md` at the repo root plus `docs/adr/` for decisions. See `docs/agents/domain.md`.
+---
 
-## Development workflow (mandatory skill + hygiene gates)
+## 6-Stage Engineering Lifecycle (Mandatory Anti-Drift Engine)
 
-These steps are non-optional per ticket. Skipping any of them is a process bug, even when the code is correct.
+Every ticket, feature, bug, or refactor moves strictly through these 6 stages:
 
-### Before implementing a ticket
+```text
+  DEFINE          PLAN           BUILD          VERIFY         REVIEW          SHIP
+ ┌──────┐      ┌──────┐      ┌──────┐      ┌──────┐      ┌──────┐      ┌──────┐
+ │ Idea │ ───▶ │ Spec │ ───▶ │ Code │ ───▶ │ Test │ ───▶ │  QA  │ ───▶ │  Go  │
+ │Refine│      │  PRD │      │ Impl │      │Debug │      │ Gate │      │ Live │
+ └──────┘      └──────┘      └──────┘      └──────┘      └──────┘      └──────┘
+  /spec          /plan          /build        /test         /review       /ship
+```
 
-1. Read the ticket body + its spec section; restate acceptance criteria as a checklist.
-2. Invoke `superpowers:test-driven-development` (or `tdd`) before writing implementation code for anything with logic; UI tickets additionally invoke `frontend-design` or `ui-ux-pro-max` and run the #79 UX-parity checklist.
-3. If the ticket touches sync/storage/AI-provider seams, read the relevant ADRs in `docs/adr/` first.
+### 1. DEFINE (`/spec`)
+- **Action**: Restate ticket acceptance criteria, interrogate edge cases against `CONTEXT.md` and ADRs.
+- **Skills**: `interview-me`, `grill-with-docs`, `spec-driven-development`.
+- **Artifact**: `docs/superpowers/specs/<issue>-spec.md`.
 
-### Before opening the PR
+### 2. PLAN (`/plan`)
+- **Action**: Architectural decomposition into atomic tasks, defining test requirements for each.
+- **Skills**: `planning-and-task-breakdown`, `writing-plans`.
+- **Artifact**: `implementation_plan.md`.
 
-4. Run the full verification suite (`npm run typecheck && npm run lint && npm test && npm run build`) and state results explicitly.
-5. **Clean-Room Subagent Review Gate**:
-   - Dispatch an independent adversarial review subagent (`invoke_subagent` with `Model: 'pro'`) evaluating `git diff origin/main...HEAD`.
-   - The subagent audits changes across 4 axes:
-     1. **Spec & Acceptance Criteria** (Issue requirements, CONTEXT.md, and ADR invariants).
-     2. **Frontend & Accessibility** (Keyboard navigation, ARIA roles, React 19/Tiptap 3 lifecycle cleanups).
-     3. **CRDT & Storage** (IndexedDB transaction atomicity, binary delta compression fidelity).
-     4. **Backend Security & Errors** (Query error propagation, storage failure rollback).
-   - Triage and fix all valid findings, then re-run the full verification suite.
-6. Invoke `verification-before-completion` mindset: no "done" claims without command output proving them.
+### 3. BUILD (`/build`)
+- **Action**: Atomic TDD slices (Red-Green-Refactor). UI code follows `vercel-react-best-practices` and #79 UX-parity.
+- **Skills**: `test-driven-development`, `subagent-driven-development`, `using-git-worktrees`, `vercel-react-best-practices`.
+- **Artifact**: Working code + unit tests.
 
-### At merge time (the step that was missed)
+### 4. VERIFY (`/test`)
+- **Action**: Full verification suite execution proving zero regressions.
+- **Command**: `npm run typecheck && npm run lint && npm test && npm run build`.
+- **Mindset**: `verification-before-completion` (No "done" claims without passing terminal outputs).
 
-6. **Dependency hygiene audit** (see `docs/agents/issue-tracker.md`): after closing any issue,
-   - remove its outgoing blocker edges from children (`DELETE /issues/<child>/dependencies/blocked_by/<db-id>`),
-   - sync children's `Blocked by` body lines,
-   - run the audit loop over all open issues: no open issue may list a closed blocker.
-7. Close the ticket, move board status to Done, update epic bodies and `docs/roadmap.md`, commit doc changes to main.
-8. Periodic hygiene sweep: orphaned branches deleted, stale Dependabot PRs triaged with a decision, labels truthful (`needs-spec` removed once specced).
+### 5. REVIEW (`/review`)
+- **Action**: Mandatory clean-room adversarial subagent review gate.
+- **Subagent**: `invoke_subagent(Model: 'pro', Role: 'Clean-Room Reviewer')` evaluating `git diff origin/main...HEAD`.
+- **Audits 4 Axes**:
+  1. Spec & Acceptance Criteria (`CONTEXT.md`, ADR invariants, `lib/tier-limits.ts`).
+  2. Frontend & Accessibility (`<button>` vs `<div>`, ARIA roles, `useEffect` cleanups).
+  3. CRDT & Storage (IndexedDB transaction atomicity, binary delta compression).
+  4. Backend Security & Errors (Query error propagation, storage rollback integrity).
+- **Artifact**: `docs/reviews/pr-<id>-review.md`. Fix all valid findings before proceeding.
+
+### 6. SHIP (`/ship`)
+- **Action**: Create PR, merge, clean up blocker trees, update roadmap and project board.
+- **Hygiene**:
+  - Remove outgoing blocker edges from children (`DELETE /issues/<child>/dependencies/blocked_by/<db-id>`).
+  - Move project board status: `docs/agents/project-board.sh <issue> Done`.
+  - Update `docs/roadmap.md` and commit doc updates.
+
+---
+
+## Multi-Session Resumption Protocol (Zero Context Drift)
+
+When starting a new session or after context compaction, execute this protocol immediately:
+
+1. **Inspect Git Context**: `git status && git log -n 3 --oneline`
+2. **Identify Active Ticket & Branch**: Look at active branch `feat/<issue>-<slug>`.
+3. **Determine Stage**:
+   - Spec missing $\rightarrow$ Stage 1 (DEFINE)
+   - Plan missing $\rightarrow$ Stage 2 (PLAN)
+   - Tests failing / incomplete $\rightarrow$ Stage 3 (BUILD)
+   - Verification unverified $\rightarrow$ Stage 4 (VERIFY)
+   - Unreviewed $\rightarrow$ Stage 5 (REVIEW)
+   - Ready to merge $\rightarrow$ Stage 6 (SHIP)
+4. **Resume Execution Immediately**: Never guess or ask "what were we doing?".
+
