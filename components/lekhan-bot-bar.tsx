@@ -113,7 +113,7 @@ export default function LekhanBotBar({
 				enabled: true,
 				defaultModel: activeModelId,
 				availableModels: [activeModelId],
-				apiKey: 'test-key',
+				apiKey: typeof window !== 'undefined' ? (localStorage.getItem(`ai_key_${activeProvider.toLowerCase()}`) || '') : '',
 				createdAt: new Date().toISOString(),
 				updatedAt: new Date().toISOString(),
 			}

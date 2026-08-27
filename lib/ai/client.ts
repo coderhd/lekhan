@@ -32,9 +32,16 @@ export class AIClient {
 				}
 				body.messages.push({ role: 'user', content: prompt })
 
+				const headers: Record<string, string> = {
+					'Content-Type': 'application/json'
+				}
+				if (config.apiKey) {
+					headers['x-ai-api-key'] = config.apiKey
+				}
+
 				const fetchOpts: RequestInit = {
 					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
+					headers,
 					body: JSON.stringify(body),
 					signal: abortController.signal
 				}

@@ -77,10 +77,11 @@ describe('POST /api/ai/stream', () => {
 
 		const res = await POST(req)
 		
-		expect(mockFetch).toHaveBeenCalledWith('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:streamGenerateContent?key=test-key&alt=sse', expect.objectContaining({
+		expect(mockFetch).toHaveBeenCalledWith('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:streamGenerateContent?alt=sse', expect.objectContaining({
 			method: 'POST',
 			headers: expect.objectContaining({
-				'Content-Type': 'application/json'
+				'Content-Type': 'application/json',
+				'x-goog-api-key': 'test-key'
 			})
 		}))
 		expect(res.status).toBe(200)

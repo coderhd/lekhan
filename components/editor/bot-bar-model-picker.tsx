@@ -29,8 +29,17 @@ export function BotBarModelPicker({
 				setIsOpen(false)
 			}
 		}
+		const handleKeyDown = (event: KeyboardEvent) => {
+			if (event.key === 'Escape') {
+				setIsOpen(false)
+			}
+		}
 		document.addEventListener('mousedown', handleClickOutside)
-		return () => document.removeEventListener('mousedown', handleClickOutside)
+		document.addEventListener('keydown', handleKeyDown)
+		return () => {
+			document.removeEventListener('mousedown', handleClickOutside)
+			document.removeEventListener('keydown', handleKeyDown)
+		}
 	}, [])
 
 	const handleSelect = (modelId: string, providerId: string) => {
@@ -42,6 +51,8 @@ export function BotBarModelPicker({
 		<div className="relative inline-flex items-center space-x-2" ref={popoverRef}>
 			<button
 				aria-label="Model picker"
+				aria-haspopup="listbox"
+				aria-expanded={isOpen}
 				onClick={() => setIsOpen(!isOpen)}
 				className="flex items-center space-x-2 px-3 py-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 rounded-full text-sm font-medium transition-all duration-200"
 			>

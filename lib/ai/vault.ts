@@ -13,15 +13,33 @@ export async function decryptAIRegistry(payload: Uint8Array, key: CryptoKey): Pr
 	return JSON.parse(json) as AIRegistryState
 }
 
-export async function syncVaultToSupabase(supabaseClient: any, userId: string, encryptedPayload: Uint8Array): Promise<void> {
-	// Need to handle Buffer / base64 for browser compatibility.
-	// We'll use standard btoa or Buffer if in node.
-	let base64Str: string
+function uint8ArrayToBase64(bytes: Uint8Array): string {
 	if (typeof Buffer !== 'undefined') {
-		base64Str = Buffer.from(encryptedPayload).toString('base64')
-	} else {
-		base64Str = btoa(String.fromCharCode.apply(null, Array.from(encryptedPayload)))
+		return Buffer.from(bytes).toString('base64')
 	}
+	let binary = ''
+	const chunkSize = 8192
+	for (let i = 0; i < bytes.length; i += chunkSize) {
+		const chunk = bytes.subarray(i, i + chunkSize)
+		binary += String.fromCharCode.apply(null, Array.from(chunk))
+	}
+	return btoa(binary)
+}
+
+function base64ToUint8Array(base64: string): Uint8Array {
+	if (typeof Buffer !== 'undefined') {
+		return new Uint8Array(Buffer.from(base64, 'base64'))
+	}
+	const binary = atob(base64)
+	const bytes = new Uint8Array(binary.length)
+	for (let i = 0; i < binary.length; i++) {
+		bytes[i] = binary.charCodeAt(i)
+	}
+	return bytes
+}
+
+export async function syncVaultToSupabase(supabaseClient: any, userId: string, encryptedPayload: Uint8Array): Promise<void> {
+	const base64Str = uint8ArrayToBase64(encryptedPayload)
 
 	const { error } = await supabaseClient
 		.from('profiles')
@@ -44,19 +62,7 @@ export async function loadVaultFromSupabase(supabaseClient: any, userId: string,
 		return null
 	}
 
-	const base64Str = data.encrypted_ai_keys
-	let payload: Uint8Array
-	if (typeof Buffer !== 'undefined') {
-		payload = new Uint8Array(Buffer.from(base64Str, 'base64'))
-	} else {
-		const binary_string = atob(base64Str)
-		const len = binary_string.length
-		payload = new Uint8Array(len)
-		for (let i = 0; i < len; i++) {
-			payload[i] = binary_string.charCodeAt(i)
-		}
-	}
-
+	const payload = base64ToUint8Array(data.encrypted_ai_keys)
 	return decryptAIRegistry(payload, key)
 }
 

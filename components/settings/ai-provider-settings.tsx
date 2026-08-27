@@ -99,26 +99,34 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 			</section>
 
 			{/* Tier Navigation Tabs */}
-			<div className="flex border-b border-black/10 dark:border-white/10 overflow-x-auto hide-scrollbar">
+			<div role="tablist" aria-label="AI Provider Tiers" className="flex border-b border-black/10 dark:border-white/10 overflow-x-auto hide-scrollbar">
 				<button 
+					role="tab"
+					aria-selected={activeTier === 1}
 					onClick={() => setActiveTier(1)}
 					className={`px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${activeTier === 1 ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
 				>
 					Tier 1: Local Offline Hub
 				</button>
 				<button 
+					role="tab"
+					aria-selected={activeTier === 2}
 					onClick={() => setActiveTier(2)}
 					className={`px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${activeTier === 2 ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
 				>
 					Tier 2: Free On-Ramp
 				</button>
 				<button 
+					role="tab"
+					aria-selected={activeTier === 3}
 					onClick={() => setActiveTier(3)}
 					className={`px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${activeTier === 3 ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
 				>
 					Tier 3: Cloud BYOK
 				</button>
 				<button 
+					role="tab"
+					aria-selected={activeTier === 'catalog'}
 					onClick={() => setActiveTier('catalog')}
 					className={`px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${activeTier === 'catalog' ? 'border-primary text-primary' : 'border-transparent text-on-surface-variant hover:text-on-surface'}`}
 				>

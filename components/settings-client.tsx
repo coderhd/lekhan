@@ -151,9 +151,11 @@ export default function SettingsClient({
 			<main className="flex-1 overflow-hidden flex justify-center px-6 md:px-10">
 				<div className="w-full max-w-[1400px] h-full flex flex-col lg:flex-row gap-8 py-8">
 					{/* Sidebar Navigation */}
-					<aside className="w-full lg:w-64 shrink-0 flex flex-row lg:flex-col gap-2 overflow-x-auto border-b lg:border-b-0 lg:border-r border-black/10 dark:border-white/10 pb-4 lg:pb-0 lg:pr-6">
+					<aside role="tablist" aria-label="Settings navigation" className="w-full lg:w-64 shrink-0 flex flex-row lg:flex-col gap-2 overflow-x-auto border-b lg:border-b-0 lg:border-r border-black/10 dark:border-white/10 pb-4 lg:pb-0 lg:pr-6">
 						<button
 							type="button"
+							role="tab"
+							aria-selected={activeTab === 'ai'}
 							onClick={() => setActiveTab('ai')}
 							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'ai'
 								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
@@ -164,6 +166,8 @@ export default function SettingsClient({
 						</button>
 						<button
 							type="button"
+							role="tab"
+							aria-selected={activeTab === 'profile'}
 							onClick={() => setActiveTab('profile')}
 							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'profile'
 								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
@@ -174,6 +178,8 @@ export default function SettingsClient({
 						</button>
 						<button
 							type="button"
+							role="tab"
+							aria-selected={activeTab === 'collaborators'}
 							onClick={() => setActiveTab('collaborators')}
 							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'collaborators'
 								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
@@ -184,6 +190,8 @@ export default function SettingsClient({
 						</button>
 						<button
 							type="button"
+							role="tab"
+							aria-selected={activeTab === 'usage'}
 							onClick={() => setActiveTab('usage')}
 							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'usage'
 								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
@@ -194,6 +202,8 @@ export default function SettingsClient({
 						</button>
 						<button
 							type="button"
+							role="tab"
+							aria-selected={activeTab === 'billing'}
 							onClick={() => setActiveTab('billing')}
 							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'billing'
 								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'

@@ -1,7 +1,8 @@
 export async function POST(req: Request) {
 	try {
 		const body = await req.json()
-		const { provider, model, apiKey, baseUrl, messages, temperature, maxTokens } = body
+		const { provider, model, baseUrl, messages, temperature, maxTokens } = body
+		const apiKey = req.headers.get('x-ai-api-key') || body.apiKey || ''
 
 		let upstreamUrl = ''
 		const upstreamHeaders: Record<string, string> = {
@@ -20,10 +21,10 @@ export async function POST(req: Request) {
 			upstreamHeaders['x-api-key'] = apiKey
 			upstreamHeaders['anthropic-version'] = '2023-06-01'
 		} else if (provider === 'gemini') {
-			upstreamUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}&alt=sse`
+			upstreamUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`
+			upstreamHeaders['x-goog-api-key'] = apiKey
 			delete upstreamBody.stream
 			delete upstreamBody.model
-			// Very basic transformation for gemini messages if needed, keeping it simple for the test
 			upstreamBody = {
 				contents: messages.map((m: any) => ({
 					role: m.role === 'assistant' ? 'model' : 'user',
@@ -54,8 +55,16 @@ export async function POST(req: Request) {
 		})
 
 		if (!response.ok) {
-			const errorText = await response.text()
-			return new Response(errorText, { status: response.status })
+			return new Response(
+				JSON.stringify({
+					error: `Provider error: ${response.status}`,
+					details: response.status === 401 ? 'Unauthorized: Invalid API Key' : 'Upstream failure'
+				}),
+				{
+					status: response.status,
+					headers: { 'Content-Type': 'application/json' }
+				}
+			)
 		}
 
 		// Simply proxy the stream back for now
