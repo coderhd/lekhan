@@ -12,8 +12,10 @@ Canonical roles: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-hum
 ### Domain docs
 Single-context — `CONTEXT.md` at repo root plus `docs/adr/` for decisions. See `docs/agents/domain.md`.
 
-### Virtual Startup Organization (Role Roster & Handoffs)
-Enterprise multi-agent protocol: `po_pm`, `tech_lead`, `qa_engineer`, `dev_engineer`, `devops_engineer`, `marketing_growth`. See `docs/agents/organization.md`.
+### Virtual Startup Organization & SDLC Workflow
+- Six dedicated role agents (`.claude/agents/` and registered subagents: `po_pm`, `tech_lead`, `qa_engineer`, `dev_engineer`, `devops_engineer`, `marketing_growth`).
+- Full gate sequence, Definition of Ready, Definition of Done, and Defect handling: [`docs/agents/sdlc-workflow.md`](docs/agents/sdlc-workflow.md) and [`docs/agents/organization.md`](docs/agents/organization.md).
+- Issue templates: `.github/ISSUE_TEMPLATE/story.md` and `.github/ISSUE_TEMPLATE/defect.md`.
 
 ---
 
