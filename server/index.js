@@ -6,11 +6,13 @@ const { createClient } = require('@supabase/supabase-js')
 const { getSupabaseClient, verifyUserRole, getDocumentOwnerPlan } = require('./auth')
 const { getPlanLimits } = require('../lib/tier-limits.ts')
 const { pruneExpiredDocumentVersions } = require('./retention.js')
-
-const { appendUpdate, getPendingUpdates, clearUpdates } = require('./wal')
+const { getDistinctCollaboratorsCount, isCollaboratorRegistered, recordCollaboratorAccess } = require('./ledger.js')
 const graphIndex = require('./graph-index')
+const { encryptSnapshot, decryptSnapshot } = require('./crypto')
 
 const port = process.env.PORT || 8080
+const MAX_CONNECTIONS = 1500
+const MAX_PAYLOAD_BYTES = 10 * 1024 * 1024 // 10 MB payload guard
 
 // Initialize privileged Supabase client for backend operations
 const supabaseAdmin = createClient(
@@ -24,56 +26,63 @@ const supabaseAdmin = createClient(
 	}
 )
 
-const server = http.createServer((req, res) => {
-	res.writeHead(200, { 'Content-Type': 'text/plain' })
-	res.end('WebSocket Sync Server Running\n')
-})
-
 const wss = new WebSocket.Server({ noServer: true })
-const { encryptSnapshot, decryptSnapshot } = require('./crypto')
-
-const fs = require('fs')
-const path = require('path')
 
 // Cache save timers
 const saveDebounceTimers = new Map()
+const saveMaxThrottleTimers = new Map()
 
-// Persistent distinct collaborator ledger
-const LEDGER_FILE = path.join(process.cwd(), '.collaborators-ledger.json')
-const documentDistinctCollaborators = new Map()
-
-try {
-	if (fs.existsSync(LEDGER_FILE)) {
-		const raw = fs.readFileSync(LEDGER_FILE, 'utf8')
-		const parsed = JSON.parse(raw)
-		for (const [docId, users] of Object.entries(parsed)) {
-			if (Array.isArray(users)) {
-				documentDistinctCollaborators.set(docId, new Set(users))
-			}
-		}
-		console.log(`[Ledger] Loaded distinct collaborators for ${documentDistinctCollaborators.size} documents.`)
+function clearSaveTimers (documentId) {
+	if (saveDebounceTimers.has(documentId)) {
+		clearTimeout(saveDebounceTimers.get(documentId))
+		saveDebounceTimers.delete(documentId)
 	}
-} catch (e) {
-	console.warn('[Ledger] Failed to load collaborators ledger from disk:', e)
-}
-
-function persistCollaboratorsLedger() {
-	try {
-		const serializable = {}
-		for (const [docId, usersSet] of documentDistinctCollaborators.entries()) {
-			serializable[docId] = Array.from(usersSet)
-		}
-		fs.writeFileSync(LEDGER_FILE, JSON.stringify(serializable, null, 2), 'utf8')
-	} catch (e) {
-		console.error('[Ledger] Failed to persist collaborators ledger to disk:', e)
+	if (saveMaxThrottleTimers.has(documentId)) {
+		clearTimeout(saveMaxThrottleTimers.get(documentId))
+		saveMaxThrottleTimers.delete(documentId)
 	}
 }
+
+// Health and metrics helper
+function getServerMetrics () {
+	const mem = process.memoryUsage()
+	const heapTotal = mem.heapTotal || 1
+	const heapUsed = mem.heapUsed || 0
+	const heapUtilizationPct = Math.round((heapUsed / heapTotal) * 100)
+
+	return {
+		status: 'ok',
+		uptimeSeconds: Math.floor(process.uptime()),
+		activeDocuments: docs.size,
+		activeConnections: wss.clients.size,
+		memory: {
+			rssMb: Math.round((mem.rss / (1024 * 1024)) * 10) / 10,
+			heapUsedMb: Math.round((heapUsed / (1024 * 1024)) * 10) / 10,
+			heapTotalMb: Math.round((heapTotal / (1024 * 1024)) * 10) / 10,
+		},
+		limits: {
+			maxConnections: MAX_CONNECTIONS,
+			heapUtilizationPct,
+		},
+	}
+}
+
+const server = http.createServer((req, res) => {
+	if (req.url === '/health' || req.url === '/metrics') {
+		res.writeHead(200, { 'Content-Type': 'application/json' })
+		res.end(JSON.stringify(getServerMetrics(), null, 2))
+		return
+	}
+
+	res.writeHead(200, { 'Content-Type': 'text/plain' })
+	res.end('WebSocket Sync Server Running\n')
+})
 
 // Helper to save document state to Supabase Storage and update text index
 async function saveDocumentState (documentId, ydoc) {
 	try {
 		console.log(`[Sync] Saving document ${documentId} to Supabase...`)
-		
+
 		// 1. Encode Yjs state to binary and encrypt at rest (ADR 0001)
 		const stateUpdate = Y.encodeStateAsUpdate(ydoc)
 		const encryptedBuffer = encryptSnapshot(stateUpdate)
@@ -114,12 +123,9 @@ async function saveDocumentState (documentId, ydoc) {
 			}
 		}
 
-		
-		// 4. Clear pending local WAL logs now that Supabase is synced
-		clearUpdates(documentId)
 		console.log(`[Sync] Document ${documentId} successfully synced to Supabase.`)
 
-		// 5. Prune expired versions
+		// 4. Prune expired versions
 		try {
 			const ownerPlan = await getDocumentOwnerPlan(supabaseAdmin, documentId)
 			if (ownerPlan) {
@@ -161,56 +167,59 @@ setPersistence({
 				console.error(`[Persist Error] Download failed for ${documentId}:`, error)
 			}
 
-			// 2. Apply pending local updates from WAL cache
-			const pending = getPendingUpdates(documentId)
-			if (pending.length > 0) {
-				console.log(`[Persist] Applying ${pending.length} pending WAL updates for ${documentId}`)
-				pending.forEach(update => {
-					Y.applyUpdate(ydoc, update, 'wal-load')
-				})
-			}
-
 			console.log(`[Persist] Document ${documentId} fully loaded.`)
 		} catch (err) {
 			console.error(`[Persist Error] Failed to bind state for ${documentId}:`, err)
 		}
 
-		// 3. Attach change listener to trigger local WAL log and debounced saves
+		// 2. Attach change listener to trigger capped debounced saves
 		ydoc.on('update', (update, origin) => {
 			// Skip saving if the update originated from the server loading base state
-			if (origin === 'supabase-load' || origin === 'wal-load') {
+			if (origin === 'supabase-load') {
 				return
 			}
 
-			// Append to local Write-Ahead Log instantly
-			appendUpdate(documentId, update)
-
-			// Clear previous debounce timer
+			// Clear previous idle debounce timer
 			if (saveDebounceTimers.has(documentId)) {
 				clearTimeout(saveDebounceTimers.get(documentId))
 			}
 
-			// Set 10-minute maximum throttle and 3-second debounce save
-			const timer = setTimeout(async () => {
-				saveDebounceTimers.delete(documentId)
-				await saveDocumentState(documentId, ydoc)
-			}, 3000)
+			// Schedule hard 10-second max-throttle if not already running
+			if (!saveMaxThrottleTimers.has(documentId)) {
+				const maxThrottleTimer = setTimeout(async () => {
+					clearSaveTimers(documentId)
+					await saveDocumentState(documentId, ydoc)
+				}, 10000)
+				saveMaxThrottleTimers.set(documentId, maxThrottleTimer)
+			}
 
-			saveDebounceTimers.set(documentId, timer)
+			// Set 2-second idle debounce save
+			const debounceTimer = setTimeout(async () => {
+				clearSaveTimers(documentId)
+				await saveDocumentState(documentId, ydoc)
+			}, 2000)
+
+			saveDebounceTimers.set(documentId, debounceTimer)
 		})
 	},
 	writeState: async (documentId, ydoc) => {
-		// Clean up save timer and force write immediately
-		if (saveDebounceTimers.has(documentId)) {
-			clearTimeout(saveDebounceTimers.get(documentId))
-			saveDebounceTimers.delete(documentId)
-		}
+		clearSaveTimers(documentId)
 		await saveDocumentState(documentId, ydoc)
 	},
 })
 
 server.on('upgrade', async (request, socket, head) => {
-	// Parse URL params
+	// 1. Concurrency & Load-Shedding Protection
+	const mem = process.memoryUsage()
+	const isMemoryExhausted = mem.heapTotal > 0 && (mem.heapUsed / mem.heapTotal) > 0.85
+	if (wss.clients.size >= MAX_CONNECTIONS || isMemoryExhausted) {
+		console.warn(`[LoadShedding] Connection rejected: connections=${wss.clients.size}/${MAX_CONNECTIONS}, memExhausted=${isMemoryExhausted}`)
+		socket.write('HTTP/1.1 503 Service Unavailable\r\nRetry-After: 5\r\n\r\n')
+		socket.destroy()
+		return
+	}
+
+	// 2. Parse URL params
 	const url = new URL(request.url, `http://${request.headers.host}`)
 	const token = url.searchParams.get('token')
 	const documentId = url.searchParams.get('documentId')
@@ -233,30 +242,25 @@ server.on('upgrade', async (request, socket, head) => {
 			return
 		}
 
-		// Enforce distinct collaborator limit based on document owner plan
+		// Enforce distinct collaborator limit based on document owner plan via Postgres ledger
 		const ownerPlan = await getDocumentOwnerPlan(supabaseAdmin, documentId)
 		const limits = getPlanLimits(ownerPlan)
 
-		let distinctUsers = documentDistinctCollaborators.get(documentId)
-		if (!distinctUsers) {
-			distinctUsers = new Set()
-			documentDistinctCollaborators.set(documentId, distinctUsers)
-		}
+		const isRegistered = await isCollaboratorRegistered(supabaseAdmin, documentId, userId)
+		const currentCount = await getDistinctCollaboratorsCount(supabaseAdmin, documentId)
 
-		const isNewUser = !distinctUsers.has(userId)
-		if (isNewUser && distinctUsers.size >= limits.maxDistinctCollaborators) {
+		if (!isRegistered && currentCount >= limits.maxDistinctCollaborators) {
 			console.log(`[Connection] Rejected: Document ${documentId} reached max distinct collaborators (${limits.maxDistinctCollaborators}) for plan ${ownerPlan}`)
 			socket.write('HTTP/1.1 4403 Forbidden\r\nX-Reason: Upgrade Required\r\n\r\n')
 			socket.destroy()
 			return
 		}
 
-		if (isNewUser) {
-			distinctUsers.add(userId)
-			persistCollaboratorsLedger()
+		if (!isRegistered && userId !== 'anonymous') {
+			await recordCollaboratorAccess(supabaseAdmin, documentId, userId)
 		}
 
-		console.log(`[Connection] User role: ${role} on doc ${documentId} (${distinctUsers.size}/${limits.maxDistinctCollaborators} distinct)`)
+		console.log(`[Connection] User role: ${role} on doc ${documentId} (${currentCount}/${limits.maxDistinctCollaborators} distinct)`)
 
 		wss.handleUpgrade(request, socket, head, (ws) => {
 			ws.isViewer = role === 'viewer'
@@ -270,17 +274,23 @@ server.on('upgrade', async (request, socket, head) => {
 })
 
 wss.on('connection', (ws, request) => {
-	// Intercept incoming messages to block Viewer writes
+	// Intercept incoming messages to guard payload size and block Viewer writes
 	const originalOnMessage = ws.on
 	ws.on = function (event, listener) {
 		if (event === 'message') {
 			const wrappedListener = function (data, isBinary) {
+				// 1. Enforce payload frame size ceiling
+				const byteLength = data ? (data instanceof Buffer ? data.length : data.byteLength || 0) : 0
+				if (byteLength > MAX_PAYLOAD_BYTES) {
+					console.warn(`[Security] Rejected oversized payload (${byteLength} bytes > ${MAX_PAYLOAD_BYTES} max)`)
+					ws.close(1009, 'Message Too Big')
+					return
+				}
+
+				// 2. Block Viewer writes
 				if (ws.isViewer && isBinary && data && data.length >= 2) {
 					const messageType = data[0]
 					const syncType = data[1]
-					// Yjs Sync Protocol message structure:
-					// data[0] === 0 (messageYjsSync)
-					// data[1] === 1 (messageYjsSyncStep2) or 2 (messageYjsSyncUpdate)
 					if (messageType === 0 && (syncType === 1 || syncType === 2)) {
 						console.log('[Security] Rejected Viewer edit message payload')
 						return
@@ -307,25 +317,35 @@ setInterval(() => {
 	for (const [docName, doc] of docs.entries()) {
 		if (doc.conns.size === 0) {
 			console.log(`[LRU] Evicting idle document ${docName} from server memory`)
-			// Persistence writeState is automatically called when document is removed
 			docs.delete(docName)
-			documentDistinctCollaborators.delete(docName)
 		}
 	}
 }, 60000) // Run check every minute
+
+// Background Retention Sweep (12-hour fallback interval)
+setInterval(async () => {
+	console.log('[Retention Sweep] Starting periodic background version cleanup...')
+	try {
+		for (const [docName] of docs.entries()) {
+			const ownerPlan = await getDocumentOwnerPlan(supabaseAdmin, docName)
+			if (ownerPlan) {
+				await pruneExpiredDocumentVersions(supabaseAdmin, docName, ownerPlan, new Date())
+			}
+		}
+	} catch (sweepErr) {
+		console.warn('[Retention Sweep] Sweep error:', sweepErr)
+	}
+}, 12 * 60 * 60 * 1000)
 
 // Catch termination signals to flush in-memory documents before exiting
 async function gracefulShutdown () {
 	console.log('\n[Shutdown] Flushing all active documents to Supabase...')
 	const promises = []
 	for (const [docName, doc] of docs.entries()) {
-		if (saveDebounceTimers.has(docName)) {
-			clearTimeout(saveDebounceTimers.get(docName))
-			saveDebounceTimers.delete(docName)
-		}
+		clearSaveTimers(docName)
 		promises.push(saveDocumentState(docName, doc))
 	}
-	await Promise.all(promises)
+	await Promise.allSettled(promises)
 	console.log('[Shutdown] All states flushed. Exiting.')
 	process.exit(0)
 }
@@ -336,3 +356,5 @@ process.on('SIGTERM', gracefulShutdown)
 server.listen(port, () => {
 	console.log(`Sync Server listening on port ${port}`)
 })
+
+module.exports = { server, wss, saveDocumentState, clearSaveTimers, getServerMetrics }
