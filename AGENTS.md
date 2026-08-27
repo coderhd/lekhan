@@ -29,7 +29,15 @@ These steps are non-optional per ticket. Skipping any of them is a process bug, 
 ### Before opening the PR
 
 4. Run the full verification suite (`npm run typecheck && npm run lint && npm test && npm run build`) and state results explicitly.
-5. Invoke `verification-before-completion` mindset: no "done" claims without command output proving them.
+5. **Clean-Room Subagent Review Gate**:
+   - Dispatch an independent adversarial review subagent (`invoke_subagent` with `Model: 'pro'`) evaluating `git diff origin/main...HEAD`.
+   - The subagent audits changes across 4 axes:
+     1. **Spec & Acceptance Criteria** (Issue requirements, CONTEXT.md, and ADR invariants).
+     2. **Frontend & Accessibility** (Keyboard navigation, ARIA roles, React 19/Tiptap 3 lifecycle cleanups).
+     3. **CRDT & Storage** (IndexedDB transaction atomicity, binary delta compression fidelity).
+     4. **Backend Security & Errors** (Query error propagation, storage failure rollback).
+   - Triage and fix all valid findings, then re-run the full verification suite.
+6. Invoke `verification-before-completion` mindset: no "done" claims without command output proving them.
 
 ### At merge time (the step that was missed)
 
