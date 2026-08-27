@@ -42,6 +42,7 @@ Bans: game-changer, revolutionary, seamless, supercharge, effortless,
 
 - Obsidian vault import preserving wikilinks/callouts/frontmatter/tags
 - Real-time CRDT collaboration over local-first storage
+- Git-style unlimited local version history & visual time-travel diffing (never paywalled on local disk)
 - Global search across the link graph
 - Markdown round-trip export (md/html/pdf/docx)
 
