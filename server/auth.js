@@ -24,7 +24,6 @@ function getSupabaseClient(token) {
 	)
 }
 
-// Resolve an entity (page first, legacy document fallback) to owner + public flag.
 async function getEntityOwner(supabase, entityId) {
 	const { data: page } = await supabase
 		.from('pages')
@@ -53,24 +52,24 @@ async function verifyUserRole(supabase, entityId, token) {
 	if (token === 'anonymous') {
 		const entity = await getEntityOwner(supabase, entityId)
 		if (entity && entity.is_public) {
-			return 'viewer'
+			return { role: 'viewer', userId: 'anonymous' }
 		}
-		return null
+		return { role: null, userId: null }
 	}
 
 	const { data: { user }, error } = await supabase.auth.getUser(token)
 	if (error || !user) {
 		console.error(`[Auth] getUser failed for ${entityId}:`, error?.message || 'No user found')
-		return null
+		return { role: null, userId: null }
 	}
 
 	const entity = await getEntityOwner(supabase, entityId)
 	if (!entity) {
-		return null
+		return { role: null, userId: user.id }
 	}
 
 	if (entity.owner_id === user.id) {
-		return 'owner'
+		return { role: 'owner', userId: user.id }
 	}
 
 	if (entity.type === 'page') {
@@ -81,19 +80,14 @@ async function verifyUserRole(supabase, entityId, token) {
 			.eq('user_id', user.id)
 			.single()
 		if (member) {
-			return member.role
+			return { role: member.role, userId: user.id }
 		}
 
-		// Page-only authority (P2): page_members is the sole membership source
-		// for pages — the legacy document_members fallback was removed so the
-		// sync server's role verdict always matches page RLS (can_access_page).
-		// Authenticated non-members get read-only access to public pages,
-		// matching RLS (previously they were denied while anon could read).
 		if (entity.is_public) {
-			return 'viewer'
+			return { role: 'viewer', userId: user.id }
 		}
 
-		return null
+		return { role: null, userId: user.id }
 	}
 
 	const { data: member } = await supabase
@@ -103,10 +97,10 @@ async function verifyUserRole(supabase, entityId, token) {
 		.eq('user_id', user.id)
 		.single()
 
-	return member ? member.role : null
+	return { role: member ? member.role : null, userId: user.id }
 }
 
-async function getDocumentOwnerPlanLimit(supabaseAdmin, entityId) {
+async function getDocumentOwnerPlan(supabaseAdmin, entityId) {
 	try {
 		const { data: page } = await supabaseAdmin
 			.from('pages')
@@ -126,7 +120,7 @@ async function getDocumentOwnerPlanLimit(supabaseAdmin, entityId) {
 			ownerId = doc ? doc.owner_id : null
 		}
 
-		if (!ownerId) return 2
+		if (!ownerId) return 'free'
 
 		const { data: profile } = await supabaseAdmin
 			.from('profiles')
@@ -134,18 +128,10 @@ async function getDocumentOwnerPlanLimit(supabaseAdmin, entityId) {
 			.eq('id', ownerId)
 			.single()
 
-		const plan = (profile && profile.plan ? profile.plan : 'free').toLowerCase()
-		switch (plan) {
-			case 'go': return 10
-			case 'pro': return 25
-			case 'team': return 50
-			case 'enterprise': return 9999
-			case 'free':
-			default: return 2
-		}
+		return (profile && profile.plan) ? profile.plan.toLowerCase() : 'free'
 	} catch {
-		return 2
+		return 'free'
 	}
 }
 
-module.exports = { getSupabaseClient, getEntityOwner, verifyUserRole, getDocumentOwnerPlanLimit }
+module.exports = { getSupabaseClient, getEntityOwner, verifyUserRole, getDocumentOwnerPlan }
