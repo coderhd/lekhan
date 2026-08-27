@@ -107,3 +107,35 @@ export function clearApiKey(): void {
 	localStorage.removeItem(STORAGE_KEY)
 	localStorage.removeItem(LEGACY_STORAGE_KEY)
 }
+
+export async function generateEncryptionKey(): Promise<CryptoKey> {
+	return window.crypto.subtle.generateKey(
+		{ name: 'AES-GCM', length: 256 },
+		true,
+		['encrypt', 'decrypt']
+	)
+}
+
+export async function encryptDocumentState(data: Uint8Array, key: CryptoKey): Promise<Uint8Array> {
+	const iv = window.crypto.getRandomValues(new Uint8Array(12))
+	const encrypted = await window.crypto.subtle.encrypt(
+		{ name: 'AES-GCM', iv },
+		key,
+		data as BufferSource
+	)
+	const result = new Uint8Array(iv.length + encrypted.byteLength)
+	result.set(iv, 0)
+	result.set(new Uint8Array(encrypted), iv.length)
+	return result
+}
+
+export async function decryptDocumentState(payload: Uint8Array, key: CryptoKey): Promise<Uint8Array> {
+	const iv = payload.slice(0, 12)
+	const ciphertext = payload.slice(12)
+	const decrypted = await window.crypto.subtle.decrypt(
+		{ name: 'AES-GCM', iv },
+		key,
+		ciphertext as BufferSource
+	)
+	return new Uint8Array(decrypted)
+}
