@@ -9,7 +9,7 @@ export interface PlanLimits {
 const FREE_LIMITS: PlanLimits = {
 	historyRetentionDays: 1,
 	maxDistinctCollaborators: 2,
-	maxStorageMb: 1000
+	maxStorageMb: 20
 }
 
 const PLUS_LIMITS: PlanLimits = {

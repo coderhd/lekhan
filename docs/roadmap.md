@@ -61,6 +61,7 @@ provider registry).
 | H0 — Encrypt page snapshots at rest (ADR 0001) | #81 | AES-256-GCM envelope encryption with magic header LK_ENC_V1, key rotation, backfill script |
 | H0 — Tier limits & local-first version history | #82 | Git-style milestones, non-destructive restore, visual word-diff viewer, quota pruning |
 | H0 — AI Provider Registry & Unified Settings Suite | #28 | 3-tier access ladder (local BYOL, free presets, cloud BYOK), zero-knowledge encrypted vault, 5-tab settings |
+| H0 — Sync Server Hardening (durability, capped debounce, ledger, scale) | #77 | 2s/10s capped debounce snapshot engine, durable Postgres collaborator ledger, automated retention cron, load-shedding |
 
 | Epic | Issue | Blocker edges | Notes |
 |---|---|---|---|

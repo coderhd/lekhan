@@ -8,12 +8,12 @@ describe('tier-limits', () => {
 			expect(getPlanLimits()).toEqual({
 				historyRetentionDays: 1,
 				maxDistinctCollaborators: 2,
-				maxStorageMb: 1000
+				maxStorageMb: 20
 			})
 			expect(getPlanLimits('unknown')).toEqual({
 				historyRetentionDays: 1,
 				maxDistinctCollaborators: 2,
-				maxStorageMb: 1000
+				maxStorageMb: 20
 			})
 		})
 

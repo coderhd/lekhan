@@ -1,53 +1,19 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 
 // Mock the environment variables needed for server scripts
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'
 process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'mock-anon-key'
 
-const wal = require('../../server/wal')
 const auth = require('../../server/auth')
 
-describe('Write-Ahead Log (WAL) Cache System', () => {
-	const testDocId = 'test-doc-uuid'
+const { getServerMetrics } = require('../../server/index.js')
 
-	beforeEach(() => {
-		// Clear updates before each test
-		wal.clearUpdates(testDocId)
-	})
-
-	afterEach(() => {
-		// Clean up final logs
-		wal.clearUpdates(testDocId)
-	})
-
-	it('should append and retrieve updates correctly', () => {
-		const update1 = new Uint8Array([1, 2, 3, 4])
-		const update2 = new Uint8Array([5, 6, 7, 8])
-
-		wal.appendUpdate(testDocId, update1)
-		wal.appendUpdate(testDocId, update2)
-
-		const pending = wal.getPendingUpdates(testDocId)
-		expect(pending.length).toBe(2)
-		expect(Array.from(pending[0])).toEqual([1, 2, 3, 4])
-		expect(Array.from(pending[1])).toEqual([5, 6, 7, 8])
-	})
-
-	it('should return empty list when no updates exist', () => {
-		const pending = wal.getPendingUpdates('non-existent-doc')
-		expect(pending).toEqual([])
-	})
-
-	it('should clear updates when requested', () => {
-		const update = new Uint8Array([1, 2, 3])
-		wal.appendUpdate(testDocId, update)
-
-		let pending = wal.getPendingUpdates(testDocId)
-		expect(pending.length).toBe(1)
-
-		wal.clearUpdates(testDocId)
-		pending = wal.getPendingUpdates(testDocId)
-		expect(pending).toEqual([])
+describe('Server Metrics & Health System', () => {
+	it('provides valid server metrics format from production getServerMetrics', () => {
+		const metrics = getServerMetrics()
+		expect(metrics).toHaveProperty('status')
+		expect(metrics.limits.maxConnections).toBe(1500)
+		expect(typeof metrics.limits.heapUtilizationPct).toBe('number')
 	})
 })
 

@@ -67,11 +67,10 @@ jobs:
           # AZURE_CONTEXT: "400000"
           # AZURE_MAX_OUTPUT: "128000"
 
-          # for any OpenAI-compatible endpoint — LiteLLM, Cloudflare AI Gateway,
-          # self-hosted vLLM (https://docs.pullfrog.com/openai-compatible)
-          # OPENAI_COMPATIBLE_BASE_URL: https://litellm.example.com/v1
-          # OPENAI_COMPATIBLE_API_KEY: ${{ secrets.OPENAI_COMPATIBLE_API_KEY }}
-          # OPENAI_COMPATIBLE_MODEL: <model-id>
-          # both limits are required — set them to the real limits of that model
-          # OPENAI_COMPATIBLE_CONTEXT: "128000"
-          # OPENAI_COMPATIBLE_MAX_OUTPUT: "16384"
+          # for any OpenAI-compatible endpoint — B.AI (https://docs.b.ai/llmservice/api/), LiteLLM, vLLM
+          OPENAI_COMPATIBLE_BASE_URL: ${{ secrets.OPENAI_COMPATIBLE_BASE_URL || 'https://api.b.ai/v1' }}
+          OPENAI_COMPATIBLE_API_KEY: ${{ secrets.OPENAI_COMPATIBLE_API_KEY || secrets.BAI_API_KEY || secrets.OPENCODE_API_KEY }}
+          OPENAI_COMPATIBLE_MODEL: ${{ secrets.OPENAI_COMPATIBLE_MODEL || 'glm-5.3-flash' }}
+          # Safe context window for B.AI gateway (120k tokens to stay strictly within 128k gateway payload ceiling)
+          OPENAI_COMPATIBLE_CONTEXT: ${{ secrets.OPENAI_COMPATIBLE_CONTEXT || '120000' }}
+          OPENAI_COMPATIBLE_MAX_OUTPUT: ${{ secrets.OPENAI_COMPATIBLE_MAX_OUTPUT || '8192' }}
