@@ -87,6 +87,15 @@ export class AIClient {
 									if (parsed.message?.content) onChunk(parsed.message.content)
 									if (parsed.choices?.[0]?.delta?.content) onChunk(parsed.choices[0].delta.content)
 									if (parsed.choices?.[0]?.message?.content) onChunk(parsed.choices[0].message.content)
+									if (parsed.candidates?.[0]?.content?.parts) {
+										for (const part of parsed.candidates[0].content.parts) {
+											if (part?.text) onChunk(part.text)
+										}
+									} else if (parsed.candidates?.[0]?.content?.parts === undefined && parsed.candidates?.[0]?.content) {
+										// fallback: some Gemini payloads use candidates[0].content.parts or candidates[0].content.text
+										const c = parsed.candidates[0].content as unknown as { text?: string }
+										if (typeof c.text === 'string') onChunk(c.text)
+									}
 									if (parsed.totalTokens !== undefined) {
 										lastStats = parsed
 									}
@@ -94,7 +103,21 @@ export class AIClient {
 									onChunk(dataStr)
 								}
 							} else if (trimmed && !trimmed.startsWith('event:')) {
-								onChunk(trimmed)
+								// Ollama NDJSON: {"message":{"content":" hi"},"done":false} or {"response":"..."}
+								try {
+									const parsed = JSON.parse(trimmed)
+									if (parsed.message?.content) {
+										onChunk(parsed.message.content)
+									} else if (typeof parsed.response === 'string') {
+										onChunk(parsed.response)
+									} else if (parsed.choices?.[0]?.delta?.content) {
+										onChunk(parsed.choices[0].delta.content)
+									} else {
+										onChunk(trimmed)
+									}
+								} catch {
+									onChunk(trimmed)
+								}
 							}
 						}
 					}

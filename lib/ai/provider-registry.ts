@@ -97,11 +97,12 @@ export function resolveBaseUrl(provider: AIProviderType, customBaseUrl?: string)
 		if (provider === 'ollama') return 'http://localhost:11434'
 		if (provider === 'lmstudio') return 'http://localhost:1234'
 	}
-	if (provider === 'custom') return TRUSTED_PROVIDER_BASE_URLS.openai
+	if (provider === 'custom') return '' // missing custom URL — caller must handle missing-base error (testConnection/buildUpstream)
 	return TRUSTED_PROVIDER_BASE_URLS[provider] || TRUSTED_PROVIDER_BASE_URLS.openai
 }
 
 export function resolveTestEndpoint(provider: AIProviderType, baseUrl?: string): string {
+	if (provider === 'custom' && (!baseUrl || !baseUrl.trim())) return ''
 	const resolvedBase = resolveBaseUrl(provider, baseUrl)
 	if (provider === 'ollama') {
 		let u = resolvedBase
@@ -234,6 +235,9 @@ export async function testProviderConnection(
 	const start = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now()
 
 	try {
+		if (provider === 'custom' && (!baseUrl || !baseUrl.trim())) {
+			return { success: false, latencyMs: 0, error: 'Missing custom base URL' }
+		}
 		if (baseUrl) {
 			try {
 				const parsed = new URL(baseUrl)
