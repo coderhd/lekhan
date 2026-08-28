@@ -1,4 +1,5 @@
 import { AIProviderConfig } from './types'
+import { resolveChatRequest } from './provider-registry'
 
 export interface StreamChatArgs {
 	prompt: string
@@ -18,41 +19,28 @@ export class AIClient {
 
 		const attempt = async (config: AIProviderConfig, fallbacks: AIProviderConfig[]) => {
 			try {
-				let url = '/api/ai/stream'
-				const body: any = {
-					provider: config.provider,
+				const resolved = resolveChatRequest({
+					provider: config.provider as any,
 					model: config.defaultModel,
+					messages: (() => {
+						const msgs: Array<{ role: string; content: string }> = []
+						if (systemPrompt) msgs.push({ role: 'system', content: systemPrompt })
+						msgs.push({ role: 'user', content: prompt })
+						return msgs
+					})(),
 					apiKey: config.apiKey,
 					baseUrl: config.baseUrl,
-					messages: []
-				}
+				})
 
-				if (systemPrompt) {
-					body.messages.push({ role: 'system', content: systemPrompt })
-				}
-				body.messages.push({ role: 'user', content: prompt })
-
-				const headers: Record<string, string> = {
-					'Content-Type': 'application/json'
-				}
-				if (config.apiKey) {
-					headers['x-ai-api-key'] = config.apiKey
-				}
+				const url = resolved.url
+				const headers = resolved.headers as Record<string, string>
+				const body = resolved.body as Record<string, unknown>
 
 				const fetchOpts: RequestInit = {
 					method: 'POST',
 					headers,
 					body: JSON.stringify(body),
 					signal: abortController.signal
-				}
-
-				if (config.provider === 'ollama' || config.provider === 'lmstudio') {
-					url = `${config.baseUrl || 'http://localhost:11434'}/api/chat`
-					fetchOpts.body = JSON.stringify({
-						model: config.defaultModel,
-						messages: body.messages,
-						stream: true
-					})
 				}
 
 				const res = await fetch(url, fetchOpts)
@@ -97,6 +85,17 @@ export class AIClient {
 									const parsed = JSON.parse(dataStr)
 									if (parsed.text) onChunk(parsed.text)
 									if (parsed.message?.content) onChunk(parsed.message.content)
+									if (parsed.choices?.[0]?.delta?.content) onChunk(parsed.choices[0].delta.content)
+									if (parsed.choices?.[0]?.message?.content) onChunk(parsed.choices[0].message.content)
+									if (parsed.candidates?.[0]?.content?.parts) {
+										for (const part of parsed.candidates[0].content.parts) {
+											if (part?.text) onChunk(part.text)
+										}
+									} else if (parsed.candidates?.[0]?.content?.parts === undefined && parsed.candidates?.[0]?.content) {
+										// fallback: some Gemini payloads use candidates[0].content.parts or candidates[0].content.text
+										const c = parsed.candidates[0].content as unknown as { text?: string }
+										if (typeof c.text === 'string') onChunk(c.text)
+									}
 									if (parsed.totalTokens !== undefined) {
 										lastStats = parsed
 									}
@@ -104,7 +103,21 @@ export class AIClient {
 									onChunk(dataStr)
 								}
 							} else if (trimmed && !trimmed.startsWith('event:')) {
-								onChunk(trimmed)
+								// Ollama NDJSON: {"message":{"content":" hi"},"done":false} or {"response":"..."}
+								try {
+									const parsed = JSON.parse(trimmed)
+									if (parsed.message?.content) {
+										onChunk(parsed.message.content)
+									} else if (typeof parsed.response === 'string') {
+										onChunk(parsed.response)
+									} else if (parsed.choices?.[0]?.delta?.content) {
+										onChunk(parsed.choices[0].delta.content)
+									} else {
+										onChunk(trimmed)
+									}
+								} catch {
+									onChunk(trimmed)
+								}
 							}
 						}
 					}
