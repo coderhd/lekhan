@@ -28,11 +28,14 @@ const BYOK_PROVIDERS: Array<{ id: AIProviderType; label: string; note?: string }
 	{ id: 'custom', label: 'Custom (OpenAI-compatible)' },
 ]
 
-export function AIProviderSettings({ registryState = getDefaultAIRegistryState(), onSaveRegistry }: AIProviderSettingsProps) {
+export function AIProviderSettings({ registryState, onSaveRegistry }: AIProviderSettingsProps) {
+	const defaultState = useMemo(() => getDefaultAIRegistryState(), [])
+	const state = registryState ?? defaultState
 	const [hardware, setHardware] = useState<HardwareProfile | null>(null)
 	const [localProbe, setLocalProbe] = useState<LocalProbeResult | null>(null)
 	const [showKeys, setShowKeys] = useState<Record<string, boolean>>({})
 	const [apiKeys, setApiKeys] = useState<Record<string, string>>({})
+	const [customBaseUrls, setCustomBaseUrls] = useState<Record<string, string>>({})
 	const [testingKey, setTestingKey] = useState<Record<string, boolean>>({})
 	const [isPingTesting, setIsPingTesting] = useState(false)
 	const [pingResult, setPingResult] = useState<{ latencyMs?: number; success?: boolean } | null>(null)
@@ -40,27 +43,35 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 	const [costFilter, setCostFilter] = useState<'all' | 'free' | 'local' | 'paid'>('all')
 	const [categoryFilter, setCategoryFilter] = useState<'all' | 'general' | 'reasoning' | 'coding' | 'indic'>('all')
 
-	const state = registryState || getDefaultAIRegistryState()
-
 	useEffect(() => {
 		detectHardwareProfile().then(setHardware)
 		probeLocalRuntime('ollama').then(setLocalProbe)
 	}, [])
 
-	// Sync apiKeys from registry state (single source of truth)
 	useEffect(() => {
 		const next: Record<string, string> = {}
 		for (const [id, cfg] of Object.entries(state.providers)) {
 			if (cfg.apiKey) next[id] = cfg.apiKey
 		}
-		// merge with local edits — don't overwrite dirty keys
-		setApiKeys(prev => ({ ...next, ...prev }))
-		// only on registry change, keep existing unsaved edits? For simplicity, sync if empty
-		if (Object.keys(next).length > 0) {
-			setApiKeys(prev => {
-				const merged: Record<string, string> = { ...prev }
-				for (const [k, v] of Object.entries(next)) if (!merged[k]) merged[k] = v
-				return merged
+		setApiKeys(prev => {
+			let changed = false
+			const merged: Record<string, string> = { ...prev }
+			for (const [k, v] of Object.entries(next)) {
+				if (merged[k] !== v) { merged[k] = v; changed = true }
+			}
+			// also preserve existing prev keys not in next (dirty edits)
+			return changed || Object.keys(merged).length !== Object.keys(prev).length ? merged : prev
+		})
+		const nextUrls: Record<string, string> = {}
+		for (const [id, cfg] of Object.entries(state.providers)) {
+			if (cfg.baseUrl) nextUrls[id] = cfg.baseUrl
+		}
+		if (Object.keys(nextUrls).length > 0) {
+			setCustomBaseUrls(prev => {
+				let changed = false
+				const merged = { ...prev }
+				for (const [k, v] of Object.entries(nextUrls)) if (merged[k] !== v) { merged[k] = v; changed = true }
+				return changed ? merged : prev
 			})
 		}
 	}, [state.providers])
@@ -69,6 +80,7 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 
 	const handleSaveKey = async (providerId: string) => {
 		const keyVal = (apiKeys[providerId] || '').trim()
+		const baseUrlVal = (customBaseUrls[providerId] || '').trim()
 		if (!onSaveRegistry) {
 			toast.success(`Saved key for ${providerId} (local)`)
 			return
@@ -79,16 +91,19 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 				id: providerId,
 				provider: providerId as AIProviderType,
 				name: providerId,
-				enabled: true,
+				enabled: !!keyVal,
 				defaultModel: state.activeModelId,
 				availableModels: [state.activeModelId],
 				apiKey: keyVal,
+				baseUrl: baseUrlVal || undefined,
 				createdAt: new Date().toISOString(),
 				updatedAt: new Date().toISOString()
 			}
 		} else {
 			newState.providers[providerId].apiKey = keyVal
 			newState.providers[providerId].enabled = !!keyVal
+			if (baseUrlVal) newState.providers[providerId].baseUrl = baseUrlVal
+			else delete newState.providers[providerId].baseUrl
 			newState.providers[providerId].updatedAt = new Date().toISOString()
 		}
 		await onSaveRegistry(newState)
@@ -97,9 +112,10 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 
 	const handleTestKey = async (providerId: string) => {
 		const keyToTest = (apiKeys[providerId] || state.providers[providerId]?.apiKey || '').trim()
+		const baseUrlToTest = (customBaseUrls[providerId] || state.providers[providerId]?.baseUrl || undefined)
 		setTestingKey(prev => ({ ...prev, [providerId]: true }))
 		try {
-			const result = await providerRegistry.testConnection(providerId as AIProviderType, keyToTest)
+			const result = await providerRegistry.testConnection(providerId as AIProviderType, keyToTest, baseUrlToTest)
 			if (result.success) toast.success(`Connected to ${providerId} — ${result.latencyMs}ms`)
 			else toast.error(`Failed: ${result.error || 'Unknown'}`)
 		} catch (err: unknown) {
@@ -116,7 +132,8 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 		try {
 			const providerId = (state.activeProviderId || 'openai') as AIProviderType
 			const key = (apiKeys[providerId] || state.providers[providerId]?.apiKey || '').trim()
-			const result = await providerRegistry.testConnection(providerId, key)
+			const baseUrl = (customBaseUrls[providerId] || state.providers[providerId]?.baseUrl || undefined)
+			const result = await providerRegistry.testConnection(providerId, key, baseUrl)
 			setPingResult(result)
 			if (result.success) toast.success(`Ping ${result.latencyMs}ms`)
 			else toast.error(`Ping failed: ${result.error || 'Unreachable'}`)
@@ -161,7 +178,6 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 
 	return (
 		<div className="space-y-6 max-w-5xl w-full">
-			{/* Active model — compact hero, DESIGN.md teak accent */}
 			<section className="rounded-2xl border border-black/5 dark:border-white/10 bg-primary-container text-on-primary-container p-5 md:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
 				<div className="min-w-0">
 					<p className="text-[11px] font-bold uppercase tracking-widest opacity-70">Active model</p>
@@ -173,7 +189,6 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 				</Button>
 			</section>
 
-			{/* Hardware — compact */}
 			{hardware && (
 				<section className="rounded-xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/[0.04] backdrop-blur px-4 py-3 flex items-center justify-between gap-3">
 					<div className="flex items-center gap-2.5 min-w-0">
@@ -187,7 +202,6 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 				</section>
 			)}
 
-			{/* Local — compact card, not a tier */}
 			<section className="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 space-y-4">
 				<div className="flex items-center justify-between gap-3">
 					<h3 className="text-sm font-bold flex items-center gap-2">Local models <span className="text-[11px] font-normal text-black/50 dark:text-white/50">BYOL · Ollama / LM Studio</span></h3>
@@ -215,7 +229,6 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 				)}
 			</section>
 
-			{/* Providers & Keys — unified, not per-tier */}
 			<section className="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 space-y-4">
 				<div className="flex items-center gap-2">
 					<Lock className="w-4 h-4 text-black/60 dark:text-white/60" />
@@ -225,30 +238,44 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 				<div className="grid gap-3">
 					{BYOK_PROVIDERS.map(p => {
 						const configured = hasKey(p.id)
+						const isCustom = p.id === 'custom'
 						return (
-							<div key={p.id} className={`flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border p-3 ${configured ? 'bg-emerald-500/[0.04] border-emerald-500/20' : 'bg-black/[0.02] dark:bg-white/[0.02] border-black/10 dark:border-white/10'}`}>
-								<div className="sm:w-36 shrink-0 flex items-center gap-2">
-									<span className={`w-2 h-2 rounded-full ${configured ? 'bg-emerald-500' : 'bg-black/20 dark:bg-white/20'}`} />
-									<span className="text-xs font-semibold">{p.label}</span>
-									{p.note && <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10">{p.note}</span>}
-								</div>
-								<div className="flex-1 flex gap-2">
-									<div className="relative flex-1">
-										<KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-black/30 dark:text-white/30" />
-										<input
-											type={showKeys[p.id] ? 'text' : 'password'}
-											placeholder={`${p.label} API key`}
-											value={apiKeys[p.id] || ''}
-											onChange={e => handleKeyChange(p.id, e.target.value)}
-											className="w-full pl-8 pr-8 py-2 rounded-lg bg-white dark:bg-black/20 border border-black/10 dark:border-white/10 text-xs focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:ring-white/10"
-										/>
-										<button type="button" aria-label={`Toggle ${p.label}`} onClick={() => setShowKeys(prev => ({ ...prev, [p.id]: !prev[p.id] }))} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-black/5 dark:hover:bg-white/10">
-											{showKeys[p.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-										</button>
+							<div key={p.id} className={`flex flex-col gap-3 rounded-xl border p-3 ${configured ? 'bg-emerald-500/[0.04] border-emerald-500/20' : 'bg-black/[0.02] dark:bg-white/[0.02] border-black/10 dark:border-white/10'}`}>
+								<div className="flex flex-col sm:flex-row sm:items-center gap-3">
+									<div className="sm:w-36 shrink-0 flex items-center gap-2">
+										<span className={`w-2 h-2 rounded-full ${configured ? 'bg-emerald-500' : 'bg-black/20 dark:bg-white/20'}`} />
+										<span className="text-xs font-semibold">{p.label}</span>
+										{p.note && <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10">{p.note}</span>}
 									</div>
-									<Button variant="secondary" size="sm" disabled={!!testingKey[p.id]} onClick={() => handleTestKey(p.id)} className="h-8 text-xs px-3 shrink-0">{testingKey[p.id] ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Test'}</Button>
-									<Button size="sm" onClick={() => handleSaveKey(p.id)} className="h-8 text-xs px-3 shrink-0 bg-[#191713] text-white dark:bg-white dark:text-black">{configured ? 'Save' : 'Save'}</Button>
+									<div className="flex-1 flex gap-2">
+										<div className="relative flex-1">
+											<KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-black/30 dark:text-white/30" />
+											<input
+												type={showKeys[p.id] ? 'text' : 'password'}
+												placeholder={`${p.label} API key`}
+												value={apiKeys[p.id] || ''}
+												onChange={e => handleKeyChange(p.id, e.target.value)}
+												className="w-full pl-8 pr-8 py-2 rounded-lg bg-white dark:bg-black/20 border border-black/10 dark:border-white/10 text-xs focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:ring-white/10"
+											/>
+											<button type="button" aria-label={`Toggle ${p.label}`} onClick={() => setShowKeys(prev => ({ ...prev, [p.id]: !prev[p.id] }))} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-black/5 dark:hover:bg-white/10">
+												{showKeys[p.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+											</button>
+										</div>
+										<Button variant="secondary" size="sm" disabled={!!testingKey[p.id]} onClick={() => handleTestKey(p.id)} className="h-8 text-xs px-3 shrink-0">{testingKey[p.id] ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Test'}</Button>
+										<Button size="sm" onClick={() => handleSaveKey(p.id)} className="h-8 text-xs px-3 shrink-0 bg-[#191713] text-white dark:bg-white dark:text-black">Save</Button>
+									</div>
 								</div>
+								{isCustom && (
+									<div className="flex items-center gap-2 pl-0 sm:pl-40">
+										<input
+											type="text"
+											placeholder="Custom base URL (https://api.example.com/v1)"
+											value={customBaseUrls[p.id] || ''}
+											onChange={e => setCustomBaseUrls(prev => ({ ...prev, [p.id]: e.target.value }))}
+											className="flex-1 py-2 px-3 rounded-lg bg-white dark:bg-black/20 border border-black/10 dark:border-white/10 text-xs focus:outline-none focus:ring-2 focus:ring-black/10"
+										/>
+									</div>
+								)}
 							</div>
 						)
 					})}
@@ -256,7 +283,6 @@ export function AIProviderSettings({ registryState = getDefaultAIRegistryState()
 				<p className="text-[11px] leading-4 text-black/50 dark:text-white/50">Free presets (Gemini, Groq, DeepSeek, Z.AI) work with any provider row above — paste a free-tier key and pick a free model below. Tauri #88 will add a Model Library built once against the local sidecar.</p>
 			</section>
 
-			{/* Unified model library — single filterable grid, replaces Tier 2/3/catalog tabs */}
 			<section className="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 space-y-4">
 				<div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
 					<h3 className="text-sm font-bold">All models</h3>

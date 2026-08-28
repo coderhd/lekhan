@@ -1,8 +1,6 @@
 import { DEFAULT_MODEL_CATALOG as RAW_CATALOG, filterModels as rawFilterModels, getModelById as rawGetModelById, getDefaultAIRegistryState as rawGetDefaultAIRegistryState } from './catalog'
 import { AIProviderType, ModelCard, CostTier, ModelCategory, AIRegistryState } from './types'
 import { HardwareProfile, HardwareTier, getHardwareRecommendation } from './hardware'
-import { encryptAIRegistry, decryptAIRegistry } from './vault'
-import { getOrCreateUserVaultKey } from '../crypto'
 
 // ---------------------------------------------------------------------------
 // Central provider contract — single source of truth for every seam
@@ -16,15 +14,14 @@ export const TRUSTED_PROVIDER_BASE_URLS: Record<string, string> = {
 	qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
 	zai: 'https://api.z.ai/v1',
 	sarvam: 'https://api.sarvam.ai/v1',
-	// anthropic + gemini have non-standard chat endpoints; kept here for testProbe URL
 	anthropic: 'https://api.anthropic.com',
 	gemini: 'https://generativelanguage.googleapis.com',
 }
 
-export const LOCAL_PROVIDERS: ReadonlySet<AIProviderType> = new Set(['ollama', 'lmstudio', 'custom'] as AIProviderType[])
+export const LOCAL_PROVIDERS: ReadonlySet<AIProviderType> = new Set(['ollama', 'lmstudio'] as AIProviderType[])
 
 export function isLocalProvider(provider: AIProviderType): boolean {
-	return provider === 'ollama' || provider === 'lmstudio' || provider === 'custom'
+	return provider === 'ollama' || provider === 'lmstudio'
 }
 
 // ---------------------------------------------------------------------------
@@ -79,11 +76,9 @@ export function headersForProvider(provider: AIProviderType, apiKey: string): Re
 	if (provider === 'anthropic') return { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
 	if (provider === 'gemini') return { 'x-goog-api-key': apiKey }
 	if (provider === 'sarvam') return { 'api-subscription-key': apiKey }
-	// openai / openrouter / groq / deepseek / qwen / zai / custom
 	return { Authorization: `Bearer ${apiKey}` }
 }
 
-// For testProbe: same headers but content-type included
 export function probeHeadersFor(provider: AIProviderType, apiKey: string): Record<string, string> {
 	return { 'Content-Type': 'application/json', ...headersForProvider(provider, apiKey) }
 }
@@ -101,8 +96,8 @@ export function resolveBaseUrl(provider: AIProviderType, customBaseUrl?: string)
 	if (isLocalProvider(provider)) {
 		if (provider === 'ollama') return 'http://localhost:11434'
 		if (provider === 'lmstudio') return 'http://localhost:1234'
-		return 'http://localhost:11434'
 	}
+	if (provider === 'custom') return TRUSTED_PROVIDER_BASE_URLS.openai
 	return TRUSTED_PROVIDER_BASE_URLS[provider] || TRUSTED_PROVIDER_BASE_URLS.openai
 }
 
@@ -116,7 +111,6 @@ export function resolveTestEndpoint(provider: AIProviderType, baseUrl?: string):
 	if (provider === 'anthropic') return baseUrl || 'https://api.anthropic.com/v1/models'
 	if (provider === 'gemini') return baseUrl || 'https://generativelanguage.googleapis.com/v1beta/models'
 	if (provider === 'sarvam') return baseUrl || 'https://api.sarvam.ai/v1/models'
-	// generic OpenAI-compatible /v1/models
 	let base = resolvedBase
 	if (base.endsWith('/')) base = base.slice(0, -1)
 	if (base.endsWith('/v1')) return `${base}/models`
@@ -141,20 +135,22 @@ export function resolveChatRequest(args: {
 	systemPrompt?: string
 }): ResolvedChatRequest {
 	const { provider, model, messages, apiKey, baseUrl, temperature, maxTokens, systemPrompt } = args
-
-	// Build messages with optional system prompt
 	const fullMessages = systemPrompt ? [{ role: 'system', content: systemPrompt }, ...messages] : messages
 
-	// Local direct path
-	if (provider === 'ollama' || provider === 'lmstudio') {
+	if (provider === 'ollama') {
 		const url = `${resolveBaseUrl(provider, baseUrl)}/api/chat`
 		const headers: Record<string, string> = { 'Content-Type': 'application/json' }
 		const body = { model, messages: fullMessages, stream: true }
 		return { url, headers, body, isLocalDirect: true }
 	}
+	if (provider === 'lmstudio') {
+		const base = resolveBaseUrl(provider, baseUrl)
+		const url = `${base.endsWith('/') ? base.slice(0, -1) : base}/v1/chat/completions`
+		const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+		const body = { model, messages: fullMessages, stream: true }
+		return { url, headers, body, isLocalDirect: true }
+	}
 
-	// Proxy path — caller should POST to /api/ai/stream with these as upstream
-	// But for direct resolution (used by client to decide URL):
 	const url = '/api/ai/stream'
 	const headers: Record<string, string> = { 'Content-Type': 'application/json' }
 	if (apiKey) headers['x-ai-api-key'] = apiKey
@@ -195,24 +191,24 @@ export function buildUpstreamRequest(args: {
 	} else if (provider === 'gemini') {
 		upstreamUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`
 		upstreamHeaders['x-goog-api-key'] = apiKey
-		// Gemini uses contents + generationConfig
 		const genConfig: Record<string, unknown> = {}
 		if (temperature !== undefined) genConfig.temperature = temperature
 		if (maxTokens !== undefined) genConfig.maxOutputTokens = maxTokens
+		// Extract system messages into systemInstruction per Gemini docs
+		const systemParts = messages.filter(m => m.role === 'system').map(m => ({ text: m.content }))
+		const nonSystem = messages.filter(m => m.role !== 'system')
 		upstreamBody = {
-			contents: messages.map((m: { role: string; content: string }) => ({
+			contents: nonSystem.map((m: { role: string; content: string }) => ({
 				role: m.role === 'assistant' ? 'model' : 'user',
 				parts: [{ text: m.content }],
 			})),
+			...(systemParts.length > 0 ? { systemInstruction: { parts: systemParts } } : {}),
 			...(Object.keys(genConfig).length > 0 ? { generationConfig: genConfig } : {}),
 		}
 	} else if (provider === 'sarvam') {
 		upstreamUrl = 'https://api.sarvam.ai/v1/chat/completions'
 		upstreamHeaders['api-subscription-key'] = apiKey
 	} else if (provider === 'custom') {
-		if (!baseUrl || !isValidCustomUrl(baseUrl, { allowLocalHttp: false }) && !isValidCustomUrl(baseUrl, { allowLocalHttp: true })) {
-			// validation is caller's responsibility, but we still build
-		}
 		let base = baseUrl || ''
 		if (base.endsWith('/')) base = base.slice(0, -1)
 		upstreamUrl = `${base}/chat/completions`
@@ -227,7 +223,7 @@ export function buildUpstreamRequest(args: {
 }
 
 // ---------------------------------------------------------------------------
-// Test connection — unified probe used by vault and /api/ai/stream? No, vault only
+// Test connection — unified probe
 // ---------------------------------------------------------------------------
 
 export async function testProviderConnection(
@@ -239,9 +235,9 @@ export async function testProviderConnection(
 
 	try {
 		if (baseUrl) {
-			const isLocal = baseUrl.includes('localhost') || baseUrl.includes('127.0.0.1')
 			try {
 				const parsed = new URL(baseUrl)
+				const isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1'
 				if (parsed.protocol !== 'https:' && !isLocal) {
 					return { success: false, latencyMs: 0, error: 'Insecure remote HTTP URL rejected' }
 				}
@@ -291,7 +287,6 @@ export function formatModelDescription(model: ModelCard): string {
 	return `${providerLabel(model.provider)}, ${ctx} context, ${model.costTier}, ${model.hardwareTier}, ${model.speedTokPerSec} tok/s, ${model.category}`
 }
 
-// Derived catalog — descriptions computed, not authored drift
 export const DEFAULT_MODEL_CATALOG: ModelCard[] = RAW_CATALOG.map(m => ({
 	...m,
 	description: formatModelDescription(m),
@@ -305,7 +300,6 @@ export function filterModels(
 }
 
 export function getModelById(modelId: string, customCatalog?: ModelCard[]): ModelCard | undefined {
-	// prefer derived catalog
 	const all = customCatalog ? [...DEFAULT_MODEL_CATALOG, ...customCatalog] : DEFAULT_MODEL_CATALOG
 	return all.find(m => m.id === modelId) || rawGetModelById(modelId, customCatalog)
 }
@@ -343,27 +337,8 @@ export function badgeForModel(
 }
 
 // ---------------------------------------------------------------------------
-// Vault Storage seam — injected adapter
+// Vault Storage seam — injected adapter (InMemory only; Supabase vault lives in lib/ai/vault.ts)
 // ---------------------------------------------------------------------------
-
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-	if (typeof Buffer !== 'undefined') return Buffer.from(bytes).toString('base64')
-	let binary = ''
-	const chunkSize = 8192
-	for (let i = 0; i < bytes.length; i += chunkSize) {
-		const chunk = bytes.subarray(i, i + chunkSize)
-		binary += String.fromCharCode.apply(null, Array.from(chunk))
-	}
-	return btoa(binary)
-}
-
-function base64ToUint8Array(base64: string): Uint8Array {
-	if (typeof Buffer !== 'undefined') return new Uint8Array(Buffer.from(base64, 'base64'))
-	const binary = atob(base64)
-	const bytes = new Uint8Array(binary.length)
-	for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-	return bytes
-}
 
 export interface VaultStorage {
 	load(userId: string): Promise<AIRegistryState | null>
@@ -381,39 +356,17 @@ export class InMemoryVaultStorage implements VaultStorage {
 	clear() { this.store.clear() }
 }
 
-export class SupabaseVaultStorage implements VaultStorage {
-	constructor(private supabaseClient: { from: (t: string) => unknown } & Record<string, unknown>) {}
-	async load(userId: string): Promise<AIRegistryState | null> {
-		const client = this.supabaseClient as unknown as { from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: { encrypted_ai_keys: string } | null; error: unknown }> } } } }
-		const { data, error } = await client.from('profiles').select('encrypted_ai_keys').eq('id', userId).maybeSingle()
-		if (error || !data || !data.encrypted_ai_keys) return null
-		const payload = base64ToUint8Array(data.encrypted_ai_keys)
-		const key = await getOrCreateUserVaultKey(userId)
-		return decryptAIRegistry(payload, key)
-	}
-	async save(userId: string, state: AIRegistryState): Promise<void> {
-		const key = await getOrCreateUserVaultKey(userId)
-		const encrypted = await encryptAIRegistry(state, key)
-		const base64Str = uint8ArrayToBase64(encrypted)
-		const client = this.supabaseClient as unknown as { from: (t: string) => { update: (v: Record<string, string>) => { eq: (k: string, v: string) => Promise<{ error: unknown }> } } }
-		const { error } = await client.from('profiles').update({ encrypted_ai_keys: base64Str, updated_at: new Date().toISOString() }).eq('id', userId)
-		if (error) throw new Error((error as { message?: string }).message || 'Failed to sync vault')
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Deep factory — the module's small interface
 // ---------------------------------------------------------------------------
 
 export interface ProviderRegistry {
-	// catalog
 	readonly catalog: ModelCard[]
 	listModels(filters: Parameters<typeof filterModels>[1]): ModelCard[]
 	getModelById(id: string, custom?: ModelCard[]): ModelCard | undefined
 	getDefaultState(): AIRegistryState
 	formatDescription(model: ModelCard): string
 	isCompatible(model: ModelCard, hardware: HardwareProfile | null | undefined): boolean
-	// provider contract
 	isLocal(provider: AIProviderType): boolean
 	resolveBaseUrl(provider: AIProviderType, customBaseUrl?: string): string
 	headersFor(provider: AIProviderType, apiKey: string): Record<string, string>
@@ -422,7 +375,6 @@ export interface ProviderRegistry {
 	buildUpstreamRequest(args: Parameters<typeof buildUpstreamRequest>[0]): UpstreamRequest
 	testConnection(provider: AIProviderType, apiKey: string, baseUrl?: string): Promise<{ success: boolean; latencyMs: number; error?: string }>
 	isValidCustomUrl(url: string): boolean
-	// vault seam (optional, injected)
 	vault?: VaultStorage
 }
 
@@ -450,5 +402,4 @@ export function createProviderRegistry(opts?: { vaultStorage?: VaultStorage; cat
 	}
 }
 
-// Singleton for app-wide usage (thin, stateless routing helpers)
 export const providerRegistry = createProviderRegistry()

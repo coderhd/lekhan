@@ -43,11 +43,6 @@ export class AIClient {
 					signal: abortController.signal
 				}
 
-				// Local direct path already encoded in resolved; for local we need to override body to Ollama shape
-				if (resolved.isLocalDirect) {
-					// resolveChatRequest already returns Ollama /api/chat URL+body for local, but keep fetch shape
-				}
-
 				const res = await fetch(url, fetchOpts)
 
 				if (res.status === 429 || res.status === 503) {
@@ -90,6 +85,8 @@ export class AIClient {
 									const parsed = JSON.parse(dataStr)
 									if (parsed.text) onChunk(parsed.text)
 									if (parsed.message?.content) onChunk(parsed.message.content)
+									if (parsed.choices?.[0]?.delta?.content) onChunk(parsed.choices[0].delta.content)
+									if (parsed.choices?.[0]?.message?.content) onChunk(parsed.choices[0].message.content)
 									if (parsed.totalTokens !== undefined) {
 										lastStats = parsed
 									}
