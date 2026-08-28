@@ -19,7 +19,7 @@ describe('UnifiedSettingsModal UI', () => {
 		
 		// Click AI tab
 		fireEvent.click(aiTab)
-		// Should render AIProviderSettings, which has Tier 1 text
-		expect(screen.getByText(/Tier 1: Local Offline Hub/i)).toBeInTheDocument()
+		// Should render AIProviderSettings unified view
+		expect(screen.getByText(/Providers & Keys/i)).toBeInTheDocument()
 	})
 })

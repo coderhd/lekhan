@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { Search, CheckCircle2, Cpu, Zap, DollarSign } from 'lucide-react'
-import { DEFAULT_MODEL_CATALOG } from '../../lib/ai/catalog'
-import { ModelCategory, CostTier, ModelCard } from '../../lib/ai/types'
+import { providerRegistry, formatModelDescription } from '../../lib/ai/provider-registry'
+import { ModelCategory, CostTier } from '../../lib/ai/types'
 import { HardwareProfile, getHardwareRecommendation } from '../../lib/ai/hardware'
 import { Button } from '../ui/button'
 
@@ -17,14 +17,7 @@ export function ModelLibrary({ activeModelId, onSelectModel, hardwareProfile }: 
 	const [costFilter, setCostFilter] = useState<CostTier | 'all'>('all')
 
 	const filteredModels = useMemo(() => {
-		return DEFAULT_MODEL_CATALOG.filter((model: ModelCard) => {
-			const matchesSearch = model.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-								  model.description.toLowerCase().includes(searchQuery.toLowerCase())
-			const matchesCategory = categoryFilter === 'all' || model.category === categoryFilter
-			const matchesCost = costFilter === 'all' || model.costTier === costFilter
-
-			return matchesSearch && matchesCategory && matchesCost
-		})
+		return providerRegistry.listModels({ costTier: costFilter === 'all' ? undefined : costFilter, category: categoryFilter === 'all' ? undefined : categoryFilter, searchQuery: searchQuery || undefined })
 	}, [searchQuery, categoryFilter, costFilter])
 
 	return (
@@ -93,7 +86,7 @@ export function ModelLibrary({ activeModelId, onSelectModel, hardwareProfile }: 
 										{isActive && <CheckCircle2 className="w-4 h-4 text-primary" />}
 									</h3>
 									<p className="text-xs text-on-surface-variant mt-2 line-clamp-2 leading-relaxed">
-										{model.description}
+										{formatModelDescription(model)}
 									</p>
 								</div>
 								<span className="px-2 py-1 rounded-md bg-black/5 dark:bg-white/5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant shrink-0">

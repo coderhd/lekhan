@@ -1,5 +1,6 @@
 import { encryptDocumentState, decryptDocumentState } from '../crypto'
 import { AIRegistryState, AIProviderType } from './types'
+import { testProviderConnection as registryTestConnection } from './provider-registry'
 
 export async function encryptAIRegistry(state: AIRegistryState, key: CryptoKey): Promise<Uint8Array> {
 	const json = JSON.stringify(state)
@@ -66,67 +67,7 @@ export async function loadVaultFromSupabase(supabaseClient: any, userId: string,
 	return decryptAIRegistry(payload, key)
 }
 
+// Thin adapter — delegates to ProviderRegistry deep module (single source of truth)
 export async function testProviderKey(provider: AIProviderType, apiKey: string, baseUrl?: string): Promise<{ success: boolean; latencyMs: number; error?: string }> {
-	const startTime = performance.now()
-	
-	try {
-		let url = ''
-		const headers: Record<string, string> = {
-			'Content-Type': 'application/json'
-		}
-		
-		if (baseUrl) {
-			try {
-				const parsed = new URL(baseUrl)
-				const isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1'
-				if (parsed.protocol !== 'https:' && !isLocal) {
-					return { success: false, latencyMs: 0, error: 'Insecure remote HTTP URL rejected' }
-				}
-			} catch {
-				return { success: false, latencyMs: 0, error: 'Invalid baseUrl format' }
-			}
-		}
-
-		if (provider === 'ollama') {
-			url = `${baseUrl || 'http://localhost:11434'}`
-			if (url.endsWith('/')) url = url.slice(0, -1)
-			url += '/api/version'
-		} else if (provider === 'anthropic') {
-			url = baseUrl || 'https://api.anthropic.com/v1/models'
-			headers['x-api-key'] = apiKey
-			headers['anthropic-version'] = '2023-06-01'
-		} else if (provider === 'gemini') {
-			url = baseUrl || 'https://generativelanguage.googleapis.com/v1beta/models'
-			headers['x-goog-api-key'] = apiKey
-		} else if (provider === 'sarvam') {
-			url = baseUrl || 'https://api.sarvam.ai/v1/models'
-			headers['api-subscription-key'] = apiKey
-		} else {
-			if (!baseUrl) {
-				if (provider === 'openrouter') url = 'https://openrouter.ai/api/v1/models'
-				else if (provider === 'groq') url = 'https://api.groq.com/openai/v1/models'
-				else if (provider === 'deepseek') url = 'https://api.deepseek.com/v1/models'
-				else if (provider === 'qwen') url = 'https://dashscope.aliyuncs.com/compatible-mode/v1/models'
-				else url = 'https://api.openai.com/v1/models'
-			} else {
-				let base = baseUrl
-				if (base.endsWith('/')) base = base.slice(0, -1)
-				if (base.endsWith('/v1')) url = `${base}/models`
-				else url = `${base}/v1/models`
-			}
-			headers['Authorization'] = `Bearer ${apiKey}`
-		}
-
-		const res = await fetch(url, { headers })
-		const latencyMs = Math.round(performance.now() - startTime)
-
-		if (res.ok) {
-			return { success: true, latencyMs }
-		} else {
-			return { success: false, latencyMs, error: `${res.status} ${res.statusText}` }
-		}
-	} catch (err: any) {
-		const latencyMs = Math.round(performance.now() - startTime)
-		return { success: false, latencyMs, error: err.message || String(err) }
-	}
+	return registryTestConnection(provider, apiKey, baseUrl)
 }

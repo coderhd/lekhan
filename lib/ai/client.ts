@@ -1,4 +1,5 @@
 import { AIProviderConfig } from './types'
+import { resolveChatRequest } from './provider-registry'
 
 export interface StreamChatArgs {
 	prompt: string
@@ -18,26 +19,22 @@ export class AIClient {
 
 		const attempt = async (config: AIProviderConfig, fallbacks: AIProviderConfig[]) => {
 			try {
-				let url = '/api/ai/stream'
-				const body: any = {
-					provider: config.provider,
+				const resolved = resolveChatRequest({
+					provider: config.provider as any,
 					model: config.defaultModel,
+					messages: (() => {
+						const msgs: Array<{ role: string; content: string }> = []
+						if (systemPrompt) msgs.push({ role: 'system', content: systemPrompt })
+						msgs.push({ role: 'user', content: prompt })
+						return msgs
+					})(),
 					apiKey: config.apiKey,
 					baseUrl: config.baseUrl,
-					messages: []
-				}
+				})
 
-				if (systemPrompt) {
-					body.messages.push({ role: 'system', content: systemPrompt })
-				}
-				body.messages.push({ role: 'user', content: prompt })
-
-				const headers: Record<string, string> = {
-					'Content-Type': 'application/json'
-				}
-				if (config.apiKey) {
-					headers['x-ai-api-key'] = config.apiKey
-				}
+				const url = resolved.url
+				const headers = resolved.headers as Record<string, string>
+				const body = resolved.body as Record<string, unknown>
 
 				const fetchOpts: RequestInit = {
 					method: 'POST',
@@ -46,13 +43,9 @@ export class AIClient {
 					signal: abortController.signal
 				}
 
-				if (config.provider === 'ollama' || config.provider === 'lmstudio') {
-					url = `${config.baseUrl || 'http://localhost:11434'}/api/chat`
-					fetchOpts.body = JSON.stringify({
-						model: config.defaultModel,
-						messages: body.messages,
-						stream: true
-					})
+				// Local direct path already encoded in resolved; for local we need to override body to Ollama shape
+				if (resolved.isLocalDirect) {
+					// resolveChatRequest already returns Ollama /api/chat URL+body for local, but keep fetch shape
 				}
 
 				const res = await fetch(url, fetchOpts)
