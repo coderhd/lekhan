@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { MarkdownEngine } from '@/lib/markdown/engine'
+import { MarkdownEngine, schemaKey } from '@/lib/markdown/engine'
 import { Mention } from '@tiptap/extension-mention'
 import { Document } from '@tiptap/extension-document'
 import { getSharedExtensions } from '@/lib/editor-extensions'
@@ -132,19 +132,21 @@ describe('MarkdownEngine deep module', () => {
 
 	describe('schemaKey regression (identical names, differing config/content)', () => {
 		it('does not reuse an incompatible Editor schema when Document content or Mention config differ', () => {
+			const customDocBlock = Document.extend({ content: 'block+' })
+			const customDocHeading = Document.extend({ content: 'heading block*' })
+			const extsBlock = [...getSharedExtensions({ document: customDocBlock }), Mention.configure({ HTMLAttributes: { class: 'mention-a' } })]
+			const extsHeading = [...getSharedExtensions({ document: customDocHeading }), Mention.configure({ HTMLAttributes: { class: 'mention-b' } })]
+			// Old sorted-names key would collide (same names), new key must distinguish
+			expect(schemaKey(extsBlock)).not.toBe(schemaKey(extsHeading))
+			expect(schemaKey(extsBlock)).not.toBe(schemaKey([...extsBlock].reverse()))
+
 			const engine = new MarkdownEngine()
 			try {
 				const doc = engine.parse('Hello\n')
-				// Same extension names (document + mention) but different Document content expressions
-				const customDocBlock = Document.extend({ content: 'block+' })
-				const customDocHeading = Document.extend({ content: 'heading block*' })
-				const extsBlock = [...getSharedExtensions({ document: customDocBlock }), Mention.configure({ HTMLAttributes: { class: 'mention-a' } })]
-				const extsHeading = [...getSharedExtensions({ document: customDocHeading }), Mention.configure({ HTMLAttributes: { class: 'mention-b' } })]
 				expect(() => engine.serialize(doc, extsBlock)).not.toThrow()
 				expect(() => engine.serialize(doc, extsHeading)).not.toThrow()
-
-				// Same names, different order must also be distinct
 				const extsReordered = [Mention.configure({ HTMLAttributes: { class: 'mention-a' } }), ...getSharedExtensions({ document: Document })]
+				expect(schemaKey(extsBlock)).not.toBe(schemaKey(extsReordered))
 				expect(() => engine.serialize(doc, extsReordered)).not.toThrow()
 			} finally { engine.destroy() }
 		})

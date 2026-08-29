@@ -1,6 +1,7 @@
 // Facade over lib/markdown/engine.ts — keeps existing import paths working
 // New code should import from @/lib/markdown/engine directly.
-// This file will be deleted once callers migrate; it delegates to the singleton.
+// Tracking issue #115: migrate 5 prod callers + 3 test files, then delete this facade
+// (or keep as stable public API per that issue's decision). Delegates to singleton.
 
 import type { AnyExtension, JSONContent } from '@tiptap/core'
 import { markdownEngine } from '@/lib/markdown/engine'

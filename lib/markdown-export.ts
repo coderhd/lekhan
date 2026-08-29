@@ -80,7 +80,7 @@ export function stripAutoHeading(doc: JSONContent): JSONContent {
  * links, code, …) round-trips into the output; saved as `.md`.
  */
 export function serializeExportBodyMarkdown(doc: JSONContent): string {
-	return markdownEngine.serialize(stripAutoHeading(doc), exportExtensions())
+	return markdownEngine.serializeExport(stripAutoHeading(doc))
 }
 
 /**
