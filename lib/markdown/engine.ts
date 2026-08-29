@@ -38,8 +38,16 @@ function pageMetaToData(meta: PageMeta): Record<string, unknown> {
 
 function schemaKey(extensions?: AnyExtension[]): string {
 	if (!extensions) return 'roundTrip'
-	// extensions identity matters: Mention vs no Mentions etc.
-	return extensions.map(e => e.name).sort().join('|') || 'roundTrip'
+	// Must distinguish order + config + Document content expression, not just sorted names.
+	// Two arrays with same names but different Document (`heading block*` vs `block+`) or
+	// Mention `HTMLAttributes` would otherwise collide and reuse an incompatible Editor schema.
+	return extensions
+		.map(e => {
+			const opts = e.options ? JSON.stringify(e.options) : '{}'
+			const content = (e as unknown as { config?: { content?: string } }).config?.content ?? ''
+			return `${e.name}::${opts}::${content}`
+		})
+		.join('||')
 }
 
 export class MarkdownEngine {
