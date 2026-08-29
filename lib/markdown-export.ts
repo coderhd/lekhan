@@ -1,8 +1,9 @@
 import type { JSONContent } from '@tiptap/core'
 import { generateHTML } from '@tiptap/core'
-import { Mention } from '@tiptap/extension-mention'
 import { Document } from '@tiptap/extension-document'
-import { assembleMarkdownFile, serializeMarkdown, type PageMeta } from '@/lib/markdown-io'
+import { Mention } from '@tiptap/extension-mention'
+import { assembleMarkdownFile, type PageMeta } from '@/lib/markdown-io'
+import { markdownEngine } from '@/lib/markdown/engine'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 
 /**
@@ -79,7 +80,7 @@ export function stripAutoHeading(doc: JSONContent): JSONContent {
  * links, code, …) round-trips into the output; saved as `.md`.
  */
 export function serializeExportBodyMarkdown(doc: JSONContent): string {
-	return serializeMarkdown(stripAutoHeading(doc), exportExtensions())
+	return markdownEngine.serialize(stripAutoHeading(doc), exportExtensions())
 }
 
 /**

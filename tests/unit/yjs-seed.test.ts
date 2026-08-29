@@ -56,10 +56,16 @@ describe('contentToYjsBase64', () => {
 		editor.destroy()
 	})
 
-	it('rejects content invalid for the live heading-block* schema', () => {
-		// paragraph-first (no leading heading) is invalid for the live doc schema.
+	it('auto-fits paragraph-first content for the live heading-block* schema (Page)', () => {
+		// Engine now fits live schema internally — paragraph-first is valid and gets an empty title heading.
+		const b64 = contentToYjsBase64({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'hello' }] }] })
+		expect(typeof b64).toBe('string')
+		expect(b64.length).toBeGreaterThan(0)
+	})
+
+	it('rejects truly invalid content for the live Page schema', () => {
 		expect(() =>
-			contentToYjsBase64({ type: 'doc', content: [{ type: 'paragraph', content: [] }] })
+			contentToYjsBase64({ type: 'doc', content: [{ type: 'unknownNode', content: [] }] } as unknown as never)
 		).toThrow()
 	})
 })
