@@ -153,7 +153,10 @@ export class MarkdownEngine {
 		return md.length > 0 && !md.endsWith('\n') ? md + '\n' : md
 	}
 
-	// Export helper — Mention-aware, used by lib/markdown-export.ts
+	// Export helper — Mention-aware.
+	// Keep in sync with exportExtensions() in lib/markdown-export.ts:16
+	// (HTML export path) — both compose [...getSharedExtensions({document: Document}), Mention] inline.
+	// If one changes (e.g., HTMLAttributes), update the other to avoid .md/.html divergence.
 	serializeExport(doc: JSONContent): string {
 		const exts = [...getSharedExtensions({ document: Document }), Mention.configure({ HTMLAttributes: { class: 'mention' } })]
 		return this.serialize(doc, exts)
