@@ -1,8 +1,9 @@
 import type { JSONContent } from '@tiptap/core'
 import { generateHTML } from '@tiptap/core'
-import { Mention } from '@tiptap/extension-mention'
 import { Document } from '@tiptap/extension-document'
-import { assembleMarkdownFile, serializeMarkdown, type PageMeta } from '@/lib/markdown-io'
+import { Mention } from '@tiptap/extension-mention'
+import { assembleMarkdownFile, type PageMeta } from '@/lib/markdown-io'
+import { markdownEngine } from '@/lib/markdown/engine'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 
 /**
@@ -11,6 +12,9 @@ import { getSharedExtensions } from '@/lib/editor-extensions'
  * node or serialization throws/warns "Unknown node type" and the body is
  * dropped. Composed here (not added to `getSharedExtensions`) to keep the
  * round-trip engine's schema seam intact.
+ * Keep in sync with MarkdownEngine.serializeExport() in lib/markdown/engine.ts:156
+ * (md path) — both compose [...getSharedExtensions({document: Document}), Mention] inline.
+ * If one changes (e.g., HTMLAttributes), update the other to avoid .md/.html divergence.
  */
 const exportExtensions = (): ReturnType<typeof getSharedExtensions> => [
 	...getSharedExtensions({ document: Document }),
@@ -79,7 +83,7 @@ export function stripAutoHeading(doc: JSONContent): JSONContent {
  * links, code, …) round-trips into the output; saved as `.md`.
  */
 export function serializeExportBodyMarkdown(doc: JSONContent): string {
-	return serializeMarkdown(stripAutoHeading(doc), exportExtensions())
+	return markdownEngine.serializeExport(stripAutoHeading(doc))
 }
 
 /**
