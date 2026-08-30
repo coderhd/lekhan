@@ -178,19 +178,20 @@ is distribution for the H1 plugin API.
 
 ---
 
-## H3 — The Suite ("AI-Native Office") `h3`
+## H3 — Studio (NotebookLM iteration, thin v1 + temporal v2) `h3`
+
+> **Respec 2026-08-30:** Office Suite as interactive editors (Sheets/Slides/Mail/Chat as defined in `2026-08-12-global-pkm-suite-strategy-design.md:96`) is **discarded** per `docs/decisions/h3-studio/02-positioning-individual-pkm-first` and `chatgpt-strategy-summary:13` (collapse roadmap). H3 is now **Studio at the Workspace root** — see `docs/superpowers/specs/2026-08-30-h3-studio-thin-v1-temporal-v2-design.md`. Office artifacts (PPTX/XLSX/DOCX) remain as **generated views** over the graph, not editors. Solo-dev pace acknowledged.
 
 | Epic | Issue | Blocker edges | Spec ref |
 |---|---|---|---|
-| H3 — Sheets (grids over properties) | #52 | ← #47 | §4 |
-| H3 — Slides (ordered page decks) | #53 | ← #47 | §4 |
-| H3 — Mail (threads as linked pages) | #54 | ← #50 | §4 |
-| H3 — Chat (agent workspace with graph context) | #55 | ← #50 | §4 |
+| H3 — Studio thin v1 (corpus picker → `studio_create_pages` → new `Page` with `[[cite]]`) | — *new, needs issue* | ← `pages`/`page_links` (no `page_chunks` yet) | `2026-08-30-h3-studio-thin-v1-temporal-v2-design.md` §4 thin v1 |
+| H3 — Studio: Sheets grouped view (XLSX renderer over `properties`) | #52 | ← #47 (respec’d: was “grids over properties” editor — now renderer, see #52 comment 2026-08-30) | `2026-08-30-h3-studio` §4 Office |
+| H3 — Studio: Slides grouped view (PPTX renderer, ordered `Page` deck) | #53 | ← #47 (respec’d as above) | `2026-08-30-h3-studio` §4 Office |
+| H3 — Mail (threads as linked pages) | #54 | ← #50 | *Deferred to H4+ — not H3* (see #54 comment 2026-08-30) |
+| H3 — Chat (agent workspace) | #55 | ← #50 | *Deferred to H4+ — not H3* (see #55 comment 2026-08-30) |
+| H3 — Studio temporal v2 (block-aware `page_chunks` + `pgvector` + `valid_from/until` + `as-of`/`between`) | — *parked, see `04-retrieval-architecture-plan` + spec §4 v2* | ← thin v1 tripwire | `2026-08-30-h3-studio` §4 v2, `docs/decisions/h3-studio/04-retrieval-architecture-plan.md` |
 
-**Sequencing narrative:** H3 modules are *views over the same graph*, so each rides
-its H2 predecessor — sheets/slides on databases, mail/chat on AI agents. Suite
-pricing (bundled in Pro/Team; enterprise per-module) rides the billing foundation
-from #29 and is deliberately not a separate epic until H3 work begins.
+**Sequencing narrative:** Studio thin v1 needs no `page_chunks` — uses `searchable_text` + `tag`/`link` filters + `AIClient` + one `studio_create_pages` tx (graph-native write-back, then `exportToDocx/Pdf` free per `03`). Deep `page_chunks` + `hybrid_search` + link-graph + temporal (`valid_from/until`) is **parked v2**, built only if thin tripwire fires (large corpora). `pptxgenjs`/`exceljs` renderers ride the same `Page` `properties` that `#47` Databases will type — no separate service. `MCP server` (H3.0, weeks) reuses `search_pages`/`hybrid_search` + `can_access_page()` RLS; `Tauri` sidecar (`.lekhan/embeddings/` + `LocalEmbedder|RemoteEmbedder`) stages after `#88`. Suite pricing narrative still rides `#29`.
 
 ---
 
