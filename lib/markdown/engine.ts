@@ -88,7 +88,7 @@ export class MarkdownEngine {
 		const key = schemaKey(extensions)
 		let ed = this.editors.get(key)
 		if (ed) return ed
-		if (extensions) {
+		if (extensions && extensions.length > 0) {
 			ed = new Editor({ extensions })
 		} else {
 			// plain block+ for round-trip
