@@ -97,9 +97,10 @@ A PR is merged only after **both** reviews are complete — ours and the externa
 
 Merging while the external reviewers are still running **wastes their tokens**: the review executes
 against a PR that is already merged, so its findings arrive too late to act on. If a reviewer is
-rate-limited or its check fails without producing a review, wait or re-run it; if it is genuinely
-unavailable, record an **explicit waiver** on the PR naming the reviewer and the reason — a
-non-`success` check alone never counts as review completion.
+rate-limited or its check fails without producing a review, wait or re-run it. If it is **genuinely
+unavailable** (persistent rate limit, service down), post an **explicit waiver** on the PR naming
+the reviewer and the reason — **the waiver satisfies this gate for that reviewer**, so the merge may
+proceed without it. A non-`success` check alone never counts as a completed review.
 
 This is enforced socially (see `AGENTS.md` SHIP stage) and can be enforced technically with branch
 protection requiring the `Pullfrog` and `CodeRabbit` status checks.
