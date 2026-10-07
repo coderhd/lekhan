@@ -24,6 +24,27 @@ export default [
     }
   },
   {
+    files: ["scripts/**/*.mjs", "scripts/**/*.js"],
+    languageOptions: {
+      globals: {
+        process: "readonly",
+        console: "readonly",
+        Buffer: "readonly",
+        URL: "readonly",
+        fetch: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        __dirname: "readonly",
+        __filename: "readonly"
+      }
+    },
+    rules: {
+      "no-empty": ["error", { "allowEmptyCatch": true }]
+    }
+  },
+  {
     files: ["server/**/*.js", "*.config.js", "tests/**/*.ts"],
     languageOptions: {
       globals: {

@@ -1,0 +1,65 @@
+// opencode-model-router project override — Lekhan
+// Requires: npm install -g opencode-model-router, then register it in
+// ~/.config/opencode/opencode.json per the plugin's README.
+//
+// VERIFY BEFORE USE: the model id strings below (e.g. "opencode/glm-5.3") are
+// my best guess at how OpenCode Go models surface in OpenCode's model catalog.
+// I could not confirm the exact provider prefix OpenCode uses for Go-plan
+// models. Run `/router models opencode` (or whatever provider name your
+// OpenCode config uses for Go) inside a session with this plugin installed —
+// it lists the exact valid ids from your live catalog, annotated with
+// deprecated/alpha/beta flags. Fix any id below that doesn't match before
+// relying on this preset; the plugin's own `/router` (no args) also validates
+// the active preset against the catalog and reports mismatches.
+//
+// Tier mapping to .agents/model-routing.md: fast=B, medium=A, heavy=S.
+// costRatio values are relative req/month throughput on the Go plan, normalised
+// to the fast tier: fast = DeepSeek V4.1 Flash (~37,800/mo) = 1 · medium =
+// Qwen3.8 Flash (~27,000/mo) ≈ 1.4 · heavy = MiMo-V2.6-Pro (~16,300/mo) ≈ 2.3.
+// Not the plugin's 1/5/20 default — see .agents/model-routing.md for the table.
+{
+  "presets": {
+    "lekhan-go": {
+      "fast": {
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "costRatio": 1,
+        "description": "Tier B — DeepSeek V4.1 Flash (37,800 req/month)",
+        "whenToUse": ["spec'd or pattern-mirroring work", "leaf features", "low blast radius"]
+      },
+      "medium": {
+        "model": "opencode-go/qwen3.8-flash",
+        "costRatio": 1.4,
+        "description": "Tier A — Qwen3.8 Flash (~27,000 req/month)",
+        "whenToUse": ["spec'd ticket needing some judgment", "unspec'd but narrow/contained work"]
+      },
+      "heavy": {
+        "model": "opencode-go/mimo-v2.6-pro",
+        "costRatio": 2.3,
+        "description": "Tier S / frontier — MiMo-V2.6-Pro (~16,300 req/month; replaces GLM-5.3 per owner call — reserve for unspec'd/design work and ADR-governed systems)",
+        "whenToUse": [
+          "no spec exists and the agent must design it",
+          "touches sync/CRDT/auth/encryption (ADR 0001/0003/0004)",
+          "high-stakes or hard-to-revert changes"
+        ]
+      }
+    }
+  },
+  // Make this the active preset. Switch back with /preset anthropic (or
+  // whatever you used before) if you need to compare behavior.
+  "activePreset": "lekhan-go",
+
+  // GLM-5.3-Flash (Tier A, Intelligence 57, 7,900 req/month) is the other
+  // strong @medium candidate per .agents/model-routing.md — alternate to it
+  // manually with /preset if Qwen3.8 Flash's budget runs low this week:
+  //   "presets": { "lekhan-go-alt-medium": { ...same fast/heavy, "medium": {
+  //     "model": "opencode/glm-5.3-flash", "costRatio": 5 } } }
+  // Not wired in as a second preset here to keep this file's failure surface
+  // small until the base preset is confirmed working.
+
+  // Left at plugin default (advisory) deliberately — enforced mode adds a
+  // produce/verify/escalate loop that's worth turning on only after the base
+  // routing itself is confirmed working against the verified model ids above.
+  "enforcement": {
+    "mode": "advisory"
+  }
+}
