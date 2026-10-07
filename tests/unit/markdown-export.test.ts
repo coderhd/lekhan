@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import {
 	slugifyTitle,
 	exportFilename,
@@ -8,7 +8,17 @@ import {
 	serializeExportBodyHtml,
 	buildStandaloneHtml,
 } from '@/lib/markdown-export'
-import { parseFrontmatter, parseMarkdown } from '@/lib/markdown-io'
+import { MarkdownEngine } from '@/lib/markdown/engine'
+
+let engine: MarkdownEngine
+
+beforeEach(() => {
+	engine = new MarkdownEngine()
+})
+
+afterEach(() => {
+	engine.destroy()
+})
 
 describe('slugifyTitle', () => {
 	it('lowercases and hyphenates spaces', () => {
@@ -174,7 +184,7 @@ describe('buildMarkdownExport', () => {
 		expect(file).not.toContain('title: fake')
 		// the tags mirror serializes once, as the canonical tags: key
 		expect(file.match(/^tags:/m)).toHaveLength(1)
-		const { data } = parseFrontmatter(file)
+		const { data } = engine.parseFrontmatter(file)
 		expect(data.title).toBe('My Page')
 		expect(data.tags).toEqual(['fake'])
 		expect(data.properties).toEqual({ author: 'Harsh' })
@@ -188,7 +198,7 @@ describe('buildMarkdownExport', () => {
 
 	it('round-trips through parseFrontmatter', () => {
 		const file = buildMarkdownExport(base)
-		const { data, body } = parseFrontmatter(file)
+		const { data, body } = engine.parseFrontmatter(file)
 		expect(data.title).toBe('My Page')
 		expect(data.tags).toEqual(['notes', 'work'])
 		expect(data.properties).toEqual({ author: 'Harsh', count: 3 })
@@ -198,7 +208,7 @@ describe('buildMarkdownExport', () => {
 
 describe('serializeExportBodyMarkdown (markdown body)', () => {
 	it('produces the markdown body the .md export assembles', () => {
-		const doc = parseMarkdown('# Heading\n\nSome **bold** and [a link](https://example.com).')
+		const doc = engine.parse('# Heading\n\nSome **bold** and [a link](https://example.com).')
 		const file = buildMarkdownExport({ title: 'My Page', properties: {}, pageTags: [], body: serializeExportBodyMarkdown(doc) })
 		expect(file).toMatch(/^---\n/)
 		expect(file).toContain('# Heading')
@@ -206,7 +216,7 @@ describe('serializeExportBodyMarkdown (markdown body)', () => {
 	})
 
 	it('preserves editor-representable inline HTML (mark-rendered spans)', () => {
-		const doc = parseMarkdown('A <span style="color: red">colored</span> word.')
+		const doc = engine.parse('A <span style="color: red">colored</span> word.')
 		expect(serializeExportBodyMarkdown(doc)).toContain('<span style="color: red;">colored</span>')
 	})
 
@@ -304,7 +314,7 @@ describe('buildStandaloneHtml', () => {
 	})
 
 	it('exports a callout doc with its styling', () => {
-		const doc = parseMarkdown('> [!note] Title\n> Body line one\n')
+		const doc = engine.parse('> [!note] Title\n> Body line one\n')
 		const body = serializeExportBodyHtml(doc)
 		const out = buildStandaloneHtml(body, 'Callout Page')
 		expect(out).toContain('data-callout')
@@ -313,7 +323,7 @@ describe('buildStandaloneHtml', () => {
 	})
 
 	it('hides the body of a collapsed callout in the standalone CSS', () => {
-		const doc = parseMarkdown('> [!note]- Title\n> hidden\n')
+		const doc = engine.parse('> [!note]- Title\n> hidden\n')
 		const body = serializeExportBodyHtml(doc)
 		const out = buildStandaloneHtml(body, 'Callout Page')
 		expect(out).toContain('.callout[data-callout-collapsed="true"] .callout-content')

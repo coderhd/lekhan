@@ -1,5 +1,15 @@
-import { describe, it, expect } from 'vitest'
-import { parseMarkdown, serializeMarkdown } from '@/lib/markdown-io'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { MarkdownEngine } from '@/lib/markdown/engine'
+
+let engine: MarkdownEngine
+
+beforeEach(() => {
+	engine = new MarkdownEngine()
+})
+
+afterEach(() => {
+	engine.destroy()
+})
 import { buildStandaloneHtml } from '@/lib/markdown-export'
 import { CALLOUT_TYPES, Callout, BLOCKQUOTE_MARKER_RE, handleCalloutInputRule } from '@/lib/callout'
 import { InputRule, Editor } from '@tiptap/core'
@@ -12,16 +22,16 @@ import type { JSONContent } from '@tiptap/core'
 
 /** Doc-level round-trip: parse → serialize → parse yields the same doc. */
 function expectDocRoundTrip(md: string) {
-	const first = parseMarkdown(md)
-	const serialized = serializeMarkdown(first)
-	const second = parseMarkdown(serialized)
+	const first = engine.parse(md)
+	const serialized = engine.serialize(first)
+	const second = engine.parse(serialized)
 	expect(second).toEqual(first)
 }
 
 describe('callout parse/serialize round-trip', () => {
 	it('round-trips a simple callout with type and title', () => {
 		const md = '> [!note] My title\n> Body line one\n'
-		const doc = parseMarkdown(md)
+		const doc = engine.parse(md)
 		const callout = doc.content?.[0]
 		expect(callout?.type).toBe('callout')
 		expect(callout?.attrs).toMatchObject({ type: 'note', title: 'My title', collapsed: false })
@@ -30,36 +40,36 @@ describe('callout parse/serialize round-trip', () => {
 
 	it('serializes an empty-title callout losslessly', () => {
 		const md = '> [!tip]\n> just a body\n'
-		expect(serializeMarkdown(parseMarkdown(md))).toBe(md)
+		expect(engine.serialize(engine.parse(md))).toBe(md)
 	})
 
 	it('round-trips the collapsed flag both directions', () => {
 		const md = '> [!warning]- Collapsed note\n> hidden body\n'
-		const doc = parseMarkdown(md)
+		const doc = engine.parse(md)
 		expect(doc.content?.[0]?.attrs).toMatchObject({ type: 'warning', collapsed: true })
-		expect(serializeMarkdown(doc)).toBe(md)
+		expect(engine.serialize(doc)).toBe(md)
 	})
 
 	it('preserves unknown callout types verbatim', () => {
 		const md = '> [!custom] My custom\n> body\n'
-		const doc = parseMarkdown(md)
+		const doc = engine.parse(md)
 		expect(doc.content?.[0]?.attrs).toMatchObject({ type: 'custom', title: 'My custom' })
-		expect(serializeMarkdown(doc)).toBe(md)
+		expect(engine.serialize(doc)).toBe(md)
 	})
 
 	it('keeps inline marks inside the callout body', () => {
 		const md = '> [!note] Title\n> **bold** and *italic* and `code`\n'
-		expect(serializeMarkdown(parseMarkdown(md))).toBe(md)
+		expect(engine.serialize(engine.parse(md))).toBe(md)
 	})
 
 	it('preserves a blank line between body paragraphs', () => {
 		const md = '> [!note] T\n> p1\n>\n> p2\n'
-		expect(serializeMarkdown(parseMarkdown(md))).toBe(md)
+		expect(engine.serialize(engine.parse(md))).toBe(md)
 	})
 
 	it('round-trips a marker-only first line (no inline body on it)', () => {
 		const md = '> [!note] Title\n>\n> body\n'
-		const doc = parseMarkdown(md)
+		const doc = engine.parse(md)
 		expect(doc.content?.[0]?.attrs).toMatchObject({ type: 'note', title: 'Title', collapsed: false })
 		expect(doc.content?.[0]?.content?.[0]?.type).toBe('paragraph')
 		expectDocRoundTrip(md)
@@ -67,27 +77,27 @@ describe('callout parse/serialize round-trip', () => {
 
 	it('round-trips a callout containing a list', () => {
 		const md = '> [!note] T\n> - item one\n> - item two\n'
-		const doc = parseMarkdown(md)
+		const doc = engine.parse(md)
 		expect(doc.content?.[0]?.content?.some((n) => n.type === 'bulletList')).toBe(true)
 		expectDocRoundTrip(md)
 	})
 
 	it('round-trips a callout containing a code fence', () => {
 		const md = '> [!tip] T\n> ```ts\n> const x = 1\n> ```\n'
-		const doc = parseMarkdown(md)
+		const doc = engine.parse(md)
 		expect(doc.content?.[0]?.content?.some((n) => n.type === 'codeBlock')).toBe(true)
 		expectDocRoundTrip(md)
 	})
 
 	it('leaves a plain blockquote untouched (regression)', () => {
 		const md = '> A blockquote line\n>\n> Second paragraph\n'
-		const doc = parseMarkdown(md)
+		const doc = engine.parse(md)
 		expect(doc.content?.[0]?.type).toBe('blockquote')
-		expect(serializeMarkdown(doc)).toBe(md)
+		expect(engine.serialize(doc)).toBe(md)
 	})
 
 	it('normalizes an uppercase marker to lowercase type', () => {
-		const doc = parseMarkdown('> [!NOTE] Loud\n> body\n')
+		const doc = engine.parse('> [!NOTE] Loud\n> body\n')
 		expect(doc.content?.[0]?.attrs).toMatchObject({ type: 'note' })
 	})
 })
@@ -111,7 +121,7 @@ describe('callout export HTML', () => {
 		// parses it with `parseHTML`. The title lives in a `.callout-title`
 		// div and must never leak into the `.callout-content` body.
 		const md = '> [!note] My title\n> Body line one\n> Body line two\n'
-		const doc = parseMarkdown(md)
+		const doc = engine.parse(md)
 		const editor = new Editor({ extensions: getSharedExtensions({ document: Document }) })
 		editor.commands.setContent(doc)
 		const html = editor.getHTML()
