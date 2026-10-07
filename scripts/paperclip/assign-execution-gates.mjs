@@ -77,27 +77,20 @@ function score(issue) {
   return Math.min(10, s);
 }
 const band = (s) => (s <= 3 ? "low" : s <= 6 ? "medium" : "high");
-const iso = (d) => new Date(Date.now() + d * 86400000).toISOString();
 
 function gatesFor(issue, s) {
   const b = band(s);
-  const names = (issue.labelIds ?? []).map((id) => labelName.get(id) ?? "");
   const text = `${issue.title} ${issue.description ?? ""}`;
   const reviewers = [A.tl];
   if (b !== "low") reviewers.push(A.qa);
   if (b === "high" && UI_RE.test(text) && !/(billing|payment|stripe|razorpay)/i.test(text)) reviewers.push(A.designer);
   const stages = [{ type: "review", approvalsNeeded: 1, participants: reviewers.map((id) => ({ type: "agent", agentId: id })) }];
   if (b === "high") stages.push({ type: "approval", approvalsNeeded: 1, participants: [{ type: "agent", agentId: A.ceo }] });
-  const monitor = b === "low" ? null : {
-    nextCheckAt: iso(b === "high" ? 1 : 3),
-    notes: "Re-check progress, blockers, and the review gate.",
-    scheduledBy: b === "high" ? "board" : "assignee",
-    kind: null,
-    recoveryPolicy: b === "high" ? "escalate_to_board" : "wake_owner",
-    maxAttempts: b === "high" ? 5 : 3,
-  };
-  const watchdog = b === "low" ? null : { agentId: b === "high" ? A.ceo : A.po, instructions: "Ensure this issue doesn't stall: chase the assignee/reviewer and escalate if blocked > 1 working day." };
-  return { band: b, score: s, stages, monitor, watchdog };
+  // Watchdog and Monitor are intentionally NOT set: they schedule extra agent
+  // wakes (stall chases / scheduled re-checks) whose token cost outweighs their
+  // value on most issues. Gates are reviewers + approvers only. Add a watchdog or
+  // monitor by hand for the rare issue that genuinely needs one.
+  return { band: b, score: s, stages };
 }
 
 const statuses = ALL ? ["todo", "in_progress", "in_review", "blocked"] : ["todo", "in_progress"];
@@ -122,17 +115,14 @@ for (const issue of targets) {
   const g = gatesFor(issue, s);
   const reviewers = g.stages[0].participants.map((p) => agents.find((a) => a.id === p.agentId)?.name).join("+");
   if (DRY) {
-    console.log(`[dry] ${issue.identifier} score=${s} ${g.band.padEnd(6)} reviewers=${reviewers} approvers=${g.stages[1] ? "CEO" : "-"} watchdog=${g.watchdog ? (g.watchdog.agentId === A.ceo ? "CEO" : "PO") : "-"} monitor=${g.monitor ? g.monitor.recoveryPolicy : "-"}  :: ${issue.title.slice(0, 45)}`);
+    console.log(`[dry] ${issue.identifier} score=${s} ${g.band.padEnd(6)} reviewers=${reviewers} approvers=${g.stages[1] ? "CEO" : "-"}  :: ${issue.title.slice(0, 45)}`);
     continue;
   }
-  const canMonitor = Boolean(issue.assigneeAgentId) && ["in_progress", "in_review"].includes(issue.status);
-  const monitor = canMonitor ? g.monitor : null;
   await api("PATCH", `/api/issues/${issue.id}`, {
-    executionPolicy: { mode: "normal", commentRequired: true, stages: g.stages, monitor, maxReviewRounds: null },
+    executionPolicy: { mode: "normal", commentRequired: true, stages: g.stages, monitor: null, maxReviewRounds: null },
   });
-  if (g.watchdog) await api("PUT", `/api/issues/${issue.id}/watchdog`, g.watchdog);
   assigned++;
-  console.log(`assigned ${issue.identifier} score=${s} ${g.band} reviewers=${reviewers}${g.stages[1] ? " +approval(CEO)" : ""}${g.watchdog ? " +watchdog" : ""}`);
+  console.log(`assigned ${issue.identifier} score=${s} ${g.band} reviewers=${reviewers}${g.stages[1] ? " +approval(CEO)" : ""}`);
 }
 if (targets.length && unreadable === targets.length) {
   console.error("all targets unreadable — the per-issue detail route or its auth changed; fix before trusting skips");
