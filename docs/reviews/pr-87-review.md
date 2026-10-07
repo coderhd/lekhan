@@ -1,39 +1,44 @@
-# PR review — #87 H0 Idempotent bulk imports (branch `feat/87-idempotent-bulk-imports`)
+# PR #87 review — idempotent bulk imports
 
-**Gate:** Stage 5 REVIEW (clean-room adversarial) · **Issue:** SIL-6 / coderhd/lekhan#87
-**Diff reviewed:** `git diff origin/main...HEAD`
-**Reviewer:** independent clean-room subagent (did not author the change), re-reviewed after remediation.
+**Revision reviewed:** `5194fb1` (`git diff origin/main...HEAD`), branch `feat/87-idempotent-bulk-imports`
+**Reviewer:** independent clean-room subagent (did not author the change)
+**Verification run in this worktree:** `npx vitest run` → 79 files / 600 tests passed; `npx tsc --noEmit` → exit 0; `npx eslint <changed files>` → exit 0. Live-Postgres migration/RLS was not executable from this worktree.
 
 ## Verdict
 
-Initial pass: **REQUEST CHANGES** (2 blockers, 3 major, 3 minor, 3 nits).
-After remediation: **APPROVE** — all blockers/majors resolved with tests; remaining items are documented residual risks.
+**APPROVE WITH NITS** — no blocking findings at the reviewed revision.
 
-## Findings and resolution
-
-| Sev | Finding | Resolution |
-|---|---|---|
-| BLOCKER | `cleanup_import_batches` is `SECURITY DEFINER` with default `PUBLIC` EXECUTE, reachable via PostgREST `rpc/` — an authenticated caller could wipe every tenant's ledger (`retain_days=0`), defeating idempotency and destroying audit rows. | Added `REVOKE EXECUTE … FROM PUBLIC` / `FROM anon, authenticated` and `GRANT … TO service_role`, mirroring `20260814000000_sync_page_graph.sql:62-64` (`supabase/migrations/20261007000001_import_batches_ledger.sql`). |
-| BLOCKER | A batch whose leaf inserts land in multiple `INSERT_CHUNK_SIZE` statements (2000 pages → up to 4 statements) could partially land, be marked `failed`, and be fully re-inserted on reclaim → duplicate pages. | Leaf creation on the idempotent path now uses **deterministic page ids** (`deriveBatchPageId(workspace, clientImportId, batchIndex, ordinal)`, RFC 4122 v5) and inserts with `upsert(..., { onConflict: 'id', ignoreDuplicates: true })`. A retry re-derives the same ids and inserts only the missing rows (`lib/import-ledger.ts`, `app/api/import/route.ts`). |
-| MAJOR | `vaultFingerprint` is order-independent but `batchIndex` is positional; if directory enumeration reorders between attempts, the server replays the recorded batch and silently drops the newly-positioned pages (duplicates + data loss). | `splitIntoBatches` now sorts pages deterministically (`folderPath` + title) before splitting, so `batchIndex` ↔ page-set is stable across retries (`services/vault-import.ts`). |
-| MAJOR | Checkpoint write failing *after* pages landed marks the batch `failed`; the retry re-inserts → duplicates. | Deterministic ids make the reclaim idempotent: the re-run upserts the same ids (no new pages). |
-| MAJOR | A crash after leaf insert but before checkpoint leaves `processing`; after the 10-min stale window the reclaim re-inserts → duplicates. | Same fix: reclaim is idempotent by construction. |
-| MINOR | Client threw immediately on `409 batch_in_progress`, contradicting spec D2 ("client retries"). | `importVaultIR` now retries 409 with bounded backoff (`MAX_BATCH_ATTEMPTS = 4`, 400 ms × attempt). |
-| MINOR | `cleanup_import_batches` only pruned `completed`; `failed`/`processing` rows grew unbounded. | The function now prunes any row older than `retain_days`. Scheduling remains an ops/cron follow-up (see residual risks). |
-| MINOR | Report headline (`report.pages created`) double-counted resumed pages shown in the "resumed" line. | Resumed line reworded to "N of these pages were already imported …" so it is not additive to the headline (`components/import-report-card.tsx`). |
-| MINOR | No tests covered partial-landing reclaim, the completion guard, cleanup grants, or batch/content mismatch. | Added: `deriveBatchPageId` determinism/version/distinctness + "does not complete a non-processing batch" (`import-ledger.test.ts`); deterministic-id upsert assertion (`api-import.test.ts`); batch-order stability + 409 retry (`vault-import.test.ts`). Live-DB migration/RLS tests remain out of scope for the unit suite. |
-| NIT | `key={i}` on warning list rows. | Stable key `${title}:${stage}:${i}`. |
-| NIT | Busy/progress block not announced to screen readers. | Added `role="status" aria-live="polite"`. |
-| NIT | `completeImportBatch` updated by id with no status guard. | Added `.eq('status', 'processing')` + require a returned row; a late writer cannot overwrite a completed report. |
+The earlier tip (`b04c01b`, captured in `.paperclip-scratch-87-diff.patch`) had two real blockers: (1) mid-batch partial leaf writes could duplicate on reclaim, and (2) `cleanup_import_batches` was a `SECURITY DEFINER` function reachable by `anon`/`authenticated` via PostgREST RPC. Both are resolved at `5194fb1` (deterministic page ids + `ON CONFLICT (id) DO NOTHING`; `REVOKE … FROM PUBLIC/anon/authenticated` + `GRANT … TO service_role`). The remaining items are nits/edge cases.
 
 ## Acceptance criteria
 
-- **AC1 zero duplicate pages on retry** — deterministic ids + replay-safe upsert; failed/stale batches are reclaimed but re-insert only the missing rows. PASS.
-- **AC2 honest partial progress** — `/api/import` returns `resumed: true` with the recorded report; the client aggregates `resumedCount`; the report card shows the resumed line. PASS.
-- **AC3 ledger cleanup / brief retention** — completed (and now failed/stale) rows pruned by `cleanup_import_batches(retain_days DEFAULT 30)`; rows cascade with the workspace; function is service-role only. PASS (scheduling is an ops follow-up).
+- **AC1 (zero duplicate pages on retry) — PASS.** Completed batches are replayed from the ledger without writing (`app/api/import/route.ts:225-233`). A reclaimed `failed`/stale-`processing` batch re-runs, but each leaf gets a deterministic id derived from `(workspace, clientImportId, batchIndex, ordinal)` (`lib/import-ledger.ts:28-43`, used at `app/api/import/route.ts:313-354`) and is written with `upsert(..., { onConflict: 'id', ignoreDuplicates: true })` → `ON CONFLICT (id) DO NOTHING`. `pages` has no unique constraint other than the PK (`supabase/migrations/20260812000000_pages_graph_schema.sql:16-30`), so the conflict target is sufficient; snapshots re-upload with `upsert: true` (`route.ts:387-392`) and graph indexing is an atomic per-page delete-and-insert (`server/graph-index.js:193`, `sync_page_graph` at `supabase/migrations/20260814000000_sync_page_graph.sql:32-48`). Residual edge cases in AC1 are listed under Residual risks.
+- **AC2 (honest partial progress) — PASS, with a caveat.** The server returns `resumed: true` + the recorded report (`route.ts:226-232`); the client aggregates `resumedCount` (`services/vault-import.ts:235-237`) and the card renders it (`components/import-report-card.tsx:57-59`). Caveat: pages already landed in a *reclaimed* batch are re-upserted and reported as *created*, not resumed, so the resumed count can undercount; the spec's exact "N of M" wording is not shown (only N, with M available indirectly as `report.pages`).
+- **AC3 (ledger cleanup/retention) — PASS, with a caveat.** The table cascades with its workspace/profile (`supabase/migrations/20261007000001_import_batches_ledger.sql:18-36`); `cleanup_import_batches(retain_days DEFAULT 30)` prunes aged rows of any status (`migration:56-70`) and is service-role only (`migration:76-78`). Caveat: the pruner is **not scheduled** anywhere (no cron/pg_cron wiring exists in the repo), so "retained briefly" is aspirational until an ops job calls it — this is explicitly acknowledged in the plan/spec.
 
-## Residual risks (accepted / followed up)
+## Findings
 
-- `cleanup_import_batches` is not wired to a schedule yet (spec: "retained briefly for audit"); an ops/cron follow-up should call it.
-- No live-Postgres test of the migration/RLS/grants in the unit suite; verified against repo convention + Postgres defaults. Confirm on staging.
-- The derived id is scoped to `(workspace, clientImportId, batchIndex, ordinal)`. A client that reuses one `clientImportId` for *different content* would have the server replay the recorded batch; the dialog keys the id to the vault fingerprint to prevent this.
+### Blocking
+
+- **None.** I found no issue that should block merge at `5194fb1`.
+
+### Non-blocking / nits
+
+- [`lib/import-ledger.ts:213-219`] `failImportBatch` updates by `id` **without a status guard**, unlike `completeImportBatch` which now guards `status='processing'` (`:207`). In the stale-reclaim race (a batch runs > `STALE_PROCESSING_MS`, a second request reclaims it, the first completes, then the second's `completeImportBatch` returns `false` → route throws → catch calls `failImportBatch`), a `completed` row can be downgraded to `failed`, discarding the recorded report. No page duplication results (the re-run is idempotent), but the state machine regresses. Fix: add `.eq('status', 'processing')` to `failImportBatch`.
+- [`lib/import-ledger.ts:158-180`] Both reclaim `UPDATE`s read `.maybeSingle().data` and ignore `.error`; a genuine DB error is indistinguishable from "no match" and the caller returns `{ kind: 'in-progress' }` → route answers `409 batch_in_progress` for what is actually a database failure. Check `reclaimFailed.error` / `reclaimStale.error` and throw.
+- [`services/vault-import.ts:93-101`] `vaultFingerprint` hashes only sorted paths (FNV-1a, 32-bit) and sums content **lengths**; it never hashes content. Two different vaults in the same workspace with identical paths and equal total content size collide → the dialog reuses the previous `clientImportId` → the server replays the old batch and silently drops the new vault's pages. Spec D3/SIL claim "no cross-vault false resumed" is therefore not strictly true. Consider hashing each page's content (or a stronger digest) and including `BATCH_BYTE_BUDGET`.
+- [`app/api/import/route.ts:121` + `:218`] The ledger claim happens **after** `readJsonWithLimit` and page validation, so a replay still transmits and parses the full body (up to 48 MB per batch). Spec D4 says "a resumed batch is not re-uploaded" — it is re-uploaded/re-parsed; only the writes/indexing are skipped. Doc/perf nit for multi-batch retries.
+- [`app/api/import/route.ts:431-435` + `services/vault-import.ts:231-237`] On the idempotent path `createdLeaves` is populated for every chunk entry regardless of whether the row already existed (`route.ts:351-353`), so `importedCount`/`createdPages` include pre-existing pages on a reclaimed re-run. This is the root of the AC2 under-report above.
+- [`services/vault-import.ts:190-218`] The 409 backoff is `MAX_BATCH_ATTEMPTS = 4`, `RETRY_BASE_MS = 400` → ~2.4 s total, then it throws. If the owning request crashed leaving a `processing` row, the user must wait out the full 10-minute `STALE_PROCESSING_MS` window and repeatedly sees a generic "Import failed / This import batch is already being processed" with no guidance.
+- [`services/vault-import.ts:131-136`] The deterministic sort returns `0` for equal `folderPath\0title` keys and relies on `Array.prototype.sort` stability; the relative order of such duplicates comes from the vault's (implementation-defined) enumeration order, which can vary between attempts and remap `ordinal → page`. Derive `ordinal` from a page identity stable under enumeration (e.g., include a content/path hash in the id) rather than raw position.
+- [`supabase/migrations/20261007000001_import_batches_ledger.sql:52-70`] `cleanup_import_batches` is defined but unscheduled; `failed`/`processing` rows will otherwise accumulate until an ops job exists. Acceptable per the plan's documented follow-up, but worth tracking as its own ticket.
+- Test coverage: the migration's grants/RLS and the actual PostgREST `ON CONFLICT (id) DO NOTHING` translation are asserted only at the client-call-shape level (`tests/unit/api-import.test.ts:515-518`), not against a live DB; the route "failure" test (`api-import.test.ts:527`) throws before any leaf write, so partial-landing reclaim is covered by the id helper but not end-to-end. The dialog retry test still only exercises a single batch (`tests/unit/import-dialog.test.tsx:261`, `batchIndex === 0`), so multi-batch resume remains untested end-to-end.
+- Accessibility: no blocking issues. Source options, page chips and "Try again" are native `<button>`s; the added resumed line is a `<li>` inside the existing `<ul>`; the progress block now carries `role="status" aria-live="polite"` (`components/import-dialog.tsx:261`) and warning keys are stable (`components/import-report-card.tsx:69`). Fine as-is.
+
+## Residual risks
+
+- **Fingerprint vs. content/batching.** `vaultFingerprint` is order-independent and length-only, while `batchIndex` is positional and the deterministic page id is derived from `batchIndex`+`ordinal`. An in-place content edit that preserves total size and paths (same fingerprint) can shift batch boundaries, so a retry could replay the wrong page set under a given index. Very narrow, but by design there is no content hash to detect it.
+- **Stale-window double-run.** A legitimately long batch (>10 min: 64 MB payload + storage + indexing on a slow path) can be reclaimed while still running; two writers can then both execute the batch. Deterministic ids keep *pages* unique, but the ledger state can be clobbered (see the `failImportBatch` nit) and work is duplicated.
+- **Migration verified by convention only.** The `REVOKE`/`GRANT` and `ON CONFLICT` behaviour were reasoned against Postgres defaults + repo precedent (`20260817000000_global_search.sql:102`), not executed against a live database in this environment. Confirm on staging before ship.
+- **Legacy callers.** Callers that omit the `clientImportId`/`batchIndex` pair keep the non-idempotent insert path (`route.ts:355-366`) and still duplicate on retry by design (spec D6). The Notion importer (#78) will need to send the pair.
+- **Retention not enforced.** Until `cleanup_import_batches` is scheduled, the ledger grows with every import batch forever.
