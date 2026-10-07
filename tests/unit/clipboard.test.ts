@@ -228,11 +228,11 @@ describe('committed clipboard fixture — Obsidian Page copy-out', () => {
 	beforeEach(() => { engine = new MarkdownEngine() })
 	afterEach(() => engine.destroy())
 
+	const fixtureDir = () => path.join(process.cwd(), 'tests/fixtures/clipboard')
+	const readFixture = (name: string) => readFileSync(path.join(fixtureDir(), name), 'utf8')
+
 	it('round-trips the recorded Obsidian Dialect page to the same IR', () => {
-		const file = readFileSync(
-			path.join(process.cwd(), 'tests/fixtures/clipboard/obsidian-page-copy.md'),
-			'utf8',
-		)
+		const file = readFixture('obsidian-page-copy.md')
 		const { data, body } = engine.parseFrontmatter(file)
 		expect(data.title).toBe('Dual-Dialect Interop Bridge')
 		expect(data.tags).toEqual(['interop', 'obsidian'])
@@ -252,5 +252,30 @@ describe('committed clipboard fixture — Obsidian Page copy-out', () => {
 		expect(html).toContain('<h1>Dual-Dialect Interop Bridge</h1>')
 		expect(html).toContain('<a href="https://example.com">link</a>')
 		expect(html).toContain('<table>')
+	})
+
+	it('committed text/html capture is the Notion-facing serialization of the page', () => {
+		const { body } = engine.parseFrontmatter(readFixture('obsidian-page-copy.md'))
+		const doc = engine.parse(body)
+		// The committed capture is the regression anchor for the Notion payload;
+		// regenerate with buildClipboardPayload if the serializer legitimately changes.
+		expect(serializeNotionHtml(doc).trim()).toBe(readFixture('obsidian-page-copy.html').trim())
+	})
+
+	it('committed combined capture carries both MIME types and round-trips paste-out -> paste-in', () => {
+		const capture = JSON.parse(readFixture('obsidian-page-copy.clipboard.json')) as {
+			'text/plain': string
+			'text/html': string
+		}
+		// Both dialects are present, so the paste target picks what it understands.
+		expect(capture['text/plain']).toContain('[[Notion|Notion app]]')
+		expect(capture['text/plain']).toContain('> [!note]')
+		expect(capture['text/html']).toContain('<h1>Dual-Dialect Interop Bridge</h1>')
+		expect(capture['text/html']).toContain('<a href="https://example.com">link</a>')
+
+		const { data, body } = engine.parseFrontmatter(capture['text/plain'])
+		expect(data.title).toBe('Dual-Dialect Interop Bridge')
+		const doc = engine.parse(body)
+		expect(engine.parse(engine.serializeObsidianBody(doc))).toEqual(doc)
 	})
 })
