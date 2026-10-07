@@ -18,6 +18,7 @@ import {
 	type Rail,
 } from "./gateway"
 import { getFakeGateway } from "./gateway-fake"
+import { razorpayGateway } from "./razorpay"
 
 const registry = new Map<Rail, PaymentGateway>()
 
@@ -39,3 +40,7 @@ export function gatewayForRail(rail: Rail): PaymentGateway {
 export function gatewayForCurrency(currency: Currency): PaymentGateway {
 	return gatewayForRail(railForCurrency(currency))
 }
+
+// Rails self-register here (T7 Razorpay; T6 Stripe in parallel). Registration
+// touches no routing logic above.
+registerGateway("razorpay", razorpayGateway)

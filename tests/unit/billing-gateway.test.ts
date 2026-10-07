@@ -45,6 +45,7 @@ import {
 	classifySubscription,
 	type GatewaySubscriptionState,
 	type PaymentGateway,
+	type Rail,
 } from '@/lib/billing/gateway'
 import {
 	gatewayForCurrency,
@@ -106,8 +107,9 @@ afterEach(() => {
 
 describe('gateway routing matrix', () => {
 	it('rejects an unregistered rail instead of silently falling back', () => {
-		expect(() => gatewayForCurrency('USD')).toThrow(/no gateway registered/i)
-		expect(() => gatewayForCurrency('INR')).toThrow(/no gateway registered/i)
+		// Phase-2 rails self-register (T6 stripe, T7 razorpay); a rail absent from
+		// the registry must still throw rather than fall back to another gateway.
+		expect(() => gatewayForRail('paypal' as unknown as Rail)).toThrow(/no gateway registered/i)
 	})
 
 	it('routes USD to stripe and INR to razorpay via the registry', () => {
