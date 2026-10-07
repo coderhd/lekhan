@@ -89,16 +89,24 @@ function hashString (input: string): string {
  * page order. The Import dialog keys its attempt-session on this: re-picking
  * the same vault after a failure resumes the same `clientImportId`; a
  * different vault gets a fresh one (no cross-vault false "resumed").
+ *
+ * It hashes only *deterministic* content (paths + source text). It must not use
+ * the Yjs encoding: seeding a Y.Doc embeds a fresh random clientID, so the
+ * encoded bytes — and their length — differ between two ingestions of the same
+ * vault. Depending on that would change the fingerprint on retry, mint a new
+ * `clientImportId`, and re-create every already-landed page (#87 AC1).
  */
 export function vaultFingerprint (ir: ObsidianImportIR): string {
-	let contentBytes = 0
 	const paths: string[] = []
+	const contents: string[] = []
 	for (const page of ir.pages) {
-		contentBytes += page.contentYjsBase64.length + page.plainText.length
-		paths.push(`${page.folderPath ?? ''}/${page.title}`)
+		const path = `${page.folderPath ?? ''}/${page.title}`
+		paths.push(path)
+		contents.push(`${path}\u0000${page.plainText}`)
 	}
 	paths.sort()
-	return `${ir.workspaceId}:${ir.pages.length}:${contentBytes}:${hashString(paths.join('\u0000'))}`
+	contents.sort()
+	return `${ir.workspaceId}:${ir.pages.length}:${hashString(paths.join('\u0000'))}:${hashString(contents.join('\u0000'))}`
 }
 
 
@@ -129,8 +137,11 @@ export function splitIntoBatches (
 	// retry could send different pages under the same batchIndex — the server
 	// would replay the recorded batch and silently drop the new pages (#87).
 	const orderedPages = [...ir.pages].sort((a, b) => {
-		const keyA = `${a.folderPath ?? ''}\u0000${a.title}`
-		const keyB = `${b.folderPath ?? ''}\u0000${b.title}`
+		// Content hash is the tie-break so the order is total even when two pages
+		// share a path (same title in the same folder); this keeps ordinal → page
+		// mapping stable across retries.
+		const keyA = `${a.folderPath ?? ''}\u0000${a.title}\u0000${hashString(a.plainText)}`
+		const keyB = `${b.folderPath ?? ''}\u0000${b.title}\u0000${hashString(b.plainText)}`
 		if (keyA === keyB) return 0
 		return keyA < keyB ? -1 : 1
 	})

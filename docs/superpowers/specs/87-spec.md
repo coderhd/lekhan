@@ -55,10 +55,17 @@ sorts pages deterministically before splitting (see D3/edge table).
 
 ### D3 — Client id is stable across the *retry*, not regenerated per call
 `crypto.randomUUID()` generated once per import attempt-session. The Import dialog holds the id in
-a ref keyed by a **vault fingerprint** (`workspaceId + page count + total content bytes + hashed
-sorted paths`). Re-picking the *same* vault after a failure reuses the id → server skips landed
-batches (AC1). Picking a *different* vault yields a new id (no cross-vault false "resumed").
-The ref clears on success, on dialog close, and when the fingerprint changes.
+a ref keyed by a **vault fingerprint** (`workspaceId + page count + hash(sorted paths) +
+hash(sorted path+source-text)`). Re-picking the *same* vault after a failure reuses the id → server
+skips landed batches (AC1). Picking a *different* vault yields a new id (no cross-vault false
+"resumed"). The ref clears on success, on dialog close, and when the fingerprint changes.
+
+The fingerprint deliberately hashes deterministic content only. It must **not** use the Yjs
+encoding: seeding a `Y.Doc` embeds a fresh random `clientID`, so the encoded bytes (and their
+length) differ between two ingestions of the same vault. Depending on that would change the
+fingerprint on retry, mint a new id, and re-create every already-landed page — the exact failure
+this ticket exists to prevent. `splitIntoBatches` sorts on the same deterministic key (path, then
+content hash) so positional `batchIndex` maps to a stable page set across retries.
 
 ### D4 — Honest resume reporting
 `/api/import` adds `resumed: boolean` to its response. The client aggregates `resumedCount`
