@@ -31,7 +31,68 @@ export interface VaultImportOutcome {
 	createdPages: Array<{ id: string; title: string }>
 	warnings: VaultImportWarning[]
 	batches: number
+	/** Pages reported by a replayed (already-landed) batch — honest resume count. */
+	resumedCount: number
 }
+
+export interface VaultImportOptions {
+	/**
+	 * Stable id for this import attempt-session (#87). Reuse it across a retry to
+	 * resume: the server replays already-landed batches instead of re-creating
+	 * their pages. Omit to generate a fresh one.
+	 */
+	clientImportId?: string
+}
+
+/**
+ * Generate a v4 uuid for an import attempt-session. Uses `crypto.randomUUID`
+ * where available and falls back to `getRandomValues`/`Math.random` for older
+ * environments, always emitting a UUID the server will accept.
+ */
+export function generateImportId (): string {
+	const cryptoObj = (globalThis as { crypto?: Crypto }).crypto
+	if (cryptoObj && typeof cryptoObj.randomUUID === 'function') {
+		return cryptoObj.randomUUID()
+	}
+	const bytes = new Uint8Array(16)
+	if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+		cryptoObj.getRandomValues(bytes)
+	} else {
+		for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256)
+	}
+	bytes[6] = (bytes[6] & 0x0f) | 0x40
+	bytes[8] = (bytes[8] & 0x3f) | 0x80
+	const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
+	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
+/** FNV-1a — cheap, stable, non-cryptographic. Used only for session equality. */
+function hashString (input: string): string {
+	let hash = 0x811c9dc5
+	for (let i = 0; i < input.length; i++) {
+		hash ^= input.charCodeAt(i)
+		hash = Math.imul(hash, 0x01000193)
+	}
+	return (hash >>> 0).toString(16)
+}
+
+/**
+ * A stable identity for a vault import, independent of object identity and
+ * page order. The Import dialog keys its attempt-session on this: re-picking
+ * the same vault after a failure resumes the same `clientImportId`; a
+ * different vault gets a fresh one (no cross-vault false "resumed").
+ */
+export function vaultFingerprint (ir: ObsidianImportIR): string {
+	let contentBytes = 0
+	const paths: string[] = []
+	for (const page of ir.pages) {
+		contentBytes += page.contentYjsBase64.length + page.plainText.length
+		paths.push(`${page.folderPath ?? ''}/${page.title}`)
+	}
+	paths.sort()
+	return `${ir.workspaceId}:${ir.pages.length}:${contentBytes}:${hashString(paths.join('\u0000'))}`
+}
+
 
 export interface VaultImportProgress {
 	stage: 'writing'
@@ -83,11 +144,14 @@ export function splitIntoBatches (
 export async function importVaultIR (
 	ir: ObsidianImportIR,
 	getToken: () => Promise<string>,
-	onProgress?: (progress: VaultImportProgress) => void
+	onProgress?: (progress: VaultImportProgress) => void,
+	options?: VaultImportOptions
 ): Promise<VaultImportOutcome> {
 	const { batches, oversized } = splitIntoBatches(ir)
+	const clientImportId = options?.clientImportId ?? generateImportId()
 	const createdPages: VaultImportOutcome['createdPages'] = []
 	const warnings: VaultImportWarning[] = []
+	let resumedCount = 0
 
 	// Pages that cannot fit any single batch are skipped up-front — sending
 	// them would guarantee a 413 for the whole batch.
@@ -110,13 +174,19 @@ export async function importVaultIR (
 					'Content-Type': 'application/json',
 					Authorization: `Bearer ${token}`,
 				},
-				body: JSON.stringify(batches[i]),
+				// The stable id + ordinal make this batch idempotent: a retry with
+				// the same pair is answered from the server's ledger, not re-written.
+				body: JSON.stringify({
+					...batches[i],
+					clientImportId,
+					batchIndex: i,
+				}),
 			})
 		} catch (err) {
 			throw new Error(`Network error during import (batch ${i + 1}/${batches.length}): ${err instanceof Error ? err.message : String(err)}`)
 		}
 
-		let data: { importedCount?: number; pages?: VaultImportOutcome['createdPages']; warnings?: VaultImportWarning[]; error?: string } = {}
+		let data: { importedCount?: number; pages?: VaultImportOutcome['createdPages']; warnings?: VaultImportWarning[]; resumed?: boolean; error?: string } = {}
 		try {
 			data = await response.json()
 		} catch {
@@ -127,13 +197,17 @@ export async function importVaultIR (
 			throw new Error(data.error || `Import failed (batch ${i + 1}/${batches.length}, status ${response.status})`)
 		}
 
-		for (const page of data.pages ?? []) {
+		const batchPages = data.pages ?? []
+		for (const page of batchPages) {
 			createdPages.push(page)
+		}
+		if (data.resumed === true) {
+			resumedCount += batchPages.length
 		}
 		for (const warning of data.warnings ?? []) {
 			warnings.push(warning)
 		}
 	}
 
-	return { createdPages, warnings, batches: batches.length }
+	return { createdPages, warnings, batches: batches.length, resumedCount }
 }

@@ -201,4 +201,65 @@ describe('ImportDialog', () => {
 		expect(warnings.textContent).toContain('Note B')
 		expect(warnings.textContent).toContain('storage down')
 	})
+
+	it('reuses the same clientImportId when retrying a failed import, and reports resumed pages (#87)', async () => {
+		readVaultZipMock.mockResolvedValue({
+			files: [{ path: 'a.md', data: new Uint8Array([104, 105]) }],
+			directories: [],
+		})
+		importObsidianVaultMock.mockReturnValue({ ir: fixtureIR, report: fixtureReport })
+
+		let call = 0
+		const fetchMock = vi.fn(async () => {
+			call += 1
+			if (call === 1) {
+				return new Response(JSON.stringify({ error: 'batch 2 exploded' }), {
+					status: 500, headers: { 'Content-Type': 'application/json' },
+				})
+			}
+			return new Response(JSON.stringify({
+				success: true,
+				resumed: true,
+				importedCount: 2,
+				pages: [{ id: 'p-1', title: 'Note A' }, { id: 'p-2', title: 'Note B' }],
+				warnings: [],
+			}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+		})
+		global.fetch = fetchMock as unknown as typeof global.fetch
+
+		render(
+			<ImportDialog
+				open
+				onOpenChange={() => {}}
+				getWorkspace={async () => ({ id: 'ws-1' })}
+				existingPageTitles={[]}
+				onMarkdownFile={() => {}}
+				onOpenPage={() => {}}
+			/>
+		)
+
+		const pickZip = async () => {
+			fireEvent.click(screen.getByText('Obsidian vault (.zip)'))
+			const input = document.querySelector('input[type="file"][accept=".zip"]') as HTMLInputElement
+			fireEvent.change(input, { target: { files: [makeZipFile()] } })
+			await waitFor(() => expect(screen.queryByTestId('import-progress')).not.toBeTruthy())
+		}
+
+		await pickZip()
+		expect(await screen.findByTestId('import-error')).toBeTruthy()
+
+		fireEvent.click(screen.getByText('Try again'))
+		await pickZip()
+
+		expect(await screen.findByTestId('import-report')).toBeTruthy()
+		expect(fetchMock).toHaveBeenCalledTimes(2)
+
+		const calls = fetchMock.mock.calls as unknown as Array<[string, RequestInit]>
+		const first = JSON.parse(String(calls[0][1].body))
+		const second = JSON.parse(String(calls[1][1].body))
+		expect(first.clientImportId).toBeTruthy()
+		expect(second.clientImportId).toBe(first.clientImportId)
+		expect(second.batchIndex).toBe(0)
+		expect(screen.getByTestId('report-resumed').textContent).toContain('2 pages already imported')
+	})
 })
