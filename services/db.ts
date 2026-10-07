@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { getPlanLimits } from '@/lib/tier-limits'
 import {
 	DocumentItem,
 	MemberDocumentItem,
@@ -126,7 +127,7 @@ export async function acceptInvitation (invite: DocumentInvitation, userId: stri
 	try {
 		const docDetails = await fetchDocumentDetails(invite.document_id)
 		const ownerCredits = await getUserAICredits(docDetails.owner_id)
-		const allowedLimit = getPlanCollaboratorLimit(ownerCredits.plan)
+		const allowedLimit = getPlanLimits(ownerCredits.plan).maxDistinctCollaborators
 
 		const { count: memberCount } = await supabase
 			.from('document_members')
@@ -185,7 +186,7 @@ export async function createInvitation (
 	try {
 		const docDetails = await fetchDocumentDetails(documentId)
 		const ownerCredits = await getUserAICredits(docDetails.owner_id)
-		const allowedLimit = getPlanCollaboratorLimit(ownerCredits.plan)
+		const allowedLimit = getPlanLimits(ownerCredits.plan).maxDistinctCollaborators
 
 		const { count: memberCount } = await supabase
 			.from('document_members')
@@ -405,19 +406,8 @@ export function getPlanMaxDocuments(plan: string): number {
 	}
 }
 
-export function getPlanCollaboratorLimit(plan: string): number {
-	switch (plan.toLowerCase()) {
-		case 'go': return 10
-		case 'pro': return 25
-		case 'team': return 50
-		case 'enterprise': return 9999
-		case 'free':
-		default: return 2
-	}
-}
-
 export function checkCanAddCollaborator(currentCount: number, plan: string): { canAdd: boolean; limit: number } {
-	const limit = getPlanCollaboratorLimit(plan)
+	const limit = getPlanLimits(plan).maxDistinctCollaborators
 	return { canAdd: currentCount < limit, limit }
 }
 

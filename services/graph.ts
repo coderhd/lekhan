@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { Backlink, DocumentVersion, MemberPageItem, MemberRole, Page, PageInvitation, PageInvitationProjection, PageLink, PageMember, PageTag, Workspace } from '@/types'
-import { getPlanCollaboratorLimit, getUserAICredits } from '@/services/db'
+import { getUserAICredits } from '@/services/db'
+import { getPlanLimits } from '@/lib/tier-limits'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -296,7 +297,7 @@ export async function createPageInvitation (
 ): Promise<void> {
 	const pageDetails = await fetchPageDetails(pageId)
 	const ownerCredits = await getUserAICredits(pageDetails.owner_id)
-	const allowedLimit = getPlanCollaboratorLimit(ownerCredits.plan)
+	const allowedLimit = getPlanLimits(ownerCredits.plan).maxDistinctCollaborators
 
 	const { count: memberCount, error: memberError } = await supabase
 		.from('page_members')
@@ -368,7 +369,7 @@ export async function acceptPageInvitation (invite: PageInvitation, userId: stri
 
 	const pageDetails = await fetchPageDetails(invite.page_id)
 	const ownerCredits = await getUserAICredits(pageDetails.owner_id)
-	const allowedLimit = getPlanCollaboratorLimit(ownerCredits.plan)
+	const allowedLimit = getPlanLimits(ownerCredits.plan).maxDistinctCollaborators
 
 	const { count: memberCount, error: memberError } = await supabase
 		.from('page_members')

@@ -28,8 +28,43 @@ describe('tier-limits', () => {
 		it('returns pro limits', () => {
 			expect(getPlanLimits('pro')).toEqual({
 				historyRetentionDays: 365,
-				maxDistinctCollaborators: 100,
+				maxDistinctCollaborators: 25,
 				maxStorageMb: 50000
+			})
+		})
+
+		it('returns team limits derived from seats (owner excluded)', () => {
+			expect(getPlanLimits('team', 5)).toEqual({
+				historyRetentionDays: 365,
+				maxDistinctCollaborators: 5,
+				maxStorageMb: 50000
+			})
+		})
+
+		it('floors the team collaborator cap at 2 and warns when seats is missing or below 2', () => {
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+			expect(getPlanLimits('team').maxDistinctCollaborators).toBe(2)
+			expect(getPlanLimits('team', 1).maxDistinctCollaborators).toBe(2)
+			expect(warn).toHaveBeenCalled()
+			warn.mockRestore()
+		})
+
+		it('keeps the pro retention/storage envelope for team', () => {
+			const teamLimits = getPlanLimits('team', 3)
+			expect(teamLimits.historyRetentionDays).toBe(365)
+			expect(teamLimits.maxStorageMb).toBe(50000)
+		})
+
+		it('falls back to free limits for legacy/unknown tokens', () => {
+			expect(getPlanLimits('go')).toEqual({
+				historyRetentionDays: 1,
+				maxDistinctCollaborators: 2,
+				maxStorageMb: 20
+			})
+			expect(getPlanLimits('enterprise')).toEqual({
+				historyRetentionDays: 1,
+				maxDistinctCollaborators: 2,
+				maxStorageMb: 20
 			})
 		})
 	})

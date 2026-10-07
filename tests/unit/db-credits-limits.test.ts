@@ -6,7 +6,7 @@ vi.mock('@/lib/supabase', () => ({
 	},
 }))
 
-import { checkCanAddCollaborator, getPlanCollaboratorLimit, getPlanMaxDocuments } from '@/services/db'
+import { checkCanAddCollaborator, getPlanMaxDocuments } from '@/services/db'
 
 describe('Plan Limit Enforcement Helpers', () => {
 	it('returns correct document limit per plan tier', () => {
@@ -16,17 +16,22 @@ describe('Plan Limit Enforcement Helpers', () => {
 		expect(getPlanMaxDocuments('team')).toBe(Infinity)
 	})
 
-	it('returns correct collaborator limit per plan tier', () => {
-		expect(getPlanCollaboratorLimit('free')).toBe(2)
-		expect(getPlanCollaboratorLimit('go')).toBe(10)
-		expect(getPlanCollaboratorLimit('pro')).toBe(25)
-		expect(getPlanCollaboratorLimit('team')).toBe(50)
-	})
+	it('enforces collaborator count against the single tier-limits map', () => {
+		// Free cap unchanged.
+		expect(checkCanAddCollaborator(1, 'free')).toEqual({ canAdd: true, limit: 2 })
+		expect(checkCanAddCollaborator(2, 'free')).toEqual({ canAdd: false, limit: 2 })
 
-	it('enforces collaborator count check correctly', () => {
-		expect(checkCanAddCollaborator(1, 'free').canAdd).toBe(true)
-		expect(checkCanAddCollaborator(2, 'free').canAdd).toBe(false)
-		expect(checkCanAddCollaborator(9, 'go').canAdd).toBe(true)
-		expect(checkCanAddCollaborator(10, 'go').canAdd).toBe(false)
+		// Legacy/unknown tokens fall through to FREE_LIMITS (normalized ingress is T11).
+		expect(checkCanAddCollaborator(1, 'go')).toEqual({ canAdd: true, limit: 2 })
+		expect(checkCanAddCollaborator(2, 'go')).toEqual({ canAdd: false, limit: 2 })
+		expect(checkCanAddCollaborator(2, 'enterprise')).toEqual({ canAdd: false, limit: 2 })
+
+		// Pro cap collapsed from 100 to 25 in the single map.
+		expect(checkCanAddCollaborator(24, 'pro')).toEqual({ canAdd: true, limit: 25 })
+		expect(checkCanAddCollaborator(25, 'pro')).toEqual({ canAdd: false, limit: 25 })
+
+		// Team without a seats source floors to 2.
+		expect(checkCanAddCollaborator(1, 'team')).toEqual({ canAdd: true, limit: 2 })
+		expect(checkCanAddCollaborator(2, 'team')).toEqual({ canAdd: false, limit: 2 })
 	})
 })
