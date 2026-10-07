@@ -68,7 +68,7 @@ Every ticket, feature, bug, or refactor moves strictly through these 6 stages:
   1. **Our review passed** — the internal clean-room REVIEW stage (see `.agents/paperclip-workflow.md`).
   2. **External automated review completed** — the Pullfrog **and** CodeRabbit checks are **`success`** (a review actually ran), and every actionable finding is addressed or explicitly dismissed with a reason on the PR. A `failed`, `cancelled`, `skipped`, or missing check is **not** completion.
   3. **CI green.**
-  Merging while external review is still running wastes its tokens: the review runs against a PR that is already merged, so its findings land too late to act on. If a reviewer is rate-limited or its check fails without producing a review, wait or re-run it; if it is genuinely unavailable, record an **explicit waiver** on the PR naming the reviewer and the reason — never treat a non-`success` check as a completed review.
+  Merging while external review is still running wastes its tokens: the review runs against a PR that is already merged, so its findings land too late to act on. If a reviewer is rate-limited or its check fails without producing a review, wait or re-run it. If it is **genuinely unavailable** (persistent rate limit, service down), post an **explicit waiver** on the PR naming the reviewer and the reason — **the waiver satisfies this gate for that reviewer**, so the merge may proceed without it. A non-`success` check alone never counts as a completed review.
 - **Hygiene**:
   - Remove outgoing blocker edges from children (`DELETE /issues/<child>/dependencies/blocked_by/<db-id>`).
   - Move project board status: `docs/agents/project-board.sh <issue> Done`.
