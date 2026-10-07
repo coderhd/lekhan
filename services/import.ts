@@ -1,5 +1,5 @@
 import { createPage } from '@/services/graph'
-import { parseFrontmatter, parseMarkdown } from '@/lib/markdown-io'
+import { markdownEngine } from '@/lib/markdown/engine'
 import { titleFromFilename } from '@/lib/title-from-filename'
 import type { Page } from '@/types'
 
@@ -37,7 +37,7 @@ export async function importMarkdownFile (
 		throw new Error('File is empty. Nothing to import.')
 	}
 
-	const { data, body } = parseFrontmatter(fileText)
+	const { data, body } = markdownEngine.parseFrontmatter(fileText)
 
 	const title = data.title ?? titleFromFilename(filename ?? '')
 
@@ -48,7 +48,7 @@ export async function importMarkdownFile (
 
 	// Parse the body through the round-trip engine. This is the fidelity gate:
 	// malformed input surfaces here as an error before any page is created.
-	parseMarkdown(body)
+	markdownEngine.parse(body)
 
 	const page = await createPage(workspaceId, ownerId, null, { title, properties })
 

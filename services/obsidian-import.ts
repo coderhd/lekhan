@@ -1,7 +1,6 @@
 import JSZip from 'jszip'
-import { parseFrontmatter, parseMarkdown } from '@/lib/markdown-io'
+import { markdownEngine, uint8ArrayToBase64 } from '@/lib/markdown/engine'
 import { fitLiveSchema } from '@/lib/import-hydration'
-import { contentToYjsBase64, contentToPlainText, uint8ArrayToBase64 } from '@/lib/yjs-seed'
 import { titleFromFilename } from '@/lib/title-from-filename'
 
 export const MAX_IMPORT_PAGES = 2000
@@ -434,7 +433,7 @@ export function importObsidianVault (content: VaultContent, options: ObsidianImp
 			folderPath: segments.length > 1 ? segments.slice(0, -1).join('/') : null,
 			properties: {},
 			tags: [],
-			contentYjsBase64: contentToYjsBase64(EMPTY_PAGE_DOC),
+			contentYjsBase64: markdownEngine.seedToYjsBase64(EMPTY_PAGE_DOC),
 			plainText: '',
 			isFolder: true,
 		})
@@ -444,7 +443,7 @@ export function importObsidianVault (content: VaultContent, options: ObsidianImp
 		if (!file.path.toLowerCase().endsWith('.md') && !file.path.toLowerCase().endsWith('.markdown')) continue
 
 		const raw = new TextDecoder().decode(file.data)
-		const { data, body } = parseFrontmatter(raw)
+		const { data, body } = markdownEngine.parseFrontmatter(raw)
 
 		const title = data.title ?? titleFromFilename(file.path.split('/').pop() ?? '')
 
@@ -454,15 +453,15 @@ export function importObsidianVault (content: VaultContent, options: ObsidianImp
 		}
 
 		const processedBody = processEmbeds(body, imageIndex, file.path, degraded)
-		const fitted = fitLiveSchema(parseMarkdown(processedBody))
+		const fitted = fitLiveSchema(markdownEngine.parse(processedBody))
 
 		notePages.push({
 			title,
 			folderPath: file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : null,
 			properties,
 			tags: data.tags ?? [],
-			contentYjsBase64: contentToYjsBase64(fitted),
-			plainText: contentToPlainText(fitted),
+			contentYjsBase64: markdownEngine.seedToYjsBase64(fitted),
+			plainText: markdownEngine.plainText(fitted),
 			isFolder: false,
 		})
 	}

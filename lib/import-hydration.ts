@@ -1,6 +1,5 @@
 import type { Editor } from '@tiptap/core'
-import { parseMarkdown } from '@/lib/markdown-io'
-import { fitLiveSchema } from '@/lib/markdown/engine'
+import { fitLiveSchema, markdownEngine } from '@/lib/markdown/engine'
 
 export { fitLiveSchema }
 
@@ -18,7 +17,7 @@ export function hydrateOnOpen (editor: Editor, initialContent: string | null | u
 	if (!editor.isEmpty) {
 		return false
 	}
-	const content = fitLiveSchema(parseMarkdown(initialContent))
+	const content = fitLiveSchema(markdownEngine.parse(initialContent))
 	editor.commands.setContent(content)
 	return true
 }
