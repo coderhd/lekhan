@@ -17,15 +17,20 @@ vi.mock('../../server/graph-index.js', () => ({
 }))
 
 // The idempotency ledger is exercised directly in import-ledger.test.ts; here we
-// assert the route's contract with it (replay, 409, checkpoint, failure).
+// assert the route's contract with it (replay, 409, checkpoint, failure). The
+// real deterministic-id helper is kept so the route's upsert ids are asserted.
 const claimImportBatchMock = vi.hoisted(() => vi.fn())
 const completeImportBatchMock = vi.hoisted(() => vi.fn(async () => true))
 const failImportBatchMock = vi.hoisted(() => vi.fn(async () => {}))
-vi.mock('@/lib/import-ledger', () => ({
-	claimImportBatch: claimImportBatchMock,
-	completeImportBatch: completeImportBatchMock,
-	failImportBatch: failImportBatchMock,
-}))
+vi.mock('@/lib/import-ledger', async importOriginal => {
+	const actual = await importOriginal<typeof import('@/lib/import-ledger')>()
+	return {
+		...actual,
+		claimImportBatch: claimImportBatchMock,
+		completeImportBatch: completeImportBatchMock,
+		failImportBatch: failImportBatchMock,
+	}
+})
 
 const CLIENT_IMPORT_ID = '11111111-1111-4111-8111-111111111111'
 
@@ -64,6 +69,7 @@ function makeAdminClient(options: AdminOptions = {}) {
 		uploadedPaths: [] as string[],
 		folderInserts: [] as Record<string, unknown>[],
 		batchInserts: [] as Array<Record<string, unknown>[]>,
+		upserts: [] as Array<{ rows: Array<Record<string, unknown>>; options: unknown }>,
 	}
 	let pageCounter = 0
 
@@ -77,11 +83,16 @@ function makeAdminClient(options: AdminOptions = {}) {
 	})
 
 	const makeChain = () => {
-		const chain: Record<string, unknown> & { __insertRows?: unknown } = {}
+		const chain: Record<string, unknown> & { __insertRows?: unknown; __upsertRows?: unknown; __upsertOptions?: unknown } = {}
 		chain.select = vi.fn(() => chain)
 		chain.eq = vi.fn(() => chain)
 		chain.insert = vi.fn((rows: unknown) => {
 			chain.__insertRows = rows
+			return chain
+		})
+		chain.upsert = vi.fn((rows: unknown, opts: unknown) => {
+			chain.__upsertRows = rows
+			chain.__upsertOptions = opts
 			return chain
 		})
 		chain.maybeSingle = vi.fn(async () => {
@@ -95,6 +106,12 @@ function makeAdminClient(options: AdminOptions = {}) {
 		})
 		chain.then = (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
 			thenableResult(() => {
+				// Idempotent leaf path: upsert with ON CONFLICT DO NOTHING.
+				if (chain.__upsertRows !== undefined) {
+					const rows = chain.__upsertRows as Array<Record<string, unknown>>
+					calls.upserts.push({ rows, options: chain.__upsertOptions })
+					return { data: null, error: null }
+				}
 				if (chain.__insertRows === undefined) {
 					if (options.existingPagesError) return { data: null, error: options.existingPagesError }
 					return { data: options.existingPages ?? [], error: null }
@@ -473,6 +490,38 @@ describe('API Route: POST /api/import', () => {
 		const [, ledgerId, result] = completeImportBatchMock.mock.calls[0] as unknown as [unknown, string, { importedCount: number }]
 		expect(ledgerId).toBe('ledger-1')
 		expect(result.importedCount).toBe(1)
+	})
+
+	it('inserts an idempotent batch with deterministic ids and duplicate-tolerant upsert', async () => {
+		claimImportBatchMock.mockResolvedValue({ kind: 'claimed', ledgerId: 'ledger-8' })
+		clients = makeAdminClient({ workspaceOwner: 'owner-1' })
+		h.adminClient = clients.admin
+		const POST = await loadRoute()
+
+		const res = await POST(makeRequest({
+			workspaceId: 'ws1',
+			pages: [{ ...validPage, title: 'A' }, { ...validPage, title: 'B' }],
+			clientImportId: CLIENT_IMPORT_ID,
+			batchIndex: 2,
+		}))
+
+		expect(res.status).toBe(200)
+		// The legacy (non-idempotent) insert path is not used.
+		expect(clients.calls.batchInserts).toHaveLength(0)
+		expect(clients.calls.upserts).toHaveLength(1)
+
+		const { rows, options } = clients.calls.upserts[0]
+		expect(options).toEqual({ onConflict: 'id', ignoreDuplicates: true })
+		const { deriveBatchPageId } = await import('@/lib/import-ledger')
+		const expectedIds = [
+			deriveBatchPageId('ws1', CLIENT_IMPORT_ID, 2, 0),
+			deriveBatchPageId('ws1', CLIENT_IMPORT_ID, 2, 1),
+		]
+		expect(rows.map(row => row.id)).toEqual(expectedIds)
+
+		const data = await res.json()
+		expect(data.importedCount).toBe(2)
+		expect(data.pages.map((page: { id: string }) => page.id)).toEqual(expectedIds)
 	})
 
 	it('marks a claimed batch failed when the import throws', async () => {

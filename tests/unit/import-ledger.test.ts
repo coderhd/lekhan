@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import {
 	claimImportBatch,
 	completeImportBatch,
+	deriveBatchPageId,
 	failImportBatch,
 	STALE_PROCESSING_MS,
 } from '@/lib/import-ledger'
@@ -165,5 +166,39 @@ describe('import ledger', () => {
 		rows.push({ ...BASE, id: 'ledger-7', status: 'processing' })
 		await failImportBatch(admin as never, 'ledger-7')
 		expect(rows[0].status).toBe('failed')
+	})
+
+	it('does not complete a batch that is no longer processing', async () => {
+		rows.push({ ...BASE, id: 'ledger-8', status: 'completed', imported_count: 3 })
+		const ok = await completeImportBatch(admin as never, 'ledger-8', {
+			importedCount: 5,
+			pages: [],
+			warnings: [],
+		})
+		expect(ok).toBe(false)
+		expect(rows[0].imported_count).toBe(3)
+	})
+})
+
+describe('deriveBatchPageId', () => {
+	const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+	it('is deterministic for the same batch identity', () => {
+		expect(deriveBatchPageId('ws-1', 'imp-1', 2, 7))
+			.toBe(deriveBatchPageId('ws-1', 'imp-1', 2, 7))
+	})
+
+	it('emits a valid RFC 4122 version 5 uuid', () => {
+		const id = deriveBatchPageId('ws-1', 'imp-1', 0, 0)
+		expect(id).toMatch(UUID_RE)
+		expect(id[14]).toBe('5')
+	})
+
+	it('distinguishes workspace, import id, batch index and ordinal', () => {
+		const base = deriveBatchPageId('ws-1', 'imp-1', 0, 0)
+		expect(deriveBatchPageId('ws-2', 'imp-1', 0, 0)).not.toBe(base)
+		expect(deriveBatchPageId('ws-1', 'imp-2', 0, 0)).not.toBe(base)
+		expect(deriveBatchPageId('ws-1', 'imp-1', 1, 0)).not.toBe(base)
+		expect(deriveBatchPageId('ws-1', 'imp-1', 0, 1)).not.toBe(base)
 	})
 })

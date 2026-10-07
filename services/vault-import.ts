@@ -11,6 +11,14 @@ import type { ObsidianImportIR } from '@/services/obsidian-import'
 /** Conservative per-batch budget (server ceiling is 64 MB of decoded JSON). */
 export const BATCH_BYTE_BUDGET = 48 * 1024 * 1024
 
+/**
+ * Bounded retry for a `409 batch_in_progress`: a live/concurrent request already
+ * owns this batch, so the client backs off and retries rather than failing the
+ * whole multi-batch import (spec D2).
+ */
+const MAX_BATCH_ATTEMPTS = 4
+const RETRY_BASE_MS = 400
+
 const textEncoder = new TextEncoder()
 
 function batchByteLength (workspaceId: string, pages: ObsidianImportIR['pages']): number {
@@ -114,7 +122,20 @@ export function splitIntoBatches (
 	const oversized: ObsidianImportIR['pages'] = []
 	let current: ObsidianImportIR['pages'] = []
 
-	for (const page of ir.pages) {
+	// Sort deterministically before batching. `batchIndex` is a positional
+	// idempotency key, so the page set behind each index must be stable across
+	// retries. Directory enumeration order is implementation-defined (and the
+	// vault fingerprint is deliberately order-independent), so without this a
+	// retry could send different pages under the same batchIndex — the server
+	// would replay the recorded batch and silently drop the new pages (#87).
+	const orderedPages = [...ir.pages].sort((a, b) => {
+		const keyA = `${a.folderPath ?? ''}\u0000${a.title}`
+		const keyB = `${b.folderPath ?? ''}\u0000${b.title}`
+		if (keyA === keyB) return 0
+		return keyA < keyB ? -1 : 1
+	})
+
+	for (const page of orderedPages) {
 		const candidate = [...current, page]
 		if (batchByteLength(ir.workspaceId, candidate) <= budgetBytes) {
 			current = candidate
@@ -165,25 +186,35 @@ export async function importVaultIR (
 
 	for (let i = 0; i < batches.length; i++) {
 		onProgress?.({ stage: 'writing', batch: i + 1, totalBatches: batches.length })
-		const token = await getToken()
-		let response: Response
-		try {
-			response = await fetch('/api/import', {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${token}`,
-				},
-				// The stable id + ordinal make this batch idempotent: a retry with
-				// the same pair is answered from the server's ledger, not re-written.
-				body: JSON.stringify({
-					...batches[i],
-					clientImportId,
-					batchIndex: i,
-				}),
-			})
-		} catch (err) {
-			throw new Error(`Network error during import (batch ${i + 1}/${batches.length}): ${err instanceof Error ? err.message : String(err)}`)
+		let response: Response | undefined
+		for (let attempt = 1; attempt <= MAX_BATCH_ATTEMPTS; attempt++) {
+			const token = await getToken()
+			try {
+				response = await fetch('/api/import', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						Authorization: `Bearer ${token}`,
+					},
+					// The stable id + ordinal make this batch idempotent: a retry with
+					// the same pair is answered from the server's ledger, not re-written.
+					body: JSON.stringify({
+						...batches[i],
+						clientImportId,
+						batchIndex: i,
+					}),
+				})
+			} catch (err) {
+				throw new Error(`Network error during import (batch ${i + 1}/${batches.length}): ${err instanceof Error ? err.message : String(err)}`)
+			}
+			if (response.status !== 409) break
+			// A concurrent/live request owns this batch; back off and retry.
+			if (attempt < MAX_BATCH_ATTEMPTS) {
+				await new Promise(resolve => setTimeout(resolve, RETRY_BASE_MS * attempt))
+			}
+		}
+		if (!response) {
+			throw new Error(`Import failed (batch ${i + 1}/${batches.length}): no response`)
 		}
 
 		let data: { importedCount?: number; pages?: VaultImportOutcome['createdPages']; warnings?: VaultImportWarning[]; resumed?: boolean; error?: string } = {}

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
@@ -8,6 +9,38 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  * records the result on completion; a replay of a landed batch is answered from
  * the recorded result instead of re-creating leaf pages.
  */
+
+// Fixed namespace for deterministic import page ids (RFC 4122 version 5). Any
+// stable uuid works; this one is specific to Lekhan import page identity.
+const IMPORT_PAGE_NAMESPACE = '6d1f7a2c-4b9e-4d3a-9f80-1c2e5b7a9d40'
+
+function uuidToBytes (uuid: string): Buffer {
+	return Buffer.from(uuid.replace(/-/g, ''), 'hex')
+}
+
+/**
+ * Deterministic id for a leaf page in an idempotent batch. The name is scoped to
+ * the workspace + attempt-session + batch ordinal, so re-running the same batch
+ * (a retry after a partial landing) derives the *same* page ids. The route
+ * inserts with `ON CONFLICT (id) DO NOTHING`, making page creation replay-safe
+ * and eliminating duplicate pages on retry (AC1).
+ */
+export function deriveBatchPageId (
+	workspaceId: string,
+	clientImportId: string,
+	batchIndex: number,
+	ordinal: number
+): string {
+	const name = `${workspaceId}:${clientImportId}:${batchIndex}:${ordinal}`
+	const digest = createHash('sha1')
+		.update(Buffer.concat([uuidToBytes(IMPORT_PAGE_NAMESPACE), Buffer.from(name, 'utf8')]))
+		.digest()
+	const bytes = Buffer.from(digest.subarray(0, 16))
+	bytes[6] = (bytes[6] & 0x0f) | 0x50 // version 5
+	bytes[8] = (bytes[8] & 0x3f) | 0x80 // RFC 4122 variant
+	const hex = bytes.toString('hex')
+	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
 
 export interface ImportedPageRecord {
 	id: string
@@ -159,7 +192,9 @@ export async function completeImportBatch (
 	ledgerId: string,
 	result: ImportBatchResult
 ): Promise<boolean> {
-	const { error } = await admin
+	// Only a row still owned by this request (status `processing`) may be
+	// completed: a late writer must never overwrite an already-completed report.
+	const { data, error } = await admin
 		.from('import_batches')
 		.update({
 			status: 'completed',
@@ -169,7 +204,10 @@ export async function completeImportBatch (
 			updated_at: new Date().toISOString(),
 		})
 		.eq('id', ledgerId)
-	return !error
+		.eq('status', 'processing')
+		.select('id')
+		.maybeSingle()
+	return !error && !!data
 }
 
 /** Mark a claimed batch failed so a retry may reclaim it. Best-effort. */

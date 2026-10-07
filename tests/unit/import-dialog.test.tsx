@@ -260,6 +260,6 @@ describe('ImportDialog', () => {
 		expect(first.clientImportId).toBeTruthy()
 		expect(second.clientImportId).toBe(first.clientImportId)
 		expect(second.batchIndex).toBe(0)
-		expect(screen.getByTestId('report-resumed').textContent).toContain('2 pages already imported')
+		expect(screen.getByTestId('report-resumed').textContent).toContain('already imported')
 	})
 })

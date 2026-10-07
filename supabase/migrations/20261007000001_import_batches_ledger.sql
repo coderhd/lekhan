@@ -49,7 +49,9 @@ CREATE POLICY select_import_batches ON public.import_batches
 		)
 	);
 
--- Prune completed ledger rows older than retain_days (the audit window).
+-- Prune ledger rows older than retain_days (the audit window): completed rows
+-- are kept briefly for audit/resume, while failed/abandoned (processing) rows
+-- are pruned too so repeated failures cannot grow the table without bound.
 -- Intended for an ops/cron call; not wired to a schedule in this slice.
 CREATE OR REPLACE FUNCTION public.cleanup_import_batches(retain_days integer DEFAULT 30)
 RETURNS integer
@@ -61,9 +63,16 @@ DECLARE
 	deleted_count integer;
 BEGIN
 	DELETE FROM public.import_batches
-	WHERE status = 'completed'
-		AND updated_at < timezone('utc'::text, now()) - make_interval(days => retain_days);
+	WHERE updated_at < timezone('utc'::text, now()) - make_interval(days => retain_days);
 	GET DIAGNOSTICS deleted_count = ROW_COUNT;
 	RETURN deleted_count;
 END;
 $$;
+
+-- Server-only: invoked through the service key (or a future cron), exactly like
+-- public.sync_page_graph. PUBLIC/anon/authenticated are revoked so a client
+-- cannot call this SECURITY DEFINER function via the REST rpc and wipe every
+-- tenant's ledger (which would defeat idempotency and destroy audit rows).
+REVOKE EXECUTE ON FUNCTION public.cleanup_import_batches(integer) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.cleanup_import_batches(integer) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cleanup_import_batches(integer) TO service_role;

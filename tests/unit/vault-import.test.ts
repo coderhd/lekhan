@@ -58,6 +58,18 @@ describe('splitIntoBatches', () => {
 		expect(batches[0].pages.map(p => p.title)).toEqual(['small'])
 		expect(oversized.map(p => p.title)).toEqual(['huge'])
 	})
+
+	it('orders pages deterministically so batchIndex maps to stable content', () => {
+		// Directory enumeration order is implementation-defined; the fingerprint
+		// is order-independent. Sorting keeps the positional batchIndex stable
+		// across a retry so the server replays the right pages (#87).
+		const { batches } = splitIntoBatches(makeIR([
+			makePage('c', 100),
+			makePage('a', 100),
+			makePage('b', 100),
+		]))
+		expect(batches.flatMap(b => b.pages.map(p => p.title))).toEqual(['a', 'b', 'c'])
+	})
 })
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -139,5 +151,24 @@ describe('importVaultIR idempotency (#87)', () => {
 		const init = (global.fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0][1]
 		const body = JSON.parse(String(init.body))
 		expect(body.clientImportId).toMatch(UUID_RE)
+	})
+
+	it('retries a 409 batch_in_progress instead of failing the import', async () => {
+		let call = 0
+		global.fetch = vi.fn(async () => {
+			call += 1
+			if (call === 1) {
+				return new Response(JSON.stringify({ error: 'busy', code: 'batch_in_progress' }), {
+					status: 409,
+					headers: { 'Content-Type': 'application/json' },
+				})
+			}
+			return jsonResponse({ success: true, importedCount: 1, pages: [{ id: 'p-1', title: 'a' }], warnings: [] })
+		}) as unknown as typeof global.fetch
+
+		const outcome = await importVaultIR(makeIR([makePage('a', 100)]), async () => 'tok')
+
+		expect(global.fetch).toHaveBeenCalledTimes(2)
+		expect(outcome.createdPages).toHaveLength(1)
 	})
 })

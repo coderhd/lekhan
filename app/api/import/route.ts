@@ -5,6 +5,7 @@ import { encryptSnapshot } from '@/lib/server-crypto'
 import {
 	claimImportBatch,
 	completeImportBatch,
+	deriveBatchPageId,
 	failImportBatch,
 	type ImportBatchResult,
 } from '@/lib/import-ledger'
@@ -306,12 +307,20 @@ export async function POST(request: NextRequest) {
 		}
 
 		// Resolve every leaf's parent first (creating folder-pages as needed),
-		// so all leaf rows exist in one shape before batching.
-		const pendingLeaves: Array<{ row: Record<string, unknown>; source: ResolvedPage }> = []
-		for (const page of pages) {
+		// so all leaf rows exist in one shape before batching. On the idempotent
+		// path each leaf gets a deterministic id derived from the batch identity,
+		// so a retry re-inserts the same rows rather than new ones.
+		const idempotent = clientImportId !== null && batchIndex !== null
+		const pendingLeaves: Array<{ id: string | null; row: Record<string, unknown>; source: ResolvedPage }> = []
+		for (const [ordinal, page] of pages.entries()) {
 			const parentId = await ensureFolderChain(page.folderPath)
+			const id = idempotent
+				? deriveBatchPageId(workspaceId, clientImportId as string, batchIndex as number, ordinal)
+				: null
 			pendingLeaves.push({
+				id,
 				row: {
+					...(id ? { id } : {}),
 					workspace_id: workspaceId,
 					owner_id: user.id,
 					title: page.title,
@@ -327,6 +336,23 @@ export async function POST(request: NextRequest) {
 		const createdLeaves: Array<{ id: string; source: ResolvedPage }> = []
 		for (let offset = 0; offset < pendingLeaves.length; offset += INSERT_CHUNK_SIZE) {
 			const chunk = pendingLeaves.slice(offset, offset + INSERT_CHUNK_SIZE)
+			if (idempotent) {
+				// Deterministic ids make the batch replay-safe: a retry after a
+				// partial landing inserts only the missing leaves (ON CONFLICT DO
+				// NOTHING) instead of duplicating the ones that already landed
+				// (#87, AC1). The ids are known up-front, so no row mapping is
+				// needed from the response.
+				const { error: upsertError } = await supabaseAdmin
+					.from('pages')
+					.upsert(chunk.map(entry => entry.row), { onConflict: 'id', ignoreDuplicates: true })
+				if (upsertError) {
+					throw upsertError
+				}
+				for (const entry of chunk) {
+					createdLeaves.push({ id: entry.id as string, source: entry.source })
+				}
+				continue
+			}
 			const { data: insertedRows, error: insertError } = await supabaseAdmin
 				.from('pages')
 				.insert(chunk.map(entry => entry.row))

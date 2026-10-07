@@ -56,7 +56,7 @@ export function ImportReportCard ({ report, serverWarnings, createdPages, resume
 				)}
 				{resumedCount > 0 && (
 					<li data-testid="report-resumed">
-						{resumedCount} page{resumedCount === 1 ? '' : 's'} already imported from an earlier interrupted attempt — resumed instead of duplicated
+						{resumedCount} of these page{resumedCount === 1 ? '' : 's'} {resumedCount === 1 ? 'was' : 'were'} already imported in an earlier interrupted attempt and {resumedCount === 1 ? 'was' : 'were'} resumed instead of duplicated
 					</li>
 				)}
 			</ul>
@@ -66,7 +66,7 @@ export function ImportReportCard ({ report, serverWarnings, createdPages, resume
 					<p className="font-semibold mb-1">{serverWarnings.length} page{serverWarnings.length === 1 ? '' : 's'} need attention:</p>
 					<ul className="list-disc list-inside text-on-surface-variant">
 						{serverWarnings.map((warning, i) => (
-							<li key={i}>
+							<li key={`${warning.title}:${warning.stage}:${i}`}>
 								<span className="font-medium">{warning.title}</span> — {warning.stage === 'snapshot' ? 'content could not be saved' : 'search/links could not be indexed'}: {warning.error}
 							</li>
 						))}
