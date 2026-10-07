@@ -85,6 +85,25 @@ never inflate it. Nothing silently disappears.
 Frontier / Tier S work (unspec'd design, ADR-governed systems, clean-room review) escalates to
 `opencode-go/mimo-v2.6-pro` via per-issue override.
 
+## PR merge gate (external review)
+
+A PR is merged only after **both** reviews are complete — ours and the external one:
+
+1. **Our review** — the internal clean-room REVIEW stage passed.
+2. **External review** — the Pullfrog **and** CodeRabbit checks are **`success`** (a review actually
+   ran), and every actionable finding is addressed or explicitly dismissed with a reason on the PR.
+   A `failed`, `cancelled`, `skipped`, or missing check is **not** completion.
+3. **CI green.**
+
+Merging while the external reviewers are still running **wastes their tokens**: the review executes
+against a PR that is already merged, so its findings arrive too late to act on. If a reviewer is
+rate-limited or its check fails without producing a review, wait or re-run it; if it is genuinely
+unavailable, record an **explicit waiver** on the PR naming the reviewer and the reason — a
+non-`success` check alone never counts as review completion.
+
+This is enforced socially (see `AGENTS.md` SHIP stage) and can be enforced technically with branch
+protection requiring the `Pullfrog` and `CodeRabbit` status checks.
+
 ## Proposed next improvements (not yet built)
 
 1. **Definition of Ready / Done as gates** — a checklist routine that refuses `in_progress` until
