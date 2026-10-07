@@ -19,7 +19,7 @@ import {
 	type ObsidianImportReport,
 	type VaultContent,
 } from '@/services/obsidian-import'
-import { importVaultIR } from '@/services/vault-import'
+import { importVaultIR, generateImportId, vaultFingerprint } from '@/services/vault-import'
 import { ImportReportCard } from '@/components/import-report-card'
 import { track } from '@/lib/analytics'
 
@@ -52,9 +52,14 @@ export function ImportDialog ({
 	const [report, setReport] = useState<ObsidianImportReport | null>(null)
 	const [serverWarnings, setServerWarnings] = useState<Array<{ title: string; stage: string; error: string }>>([])
 	const [createdPages, setCreatedPages] = useState<Array<{ id: string; title: string }>>([])
+	const [resumedCount, setResumedCount] = useState(0)
 	const zipInputRef = useRef<HTMLInputElement>(null)
 	const folderInputRef = useRef<HTMLInputElement>(null)
 	const markdownInputRef = useRef<HTMLInputElement>(null)
+	// Stable import id for one attempt-session (#87), keyed by vault fingerprint
+	// so a retry of the SAME vault resumes (server skips landed batches) while a
+	// different vault gets a fresh id. Survives the "Try again" reset on purpose.
+	const importSessionRef = useRef<{ fingerprint: string; clientImportId: string } | null>(null)
 
 	const reset = () => {
 		setPhase('choose')
@@ -62,11 +67,14 @@ export function ImportDialog ({
 		setReport(null)
 		setServerWarnings([])
 		setCreatedPages([])
+		setResumedCount(0)
 	}
 
 	const handleOpenChange = (next: boolean) => {
 		if (!next) {
 			reset()
+			// Closing abandons the attempt-session; a later import starts fresh.
+			importSessionRef.current = null
 		}
 		onOpenChange(next)
 	}
@@ -106,17 +114,29 @@ export function ImportDialog ({
 
 		setPhase('writing')
 		try {
+			const obsidianIR = result.ir as ObsidianImportIR
+			// Reuse the attempt-session id when retrying the same vault; otherwise
+			// start a new one. This is what makes a retry resume instead of duplicate.
+			const fingerprint = vaultFingerprint(obsidianIR)
+			if (importSessionRef.current?.fingerprint !== fingerprint) {
+				importSessionRef.current = { fingerprint, clientImportId: generateImportId() }
+			}
 			const outcome = await importVaultIR(
-				result.ir as ObsidianImportIR,
+				obsidianIR,
 				async () => {
 					const { data } = await supabase.auth.getSession()
 					return data.session?.access_token ?? ''
-				}
+				},
+				undefined,
+				{ clientImportId: importSessionRef.current.clientImportId }
 			)
 			setReport(result.report)
 			setServerWarnings(outcome.warnings)
 			setCreatedPages(outcome.createdPages)
+			setResumedCount(outcome.resumedCount)
 			setPhase('done')
+			// The import landed; the attempt-session is spent.
+			importSessionRef.current = null
 			track('import_completed', {
 				source: 'obsidian',
 				pages_count: result.report.pages,
@@ -238,7 +258,7 @@ export function ImportDialog ({
 				)}
 
 				{busy && (
-					<div className="py-lg flex flex-col items-center gap-sm" data-testid="import-progress">
+					<div className="py-lg flex flex-col items-center gap-sm" data-testid="import-progress" role="status" aria-live="polite">
 						<div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
 						<p className="text-on-surface-variant text-sm">
 							{phase === 'picking' && 'Preparing…'}
@@ -253,6 +273,7 @@ export function ImportDialog ({
 						report={report}
 						serverWarnings={serverWarnings}
 						createdPages={createdPages}
+						resumedCount={resumedCount}
 						onOpenPage={(pageId) => {
 							handleOpenChange(false)
 							onOpenPage(pageId)

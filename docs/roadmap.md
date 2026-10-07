@@ -95,7 +95,7 @@ provider registry).
 | — | 🔒 **Private beta opens** (gate #84 clears) | — | — | **Sep 2** | — |
 | #28 | AI Provider Registry (final spec 4h incl.) | P0 | 64h | Sep 2 → Sep 10 | **Shipped** (PR #107) |
 | #29 | Billing: Stripe/Razorpay + founding prices + referral credits | P0 | 60h | Sep 11 → Sep 22 | Backlog |
-| #87 | Idempotent imports | P1 | 12h | Sep 23 → Sep 24 | Backlog |
+| #87 | Idempotent imports | P1 | 12h | Sep 23 → Sep 24 | **In review** (PR #130) |
 | #31 | i18n framework | P0 | 24h | Sep 25 → Sep 29 | Backlog |
 | #32 | Docs site (agent 32h; prose content owner-driven in parallel) | P0 | 32h | Sep 30 → Oct 7 | Backlog |
 | #30 | Publish polish | P0 | 12h | Oct 8 → Oct 9 | Backlog |

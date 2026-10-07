@@ -7,6 +7,8 @@ interface ImportReportCardProps {
 	/** Server-side warnings (snapshot/index failures) keyed by page title. */
 	serverWarnings: Array<{ title: string; stage: string; error: string }>
 	createdPages: Array<{ id: string; title: string }>
+	/** Pages recovered from an already-landed batch when resuming (#87). */
+	resumedCount?: number
 	onOpenPage: (pageId: string) => void
 }
 
@@ -15,7 +17,7 @@ interface ImportReportCardProps {
  * Per #27's spec — no silent data loss, ever. Interop moments are first
  * impressions; this card is where skeptical switchers decide to trust us.
  */
-export function ImportReportCard ({ report, serverWarnings, createdPages, onOpenPage }: ImportReportCardProps) {
+export function ImportReportCard ({ report, serverWarnings, createdPages, resumedCount = 0, onOpenPage }: ImportReportCardProps) {
 	const unresolved = Math.max(0, report.linksUnresolved)
 	const previewPages = createdPages.slice(0, 8)
 	const hiddenPages = createdPages.length - previewPages.length
@@ -52,6 +54,11 @@ export function ImportReportCard ({ report, serverWarnings, createdPages, onOpen
 						{report.degradedBlocks} block{report.degradedBlocks === 1 ? '' : 's'} couldn't be converted exactly (e.g. non-image embeds) and were kept as links instead
 					</li>
 				)}
+				{resumedCount > 0 && (
+					<li data-testid="report-resumed">
+						{resumedCount} of these page{resumedCount === 1 ? '' : 's'} {resumedCount === 1 ? 'was' : 'were'} already imported in an earlier interrupted attempt and {resumedCount === 1 ? 'was' : 'were'} resumed instead of duplicated
+					</li>
+				)}
 			</ul>
 
 			{serverWarnings.length > 0 && (
@@ -59,7 +66,7 @@ export function ImportReportCard ({ report, serverWarnings, createdPages, onOpen
 					<p className="font-semibold mb-1">{serverWarnings.length} page{serverWarnings.length === 1 ? '' : 's'} need attention:</p>
 					<ul className="list-disc list-inside text-on-surface-variant">
 						{serverWarnings.map((warning, i) => (
-							<li key={i}>
+							<li key={`${warning.title}:${warning.stage}:${i}`}>
 								<span className="font-medium">{warning.title}</span> — {warning.stage === 'snapshot' ? 'content could not be saved' : 'search/links could not be indexed'}: {warning.error}
 							</li>
 						))}
