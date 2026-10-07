@@ -29,10 +29,11 @@ jobs:
         uses: pullfrog/pullfrog@v0
         with:
           prompt: ${{ inputs.prompt }}
-          # Reviewer model: OpenCode Go provider, MiMo-V2.6-Flash.
-          # The action `model` input overrides repo/console settings. Requires an
-          # OpenCode Go key (OPENCODE_API_KEY secret or Pullfrog's stored key).
-          model: opencode-go/mimo-v2.6-flash
+          # Reviewer: OpenCode Go provider, GPT-6-Luna at high reasoning effort.
+          # The action `model`/`effort` inputs override repo/console settings.
+          # Requires an OpenCode Go key (OPENCODE_API_KEY secret or Pullfrog's stored key).
+          model: opencode-go/gpt-6-luna
+          effort: high
         env:
           # add at least one provider API key
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
