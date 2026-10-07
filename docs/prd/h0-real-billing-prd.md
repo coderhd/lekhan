@@ -48,7 +48,7 @@ prices, with a referral loop that compounds early growth — without ever punish
 |---|---|---|---|
 | P1 | **Maya** — global solo writer (US/EU) | USD via Stripe | Imports her Obsidian vault, loves the local-first graph, upgrades to Plus the day she wants a second device in sync. Expects checkout in dollars, cancels anytime, keeps her files either way. |
 | P2 | **Aarav** — India power user | INR via Razorpay | Price-sensitive (PPP), pays in rupees from the ₹ pricing. Expects UPI/cards, an INR price that isn't a naive USD conversion, and never sees a dollar sign. |
-| P3 | **Priya** — small studio/team lead | INR or USD via Team | Wants her 4-person team inside one knowledge graph. Expects per-seat clarity ("how much when I add the 5th seat?"), admin visibility, and no seat spring-loaded surprises. |
+| P3 | **Priya** — small studio/team lead | USD (Team H0); INR core via Plus/Pro | Wants her 4-person team inside one knowledge graph. Expects per-seat clarity ("how much when I add the 5th seat?"), admin visibility, and no seat spring-loaded surprises. |
 | P4 | **Founding referrer** — early adopter | any founding tier | Already in the 500. Shares `?ref` links because credits are real: 1 month per friend who activates, 2 if they go paid. Expects credits to simply appear at renewal. |
 | P5 | **Free-forever user** — privacy-first local user | none, ever | Local pages, BYOL models. Must feel zero billing pressure: no paywall core, no credit meter, doc cap gone, AI still on their machine. |
 
@@ -76,9 +76,13 @@ Per workspace, from `docs/marketing/founding-cohort-launch.md`:
 | Free | $0 / ₹0 | — | $0 |
 | Plus | $4 / ₹249 | $40 / ₹2,499 | $6 / ₹499 |
 | Pro | $8 / ₹499 | $80 / ₹4,999 | $12 / ₹999 |
-| Team | $8/seat (2–10) | 10× monthly across seats | $10/seat |
+| Team | $8/seat (2–10) | 2-month convention | $10/seat |
 | Team 11–25 seats | $7/seat | 2-month convention | $9/seat |
 | Team 26+ seats | $6/seat | 2-month convention | $8/seat |
+
+> **Team currency note (Tech Lead round-1 arbitration, spec §16 Q11):** Team ships **USD-only via
+> Stripe at H0** — no founding INR per-seat price exists in any source doc; INR Team pricing defers
+> to a GA pricing decision. INR individuals ride Plus/Pro via Razorpay.
 
 - Founding = the cohort's price identity, grandfathered via the cohort flag on each subscription.
 - Annual = pay-for-10 convention on every paid tier, monthly and annual on **both rails**.
@@ -110,7 +114,8 @@ my sync and history unlock immediately.
 
 ### US-2 — Checkout with Razorpay (P2 Aarav) — P0
 **As** Aarav, **I want** to pay in ₹ via UPI/card, **so that** buying feels native in India.
-- AC1: Given an INR-eligible owner, when they pick any paid tier → Razorpay hosted checkout opens in
+- AC1: Given an INR-eligible owner, when they pick any INR-available paid tier (Plus/Pro at H0;
+  Team is USD-only per spec §16 Q11) → Razorpay hosted checkout opens in
   INR (never Stripe-imported currency); nearest-fallback is a clear "pay internationally in USD"
   escape hatch, never a silent redirect.
 - AC2: Given payment succeeds → webhook applies the entitlement with the purchased cycle (monthly/annual)
@@ -184,8 +189,10 @@ advocacy pays for my subscription.
 ### US-11 — Referral credits applied at renewal (P4) — P1
 **As** a paying referrer, **I want** banked months to extend my period, **so that** credits are real
 value, not vibes.
-- AC1: Given a banked balance > 0 and renewal due → cycle extends by 1 month per credit (at current
-  tier), invoiced at ₹/$0 for the extended period; decrement ledger, apply once, idempotently.
+- AC1: Given a banked balance > 0 and renewal due → the next cycle extends by 1 month per credit
+  (at the current tier value), invoiced at ₹/$0 for the extended period; applied **provider-side**
+  (Stripe customer credit balance in H0; Razorpay redemption path verified at PLAN — spec §8),
+  never by editing `current_period_end` locally; ledger decrements once, idempotently.
 - AC2: Given a plan/skip/cancel in the meanwhile → credits remain banked on the workspace, unaffected
   by tier changes beyond value-equivalence note (1 month of the current tier).
 
@@ -213,9 +220,14 @@ says, **so that** billing states never lie.
   #29 sits between #28 (provider registry) and the #28/#29/#31/#32 launch gate (≈Sept 30 target
   recorded in the launch doc; recalibration checkpoints noted after #81 and after #29 in `docs/roadmap.md`).
 
-## 9. Open questions
+## 9. Open questions → resolved (Tech Lead round-1 arbitration, 2026-10-07)
 
-Owned in the spec (`docs/superpowers/specs/29-spec.md`, §Open Questions) — headline: free-tier
-history retention (code 1d vs strategy 7d), INR/USD region assignment rule, tax handling deferral,
-Team-seat proration depth, grace-window length, founding-flag semantics on tier changes, Team
-workspace object timing vs billing landing.
+All ten spec open questions are closed; rulings live in
+`docs/superpowers/specs/29-spec.md` §16. Headlines: Free history retention is **1 day** (ADR 0002
+canonical — supersedes the roadmap-position recommendation), Pro = **25** collaborators (strategy
+values win; `lib/tier-limits.ts` edit pre-approved by TL), explicit currency picker with
+`x-vercel-ip-country` geo default, **Team is USD-only at H0** (no invented INR founding price),
+taxes engines deferred, period-end downgrades, referral grant hooks `ensureWorkspace()`, Stripe
+credit balance carries referral redemption in H0 (Razorpay INR redemption verified against current
+Razorpay APIs at PLAN).
+
