@@ -66,6 +66,30 @@ export function schemaKey(extensions?: AnyExtension[]): string {
 		.join('||')
 }
 
+/**
+ * Strip the live editor's auto-filled placeholder headings from a doc. The
+ * live editor's `CustomDocument` is `heading block*`, so every Page doc opens
+ * with a title heading and an empty page carries an empty first heading. Those
+ * headings are not page content: without stripping, an empty page exports a
+ * stray `# ` and markdown hydration appends a trailing `# `. Non-empty
+ * headings the user authored are kept.
+ *
+ * Lives on the engine (ADR 0005: engine is the single markdown seam) so the
+ * Obsidian clipboard/export profile and `lib/markdown-export.ts` share one
+ * implementation.
+ */
+export function stripAutoHeading(doc: JSONContent): JSONContent {
+	const content = [...(doc.content ?? [])]
+	if (content[0]?.type === 'heading' && !(content[0].content ?? []).length) {
+		content.shift()
+	}
+	const last = content[content.length - 1]
+	if (content.length > 1 && last?.type === 'heading' && !(last.content ?? []).length) {
+		content.pop()
+	}
+	return { ...doc, content }
+}
+
 export function uint8ArrayToBase64(bytes: Uint8Array): string {
 	let binary = ''
 	const chunkSize = 0x8000
@@ -160,6 +184,28 @@ export class MarkdownEngine {
 	serializeExport(doc: JSONContent): string {
 		const exts = [...getSharedExtensions({ document: Document }), Mention.configure({ HTMLAttributes: { class: 'mention' } })]
 		return this.serialize(doc, exts)
+	}
+
+	// -- Obsidian profile (clipboard copy-out + vault export, SIL-9 S3/S4) --
+
+	/**
+	 * Obsidian-flavored body markdown: callouts (`> [!type]`), wikilinks
+	 * (`[[Page]]` / `[[Page|Alias]]`) and inline `#tags` are preserved by the
+	 * export serializer; the placeholder title heading is stripped so frontmatter
+	 * (not a duplicated heading) carries the Page title. Shared by clipboard
+	 * copy-out and the S4 vault export.
+	 */
+	serializeObsidianBody(doc: JSONContent): string {
+		return this.serializeExport(stripAutoHeading(doc))
+	}
+
+	/**
+	 * Full Obsidian-flavored Page file: YAML frontmatter assembled from Page
+	 * properties (title, tags, remaining properties) followed by the
+	 * Obsidian-flavored body. Returns the bare body when there is no meta.
+	 */
+	serializeObsidianPage(doc: JSONContent, meta: PageMeta): string {
+		return this.assembleMarkdownFile(meta, this.serializeObsidianBody(doc))
 	}
 
 	// -- Yjs / plain text (Page graph) --

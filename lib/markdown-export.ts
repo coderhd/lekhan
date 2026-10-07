@@ -3,6 +3,7 @@ import { generateHTML } from '@tiptap/core'
 import { Document } from '@tiptap/extension-document'
 import { Mention } from '@tiptap/extension-mention'
 import { markdownEngine } from '@/lib/markdown/engine'
+import { stripAutoHeading } from '@/lib/markdown/engine'
 import type { PageMeta } from '@/lib/markdown/engine'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 
@@ -55,26 +56,6 @@ export function resolveTags(pageTags: string[], properties: Record<string, unkno
 		return mirror.filter((tag): tag is string => typeof tag === 'string')
 	}
 	return []
-}
-
-/**
- * Strip the live editor's auto-filled empty headings (the `heading block*`
- * placeholder that shows "Untitled Document") from a doc. They are not page
- * content: without stripping, an empty page would export a stray `# ` as its
- * first element and any replacement of a doc that doesn't end in a heading
- * (e.g. markdown import hydration) would export a trailing `# ` line. Non-empty
- * headings are the user's real blocks and are kept.
- */
-export function stripAutoHeading(doc: JSONContent): JSONContent {
-	const content = [...(doc.content ?? [])]
-	if (content[0]?.type === 'heading' && !(content[0].content ?? []).length) {
-		content.shift()
-	}
-	const last = content[content.length - 1]
-	if (content.length > 1 && last?.type === 'heading' && !(last.content ?? []).length) {
-		content.pop()
-	}
-	return { ...doc, content }
 }
 
 /**
