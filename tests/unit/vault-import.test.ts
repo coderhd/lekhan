@@ -10,12 +10,13 @@ import {
 function makePage (title: string, base64Length: number) {
 	return {
 		title,
-		folderPath: null,
-		properties: {},
-		tags: [],
+		folderPath: null as string | null,
+		properties: {} as Record<string, unknown>,
+		tags: [] as string[],
 		contentYjsBase64: 'A'.repeat(base64Length),
 		plainText: '',
 		isFolder: false,
+		contentHash: `hash-${title}`,
 	}
 }
 
@@ -102,6 +103,30 @@ describe('vaultFingerprint', () => {
 		const a = makeIR([makePage('a', 10)])
 		const b = makeIR([{ ...makePage('a', 10), contentYjsBase64: 'B'.repeat(99) }])
 		expect(vaultFingerprint(a)).toBe(vaultFingerprint(b))
+	})
+
+	it('diverges when rich-text content changes but plain text does not', () => {
+		// `plainText` drops marks/structure, so an italic-only edit can leave it
+		// unchanged while the imported doc materially differs. The content hash
+		// must carry that difference (external review finding, PR #132).
+		const base = makeIR([makePage('a', 10)])
+		const restyled = makeIR([{ ...makePage('a', 10), contentHash: 'different-content' }])
+		expect(base.pages[0].plainText).toBe(restyled.pages[0].plainText)
+		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(restyled))
+	})
+
+	it('diverges when page properties or tags change', () => {
+		const base = makeIR([makePage('a', 10)])
+		const withProps = makeIR([{ ...makePage('a', 10), properties: { author: 'Harsh' } }])
+		const withTags = makeIR([{ ...makePage('a', 10), tags: ['work'] }])
+		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(withProps))
+		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(withTags))
+	})
+
+	it('diverges when folder/note role changes for the same path', () => {
+		const base = makeIR([makePage('a', 10)])
+		const asFolder = makeIR([{ ...makePage('a', 10), isFolder: true }])
+		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(asFolder))
 	})
 })
 

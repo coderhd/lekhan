@@ -227,4 +227,35 @@ describe('importObsidianVault — retry fingerprint stability (#87)', () => {
 		const second = importObsidianVault(vault, options).ir
 		expect(vaultFingerprint(first)).toBe(vaultFingerprint(second))
 	})
+
+	function contentOf (files: Record<string, string>): Parameters<typeof importObsidianVault>[0] {
+		return {
+			files: Object.entries(files).map(([path, body]) => ({
+				path,
+				data: new TextEncoder().encode(body),
+			})),
+			directories: [],
+		}
+	}
+
+	it('distinguishes a mark-only edit whose plain text is unchanged', () => {
+		// `plainText` drops marks: "word" and "*word*" both read as "word", yet
+		// they import different docs. The fingerprint must diverge (external
+		// review finding on PR #132), or a retry silently replays the stale batch.
+		const options = { workspaceId: 'ws-1', existingPageTitles: [] }
+		const plain = importObsidianVault(contentOf({ 'n.md': '# N\n\nword\n' }), options).ir
+		const styled = importObsidianVault(contentOf({ 'n.md': '# N\n\n*word*\n' }), options).ir
+		const page = (ir: typeof plain) => ir.pages.find((p) => !p.isFolder)!
+		expect(page(plain).plainText).toBe(page(styled).plainText)
+		expect(vaultFingerprint(plain)).not.toBe(vaultFingerprint(styled))
+	})
+
+	it('distinguishes a metadata-only edit whose body is unchanged', () => {
+		const options = { workspaceId: 'ws-1', existingPageTitles: [] }
+		const first = importObsidianVault(contentOf({ 'n.md': '---\nauthor: A\n---\nbody\n' }), options).ir
+		const second = importObsidianVault(contentOf({ 'n.md': '---\nauthor: B\n---\nbody\n' }), options).ir
+		const page = (ir: typeof first) => ir.pages.find((p) => !p.isFolder)!
+		expect(page(first).plainText).toBe(page(second).plainText)
+		expect(vaultFingerprint(first)).not.toBe(vaultFingerprint(second))
+	})
 })

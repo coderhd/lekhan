@@ -2,6 +2,7 @@ import JSZip from 'jszip'
 import { markdownEngine, uint8ArrayToBase64 } from '@/lib/markdown/engine'
 import { fitLiveSchema } from '@/lib/import-hydration'
 import { titleFromFilename } from '@/lib/title-from-filename'
+import { canonicalJson, stableHash } from '@/lib/stable-content'
 
 export const MAX_IMPORT_PAGES = 2000
 /** Per-file unpacked byte limit for vault entries (shared across all vault readers). */
@@ -275,6 +276,14 @@ export interface ObsidianImportPage {
 	contentYjsBase64: string
 	plainText: string
 	isFolder: boolean
+	/**
+	 * Deterministic hash of the fitted ProseMirror doc this page imports (#87).
+	 * Unlike `contentYjsBase64` (fresh random Yjs clientID each seeding) and
+	 * `plainText` (drops marks/structure), this captures ALL deterministic page
+	 * content — marks, node structure, and attributes — so the retry fingerprint
+	 * distinguishes a materially edited page.
+	 */
+	contentHash: string
 }
 
 export interface ObsidianImportIR {
@@ -399,6 +408,11 @@ const EMPTY_PAGE_DOC = {
 	content: [{ type: 'heading', attrs: { level: 1 }, content: [] }],
 }
 
+// Every folder page seeds this exact doc; its content hash is a constant.
+// (`fitLiveSchema` is idempotent, so hashing the raw doc equals hashing the
+// seeded one.)
+const EMPTY_PAGE_CONTENT_HASH = stableHash(canonicalJson(EMPTY_PAGE_DOC))
+
 /**
  * Normalize a vault into the IR + report. Pure and synchronous (parsing and
  * Yjs seeding are both sync); the async part is reading the vault (see
@@ -436,6 +450,7 @@ export function importObsidianVault (content: VaultContent, options: ObsidianImp
 			contentYjsBase64: markdownEngine.seedToYjsBase64(EMPTY_PAGE_DOC),
 			plainText: '',
 			isFolder: true,
+			contentHash: EMPTY_PAGE_CONTENT_HASH,
 		})
 	}
 
@@ -463,6 +478,9 @@ export function importObsidianVault (content: VaultContent, options: ObsidianImp
 			contentYjsBase64: markdownEngine.seedToYjsBase64(fitted),
 			plainText: markdownEngine.plainText(fitted),
 			isFolder: false,
+			// `seedToYjsBase64` applies `fitLiveSchema` again, which is idempotent,
+			// so hashing `fitted` hashes exactly the doc that gets seeded.
+			contentHash: stableHash(canonicalJson(fitted)),
 		})
 	}
 

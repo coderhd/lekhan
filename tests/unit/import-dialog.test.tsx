@@ -40,12 +40,12 @@ const fixtureIR = {
 		{
 			title: 'Note A', folderPath: null, properties: {}, tags: [],
 			contentYjsBase64: Buffer.from('a').toString('base64'),
-			plainText: 'a', isFolder: false,
+			plainText: 'a', isFolder: false, contentHash: 'hash-note-a',
 		},
 		{
 			title: 'Note B', folderPath: null, properties: {}, tags: [],
 			contentYjsBase64: Buffer.from('b').toString('base64'),
-			plainText: 'b', isFolder: false,
+			plainText: 'b', isFolder: false, contentHash: 'hash-note-b',
 		},
 	],
 }

@@ -2,8 +2,8 @@
 
 **Branch:** `feat/87-idempotent-bulk-imports` · **PR:** #130 (**merged** at pre-fix tip `83fd28a`) · **follow-up fix:** #132 (`fix/87-stable-retry-fingerprint`)
 **Diff:** `git diff origin/main...HEAD`
-**Reviewer:** independent clean-room adversarial subagent (did not author the change), run across two passes.
-**Verification (worktree):** `npm run typecheck` clean · `npm run lint` clean · `npm test` → 79 files / **603 tests** passed · `npm run build` succeeded. Live-Postgres migration/RLS was not executable from this worktree.
+**Reviewer:** independent clean-room adversarial subagent (did not author the change), run across two passes; plus the external Pullfrog review on PR #132.
+**Verification (worktree):** `npm run typecheck` clean · `npm run lint` clean · `npm test` → 79 files / **608 tests** passed · `npm run build` succeeded. Live-Postgres migration/RLS was not executable from this worktree.
 
 ## Verdict
 
@@ -25,6 +25,16 @@ the deterministic order is total. Regression tests now exercise real double inge
 (`tests/unit/obsidian-import.test.ts`), Yjs-length independence (`tests/unit/vault-import.test.ts`), and a
 dialog retry that re-ingests with different Yjs bytes (`tests/unit/import-dialog.test.tsx`).
 
+The external Pullfrog review on #132 then found that this fix was still **incomplete**: hashing only
+`path` + `plainText` meant a mark-only edit (e.g. `word` → `*word*`) or a metadata-only edit
+(`properties`/`tags`) left the fingerprint unchanged, so the dialog reused the old `clientImportId` and the
+server replayed the completed `(clientImportId, batchIndex)` from its ledger — **silently dropping the
+edit**. Fixed by making the fingerprint cover all deterministic page state: each page now carries a
+`contentHash` computed at ingestion from the fitted ProseMirror doc (`stableHash(canonicalJson(fitted))`,
+capturing marks/structure/attributes), and the fingerprint also folds in canonical `properties`, `tags`,
+and the folder/note role. `splitIntoBatches` tie-breaks on the same `contentHash`. `Yjs` bytes remain
+excluded. See the findings table and `docs/superpowers/specs/87-spec.md` D3.
+
 ## Findings and resolution
 
 | Sev | Finding | Resolution |
@@ -32,6 +42,7 @@ dialog retry that re-ingests with different Yjs bytes (`tests/unit/import-dialog
 | BLOCKER | `cleanup_import_batches` `SECURITY DEFINER` reachable via PostgREST rpc (default `PUBLIC` EXECUTE) — an authenticated caller could wipe every tenant's ledger. | `REVOKE EXECUTE … FROM PUBLIC` / `FROM anon, authenticated`; `GRANT … TO service_role` (`supabase/migrations/20261007000001_import_batches_ledger.sql`), mirroring `20260814000000_sync_page_graph.sql:62-64`. |
 | BLOCKER | A reclaimed batch re-runs leaf inserts → duplicate pages (partial chunk / checkpoint failure / crash-after-landing). | Deterministic ids `deriveBatchPageId(workspace, clientImportId, batchIndex, ordinal)` (UUID v5) + `upsert(…, { onConflict: 'id', ignoreDuplicates: true })` (`lib/import-ledger.ts`, `app/api/import/route.ts`). |
 | BLOCKER | **Unstable fingerprint → new `clientImportId` on retry → duplicates (see verdict).** | `vaultFingerprint` is now content-based and Yjs-independent; verified by real double-ingestion test. |
+| BLOCKER | **Incomplete fingerprint → stale edit silently dropped (external Pullfrog review, #132).** `path`+`plainText` ignores marks/structure and `properties`/`tags`; a mark- or metadata-only edit left the fingerprint unchanged, so the dialog reused the id and the server replayed the old batch. | Each page gains `contentHash = stableHash(canonicalJson(fitted))` (marks/structure/attrs); `vaultFingerprint` also hashes canonical `properties`, `tags`, and folder/note role; batching tie-breaks on `contentHash` (`lib/stable-content.ts`, `services/obsidian-import.ts`, `services/vault-import.ts`). Tests: mark-only and metadata-only edits diverge despite identical `plainText`. |
 | MAJOR | Order-blind fingerprint + positional `batchIndex`: enumeration reorder maps a batchIndex to different pages; the server replays the recorded set and drops the new pages. | `splitIntoBatches` sorts deterministically (path, then content hash) so `batchIndex` ↔ page set is stable. |
 | MINOR | No client retry on `409 batch_in_progress` (contradicts spec D2). | Bounded backoff (`MAX_BATCH_ATTEMPTS = 4`, 400 ms × attempt). |
 | MINOR | `cleanup_import_batches` pruned only `completed`. | Prunes any stale row. |
@@ -43,8 +54,10 @@ dialog retry that re-ingests with different Yjs bytes (`tests/unit/import-dialog
 
 - **AC1 zero duplicate pages on retry — PASS.** Completed batches replay with no writes; reclaimed
   failed/stale batches re-run but every leaf re-derives the *same* id and `ON CONFLICT (id) DO NOTHING`
-  keeps them unique. The attempt-session id is now stable across retries (fingerprint fix), which is what
-  makes the ledger actually resume.
+  keeps them unique. The attempt-session id is now stable across retries (fingerprint fix) **and** any
+  deterministic edit to page content or metadata changes the fingerprint, minting a fresh id so the edit
+  is actually imported rather than silently replayed away. A *genuinely edited* vault is a different
+  import (fresh id, full re-import) — that is the intended, honestly-reported behaviour.
 - **AC2 honest partial progress — PASS.** `resumed: true` + recorded report; client aggregates
   `resumedCount`; the card shows the resumed line. Caveat: pages re-upserted by a *reclaimed* batch are
   reported as created, not resumed (only truly replayed completed batches increment `resumedCount`).
@@ -61,3 +74,7 @@ dialog retry that re-ingests with different Yjs bytes (`tests/unit/import-dialog
   precedent, not executed against a live DB here; confirm on staging before ship.
 - **Legacy callers** — omitting the `clientImportId`/`batchIndex` pair keeps the non-idempotent path (spec
   D6); the Notion importer (#78) must send the pair.
+- **Server replay trusts the client fingerprint** — the ledger replays a completed `(clientImportId,
+  batchIndex)` without re-comparing the request payload. This is by design: the client owns vault content,
+  and the (now complete) fingerprint is what guarantees a changed vault gets a fresh id. A defensive
+  server-side payload hash in the ledger is deliberately out of scope for #87 and could be a follow-up.

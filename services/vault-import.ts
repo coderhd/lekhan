@@ -1,4 +1,5 @@
 import type { ObsidianImportIR } from '@/services/obsidian-import'
+import { canonicalJson, stableHash } from '@/lib/stable-content'
 
 /**
  * Client-side writer for `/api/import`: batches the IR into payload groups
@@ -74,14 +75,27 @@ export function generateImportId (): string {
 	return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
-/** FNV-1a — cheap, stable, non-cryptographic. Used only for session equality. */
-function hashString (input: string): string {
-	let hash = 0x811c9dc5
-	for (let i = 0; i < input.length; i++) {
-		hash ^= input.charCodeAt(i)
-		hash = Math.imul(hash, 0x01000193)
-	}
-	return (hash >>> 0).toString(16)
+/**
+ * One page's deterministic import identity: everything that materially affects
+ * what gets written, and nothing that varies run-to-run. Order-independent
+ * because the caller sorts the records.
+ *
+ * `contentHash` captures rich-text marks/structure (via the fitted doc);
+ * `properties`/`tags` capture page metadata; `plainText` is kept as belt-and-
+ * braces. `contentYjsBase64` is deliberately excluded: seeding a Y.Doc embeds
+ * a fresh random clientID, so its bytes differ between two ingestions of the
+ * same vault.
+ */
+function pageFingerprint (page: ObsidianImportIR['pages'][number]): string {
+	const path = `${page.folderPath ?? ''}/${page.title}`
+	return [
+		path,
+		page.isFolder ? 'folder' : 'note',
+		canonicalJson(page.properties ?? {}),
+		canonicalJson(page.tags ?? []),
+		page.contentHash ?? stableHash(page.plainText),
+		page.plainText,
+	].join('\u0000')
 }
 
 /**
@@ -90,23 +104,17 @@ function hashString (input: string): string {
  * the same vault after a failure resumes the same `clientImportId`; a
  * different vault gets a fresh one (no cross-vault false "resumed").
  *
- * It hashes only *deterministic* content (paths + source text). It must not use
- * the Yjs encoding: seeding a Y.Doc embeds a fresh random clientID, so the
- * encoded bytes — and their length — differ between two ingestions of the same
- * vault. Depending on that would change the fingerprint on retry, mint a new
- * `clientImportId`, and re-create every already-landed page (#87 AC1).
+ * It hashes only *deterministic* content: each page's path, folder/note role,
+ * canonical properties/tags, rich-text content hash, and plain text. It must
+ * not use the Yjs encoding: seeding a Y.Doc embeds a fresh random clientID, so
+ * the encoded bytes — and their length — differ between two ingestions of the
+ * same vault. Depending on that would change the fingerprint on retry, mint a
+ * new `clientImportId`, and re-create every already-landed page (#87 AC1).
  */
 export function vaultFingerprint (ir: ObsidianImportIR): string {
-	const paths: string[] = []
-	const contents: string[] = []
-	for (const page of ir.pages) {
-		const path = `${page.folderPath ?? ''}/${page.title}`
-		paths.push(path)
-		contents.push(`${path}\u0000${page.plainText}`)
-	}
-	paths.sort()
-	contents.sort()
-	return `${ir.workspaceId}:${ir.pages.length}:${hashString(paths.join('\u0000'))}:${hashString(contents.join('\u0000'))}`
+	const records = ir.pages.map(pageFingerprint)
+	records.sort()
+	return `${ir.workspaceId}:${ir.pages.length}:${stableHash(records.join('\u0000'))}`
 }
 
 
@@ -137,11 +145,11 @@ export function splitIntoBatches (
 	// retry could send different pages under the same batchIndex — the server
 	// would replay the recorded batch and silently drop the new pages (#87).
 	const orderedPages = [...ir.pages].sort((a, b) => {
-		// Content hash is the tie-break so the order is total even when two pages
-		// share a path (same title in the same folder); this keeps ordinal → page
-		// mapping stable across retries.
-		const keyA = `${a.folderPath ?? ''}\u0000${a.title}\u0000${hashString(a.plainText)}`
-		const keyB = `${b.folderPath ?? ''}\u0000${b.title}\u0000${hashString(b.plainText)}`
+		// Content identity is the tie-break so the order is total even when two
+		// pages share a path (same title in the same folder); this keeps
+		// ordinal → page mapping stable across retries.
+		const keyA = `${a.folderPath ?? ''}\u0000${a.title}\u0000${a.contentHash ?? stableHash(a.plainText)}`
+		const keyB = `${b.folderPath ?? ''}\u0000${b.title}\u0000${b.contentHash ?? stableHash(b.plainText)}`
 		if (keyA === keyB) return 0
 		return keyA < keyB ? -1 : 1
 	})
