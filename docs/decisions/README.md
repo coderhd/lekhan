@@ -16,6 +16,7 @@ A running log of product/architecture decisions and open questions for Lekhan �
 - [[0002-free-history-retention-one-day]] — free-tier history retention window
 - [[0003-desktop-markdown-plus-yjs-sidecar]] — `.md` files + hidden CRDT sidecar on desktop
 - [[0004-server-hub-crdt-sync-topology]] — hub-relay sync topology
+- [[0005-engine-is-the-single-markdown-seam-facades-deleted]] — engine is the sole public seam; the transitional `markdown-io`/`yjs-seed` facades are deleted (#115)
 
 ## H3 "Studio" — in progress
 - [[01-one-architecture-not-team-vs-individual]]
