@@ -138,6 +138,7 @@ describe('serializeNotionHtml — Notion paste constructs (seam 3)', () => {
 	it('emits tables', () => {
 		const html = htmlFor('| Name | Role |\n| --- | --- |\n| Alice | Writer |\n')
 		expect(html).toContain('<table>')
+		expect(html).toContain('<thead>')
 		expect(html).toContain('<tbody>')
 		expect(html).toContain('<th>')
 		expect(html).toContain('<td>')

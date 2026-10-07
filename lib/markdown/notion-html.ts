@@ -156,8 +156,17 @@ function renderNode(node: JSONContent): string {
 			const title = node.attrs?.title ? ` title="${escapeAttr(node.attrs.title)}"` : ''
 			return `<img src="${src}"${alt}${title}>`
 		}
-		case 'table':
-			return `<table><tbody>${renderChildren(node)}</tbody></table>`
+		case 'table': {
+			// Notion expects a real header row; GFM header cells parse to
+			// `tableHeader`, so split rows into thead/tbody (spec §5).
+			const rows = node.content ?? []
+			const isHeaderRow = (row: JSONContent) => (row.content ?? []).some((cell) => cell.type === 'tableHeader')
+			const headerRows = rows.filter(isHeaderRow)
+			const bodyRows = rows.filter((row) => !isHeaderRow(row))
+			const thead = headerRows.length > 0 ? `<thead>${headerRows.map(renderNode).join('')}</thead>` : ''
+			const tbody = bodyRows.length > 0 ? `<tbody>${bodyRows.map(renderNode).join('')}</tbody>` : ''
+			return `<table>${thead}${tbody}</table>`
+		}
 		case 'tableRow':
 			return `<tr>${renderChildren(node)}</tr>`
 		case 'tableHeader':
