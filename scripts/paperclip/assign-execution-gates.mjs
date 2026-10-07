@@ -11,7 +11,11 @@
  * Complexity signals (labels + title/body keywords):
  *   base 3  ·  est:5 +2, est:8 +4  ·  epic|needs-spec +3  ·  h0 +2, h1 +1
  *   ·  billing|payment|stripe|razorpay|auth|encryption|sync|crdt|migration|security +2
+ *   ·  ui|ux|design|frontend|page|component|layout|accessib|visual +2
  *   bands: 1-3 low · 4-6 medium · 7-10 high
+ *   Title/body are read from the per-issue detail endpoint — the company list
+ *   endpoint truncates `description` at 1200 chars and would under-score long
+ *   bodies (keywords past the cutoff are invisible to the regexes).
  *
  * Gates:
  *   Reviewers : low [Tech Lead] · medium [TL, QA] · high [TL, QA] (+ Designer for UI work)
@@ -106,11 +110,12 @@ const targets = issues.filter((i) => statuses.includes(i.status));
 
 let assigned = 0, skipped = 0, unreadable = 0;
 for (const issue of targets) {
-  // Idempotency check must read the per-issue detail: the company list endpoint
-  // serializes executionPolicy as null, so a list-only check never skips and a
-  // periodic re-run would regenerate stage ids and bump active monitor/review
-  // state. Fail closed: if the detail cannot be read, skip the issue rather
-  // than re-gate it. Scoring still uses the list payload, unchanged.
+  // The per-issue detail is the source of truth for BOTH the idempotency check
+  // and scoring. The company list endpoint truncates `description` at 1200 chars
+  // (descriptionTruncated: true) and serializes executionPolicy as null, so a
+  // list-only pass both never skips already-gated issues and under-scores long
+  // bodies whose complexity keywords fall past the cutoff. Fail closed: if the
+  // detail cannot be read, skip the issue rather than re-gate or mis-score it.
   const detail = await api("GET", `/api/issues/${issue.id}`).catch((e) => {
     console.warn(`skip ${issue.identifier}: detail read failed: ${e.message}`);
     return null;
@@ -118,21 +123,21 @@ for (const issue of targets) {
   if (!detail) { unreadable++; continue; }
   const already = (detail.executionPolicy?.stages ?? []).length > 0;
   if (already) { skipped++; continue; }
-  const s = score(issue);
-  const g = gatesFor(issue, s);
+  const s = score(detail);
+  const g = gatesFor(detail, s);
   const reviewers = g.stages[0].participants.map((p) => agents.find((a) => a.id === p.agentId)?.name).join("+");
   if (DRY) {
-    console.log(`[dry] ${issue.identifier} score=${s} ${g.band.padEnd(6)} reviewers=${reviewers} approvers=${g.stages[1] ? "CEO" : "-"} watchdog=${g.watchdog ? (g.watchdog.agentId === A.ceo ? "CEO" : "PO") : "-"} monitor=${g.monitor ? g.monitor.recoveryPolicy : "-"}  :: ${issue.title.slice(0, 45)}`);
+    console.log(`[dry] ${detail.identifier} score=${s} ${g.band.padEnd(6)} reviewers=${reviewers} approvers=${g.stages[1] ? "CEO" : "-"} watchdog=${g.watchdog ? (g.watchdog.agentId === A.ceo ? "CEO" : "PO") : "-"} monitor=${g.monitor ? g.monitor.recoveryPolicy : "-"}  :: ${detail.title.slice(0, 45)}`);
     continue;
   }
-  const canMonitor = Boolean(issue.assigneeAgentId) && ["in_progress", "in_review"].includes(issue.status);
+  const canMonitor = Boolean(detail.assigneeAgentId) && ["in_progress", "in_review"].includes(detail.status);
   const monitor = canMonitor ? g.monitor : null;
   await api("PATCH", `/api/issues/${issue.id}`, {
     executionPolicy: { mode: "normal", commentRequired: true, stages: g.stages, monitor, maxReviewRounds: null },
   });
   if (g.watchdog) await api("PUT", `/api/issues/${issue.id}/watchdog`, g.watchdog);
   assigned++;
-  console.log(`assigned ${issue.identifier} score=${s} ${g.band} reviewers=${reviewers}${g.stages[1] ? " +approval(CEO)" : ""}${g.watchdog ? " +watchdog" : ""}`);
+  console.log(`assigned ${detail.identifier} score=${s} ${g.band} reviewers=${reviewers}${g.stages[1] ? " +approval(CEO)" : ""}${g.watchdog ? " +watchdog" : ""}`);
 }
 if (targets.length && unreadable === targets.length) {
   console.error("all targets unreadable — the per-issue detail route or its auth changed; fix before trusting skips");
