@@ -104,9 +104,19 @@ const statuses = ALL ? ["todo", "in_progress", "in_review", "blocked"] : ["todo"
 const issues = await api("GET", `/api/companies/${COMPANY}/issues`);
 const targets = issues.filter((i) => statuses.includes(i.status));
 
-let assigned = 0, skipped = 0;
+let assigned = 0, skipped = 0, unreadable = 0;
 for (const issue of targets) {
-  const already = (issue.executionPolicy?.stages ?? []).length > 0;
+  // Idempotency check must read the per-issue detail: the company list endpoint
+  // serializes executionPolicy as null, so a list-only check never skips and a
+  // periodic re-run would regenerate stage ids and bump active monitor/review
+  // state. Fail closed: if the detail cannot be read, skip the issue rather
+  // than re-gate it. Scoring still uses the list payload, unchanged.
+  const detail = await api("GET", `/api/issues/${issue.id}`).catch((e) => {
+    console.warn(`skip ${issue.identifier}: detail read failed: ${e.message}`);
+    return null;
+  });
+  if (!detail) { unreadable++; continue; }
+  const already = (detail.executionPolicy?.stages ?? []).length > 0;
   if (already) { skipped++; continue; }
   const s = score(issue);
   const g = gatesFor(issue, s);
@@ -124,4 +134,8 @@ for (const issue of targets) {
   assigned++;
   console.log(`assigned ${issue.identifier} score=${s} ${g.band} reviewers=${reviewers}${g.stages[1] ? " +approval(CEO)" : ""}${g.watchdog ? " +watchdog" : ""}`);
 }
-console.log(`\n${DRY ? "[dry] " : ""}targets=${targets.length} assigned=${assigned} skipped(existing gates)=${skipped}`);
+if (targets.length && unreadable === targets.length) {
+  console.error("all targets unreadable — the per-issue detail route or its auth changed; fix before trusting skips");
+  process.exitCode = 1;
+}
+console.log(`\n${DRY ? "[dry] " : ""}targets=${targets.length} assigned=${assigned} skipped(existing gates)=${skipped} unreadable=${unreadable}`);
