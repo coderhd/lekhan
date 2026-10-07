@@ -168,6 +168,13 @@ describe('import ledger', () => {
 		expect(rows[0].status).toBe('failed')
 	})
 
+	it('does not downgrade a completed batch when failing a losing writer', async () => {
+		rows.push({ ...BASE, id: 'ledger-7b', status: 'completed', imported_count: 2 })
+		await failImportBatch(admin as never, 'ledger-7b')
+		expect(rows[0].status).toBe('completed')
+		expect(rows[0].imported_count).toBe(2)
+	})
+
 	it('does not complete a batch that is no longer processing', async () => {
 		rows.push({ ...BASE, id: 'ledger-8', status: 'completed', imported_count: 3 })
 		const ok = await completeImportBatch(admin as never, 'ledger-8', {

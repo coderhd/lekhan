@@ -162,6 +162,11 @@ export async function claimImportBatch (
 		.eq('status', 'failed')
 		.select('id')
 		.maybeSingle()
+	if (reclaimFailed.error) {
+		// A real DB failure must not masquerade as "no match" (which would
+		// answer 409 batch_in_progress for a transient error).
+		throw reclaimFailed.error
+	}
 	if (reclaimFailed.data) {
 		return { kind: 'claimed', ledgerId: (reclaimFailed.data as { id: string }).id }
 	}
@@ -175,6 +180,9 @@ export async function claimImportBatch (
 		.lt('updated_at', staleBefore)
 		.select('id')
 		.maybeSingle()
+	if (reclaimStale.error) {
+		throw reclaimStale.error
+	}
 	if (reclaimStale.data) {
 		return { kind: 'claimed', ledgerId: (reclaimStale.data as { id: string }).id }
 	}
@@ -210,10 +218,15 @@ export async function completeImportBatch (
 	return !error && !!data
 }
 
-/** Mark a claimed batch failed so a retry may reclaim it. Best-effort. */
+/**
+ * Mark a claimed batch failed so a retry may reclaim it. Best-effort: a
+ * status guard means a completed row is never downgraded to `failed` by a
+ * late/losing writer in the stale-reclaim race.
+ */
 export async function failImportBatch (admin: SupabaseClient, ledgerId: string): Promise<void> {
 	await admin
 		.from('import_batches')
 		.update({ status: 'failed', updated_at: new Date().toISOString() })
 		.eq('id', ledgerId)
+		.eq('status', 'processing')
 }
