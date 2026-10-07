@@ -4,6 +4,8 @@ import path from 'node:path'
 import { MarkdownEngine } from '@/lib/markdown/engine'
 import { serializeNotionHtml } from '@/lib/markdown/notion-html'
 import { buildClipboardPayload, writeClipboardPayload } from '@/lib/markdown/clipboard'
+import { classifyClipboardPaste } from '@/lib/markdown-paste'
+import { splitObsidianFrontmatter } from '@/lib/obsidian-clipboard'
 
 // ---------------------------------------------------------------------------
 // SIL-9 S3 — Clipboard copy-out. Seams: (2) Obsidian profile on the engine,
@@ -228,11 +230,11 @@ describe('committed clipboard fixture — Obsidian Page copy-out', () => {
 	beforeEach(() => { engine = new MarkdownEngine() })
 	afterEach(() => engine.destroy())
 
+	const fixtureDir = () => path.join(process.cwd(), 'tests/fixtures/clipboard')
+	const readFixture = (name: string) => readFileSync(path.join(fixtureDir(), name), 'utf8')
+
 	it('round-trips the recorded Obsidian Dialect page to the same IR', () => {
-		const file = readFileSync(
-			path.join(process.cwd(), 'tests/fixtures/clipboard/obsidian-page-copy.md'),
-			'utf8',
-		)
+		const file = readFixture('obsidian-page-copy.md')
 		const { data, body } = engine.parseFrontmatter(file)
 		expect(data.title).toBe('Dual-Dialect Interop Bridge')
 		expect(data.tags).toEqual(['interop', 'obsidian'])
@@ -252,5 +254,109 @@ describe('committed clipboard fixture — Obsidian Page copy-out', () => {
 		expect(html).toContain('<h1>Dual-Dialect Interop Bridge</h1>')
 		expect(html).toContain('<a href="https://example.com">link</a>')
 		expect(html).toContain('<table>')
+	})
+
+	it('committed text/html capture is the Notion-facing serialization of the page', () => {
+		const { body } = engine.parseFrontmatter(readFixture('obsidian-page-copy.md'))
+		const doc = engine.parse(body)
+		// The committed capture is the regression anchor for the Notion payload;
+		// regenerate with buildClipboardPayload if the serializer legitimately changes.
+		expect(serializeNotionHtml(doc).trim()).toBe(readFixture('obsidian-page-copy.html').trim())
+	})
+
+	it('committed combined capture carries both MIME types and round-trips paste-out -> paste-in', () => {
+		const capture = JSON.parse(readFixture('obsidian-page-copy.clipboard.json')) as {
+			'text/plain': string
+			'text/html': string
+		}
+		// Both dialects are present, so the paste target picks what it understands.
+		expect(capture['text/plain']).toContain('[[Notion|Notion app]]')
+		expect(capture['text/plain']).toContain('> [!note]')
+		expect(capture['text/html']).toContain('<h1>Dual-Dialect Interop Bridge</h1>')
+		expect(capture['text/html']).toContain('<a href="https://example.com">link</a>')
+
+		const { data, body } = engine.parseFrontmatter(capture['text/plain'])
+		expect(data.title).toBe('Dual-Dialect Interop Bridge')
+		const doc = engine.parse(body)
+		expect(engine.parse(engine.serializeObsidianBody(doc))).toEqual(doc)
+	})
+})
+
+// ---------------------------------------------------------------------------
+// Round-trip guarantee — paste-out through the REAL S1 paste-in routing
+// (SIL-57: classifyClipboardPaste -> splitObsidianFrontmatter -> markdown
+// parser), not just engine.parse of the serialized body. This is the
+// acceptance criterion as written: paste-out -> paste-in is IR identity.
+// ---------------------------------------------------------------------------
+
+describe('round-trip guarantee through S1 paste-in routing', () => {
+	let engine: MarkdownEngine
+	beforeEach(() => { engine = new MarkdownEngine() })
+	afterEach(() => engine.destroy())
+
+	const meta = { title: 'Page title', tags: ['work', 'ai'], properties: { status: 'draft' } }
+
+	it('a whole-Page Obsidian copy routes to obsidian-markdown and reproduces the IR', () => {
+		for (const { name, markdown } of CORPUS) {
+			const doc = engine.parse(markdown)
+			const payload = buildClipboardPayload(doc, meta, { wholePage: true, target: 'obsidian' })
+
+			// Obsidian target is plain-only, so the Obsidian dialect actually reaches
+			// Obsidian (the SIL-68 finding) and the classifier sees no HTML to prefer.
+			expect(payload.html, name).toBe('')
+			expect(classifyClipboardPaste(payload.text, undefined), name).toBe('obsidian-markdown')
+
+			const { properties, tags, body } = splitObsidianFrontmatter(payload.text)
+			expect(tags, name).toEqual(['work', 'ai'])
+			expect(properties, name).toEqual({ status: 'draft', tags: ['work', 'ai'] })
+
+			// IR identity: paste-out -> paste-in is the same document.
+			expect(engine.parse(body), name).toEqual(doc)
+		}
+	})
+
+	it('a Notion-target copy still round-trips into Lekhan without loss', () => {
+		for (const { name, markdown } of CORPUS) {
+			const doc = engine.parse(markdown)
+			const payload = buildClipboardPayload(doc, meta, { wholePage: true, target: 'notion' })
+			expect(payload.html, name).not.toBe('')
+
+			// The plain-text half is the Obsidian dialect, so S1 routes Obsidian
+			// signals ahead of the Notion HTML and no body content is lost.
+			expect(classifyClipboardPaste(payload.text, payload.html), name).toBe('obsidian-markdown')
+			const { body } = splitObsidianFrontmatter(payload.text)
+			expect(engine.parse(body), name).toEqual(doc)
+		}
+	})
+
+	it('a partial-selection copy carries no frontmatter and still reproduces the IR', () => {
+		for (const { name, markdown } of CORPUS) {
+			const doc = engine.parse(markdown)
+			const payload = buildClipboardPayload(doc, meta, { wholePage: false, target: 'obsidian' })
+			expect(payload.text.startsWith('---'), name).toBe(false)
+			expect(engine.parse(payload.text), name).toEqual(doc)
+		}
+	})
+
+	it('a Page with wikilinks, callouts, frontmatter and tags survives the full loop', () => {
+		const markdown = [
+			'# Bridge',
+			'',
+			'Links to [[Alpha]] and [[Beta|the beta]].',
+			'',
+			'> [!warning] Careful',
+			'> Read [[Alpha]] first.',
+			'',
+			'Tagged #work here.',
+		].join('\n')
+		const doc = engine.parse(markdown)
+		const payload = buildClipboardPayload(doc, meta, { wholePage: true, target: 'obsidian' })
+		const { body } = splitObsidianFrontmatter(payload.text)
+		const roundTripped = engine.parse(body)
+
+		expect(roundTripped).toEqual(doc)
+		expect(body).toContain('[[Alpha]]')
+		expect(body).toContain('[[Beta|the beta]]')
+		expect(body).toMatch(/> \[!warning\](?:^|\s)/m)
 	})
 })
