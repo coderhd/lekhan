@@ -1,6 +1,7 @@
 # PR #87 review — idempotent bulk imports
 
-**Branch:** `feat/87-idempotent-bulk-imports` · **PR:** #130 · **Diff:** `git diff origin/main...HEAD`
+**Branch:** `feat/87-idempotent-bulk-imports` · **PR:** #130 (**merged** at pre-fix tip `83fd28a`) · **follow-up fix:** #132 (`fix/87-stable-retry-fingerprint`)
+**Diff:** `git diff origin/main...HEAD`
 **Reviewer:** independent clean-room adversarial subagent (did not author the change), run across two passes.
 **Verification (worktree):** `npm run typecheck` clean · `npm run lint` clean · `npm test` → 79 files / **603 tests** passed · `npm run build` succeeded. Live-Postgres migration/RLS was not executable from this worktree.
 
