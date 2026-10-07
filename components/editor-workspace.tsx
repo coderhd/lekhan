@@ -35,7 +35,7 @@ import { PromptDialog } from './ui/prompt-dialog'
 import * as Y from 'yjs'
 import { Mention } from '@tiptap/extension-mention'
 import MentionList, { MentionItem } from './mention-list'
-import { fetchPageDetails, fetchPageMemberRole, updatePageTitle, fetchMentionablePageCollaborators, fetchPageTags, fetchWorkspacePages, createPage } from '@/services/graph'
+import { fetchPageDetails, fetchPageMemberRole, updatePageTitle, updatePageProperties, fetchMentionablePageCollaborators, fetchPageTags, fetchWorkspacePages, createPage } from '@/services/graph'
 import { Wikilink, type WorkspacePageSummary, normalizeWikilinkTarget } from '@/lib/wikilink'
 
 import { TableToolbar } from './table-toolbar'
@@ -77,7 +77,9 @@ const CURSOR_COLORS = [
 ]
 
 import { getSharedExtensions } from '@/lib/editor-extensions'
-import { decideMarkdownPaste } from '@/lib/markdown-paste'
+import { classifyClipboardPaste } from '@/lib/markdown-paste'
+import { splitObsidianFrontmatter } from '@/lib/obsidian-clipboard'
+import { notionHtmlToMarkdown } from '@/lib/notion-clipboard'
 import { insertParsedHtml } from '@/lib/insert-parsed-html'
 import { hydrateOnOpen } from '@/lib/import-hydration'
 import { Callout, BLOCKQUOTE_MARKER_RE, handleCalloutInputRule } from '@/lib/callout'
@@ -578,21 +580,54 @@ export default function EditorWorkspace({	pageId,
 					return false
 				}
 
-				const kind = decideMarkdownPaste(plainText, htmlText)
+				const kind = classifyClipboardPaste(plainText, htmlText)
+				const parser = (currentEditor as any).storage?.markdown?.parser
+				const replaceDocument = currentEditor.isEmpty || currentEditor.getText().trim() === ''
 
-				if (kind === 'markdown') {
-					const parser = (currentEditor as any).storage?.markdown?.parser
-					if (parser) {
-						const parsedHtml = parser.parse(plainText)
+				if (kind === 'obsidian-markdown' && parser) {
+					// Strip leading frontmatter before parsing the body, and land
+					// the extracted keys as Page properties (Obsidian dialect).
+					const { properties, body } = splitObsidianFrontmatter(plainText)
+					const parsedHtml = parser.parse(body)
+					if (parsedHtml) {
+						event.preventDefault()
+						track('paste_in_resolved', { kind: 'obsidian-markdown' })
+						insertParsedHtml(currentEditor, parsedHtml, { replaceDocument })
+						if (Object.keys(properties).length > 0) {
+							updatePageProperties(pageId, properties).catch((err) => {
+								console.error('Error applying pasted Page properties:', err)
+							})
+						}
+						return true
+					}
+				}
+
+				if (kind === 'notion-html' && parser && htmlText) {
+					// Convert Notion HTML to markdown so mentions become Page
+					// links. Fall back to the native HTML paste when conversion
+					// yields nothing rather than dropping content.
+					const markdown = notionHtmlToMarkdown(htmlText)
+					if (markdown) {
+						const parsedHtml = parser.parse(markdown)
 						if (parsedHtml) {
 							event.preventDefault()
-							track('paste_in_resolved', { kind: 'markdown' })
-							// parsedHtml is already HTML — see lib/insert-parsed-html.ts:
-							// the markdown command overrides would re-parse it as markdown.
-							const replaceDocument = currentEditor.isEmpty || currentEditor.getText().trim() === ''
+							track('paste_in_resolved', { kind: 'notion-html' })
 							insertParsedHtml(currentEditor, parsedHtml, { replaceDocument })
 							return true
 						}
+					}
+					return false
+				}
+
+				if (kind === 'markdown' && parser) {
+					const parsedHtml = parser.parse(plainText)
+					if (parsedHtml) {
+						event.preventDefault()
+						track('paste_in_resolved', { kind: 'markdown' })
+						// parsedHtml is already HTML — see lib/insert-parsed-html.ts:
+						// the markdown command overrides would re-parse it as markdown.
+						insertParsedHtml(currentEditor, parsedHtml, { replaceDocument })
+						return true
 					}
 					return false
 				}

@@ -1,6 +1,62 @@
 export type MarkdownPasteKind = 'markdown' | 'codeBlock' | 'default'
 
+/**
+ * Source-aware clipboard classification. Narrows the generic markdown/code
+ * decision with the two dialects this slice accepts: Obsidian-dialect markdown
+ * and Notion-copied HTML. Existing callers of `decideMarkdownPaste` keep their
+ * contract; `obsidian-markdown` is the only value that also flows to the
+ * markdown parser.
+ */
+export type ClipboardPasteKind =
+	| 'obsidian-markdown'
+	| 'notion-html'
+	| 'markdown'
+	| 'codeBlock'
+	| 'default'
+
 const MARKDOWN_INDICATOR_REGEX = /^ {0,3}#+\s|^\s*[-*+]\s|^\s*\d+\.\s|```|^\s*>\s|\*\*.+\*\*|__.+__|\[.+\]\(.+\)|^---$/m
+
+// Strong Obsidian signals only: YAML frontmatter, a callout marker, or a
+// wikilink. Inline `#tags` are intentionally excluded — they also appear in
+// plain prose and code comments, so on their own they must not divert a paste
+// away from the code-block branch. Tags still index from the pasted body.
+const OBSIDIAN_FRONTMATTER_RE = /^---\r?\n/
+const OBSIDIAN_CALLOUT_RE = /^\s*>\s*\[![a-zA-Z0-9 ]+\]/m
+const WIKILINK_RE = /\[\[[^[\]]+\]\]/
+
+// Notion's clipboard HTML carries its own host or data/class markers.
+const NOTION_HTML_RE = /(?:www\.)?notion\.(?:so|site)|data-notion|class="[^"]*notion/i
+
+export function isObsidianMarkdown(text: string | undefined): boolean {
+	if (typeof text !== 'string') return false
+	return (
+		OBSIDIAN_FRONTMATTER_RE.test(text) ||
+		OBSIDIAN_CALLOUT_RE.test(text) ||
+		WIKILINK_RE.test(text)
+	)
+}
+
+export function isNotionHtml(html: string | undefined): boolean {
+	return typeof html === 'string' && NOTION_HTML_RE.test(html)
+}
+
+/**
+ * Classify a clipboard payload by dialect:
+ * - Obsidian signals win (they are unambiguous and must route to the markdown
+ *   parser even when Notion also tagged the HTML).
+ * - Notion HTML routes to the Notion converter when the plain text carries no
+ *   Obsidian signals.
+ * - Otherwise fall back to the existing generic decision.
+ */
+export function classifyClipboardPaste(
+	plainText: string | undefined,
+	htmlText: string | undefined,
+): ClipboardPasteKind {
+	if (!plainText) return 'default'
+	if (isObsidianMarkdown(plainText)) return 'obsidian-markdown'
+	if (isNotionHtml(htmlText)) return 'notion-html'
+	return decideMarkdownPaste(plainText, htmlText)
+}
 
 // A GFM table delimiter row, e.g. `| --- | --- |` or `---|---`. Pipes on their
 // own (e.g. `read | write | execute`) are NOT enough to mark a paste as a table.

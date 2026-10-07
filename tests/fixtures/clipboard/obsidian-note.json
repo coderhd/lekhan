@@ -1,0 +1,19 @@
+{
+	"source": "Obsidian 1.9 — copy of a note containing frontmatter, a callout, wikilinks (plain + alias) and inline tags",
+	"recordedAt": "2026-10-07",
+	"clipboard": {
+		"text/plain": "---\ntitle: Meeting prep\ntags:\n  - work\n  - planning\nstatus: active\n---\n\n# Meeting prep\n\n> [!warning] Don't forget\n> Bring the **roadmap** and the `#work` notes.\n\nSee [[Design System]] and [[Roadmap|the roadmap]] — and [[Nonexistent Page]].\n\n#work #planning\n",
+		"text/html": "<meta charset='utf-8'><h1>Meeting prep</h1><blockquote><p>[!warning] Don't forget<br>Bring the <strong>roadmap</strong> and the <code>#work</code> notes.</p></blockquote><p>See <a href='obsidian://open?vault=V&file=Design%20System'>Design System</a> and <a href='obsidian://open?vault=V&file=Roadmap'>Roadmap</a> — and <a href='obsidian://open?vault=V&file=Nonexistent%20Page'>Nonexistent Page</a>.</p><p>#work #planning</p>"
+	},
+	"expectations": {
+		"kind": "obsidian-markdown",
+		"properties": { "status": "active" },
+		"tags": ["work", "planning"],
+		"bodyStartsWith": "# Meeting prep",
+		"containsCallout": true,
+		"calloutType": "warning",
+		"wikilinks": ["Design System", "Roadmap", "Nonexistent Page"],
+		"aliasWikilink": { "target": "Roadmap", "alias": "the roadmap" },
+		"inlineTags": ["work", "planning"]
+	}
+}

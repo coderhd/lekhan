@@ -71,6 +71,40 @@ export async function updatePageTitle (pageId: string, title: string): Promise<v
 	}
 }
 
+/**
+ * Merge a partial properties object into a page's existing Page properties.
+ * Used when a paste carries frontmatter (Obsidian dialect) or other metadata:
+ * read-modify-write so unrelated properties already on the page survive. The
+ * caller is the page owner in the paste path, so the owner-only RLS update
+ * policy applies.
+ */
+export async function updatePageProperties (
+	pageId: string,
+	patch: Record<string, unknown>
+): Promise<void> {
+	const { data, error } = await supabase
+		.from('pages')
+		.select('properties')
+		.eq('id', pageId)
+		.maybeSingle()
+
+	if (error) {
+		throw error
+	}
+
+	const current = (data?.properties as Record<string, unknown> | null) ?? {}
+	const merged = { ...current, ...patch }
+
+	const { error: updateError } = await supabase
+		.from('pages')
+		.update({ properties: merged })
+		.eq('id', pageId)
+
+	if (updateError) {
+		throw updateError
+	}
+}
+
 export async function deletePage (pageId: string): Promise<void> {
 	const { error } = await supabase
 		.from('pages')

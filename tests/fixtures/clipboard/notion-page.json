@@ -1,0 +1,21 @@
+{
+	"source": "Notion (2026) — copy of a page section with internal page mentions and an external link",
+	"recordedAt": "2026-10-07",
+	"clipboard": {
+		"text/plain": "Meeting notes\n\nDiscussed the Design System and the Roadmap.\n\n- Ship paste-in\n- Review fixtures\n\nExternal: Obsidian",
+		"text/html": "<meta charset='utf-8'><h1>Meeting notes</h1><p>Discussed the <a href=\"https://www.notion.so/Design-System-1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d\">Design System</a> and the <a href=\"https://www.notion.so/Roadmap-ffffffffffffffffffffffffffffffff\">Roadmap</a>.</p><ul><li>Ship paste-in</li><li>Review fixtures</li></ul><p>External: <a href=\"https://obsidian.md\">Obsidian</a></p>"
+	},
+	"expectations": {
+		"kind": "notion-html",
+		"markdownIncludes": [
+			"# Meeting notes",
+			"[[Design System]]",
+			"[[Roadmap]]",
+			"- Ship paste-in",
+			"- Review fixtures",
+			"[Obsidian](https://obsidian.md)"
+		],
+		"pageLinks": ["Design System", "Roadmap"],
+		"externalLinks": ["https://obsidian.md"]
+	}
+}

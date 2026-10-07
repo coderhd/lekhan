@@ -1,0 +1,231 @@
+import { describe, it, expect } from 'vitest'
+import fs from 'node:fs'
+import path from 'node:path'
+import { Editor } from '@tiptap/core'
+import type { JSONContent } from '@tiptap/core'
+import {
+	classifyClipboardPaste,
+	isObsidianMarkdown,
+	isNotionHtml,
+	decideMarkdownPaste,
+} from '@/lib/markdown-paste'
+import { hasObsidianFrontmatter, splitObsidianFrontmatter } from '@/lib/obsidian-clipboard'
+import { notionHtmlToMarkdown } from '@/lib/notion-clipboard'
+import { getSharedExtensions } from '@/lib/editor-extensions'
+import { insertParsedHtml } from '@/lib/insert-parsed-html'
+import { createWikilinkDecorations, normalizeWikilinkTarget } from '@/lib/wikilink'
+
+// ---------------------------------------------------------------------------
+// Recorded clipboard fixtures (seam 3). Real Obsidian + Notion copy payloads,
+// dual text/html + text/plain, committed under tests/fixtures/clipboard/.
+// ---------------------------------------------------------------------------
+
+interface ClipboardFixture {
+	source: string
+	clipboard: { 'text/plain': string; 'text/html': string }
+	expectations: Record<string, unknown>
+}
+
+const fixtureDir = path.resolve(process.cwd(), 'tests/fixtures/clipboard')
+
+function loadFixture(name: string): ClipboardFixture {
+	return JSON.parse(fs.readFileSync(path.join(fixtureDir, name), 'utf8'))
+}
+
+const obsidian = loadFixture('obsidian-note.json')
+const notion = loadFixture('notion-page.json')
+
+function buildEditor(): Editor {
+	return new Editor({ extensions: [...getSharedExtensions()] })
+}
+
+function findNodes(node: JSONContent, type: string, found: JSONContent[] = []): JSONContent[] {
+	if (node.type === type) found.push(node)
+	for (const child of node.content ?? []) findNodes(child, type, found)
+	return found
+}
+
+function collectMarks(node: JSONContent, type: string, found: NonNullable<JSONContent['marks']> = []) {
+	for (const mark of node.marks ?? []) if (mark.type === type) found.push(mark)
+	for (const child of node.content ?? []) collectMarks(child, type, found)
+	return found
+}
+
+// ---------------------------------------------------------------------------
+// T3 — clipboard classifier
+// ---------------------------------------------------------------------------
+
+describe('classifyClipboardPaste', () => {
+	it('routes the recorded Obsidian payload as obsidian-markdown', () => {
+		expect(classifyClipboardPaste(obsidian.clipboard['text/plain'], obsidian.clipboard['text/html'])).toBe(
+			'obsidian-markdown',
+		)
+	})
+
+	it('routes the recorded Notion payload as notion-html', () => {
+		expect(classifyClipboardPaste(notion.clipboard['text/plain'], notion.clipboard['text/html'])).toBe('notion-html')
+	})
+
+	it('keeps generic markdown classification unchanged', () => {
+		const plain = '# Welcome\n\n- item one'
+		const html = "<meta charset='utf-8'><div><pre># Welcome\n\n- item one</pre></div>"
+		expect(classifyClipboardPaste(plain, html)).toBe('markdown')
+		expect(decideMarkdownPaste(plain, html)).toBe('markdown')
+	})
+
+	it('still classifies genuine code from an editor as a code block', () => {
+		const plain = 'const x = 1\nfunction foo() { return x }'
+		const html = '<pre style="color:#d4d4d4">const x = 1\nfunction foo() { return x }</pre>'
+		expect(classifyClipboardPaste(plain, html)).toBe('codeBlock')
+	})
+
+	it('does not treat a bare inline tag as Obsidian markdown', () => {
+		expect(isObsidianMarkdown('Note about #1 priority')).toBe(false)
+		expect(isObsidianMarkdown('A #tag in prose')).toBe(false)
+	})
+
+	it('detects strong Obsidian signals and Notion hosts', () => {
+		expect(isObsidianMarkdown('> [!note] Title')).toBe(true)
+		expect(isObsidianMarkdown('See [[Page]]')).toBe(true)
+		expect(isObsidianMarkdown('---\ntitle: x\n---\nbody')).toBe(true)
+		expect(isNotionHtml('<a href="https://www.notion.so/x-y">x</a>')).toBe(true)
+		expect(isNotionHtml('<p>plain</p>')).toBe(false)
+	})
+
+	it('prefers Obsidian classification when both dialects are present', () => {
+		expect(classifyClipboardPaste('See [[Page]]', '<a href="https://www.notion.so/x-y">x</a>')).toBe(
+			'obsidian-markdown',
+		)
+	})
+})
+
+// ---------------------------------------------------------------------------
+// T2 — Obsidian frontmatter split
+// ---------------------------------------------------------------------------
+
+describe('splitObsidianFrontmatter', () => {
+	it('extracts properties, tags and body from the recorded payload', () => {
+		const { properties, tags, body } = splitObsidianFrontmatter(obsidian.clipboard['text/plain'])
+		expect(properties).toEqual({ status: 'active', tags: ['work', 'planning'] })
+		expect(tags).toEqual(['work', 'planning'])
+		expect(body.trimStart().startsWith(obsidian.expectations.bodyStartsWith as string)).toBe(true)
+		expect(body).not.toContain('status: active')
+	})
+
+	it('leaves text without frontmatter untouched', () => {
+		const text = '# Just a heading\n\nNo frontmatter here.'
+		expect(hasObsidianFrontmatter(text)).toBe(false)
+		expect(splitObsidianFrontmatter(text)).toEqual({ properties: {}, tags: [], body: text })
+	})
+
+	it('does not mistake a thematic break for frontmatter', () => {
+		const text = '---\n\nNot frontmatter\n'
+		expect(hasObsidianFrontmatter(text)).toBe(false)
+		expect(splitObsidianFrontmatter(text).body).toBe(text)
+	})
+})
+
+// ---------------------------------------------------------------------------
+// T4 — Notion HTML → markdown
+// ---------------------------------------------------------------------------
+
+describe('notionHtmlToMarkdown', () => {
+	it('converts the recorded Notion payload to Obsidian-flavored markdown', () => {
+		const md = notionHtmlToMarkdown(notion.clipboard['text/html'])
+		for (const expected of notion.expectations.markdownIncludes as string[]) {
+			expect(md).toContain(expected)
+		}
+	})
+
+	it('returns an empty string when there is nothing to convert', () => {
+		expect(notionHtmlToMarkdown('')).toBe('')
+		expect(notionHtmlToMarkdown('   ')).toBe('')
+	})
+
+	it('keeps genuinely external links as markdown links, never wikilinks', () => {
+		const md = notionHtmlToMarkdown('<p>Read <a href="https://obsidian.md">Obsidian</a></p>')
+		expect(md).toBe('Read [Obsidian](https://obsidian.md)')
+		expect(md).not.toContain('[[')
+	})
+
+	it('derives a page title from a Notion href when the anchor text is empty', () => {
+		const md = notionHtmlToMarkdown(
+			'<p><a href="https://www.notion.so/Roadmap-ffffffffffffffffffffffffffffffff"></a></p>',
+		)
+		expect(md).toBe('[[Roadmap]]')
+	})
+})
+
+// ---------------------------------------------------------------------------
+// T6 / T7 — paste integration at the Tiptap seam (external behavior only)
+// ---------------------------------------------------------------------------
+
+describe('pasting the recorded Obsidian payload into the editor', () => {
+	it('yields a callout node, frontmatter properties, and wikilink + tag text', () => {
+		const editor = buildEditor()
+		const { properties, tags, body } = splitObsidianFrontmatter(obsidian.clipboard['text/plain'])
+		expect(properties.status).toBe('active')
+		expect(tags).toEqual(['work', 'planning'])
+
+		const parsedHtml = (editor as any).storage.markdown.parser.parse(body)
+		insertParsedHtml(editor, parsedHtml, { replaceDocument: true })
+
+		const doc = editor.getJSON()
+		const callouts = findNodes(doc, 'callout')
+		expect(callouts).toHaveLength(1)
+		expect(callouts[0].attrs?.type).toBe(obsidian.expectations.calloutType)
+
+		const text = editor.getText()
+		expect(text).toContain('[[Design System]]')
+		expect(text).toContain('[[Roadmap|the roadmap]]')
+		expect(text).toContain('[[Nonexistent Page]]')
+		expect(text).toContain('#work')
+		editor.destroy()
+	})
+})
+
+describe('pasting the recorded Notion payload into the editor', () => {
+	it('yields native nodes, page mentions and external links', () => {
+		const editor = buildEditor()
+		const md = notionHtmlToMarkdown(notion.clipboard['text/html'])
+		const parsedHtml = (editor as any).storage.markdown.parser.parse(md)
+		insertParsedHtml(editor, parsedHtml, { replaceDocument: true })
+
+		const doc = editor.getJSON()
+		const headings = findNodes(doc, 'heading')
+		expect(headings[0]?.content?.[0]?.text).toBe('Meeting notes')
+
+		const text = editor.getText()
+		for (const pageLink of notion.expectations.pageLinks as string[]) {
+			expect(text).toContain(`[[${pageLink}]]`)
+		}
+
+		const links = collectMarks(doc, 'link')
+		const hrefs = links.map((mark) => mark.attrs?.href)
+		expect(hrefs).toContain('https://obsidian.md')
+		editor.destroy()
+	})
+})
+
+describe('three link states from pasted content', () => {
+	it('decorates resolved and unresolved wikilinks distinctly and keeps external links external', () => {
+		const editor = buildEditor()
+		const md = 'See [[Design System]], [[Nonexistent Page]] and [Obsidian](https://obsidian.md).'
+		const parsedHtml = (editor as any).storage.markdown.parser.parse(md)
+		insertParsedHtml(editor, parsedHtml, { replaceDocument: true })
+
+		const pagesMap = new Map([
+			[normalizeWikilinkTarget('Design System'), { id: 'page-1', title: 'Design System' }],
+		])
+		const decorations = createWikilinkDecorations(editor.state.doc, pagesMap)
+		const classes = decorations.find().map((deco: any) => String(deco.type?.attrs?.class ?? ''))
+
+		expect(classes.some((c) => c.includes('wikilink-resolved'))).toBe(true)
+		expect(classes.some((c) => c.includes('wikilink-unresolved'))).toBe(true)
+
+		// External URL is a real link, not a wikilink decoration.
+		const linkHrefs = collectMarks(editor.getJSON(), 'link').map((mark) => mark.attrs?.href)
+		expect(linkHrefs).toContain('https://obsidian.md')
+		editor.destroy()
+	})
+})
