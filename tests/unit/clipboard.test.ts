@@ -206,6 +206,32 @@ describe('buildClipboardPayload — dual dialect payload (seam 3)', () => {
 	})
 })
 
+describe('buildClipboardPayload — paste-target tuning (SIL-68 finding)', () => {
+	let engine: MarkdownEngine
+	beforeEach(() => { engine = new MarkdownEngine() })
+	afterEach(() => engine.destroy())
+
+	it('obsidian target omits the HTML payload so Obsidian pastes the markdown natively', () => {
+		const doc = engine.parse('# Title\n\nBody with [[Link]].\n')
+		const payload = buildClipboardPayload(doc, { title: 'My Page', tags: ['work'] }, { wholePage: true, target: 'obsidian' })
+		expect(payload.text).toContain('title: My Page')
+		expect(payload.text).toContain('[[Link]]')
+		expect(payload.html).toBe('')
+	})
+
+	it('notion target carries the rich HTML payload', () => {
+		const doc = engine.parse('# Title\n\nBody.\n')
+		const payload = buildClipboardPayload(doc, {}, { wholePage: true, target: 'notion' })
+		expect(payload.text).toContain('# Title')
+		expect(payload.html).toContain('<h1>Title</h1>')
+	})
+
+	it('defaults to both representations (legacy behaviour)', () => {
+		const doc = engine.parse('# Title\n\nBody.\n')
+		expect(buildClipboardPayload(doc, {}, { wholePage: true }).html).not.toBe('')
+	})
+})
+
 describe('writeClipboardPayload', () => {
 	it('writes both MIME types', () => {
 		const store: Record<string, string> = {}
@@ -215,6 +241,16 @@ describe('writeClipboardPayload', () => {
 		expect(writeClipboardPayload(event, { text: 'md', html: '<p>md</p>' })).toBe(true)
 		expect(store['text/plain']).toBe('md')
 		expect(store['text/html']).toBe('<p>md</p>')
+	})
+
+	it('omits text/html for a plain-only (Obsidian) payload', () => {
+		const store: Record<string, string> = {}
+		const event = {
+			clipboardData: { setData: (type: string, value: string) => { store[type] = value } },
+		} as unknown as ClipboardEvent
+		expect(writeClipboardPayload(event, { text: 'md', html: '' })).toBe(true)
+		expect(store['text/plain']).toBe('md')
+		expect(store['text/html']).toBeUndefined()
 	})
 
 	it('returns false without clipboardData', () => {

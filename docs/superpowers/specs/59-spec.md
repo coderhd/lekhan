@@ -71,6 +71,10 @@ copy with a handler that writes **dual clipboard payloads**:
 | Horizontal rule | `---` | `<hr>` |
 | Frontmatter (properties/tags/title) | `---` YAML block prepended (whole-Page copy only) | not emitted (Notion has no frontmatter) |
 
+> **Target note (SIL-68).** The `text/html` column is emitted only for the **Notion** target. The
+> Obsidian target writes `text/plain` alone, because Obsidian prefers `text/html` when both are
+> present and would drop frontmatter / degrade callouts (see §6.2.1).
+
 ## 6. Design
 
 ### 6.1 Seam 2 — Obsidian profile on the engine
@@ -96,17 +100,36 @@ export interface ClipboardPageMeta {
   properties?: Record<string, unknown>
 }
 export interface ClipboardPayload { text: string; html: string }
+export type ClipboardTarget = 'obsidian' | 'notion' | 'both'
 
 // ESLint: function is pure — doc JSON + meta in, payload out.
 export function buildClipboardPayload(
   doc: JSONContent,
   meta: ClipboardPageMeta,
-  opts: { wholePage: boolean },
+  opts: { wholePage: boolean; target?: ClipboardTarget },
 ): ClipboardPayload
 ```
 
 `buildClipboardPayload` calls `markdownEngine.serializeObsidianPage` (whole page) or
-`serializeObsidianBody` (selection) for `text`, and `serializeNotionHtml(doc)` for `html`.
+`serializeObsidianBody` (selection) for `text`, and `serializeNotionHtml(doc)` for `html` **only when the
+target is not `obsidian`**.
+
+### 6.2.1 Paste-target decision (SIL-68 finding)
+
+The original design wrote both MIMEs on every copy and assumed the paste target picks what it
+understands. Real-app dogfood (SIL-68) disproved that: **Obsidian prefers `text/html` when both are
+present** and runs it through HTML→markdown, which drops the YAML frontmatter entirely and degrades
+`> [!type]` callouts to plain blockquotes. A dual payload therefore never delivers the Obsidian dialect
+to the very target it was built for.
+
+Resolution: make the payload **target-aware**.
+
+- `target: 'obsidian'` → `text/plain` only (frontmatter, callouts, wikilinks, tags all survive).
+- `target: 'notion'` → `text/plain` + `text/html` (Notion's converter prefers the rich HTML).
+- `target: 'both'` → legacy dual payload; retained only for callers with a genuinely unknown target.
+
+The default editor copy (⌘C) writes the **Obsidian** target, and the Export menu gains explicit
+**"Copy as Obsidian markdown"** and **"Copy for Notion (rich)"** actions.
 
 New pure module `lib/markdown/notion-html.ts` — `serializeNotionHtml(doc): string`, a
 schema-driven JSON walker (no DOM, no Tiptap editor instantiation) so the Notion mapping is
@@ -121,13 +144,17 @@ In `components/editor-workspace.tsx` `editorProps.handleDOMEvents.copy`:
 2. Compute the selection doc: whole-page (`from === 0 && to === doc.content.size`) → `doc.toJSON()`;
    otherwise `doc.cut(from, to).toJSON()`, normalized so any leaked top-level inline nodes are wrapped
    in a paragraph (keeps the doc valid for the `block+` schema).
-3. Build the payload from the live Page meta held in a ref (`title` always; `tags`/`properties`
-   loaded once on mount via `fetchPageTags` / `fetchPageDetails`, best-effort).
-4. On success: `event.preventDefault()`, `setData('text/plain', …)`, `setData('text/html', …)`,
+3. Build the payload for the **`obsidian`** target from the live Page meta held in a ref (`title`
+   always; `tags`/`properties` loaded once on mount via `fetchPageTags` / `fetchPageDetails`,
+   best-effort).
+4. On success: `event.preventDefault()`, `setData('text/plain', …)` (no `text/html` for this target),
    return `true`. On any serializer error: `console.warn` + return `false` (native copy still works).
 
-Keep `transformCopiedText` off for the custom path (the handler owns both payloads). The paste seam
-(`handlePaste` / `decideMarkdownPaste`) is unchanged.
+The Export menu additionally exposes **"Copy as Obsidian markdown"** (whole page, plain-only) and
+**"Copy for Notion (rich)"** (whole page, dual payload) via `handleCopyFor` →
+`copyClipboardPayloadToSystem` (async Clipboard API). Keep `transformCopiedText` off for the custom
+path (the handler owns the payload). The paste seam (`handlePaste` / `decideMarkdownPaste`) is
+unchanged.
 
 ## 7. Round-trip guarantee
 

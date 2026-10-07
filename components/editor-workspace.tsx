@@ -43,7 +43,7 @@ import { CodeBlockLanguageSelect } from './code-block-language-select'
 import { DragContextMenu } from './drag-context-menu'
 import { exportToDocx, exportToPdf, downloadBlob } from '@/lib/export-utils'
 import { buildMarkdownExport, exportFilename, serializeExportBodyMarkdown, serializeExportBodyHtml, buildStandaloneHtml } from '@/lib/markdown-export'
-import { Download, FileText, FileSpreadsheet, FileCode, Globe, type LucideIcon } from 'lucide-react'
+import { Download, Copy as CopyIcon, FileText, FileSpreadsheet, FileCode, Globe, type LucideIcon } from 'lucide-react'
 import { track } from '@/lib/analytics'
 
 type ExportType = 'markdown' | 'html' | 'docx' | 'pdf'
@@ -53,6 +53,14 @@ const EXPORT_MENU_ITEMS: { type: ExportType; label: string; icon: LucideIcon; ic
 	{ type: 'html', label: 'Download as HTML (.html)', icon: Globe, iconClass: 'text-orange-500' },
 	{ type: 'docx', label: 'Download as DOCX', icon: FileSpreadsheet, iconClass: 'text-blue-500' },
 	{ type: 'pdf', label: 'Download as PDF', icon: FileText, iconClass: 'text-red-500' },
+]
+
+// Explicit copy-out affordances (SIL-59): a single automatic payload cannot
+// serve both targets — Obsidian prefers `text/html` when present and would drop
+// frontmatter/degrade callouts, so it needs the plain Obsidian markdown alone.
+const COPY_MENU_ITEMS: { target: ClipboardTarget; label: string; icon: LucideIcon; iconClass: string }[] = [
+	{ target: 'obsidian', label: 'Copy as Obsidian markdown', icon: CopyIcon, iconClass: 'text-violet-500' },
+	{ target: 'notion', label: 'Copy for Notion (rich)', icon: CopyIcon, iconClass: 'text-pink-500' },
 ]
 
 interface EditorWorkspaceProps {
@@ -82,7 +90,7 @@ import { insertParsedHtml } from '@/lib/insert-parsed-html'
 import { hydrateOnOpen } from '@/lib/import-hydration'
 import { Callout, BLOCKQUOTE_MARKER_RE, handleCalloutInputRule } from '@/lib/callout'
 import { CalloutNodeView } from './callout-node-view'
-import { buildClipboardPayload, writeClipboardPayload } from '@/lib/markdown/clipboard'
+import { buildClipboardPayload, writeClipboardPayload, copyClipboardPayloadToSystem, type ClipboardTarget } from '@/lib/markdown/clipboard'
 import { InputRule, type JSONContent } from '@tiptap/core'
 
 const LiveCallout = Callout.extend({
@@ -267,6 +275,31 @@ export default function EditorWorkspace({	pageId,
 			console.error('Export error:', err)
 		} finally {
 			setIsExporting(false)
+			setIsExportOpen(false)
+		}
+	}
+
+	// Explicit copy-out (SIL-59): copy the whole Page as an Obsidian-safe
+	// markdown payload, or as the Notion-facing rich (dual-MIME) payload. Used
+	// by the Export menu's "Copy for …" items, outside any copy event.
+	const handleCopyFor = async (target: ClipboardTarget) => {
+		if (!editor) return
+		try {
+			const payload = buildClipboardPayload(editor.getJSON(), clipboardMetaRef.current, {
+				wholePage: true,
+				target,
+			})
+			const ok = await copyClipboardPayloadToSystem(payload)
+			if (!ok) {
+				toast.error('Could not access the clipboard')
+				return
+			}
+			track('copy_out_resolved', { whole_page: true, target })
+			toast.success(target === 'obsidian' ? 'Copied as Obsidian markdown' : 'Copied for Notion')
+		} catch (err) {
+			console.warn('Copy-out failed:', err)
+			toast.error('Copy failed')
+		} finally {
 			setIsExportOpen(false)
 		}
 	}
@@ -592,10 +625,12 @@ export default function EditorWorkspace({	pageId,
 				class: 'prose dark:prose-invert max-w-none focus:outline-none min-h-[500px] text-on-surface break-words w-full',
 			},
 			handleDOMEvents: {
-				// Copy-out (SIL-9 S3): write BOTH the Obsidian-flavored markdown
-				// (text/plain) and Notion-friendly HTML (text/html) so the paste
-				// target picks the representation it understands. Compatibility,
-				// never live sync. Falls back to the native copy on any failure.
+				// Copy-out (SIL-9 S3): the default ⌘C writes the Obsidian-flavored
+				// markdown as `text/plain` ONLY. A dual payload is unsafe here —
+				// Obsidian prefers `text/html` when present and runs HTML→markdown,
+				// dropping frontmatter and degrading callouts (QA dogfood, SIL-68).
+				// Notion users use the explicit "Copy for Notion" action. On any
+				// failure we fall back to the browser's native copy.
 				copy: (view, event) => {
 					const { state } = view
 					const { selection } = state
@@ -604,9 +639,9 @@ export default function EditorWorkspace({	pageId,
 						const { from, to } = selection
 						const wholePage = from <= 0 && to >= state.doc.content.size
 						const doc = (wholePage ? state.doc : state.doc.cut(from, to)).toJSON() as JSONContent
-						const payload = buildClipboardPayload(doc, clipboardMetaRef.current, { wholePage })
+						const payload = buildClipboardPayload(doc, clipboardMetaRef.current, { wholePage, target: 'obsidian' })
 						if (!writeClipboardPayload(event, payload)) return false
-						track('copy_out_resolved', { whole_page: wholePage })
+						track('copy_out_resolved', { whole_page: wholePage, target: 'obsidian' })
 						event.preventDefault()
 						return true
 					} catch (err) {
@@ -931,7 +966,7 @@ export default function EditorWorkspace({	pageId,
 										aria-haspopup="menu"
 										aria-expanded={isExportOpen}
 										className="bg-surface-container-low border border-black/10 dark:border-white/10 text-on-surface px-2.5 h-8 rounded-lg font-medium text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50 disabled:pointer-events-none"
-										title="Export Document"
+										title="Export or copy"
 									>
 										<Download className="w-3.5 h-3.5 text-primary" />
 										<span className="hidden lg:inline font-bold">Export</span>
@@ -949,6 +984,22 @@ export default function EditorWorkspace({	pageId,
 															disabled={isExporting}
 															onClick={() => handleExport(item.type)}
 															className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full disabled:opacity-50 disabled:pointer-events-none"
+															role="menuitem"
+														>
+															<Icon className={`w-4 h-4 ${item.iconClass}`} />
+															<span>{item.label}</span>
+														</button>
+													)
+												})}
+												<div className="my-0.5 h-px bg-black/10 dark:bg-white/10" />
+												{COPY_MENU_ITEMS.map((item) => {
+													const Icon = item.icon
+													return (
+														<button
+															key={item.target}
+															type="button"
+															onClick={() => handleCopyFor(item.target)}
+															className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full"
 															role="menuitem"
 														>
 															<Icon className={`w-4 h-4 ${item.iconClass}`} />
