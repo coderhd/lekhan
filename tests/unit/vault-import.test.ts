@@ -90,8 +90,18 @@ describe('vaultFingerprint', () => {
 
 	it('diverges for different content or workspace', () => {
 		const base = makeIR([makePage('a', 10)])
-		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(makeIR([makePage('a', 11)])))
+		const differentContent = makeIR([{ ...makePage('a', 10), plainText: 'a different body' }])
+		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(differentContent))
 		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint({ ...base, workspaceId: 'ws-2' }))
+	})
+
+	it('is stable when only the nondeterministic Yjs encoding differs', () => {
+		// Two ingestions of the same vault seed Yjs with different random
+		// clientIDs, so contentYjsBase64 (and its length) varies. The fingerprint
+		// must ignore it — otherwise a retry mints a new clientImportId (#87 AC1).
+		const a = makeIR([makePage('a', 10)])
+		const b = makeIR([{ ...makePage('a', 10), contentYjsBase64: 'B'.repeat(99) }])
+		expect(vaultFingerprint(a)).toBe(vaultFingerprint(b))
 	})
 })
 

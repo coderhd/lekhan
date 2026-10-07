@@ -6,6 +6,7 @@ import * as Y from 'yjs'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 import { readVaultZip } from '@/services/obsidian-import'
 import { importObsidianVault, type ObsidianImportPage } from '@/services/obsidian-import'
+import { vaultFingerprint } from '@/services/vault-import'
 import { base64ToUint8Array } from '@/lib/markdown/engine'
 
 async function fixtureVault(): Promise<Parameters<typeof importObsidianVault>[0]> {
@@ -211,5 +212,19 @@ describe('importObsidianVault — image embed resolution', () => {
 		expect(html).not.toContain('data:image/png;base64')
 		expect(noteG.plainText).toContain('[[logo.png]]')
 		expect(report.degradedBlocks).toBe(1)
+	})
+})
+
+describe('importObsidianVault — retry fingerprint stability (#87)', () => {
+	it('is stable across identical ingestions despite a fresh (random-clientID) Yjs encoding', async () => {
+		// Each ingestion re-seeds Yjs with a new random clientID, so the encoded
+		// bytes — and their length — differ run to run. The vault fingerprint must
+		// not depend on that, or the import dialog mints a new clientImportId on
+		// retry and the server re-creates every already-landed page (#87 AC1).
+		const vault = await fixtureVault()
+		const options = { workspaceId: 'ws-1', existingPageTitles: ['Old Page'] }
+		const first = importObsidianVault(vault, options).ir
+		const second = importObsidianVault(vault, options).ir
+		expect(vaultFingerprint(first)).toBe(vaultFingerprint(second))
 	})
 })
