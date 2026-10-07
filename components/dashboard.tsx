@@ -662,6 +662,9 @@ export default function Dashboard({ user }: DashboardProps) {
 			</main>
 
 			{/* FABs for mobile */}
+			<button onClick={() => setVaultExportOpen(true)} className="md:hidden fixed bottom-40 right-8 z-[100] w-14 h-14 bg-surface-container text-on-surface rounded-full shadow-2xl border border-black/10 dark:border-white/10 flex items-center justify-center active:scale-90 premium-transition" title="Export workspace to an Obsidian vault (compatible, not synced)">
+				<span className="material-symbols-outlined text-3xl">download</span>
+			</button>
 			<button onClick={() => setImportDialogOpen(true)} className="md:hidden fixed bottom-24 right-8 z-[100] w-14 h-14 bg-surface-container text-on-surface rounded-full shadow-2xl border border-black/10 dark:border-white/10 flex items-center justify-center active:scale-90 premium-transition" title="Import">
 				<span className="material-symbols-outlined text-3xl">upload_file</span>
 			</button>

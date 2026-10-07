@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import * as Y from 'yjs'
 import { MarkdownEngine, base64ToUint8Array, fitLiveSchema } from '@/lib/markdown/engine'
 import { loadVaultPageDocs, toVaultPage } from '@/lib/markdown/vault-export-loader'
 import type { VaultPage } from '@/lib/markdown/vault-export'
@@ -43,6 +44,15 @@ describe('MarkdownEngine.yjsStateToJson — inverse of seedToYjsBase64', () => {
 		const doc = engine.parse('# T\n\n- one\n- two\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n')
 		const back = engine.yjsStateToJson(base64ToUint8Array(engine.seedToYjsBase64(doc)))
 		expect(back).toEqual(fitLiveSchema(doc))
+	})
+
+	// A never-edited Page (local + remote empty) is a genuinely empty doc, not a
+	// read failure: the vault export must serialize it as a title-only note with
+	// no "content could not be read" warning (S4a clean-room finding).
+	it('returns an empty doc for an empty (never-edited) Yjs state', () => {
+		const back = engine.yjsStateToJson(Y.encodeStateAsUpdate(new Y.Doc()))
+		expect(back.type).toBe('doc')
+		expect(back.content ?? []).toEqual([])
 	})
 })
 

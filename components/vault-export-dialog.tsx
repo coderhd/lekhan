@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
 	AlertDialog,
 	AlertDialogContent,
@@ -8,6 +8,7 @@ import {
 	AlertDialogTitle,
 	AlertDialogDescription,
 	AlertDialogFooter,
+	AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
@@ -44,6 +45,12 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 	const [warnings, setWarnings] = useState<FidelityWarning[]>([])
 	const [errorMessage, setErrorMessage] = useState('')
 
+	// Monotonic id for the in-flight export. Closing/cancelling (or starting a
+	// new run) bumps it so a late-resolving run cannot download or write state.
+	const runIdRef = useRef(0)
+	// Folders occupy no content read; the progress bar counts notes only.
+	const exportableCount = pages.filter((page) => page.properties?.importFolder !== true).length
+
 	const reset = () => {
 		setPhase('confirm')
 		setProgress({ done: 0, total: 0 })
@@ -53,7 +60,12 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 	}
 
 	const handleOpenChange = (next: boolean) => {
-		if (!next) reset()
+		if (!next) {
+			// Invalidate any in-flight run so it cannot download behind the
+			// closed dialog or leave a stale report for the next open.
+			runIdRef.current += 1
+			reset()
+		}
 		onOpenChange(next)
 	}
 
@@ -62,8 +74,9 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 			toast.error('There are no pages to export yet.')
 			return
 		}
+		const runId = ++runIdRef.current
 		setPhase('exporting')
-		setProgress({ done: 0, total: pages.length })
+		setProgress({ done: 0, total: exportableCount })
 		track('export_vault_started', { pages: pages.length })
 		try {
 			const { data: { session } } = await supabase.auth.getSession()
@@ -81,8 +94,13 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 			const source = createClientPageDocSource({ token })
 			const { pages: loaded, warnings: loadWarnings } = await loadVaultPageDocs(vaultPages, {
 				loadDoc: source,
-				onProgress: ({ done, total }) => setProgress({ done, total }),
+				onProgress: ({ done, total }) => {
+					if (runId === runIdRef.current) setProgress({ done, total })
+				},
 			})
+
+			// Abandoned (dialog closed/cancelled) — never download a surprise zip.
+			if (runId !== runIdRef.current) return
 
 			const { files, report: exportReport } = buildVaultFiles(loaded)
 			downloadBlob(buildZipBlob(files), 'lekhan-vault.zip')
@@ -96,6 +114,7 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 				warnings: loadWarnings.length,
 			})
 		} catch (err) {
+			if (runId !== runIdRef.current) return
 			setErrorMessage(err instanceof Error ? err.message : 'Export failed — please try again.')
 			setPhase('error')
 			track('export_vault_failed', { reason: err instanceof Error ? err.message : 'unknown' })
@@ -106,7 +125,14 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 
 	return (
 		<AlertDialog open={open} onOpenChange={handleOpenChange}>
-			<AlertDialogContent data-testid="vault-export-dialog">
+			<AlertDialogContent
+				data-testid="vault-export-dialog"
+				// Escape must not silently abandon a run mid-read; the exporting
+				// phase offers an explicit Cancel instead.
+				onEscapeKeyDown={(event) => {
+					if (phase === 'exporting') event.preventDefault()
+				}}
+			>
 				{phase === 'confirm' && (
 					<>
 						<AlertDialogHeader>
@@ -119,12 +145,12 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 							</AlertDialogDescription>
 						</AlertDialogHeader>
 						<AlertDialogFooter>
-							<button
-								onClick={() => handleOpenChange(false)}
-								className="px-lg py-2 rounded-lg bg-surface-container hover:bg-surface-container-high font-medium premium-transition"
-							>
+							{/* AlertDialogCancel registers the ref Radix auto-focuses on open. */}
+							<AlertDialogCancel className="px-lg py-2 rounded-lg bg-surface-container hover:bg-surface-container-high font-medium premium-transition">
 								Cancel
-							</button>
+							</AlertDialogCancel>
+							{/* Not AlertDialogAction: that is a Dialog.Close and would
+							    dismiss the dialog instead of starting the export. */}
 							<button
 								onClick={runExport}
 								className="px-lg py-2 rounded-lg bg-primary text-on-primary font-bold hover:bg-primary/90 premium-transition"
@@ -143,9 +169,14 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 								Reading page content ({progress.done}/{progress.total}). Keep this tab open.
 							</AlertDialogDescription>
 						</AlertDialogHeader>
-						<div className="w-full h-2 rounded-full bg-surface-container overflow-hidden" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+						<div className="w-full h-2 rounded-full bg-surface-container overflow-hidden" role="progressbar" aria-label="Export progress" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
 							<div className="h-full bg-primary premium-transition" style={{ width: `${pct}%` }} />
 						</div>
+						<AlertDialogFooter>
+							<AlertDialogCancel className="px-lg py-2 rounded-lg bg-surface-container hover:bg-surface-container-high font-medium premium-transition">
+								Cancel
+							</AlertDialogCancel>
+						</AlertDialogFooter>
 					</>
 				)}
 

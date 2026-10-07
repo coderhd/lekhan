@@ -53,11 +53,31 @@ function toJson(doc: Y.Doc): JSONContent {
 }
 
 /**
+ * Whether this device already has an `y-indexeddb` database for the Page.
+ * Constructing `IndexeddbPersistence` for a Page that was never opened would
+ * create and persist an empty database as a side effect (y-indexeddb writes an
+ * auto-key update on load), so a bulk export must not do that for thousands of
+ * Pages. Falls back to `true` when the browser cannot enumerate databases.
+ */
+async function hasLocalDatabase(pageId: string): Promise<boolean> {
+	try {
+		if (typeof indexedDB === 'undefined' || typeof indexedDB.databases !== 'function') return true
+		const databases = await indexedDB.databases()
+		return databases.some((entry) => entry.name === pageId)
+	} catch {
+		return true
+	}
+}
+
+/**
  * Read a Page from the client's `y-indexeddb` cache, if it has one. Returns
- * `null` when the cache is absent, empty, or unreadable within `timeoutMs`.
+ * `null` when the cache is absent, empty, or unreadable within `timeoutMs`; an
+ * empty cache falls through to a remote gap sync rather than being treated as
+ * "this Page has no content".
  */
 async function readLocalCopy(pageId: string, timeoutMs: number): Promise<JSONContent | null> {
 	if (typeof indexedDB === 'undefined') return null
+	if (!(await hasLocalDatabase(pageId))) return null
 	const { IndexeddbPersistence } = await import('y-indexeddb')
 	const doc = new Y.Doc()
 	const persistence = new IndexeddbPersistence(pageId, doc)
@@ -77,7 +97,10 @@ async function readLocalCopy(pageId: string, timeoutMs: number): Promise<JSONCon
 
 /**
  * Gap-sync a single Page from the collab server with a short-lived provider,
- * then tear it down. Returns `null` on timeout/empty so the caller can warn.
+ * then tear it down. Returns `null` only on timeout/error — a successful sync
+ * of an empty room returns the Page's (empty) doc, so a never-edited Page is
+ * exported as a title-only note without a false "content could not be read"
+ * warning (`loadVaultPageDocs` warns only on `null`).
  */
 async function readRemoteCopy(
 	pageId: string,
@@ -94,7 +117,7 @@ async function readRemoteCopy(
 			new Promise<void>((resolve) => provider.once('sync', () => resolve())),
 			opts.timeoutMs,
 		)
-		return hasContent(doc) ? toJson(doc) : null
+		return toJson(doc)
 	} catch {
 		return null
 	} finally {
