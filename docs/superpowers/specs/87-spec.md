@@ -74,6 +74,12 @@ and re-create every already-landed page — the exact failure this ticket exists
 `splitIntoBatches` sorts on the same deterministic key (path, then content hash) so positional
 `batchIndex` maps to a stable page set across retries.
 
+Canonicalizing `properties` must mirror what the request serializes. `gray-matter` turns unquoted YAML
+timestamps into `Date`, which has no enumerable own keys, so a naive object walk collapses every date to
+`{}` — two different timestamps would then fingerprint identically while the request sends distinct ISO
+strings, reopening the same stale-replay hole (Pullfrog re-review on #132). `canonicalJson` therefore
+honours `toJSON` exactly as `JSON.stringify` does and omits `undefined`-valued keys.
+
 ### D4 — Honest resume reporting
 `/api/import` adds `resumed: boolean` to its response. The client aggregates `resumedCount`
 across batches and the report card shows a "resumed — N pages already imported" line (AC2).

@@ -3,7 +3,7 @@
 **Branch:** `feat/87-idempotent-bulk-imports` · **PR:** #130 (**merged** at pre-fix tip `83fd28a`) · **follow-up fix:** #132 (`fix/87-stable-retry-fingerprint`)
 **Diff:** `git diff origin/main...HEAD`
 **Reviewer:** independent clean-room adversarial subagent (did not author the change), run across two passes; plus the external Pullfrog review on PR #132.
-**Verification (worktree):** `npm run typecheck` clean · `npm run lint` clean · `npm test` → 79 files / **608 tests** passed · `npm run build` succeeded. Live-Postgres migration/RLS was not executable from this worktree.
+**Verification (worktree):** `npm run typecheck` clean · `npm run lint` clean · `npm test` → 80 files / **616 tests** passed · `npm run build` succeeded. Live-Postgres migration/RLS was not executable from this worktree.
 
 ## Verdict
 
@@ -35,6 +35,17 @@ capturing marks/structure/attributes), and the fingerprint also folds in canonic
 and the folder/note role. `splitIntoBatches` tie-breaks on the same `contentHash`. `Yjs` bytes remain
 excluded. See the findings table and `docs/superpowers/specs/87-spec.md` D3.
 
+Pullfrog's re-review of that fix raised one further **incomplete-fingerprint** gap: `canonicalJson`
+walked objects by enumerable keys, so a `Date` (which `gray-matter` produces from unquoted YAML
+timestamps) collapsed to `{}`. Two different timestamps then hashed identically even though the request
+serializes them as distinct ISO strings — the same stale-replay failure. `canonicalJson` now honours
+`toJSON` (exactly as `JSON.stringify` does), so Date-valued metadata is fingerprinted by its serialized
+value, and `undefined`-valued keys are omitted to match the request payload.
+
+A follow-up re-review then caught that `canonicalJson` treated `Date` as an empty object, so a
+YAML-timestamp property edit was still invisible to the fingerprint; fixed by honouring the `toJSON`
+hook (Date → ISO string), matching the request's own serialization.
+
 ## Findings and resolution
 
 | Sev | Finding | Resolution |
@@ -43,6 +54,8 @@ excluded. See the findings table and `docs/superpowers/specs/87-spec.md` D3.
 | BLOCKER | A reclaimed batch re-runs leaf inserts → duplicate pages (partial chunk / checkpoint failure / crash-after-landing). | Deterministic ids `deriveBatchPageId(workspace, clientImportId, batchIndex, ordinal)` (UUID v5) + `upsert(…, { onConflict: 'id', ignoreDuplicates: true })` (`lib/import-ledger.ts`, `app/api/import/route.ts`). |
 | BLOCKER | **Unstable fingerprint → new `clientImportId` on retry → duplicates (see verdict).** | `vaultFingerprint` is now content-based and Yjs-independent; verified by real double-ingestion test. |
 | BLOCKER | **Incomplete fingerprint → stale edit silently dropped (external Pullfrog review, #132).** `path`+`plainText` ignores marks/structure and `properties`/`tags`; a mark- or metadata-only edit left the fingerprint unchanged, so the dialog reused the id and the server replayed the old batch. | Each page gains `contentHash = stableHash(canonicalJson(fitted))` (marks/structure/attrs); `vaultFingerprint` also hashes canonical `properties`, `tags`, and folder/note role; batching tie-breaks on `contentHash` (`lib/stable-content.ts`, `services/obsidian-import.ts`, `services/vault-import.ts`). Tests: mark-only and metadata-only edits diverge despite identical `plainText`. |
+| BLOCKER | **Date-valued metadata collapsed in the fingerprint (external Pullfrog re-review, #132).** `canonicalJson` walked objects by enumerable keys, so a `Date` from a YAML timestamp became `{}`; two different timestamps hashed the same while the request serialized distinct ISO strings → stale replay. | `canonicalJson` honours `toJSON` (mirroring `JSON.stringify`) and omits `undefined` keys; tests cover Date divergence and repeat-ingestion stability (`lib/stable-content.ts`, `tests/unit/stable-content.test.ts`, `tests/unit/vault-import.test.ts`). |
+| BLOCKER | **`canonicalJson` collapsed `Date` to `{}` (external Pullfrog re-review, #132).** gray-matter parses unquoted YAML timestamps into `Date`; with no enumerable own keys a timestamp-only property edit produced an identical fingerprint, so the stale batch was replayed. | `canonicalJson` honours the `toJSON` hook (exactly as `JSON.stringify` does) so `Date` → ISO string, matching the bytes the request serializes; `undefined`-valued keys are dropped like `JSON.stringify`. Tests: `canonicalJson(date)` equals `JSON.stringify(date)`, distinct timestamps diverge, and an ingestion-level YAML-timestamp edit changes the fingerprint (`tests/unit/stable-content.test.ts`, `tests/unit/obsidian-import.test.ts`). |
 | MAJOR | Order-blind fingerprint + positional `batchIndex`: enumeration reorder maps a batchIndex to different pages; the server replays the recorded set and drops the new pages. | `splitIntoBatches` sorts deterministically (path, then content hash) so `batchIndex` ↔ page set is stable. |
 | MINOR | No client retry on `409 batch_in_progress` (contradicts spec D2). | Bounded backoff (`MAX_BATCH_ATTEMPTS = 4`, 400 ms × attempt). |
 | MINOR | `cleanup_import_batches` pruned only `completed`. | Prunes any stale row. |

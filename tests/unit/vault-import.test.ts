@@ -128,6 +128,29 @@ describe('vaultFingerprint', () => {
 		const asFolder = makeIR([{ ...makePage('a', 10), isFolder: true }])
 		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(asFolder))
 	})
+
+	it('diverges when a Date-valued property changes but serializes the same shape', () => {
+		// `gray-matter` parses unquoted YAML timestamps into `Date`. A naive
+		// object walk sees no enumerable keys and collapses every date to `{}`,
+		// so a timestamp-only edit would reuse the stale id and replay the old
+		// batch (external review finding, PR #132). Different dates must diverge.
+		const first = makeIR([{
+			...makePage('a', 10),
+			properties: { updated: new Date('2026-01-01T00:00:00Z') },
+		}])
+		const second = makeIR([{
+			...makePage('a', 10),
+			properties: { updated: new Date('2026-06-01T00:00:00Z') },
+		}])
+		expect(vaultFingerprint(first)).not.toBe(vaultFingerprint(second))
+	})
+
+	it('is stable for identical Date-valued properties across ingestions', () => {
+		const stamp = () => new Date('2026-01-01T00:00:00Z')
+		const a = makeIR([{ ...makePage('a', 10), properties: { updated: stamp() } }])
+		const b = makeIR([{ ...makePage('a', 10), properties: { updated: stamp() } }])
+		expect(vaultFingerprint(a)).toBe(vaultFingerprint(b))
+	})
 })
 
 describe('importVaultIR idempotency (#87)', () => {

@@ -258,4 +258,17 @@ describe('importObsidianVault — retry fingerprint stability (#87)', () => {
 		expect(page(first).plainText).toBe(page(second).plainText)
 		expect(vaultFingerprint(first)).not.toBe(vaultFingerprint(second))
 	})
+
+	it('distinguishes Date-valued frontmatter (unquoted YAML timestamps)', () => {
+		// gray-matter parses `due: 2024-01-01` into a Date, which the request
+		// serializes to an ISO string. The fingerprint must track that value, not
+		// collapse both dates to `{}` (external review finding on PR #132).
+		const options = { workspaceId: 'ws-1', existingPageTitles: [] }
+		const jan = importObsidianVault(contentOf({ 'n.md': '---\ndue: 2024-01-01\n---\nbody\n' }), options).ir
+		const feb = importObsidianVault(contentOf({ 'n.md': '---\ndue: 2024-02-01\n---\nbody\n' }), options).ir
+		const page = (ir: typeof jan) => ir.pages.find((p) => !p.isFolder)!
+		expect(page(jan).properties.due).toBeInstanceOf(Date)
+		expect(page(jan).plainText).toBe(page(feb).plainText)
+		expect(vaultFingerprint(jan)).not.toBe(vaultFingerprint(feb))
+	})
 })

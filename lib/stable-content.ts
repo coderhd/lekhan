@@ -24,16 +24,29 @@ export function stableHash (input: string): string {
  * preserved — it is semantically meaningful). This makes a ProseMirror/JSON
  * document hash its *content* rather than its property insertion order, so two
  * ingestions of the same source produce the same string.
+ *
+ * Non-plain values must serialize the same way the import *request* does, or a
+ * fingerprint could miss a real edit. In particular `gray-matter` parses
+ * unquoted YAML timestamps into `Date`, which has no enumerable own keys — a
+ * naive object walk would collapse every date to `{}` and let a timestamp-only
+ * edit reuse the stale import id (external review on PR #132). `JSON.stringify`
+ * calls `toJSON` (Date → ISO string), so we do the same before recursing.
  */
 export function canonicalJson (value: unknown): string {
 	if (value === null || typeof value !== 'object') {
 		const serialized = JSON.stringify(value)
 		return serialized === undefined ? 'null' : serialized
 	}
+	// Mirror `JSON.stringify`: honour `toJSON` (Date, and any date-like value)
+	// so the fingerprint tracks exactly what the request serializes.
+	const toJson = (value as { toJSON?: unknown }).toJSON
+	if (typeof toJson === 'function') {
+		return canonicalJson((toJson as () => unknown).call(value))
+	}
 	if (Array.isArray(value)) {
 		return `[${value.map(canonicalJson).join(',')}]`
 	}
 	const record = value as Record<string, unknown>
-	const keys = Object.keys(record).sort()
+	const keys = Object.keys(record).filter(key => record[key] !== undefined).sort()
 	return `{${keys.map(key => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(',')}}`
 }
