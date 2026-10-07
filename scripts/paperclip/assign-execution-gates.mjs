@@ -81,7 +81,6 @@ const iso = (d) => new Date(Date.now() + d * 86400000).toISOString();
 
 function gatesFor(issue, s) {
   const b = band(s);
-  const names = (issue.labelIds ?? []).map((id) => labelName.get(id) ?? "");
   const text = `${issue.title} ${issue.description ?? ""}`;
   const reviewers = [A.tl];
   if (b !== "low") reviewers.push(A.qa);
