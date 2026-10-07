@@ -39,7 +39,7 @@ Name: Lekhan (Hindi: writing). Voice: plain, confident, specific; developer-resp
 
 ## Evidence on Hand
 
-Real, demonstrable: vault import with fidelity report; live multiplayer editing; export in five formats; BYOK settings flow. No testimonials, no customer counts, no benchmark numbers exist — future work must not fabricate any. Product screenshots exist in public/early/ (editor, import, share).
+Real, demonstrable: vault import with fidelity report; live multiplayer editing; export in four formats (md/html/pdf/docx); BYOK settings flow. No testimonials, no customer counts, no benchmark numbers exist — future work must not fabricate any. Product screenshots exist in public/early/ (editor, import, share).
 
 ## Product Principles
 

@@ -1,13 +1,14 @@
+// Designed as — Lekhan public marketing · system: DESIGN.md (incumbent Material/Inter stack, cream/teak) · visual-consistency pass
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
 	title: 'Frequently Asked Questions | Lekhan',
-	description: 'Find answers about Lekhan — the local-first collaborative editor. Learn about offline support, real-time collaboration, AI features, security, and more.',
+	description: 'How Lekhan stores your notes, how offline multiplayer works, and why AI here runs on your own keys instead of another subscription.',
 	openGraph: {
 			images: ['/og.png'],
 		title: 'FAQ — Lekhan',
-		description: 'Everything you need to know about Lekhan, the collaborative local-first writing tool.',
+		description: 'How Lekhan stores your notes, how offline multiplayer works, and why AI here runs on your own keys.',
 	},
 }
 
@@ -27,7 +28,7 @@ const faqData: FaqGroup[] = [
 		items: [
 			{
 				question: 'Is Lekhan free to use?',
-				answer: 'Yes. Lekhan is completely free to use. Sign up and start writing immediately — no credit card required, no trial period.',
+				answer: 'Yes. Lekhan is free to use while we\'re in build — sign up and start writing, no credit card required. Founding-edition spots lock the price for life when paid plans arrive.',
 			},
 			{
 				question: 'Do I need to install anything?',
@@ -44,7 +45,7 @@ const faqData: FaqGroup[] = [
 		items: [
 			{
 				question: 'What does "local-first" mean?',
-				answer: 'Local-first means your edits are saved directly to your device before syncing to the cloud. This gives you zero typing latency and means the editor works even without an internet connection.',
+				answer: 'Local-first means your edits are saved directly to your device before syncing to the cloud. There is no network round-trip between your keystroke and the save, so the editor works even without an internet connection.',
 			},
 			{
 				question: 'How does real-time collaboration work?',
@@ -52,11 +53,15 @@ const faqData: FaqGroup[] = [
 			},
 			{
 				question: 'What AI features does Lekhan include?',
-				answer: 'Lekhan includes an AI assistant panel that helps with writing tasks like summarizing content, improving clarity, fixing grammar, and generating ideas — all accessible directly inside your document.',
+				answer: 'An AI assistant panel inside every document: summarize, improve clarity, fix grammar, generate ideas. It runs browser-direct on your own API keys or a local model — we never host inference and never sell AI credits, so the AI bill stays yours.',
+			},
+			{
+				question: 'Can I move in from Obsidian?',
+				answer: 'Yes. Import your vault and your wikilinks, callouts, frontmatter, and tags come with you. The import produces a fidelity report that names anything it couldn\'t map — you always know exactly what arrived.',
 			},
 			{
 				question: 'Can I see the history of my document?',
-				answer: 'Yes. Lekhan includes full version history so you can see exactly how your document evolved over time and restore any previous version safely.',
+				answer: 'Yes — git-style history that lives on your own disk. Every version is kept, with visual diffs so you can time-travel through a document and restore any point. Local history is never paywalled.',
 			},
 		],
 	},
@@ -65,7 +70,7 @@ const faqData: FaqGroup[] = [
 		items: [
 			{
 				question: 'Is my data secure?',
-				answer: 'Absolutely. Your data is encrypted in transit, and Lekhan uses Supabase with row-level security policies to ensure only authorized users can access your documents.',
+				answer: 'Your notes are encrypted in transit and at rest by default. Cloud sync runs on Supabase with row-level security, so only you and the accounts you explicitly share a document with can access it.',
 			},
 			{
 				question: 'Who can see my documents?',
@@ -94,7 +99,7 @@ const faqData: FaqGroup[] = [
 			},
 			{
 				question: 'What happens if I go offline while collaborating?',
-				answer: 'You can keep writing normally. When you reconnect, Lekhan automatically merges your changes with everyone else\'s — seamlessly and without data loss.',
+				answer: 'You can keep writing normally. When you reconnect, Lekhan automatically merges your changes with everyone else\'s — no data loss.',
 			},
 		],
 	},
@@ -115,7 +120,7 @@ function FaqAccordion ({ group }: { group: FaqGroup }) {
 						<summary className="flex items-center justify-between cursor-pointer px-6 py-5 text-on-surface font-medium text-base select-none list-none">
 							<span>{item.question}</span>
 							<svg
-								className="w-5 h-5 text-muted-foreground transition-transform duration-200 group-open:rotate-180 shrink-0 ml-4"
+								className="w-5 h-5 text-on-surface-variant transition-transform duration-200 group-open:rotate-180 shrink-0 ml-4"
 								fill="none"
 								viewBox="0 0 24 24"
 								stroke="currentColor"
@@ -124,7 +129,7 @@ function FaqAccordion ({ group }: { group: FaqGroup }) {
 								<path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
 							</svg>
 						</summary>
-						<div className="px-6 pb-5 text-muted-foreground text-sm leading-relaxed">
+						<div className="px-6 pb-5 text-on-surface-variant text-sm leading-relaxed">
 							{item.answer}
 						</div>
 					</details>
@@ -143,8 +148,9 @@ export default function FaqPage () {
 					<h1 className="font-display-lg text-4xl md:text-5xl font-bold text-on-surface mb-4">
 						Frequently Asked Questions
 					</h1>
-					<p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-						Everything you need to know about Lekhan. Can&apos;t find what you&apos;re looking for? <Link href="/contact" className="text-primary-ink hover:underline">Reach out directly</Link>.
+					<p className="text-lg text-on-surface-variant max-w-2xl mx-auto">
+						How your notes are stored, how sync works, and why AI here doesn&apos;t mean
+						another subscription. Can&apos;t find what you&apos;re looking for? <Link href="/contact" className="text-primary-ink hover:underline">Reach out directly</Link>.
 					</p>
 				</div>
 
@@ -158,16 +164,16 @@ export default function FaqPage () {
 					<h2 className="font-display-lg text-2xl md:text-3xl font-bold text-on-surface mb-4">
 						Ready to start writing?
 					</h2>
-					<p className="text-muted-foreground mb-8">
-						Join teams who&apos;ve already upgraded their writing workflow.
+					<p className="text-on-surface-variant mb-8">
+						Free to use while we're in build. Your notes go in and out as markdown, so you're never locked in.
 					</p>
 					<Link
 						href="/signup"
-						className="inline-block bg-primary-container text-on-primary text-base px-8 py-4 rounded-xl font-bold active:scale-[0.98] hover:shadow-lg hover:shadow-primary-container/20 transition-all"
+						className="inline-block bg-primary-container text-on-primary text-base px-8 py-4 rounded-xl font-bold active:scale-[0.98] hover:bg-primary transition-colors whitespace-nowrap"
 					>
 						Start Writing Free
 					</Link>
-					<p className="text-xs text-muted-foreground mt-3">No credit card required</p>
+					<p className="text-xs text-on-surface-variant mt-3">No credit card required</p>
 				</div>
 			</div>
 		</div>

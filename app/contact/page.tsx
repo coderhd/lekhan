@@ -1,3 +1,4 @@
+// Designed as — Lekhan public marketing · system: DESIGN.md (incumbent Material/Inter stack, cream/teak) · visual-consistency pass
 import type { Metadata } from 'next'
 import Link from 'next/link'
 
@@ -68,7 +69,7 @@ export default function ContactPage () {
 					<h1 className="font-display-lg text-4xl md:text-5xl font-bold text-on-surface mb-4">
 						Get in Touch
 					</h1>
-					<p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+					<p className="text-lg text-on-surface-variant max-w-2xl mx-auto">
 						Have a question, found a bug, or just want to share feedback? We&apos;d love to hear from you.
 					</p>
 				</div>
@@ -81,7 +82,7 @@ export default function ContactPage () {
 							href={channel.href}
 							target="_blank"
 							rel="noopener noreferrer"
-							className="glass rounded-xl p-6 flex items-start gap-4 transition-all hover:-translate-y-1 hover:border-primary-container/40 group"
+							className="glass rounded-xl p-6 flex items-start gap-4 transition-colors hover:border-primary-container/40 group"
 						>
 							<div className="w-12 h-12 rounded-xl bg-primary-container/10 flex items-center justify-center text-primary-container shrink-0 group-hover:bg-primary-container/20 transition-colors">
 								{channel.icon}
@@ -90,7 +91,7 @@ export default function ContactPage () {
 								<h2 className="font-headline-md text-lg font-bold text-on-surface mb-1">
 									{channel.title}
 								</h2>
-								<p className="text-sm text-muted-foreground mb-2">
+								<p className="text-sm text-on-surface-variant mb-2">
 									{channel.description}
 								</p>
 								<span className="text-sm text-primary-ink font-medium">
@@ -106,14 +107,14 @@ export default function ContactPage () {
 					<h2 className="font-headline-md text-xl font-bold text-on-surface mb-3">
 						Open Source & Community Driven
 					</h2>
-					<p className="text-muted-foreground leading-relaxed max-w-lg mx-auto">
+					<p className="text-on-surface-variant leading-relaxed max-w-lg mx-auto">
 						Lekhan is an open-source project. The best way to report bugs or request features is through our <a href="https://github.com/coderhd" target="_blank" rel="noopener noreferrer" className="text-primary-ink hover:underline">GitHub repository</a>. For everything else, email works great.
 					</p>
 				</div>
 
 				{/* CTA */}
 				<div className="text-center mt-16 pt-12 border-t border-border">
-					<p className="text-muted-foreground mb-6">
+					<p className="text-on-surface-variant mb-6">
 						Not sure if Lekhan is right for you?
 					</p>
 					<Link
