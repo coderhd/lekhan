@@ -1,12 +1,14 @@
 ---
 name: model-routing
-description: Decide which OpenCode Go model to use for a task, via a 1-10 complexity score mapped to S/A/B/C tiers. Enforced automatically by the opencode-model-router plugin (see .opencode/opencode-model-router.overrides.jsonc) — this file is the human-readable reference the tiers/scoring are derived from.
+description: Decide which OpenCode Go model to use for a task, via a 1-10 complexity score mapped to S/A/B/C tiers. The opencode-model-router plugin preset (see .opencode/opencode-model-router.overrides.jsonc) is ADVISORY — it reports routing guidance but does not hard-block a different tier. This file is the human-readable reference the tiers/scoring are derived from.
 ---
 
 # Model routing policy — OpenCode Go
 
-**Enforcement note (2026-08-31):** this policy is now wired into automatic
-enforcement via the `opencode-model-router` plugin — see
+**Advisory note (2026-08-31, corrected 2026-10-07):** this policy is wired into
+the `opencode-model-router` plugin as **advisory guidance** — the committed preset
+sets `enforcement.mode: "advisory"`, so the plugin reports routing guidance but
+does **not** hard-block a different tier. See
 `.opencode/opencode-model-router.overrides.jsonc` for the actual fast/medium/heavy
 preset (B/A/S below map to its fast/medium/heavy). This file remains the
 reference for *why* those tiers are what they are — read it when tuning the

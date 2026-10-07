@@ -32,10 +32,13 @@ assignment/mention (`wakeOnDemand`), which is the main spend control.
 The dev-time router preset in `.opencode/opencode-model-router.overrides.jsonc` now maps
 fast/medium/heavy → `deepseek-v4.1-flash` / `qwen3.8-flash` / `mimo-v2.6-pro`.
 
-Budget reality (OpenCode Go, req/month): MiMo-V2.6-Pro **16,300** ($15/mo cap) · GLM-5.3 **1,080** ·
-GLM-5.3-Flash **7,900** · Qwen3.8 Flash **27,000** · DeepSeek V4.1 Flash **37,800**. MiMo is the
-frontier pick and its budget is large enough to use for the review stage, not just rare escalations. Estimate: CEO ~4–6k, Tech Lead ~3–4.5k
-req/month. Never route defaults to a Tier-S model.
+Budget reality — OpenCode Go **typical-usage estimates**, not fixed quotas (OpenCode labels these
+estimates based on typical usage; verify against the current
+[OpenCode Go table](https://dev.opencode.ai/docs/go/)): MiMo-V2.6-Pro **~16,300** ($15/mo cap) ·
+GLM-5.3 **~1,080** · GLM-5.3-Flash **~31,580** · Qwen3.8 Flash **~27,000** · DeepSeek V4.1 Flash
+**~37,800** req/month. MiMo is the frontier pick and its budget is large enough to use for the
+review stage, not just rare escalations. Estimate: CEO ~4–6k, Tech Lead ~3–4.5k req/month. Never
+route defaults to a Tier-S model.
 
 ## Skills
 
@@ -74,5 +77,6 @@ the author, fresh context, per-criterion falsification, fail-closed on anything 
 
 ## Credentials (never commit)
 
-Agent API keys live under `~/.paperclip-onboarding/` (mode `0600`): `paperclip.env` (CEO),
-`team-keys.json` (all agents). Do not paste keys into issues, comments, docs, or logs.
+The `~/.paperclip-onboarding/` directory uses mode `0700`; its credential files use mode `0600`:
+`paperclip.env` (CEO) and `team-keys.json` (all agents). Do not paste keys into issues, comments,
+docs, or logs.
