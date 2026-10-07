@@ -1,5 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { MarkdownEngine } from '@/lib/markdown/engine'
+import { buildStandaloneHtml } from '@/lib/markdown-export'
+import { CALLOUT_TYPES, Callout, BLOCKQUOTE_MARKER_RE, handleCalloutInputRule } from '@/lib/callout'
+import { InputRule, Editor } from '@tiptap/core'
+import { Document } from '@tiptap/extension-document'
+import { StarterKit } from '@tiptap/starter-kit'
+import { Markdown } from 'tiptap-markdown'
+import { buildSlashMenuItems } from '@/lib/slash-menu-extension'
+import { getSharedExtensions } from '@/lib/editor-extensions'
+import type { JSONContent } from '@tiptap/core'
 
 let engine: MarkdownEngine
 
@@ -10,15 +19,6 @@ beforeEach(() => {
 afterEach(() => {
 	engine.destroy()
 })
-import { buildStandaloneHtml } from '@/lib/markdown-export'
-import { CALLOUT_TYPES, Callout, BLOCKQUOTE_MARKER_RE, handleCalloutInputRule } from '@/lib/callout'
-import { InputRule, Editor } from '@tiptap/core'
-import { Document } from '@tiptap/extension-document'
-import { StarterKit } from '@tiptap/starter-kit'
-import { Markdown } from 'tiptap-markdown'
-import { buildSlashMenuItems } from '@/lib/slash-menu-extension'
-import { getSharedExtensions } from '@/lib/editor-extensions'
-import type { JSONContent } from '@tiptap/core'
 
 /** Doc-level round-trip: parse → serialize → parse yields the same doc. */
 function expectDocRoundTrip(md: string) {
