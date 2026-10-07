@@ -2,8 +2,8 @@ import type { JSONContent } from '@tiptap/core'
 import { generateHTML } from '@tiptap/core'
 import { Document } from '@tiptap/extension-document'
 import { Mention } from '@tiptap/extension-mention'
-import { assembleMarkdownFile, type PageMeta } from '@/lib/markdown-io'
 import { markdownEngine } from '@/lib/markdown/engine'
+import type { PageMeta } from '@/lib/markdown/engine'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 
 /**
@@ -165,5 +165,5 @@ export function buildMarkdownExport(options: {
 	if (tags.length > 0) {
 		meta.tags = tags
 	}
-	return assembleMarkdownFile(meta, body)
+	return markdownEngine.assembleMarkdownFile(meta, body)
 }

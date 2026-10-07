@@ -6,7 +6,7 @@ import * as Y from 'yjs'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 import { readVaultZip } from '@/services/obsidian-import'
 import { importObsidianVault, type ObsidianImportPage } from '@/services/obsidian-import'
-import { base64ToUint8Array } from '@/lib/yjs-seed'
+import { base64ToUint8Array } from '@/lib/markdown/engine'
 
 async function fixtureVault(): Promise<Parameters<typeof importObsidianVault>[0]> {
 	const zip = new JSZip()
