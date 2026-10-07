@@ -24,7 +24,7 @@ export default [
     }
   },
   {
-    files: ["server/**/*.js", "*.config.js", "tests/**/*.ts"],
+    files: ["server/**/*.js", "*.config.js", "tests/**/*.ts", "scripts/**/*.mjs"],
     languageOptions: {
       globals: {
         require: true,
@@ -36,7 +36,8 @@ export default [
         setInterval: true,
         clearTimeout: true,
         console: true,
-        URL: true
+        URL: true,
+        fetch: true
       }
     },
     rules: {

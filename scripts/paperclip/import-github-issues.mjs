@@ -53,7 +53,7 @@ async function api(method, urlPath, body, { board = false } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const text = await res.text();
-  let json = null; try { json = JSON.parse(text); } catch {}
+  let json = null; try { json = JSON.parse(text); } catch { /* non-JSON response body */ }
   if (!res.ok) throw new Error(`${method} ${urlPath} -> ${res.status} ${json?.error ?? text.slice(0, 200)}`);
   return json;
 }
@@ -160,7 +160,7 @@ if (!DRY) {
     const blockedBy = deps.map((n) => byGh.get(n)).filter((id) => id && id !== self);
     if (blockedBy.length === 0) continue;
     try { await api("PATCH", `/api/issues/${self}`, { blockedByIssueIds: blockedBy }); linked++; }
-    catch (e) {
+    catch {
       // Agents need a run to attribute cross-issue writes; fall back to board (local_trusted).
       try { await api("PATCH", `/api/issues/${self}`, { blockedByIssueIds: blockedBy }, { board: true }); linked++; }
       catch (e2) { console.log(`  blocker link failed for #${it.number}: ${String(e2).slice(0, 120)}`); }
