@@ -82,7 +82,8 @@ import { insertParsedHtml } from '@/lib/insert-parsed-html'
 import { hydrateOnOpen } from '@/lib/import-hydration'
 import { Callout, BLOCKQUOTE_MARKER_RE, handleCalloutInputRule } from '@/lib/callout'
 import { CalloutNodeView } from './callout-node-view'
-import { InputRule } from '@tiptap/core'
+import { buildClipboardPayload, writeClipboardPayload } from '@/lib/markdown/clipboard'
+import { InputRule, type JSONContent } from '@tiptap/core'
 
 const LiveCallout = Callout.extend({
 	addNodeView() {
@@ -142,6 +143,19 @@ export default function EditorWorkspace({	pageId,
 	const [workspaceId, setWorkspaceId] = useState<string | null>(null)
 	const [workspacePages, setWorkspacePages] = useState<WorkspacePageSummary[]>([])
 
+	// Live Page metadata for clipboard copy-out (S3). The copy handler is
+	// synchronous, so title/tags/properties are mirrored into a ref rather than
+	// read from state (which would be stale inside the editorProps closure).
+	const clipboardMetaRef = useRef<{ title: string; tags: string[]; properties: Record<string, unknown> }>({
+		title: initialTitle,
+		tags: [],
+		properties: {},
+	})
+
+	useEffect(() => {
+		clipboardMetaRef.current.title = title
+	}, [title])
+
 	useEffect(() => {
 		let isMounted = true
 		const loadMentionables = async () => {
@@ -159,6 +173,9 @@ export default function EditorWorkspace({	pageId,
 				const details = await fetchPageDetails(pageId)
 				if (details?.workspace_id && isMounted) {
 					setWorkspaceId(details.workspace_id)
+					// Mirror Page properties for clipboard copy-out (S3); the
+					// synchronous copy handler cannot fetch on demand.
+					clipboardMetaRef.current.properties = details.properties || {}
 					const pages = await fetchWorkspacePages(details.workspace_id)
 					if (isMounted) {
 						const summaries: WorkspacePageSummary[] = pages.map(p => ({ id: p.id, title: p.title }))
@@ -169,9 +186,20 @@ export default function EditorWorkspace({	pageId,
 				console.error('Error fetching workspace pages for wikilinks:', err)
 			}
 		}
+		// Tags load independently and best-effort: a missing/failed tag fetch must
+		// never block workspace setup (wikilinks) or clipboard metadata.
+		const loadClipboardTags = async () => {
+			try {
+				const pageTags = await fetchPageTags(pageId)
+				if (isMounted) clipboardMetaRef.current.tags = pageTags.map(t => t.tag)
+			} catch (err) {
+				console.error('Error fetching page tags for clipboard:', err)
+			}
+		}
 		if (pageId) {
 			loadMentionables()
 			loadWorkspacePages()
+			loadClipboardTags()
 		}
 		return () => {
 			isMounted = false
@@ -562,6 +590,30 @@ export default function EditorWorkspace({	pageId,
 		editorProps: {
 			attributes: {
 				class: 'prose dark:prose-invert max-w-none focus:outline-none min-h-[500px] text-on-surface break-words w-full',
+			},
+			handleDOMEvents: {
+				// Copy-out (SIL-9 S3): write BOTH the Obsidian-flavored markdown
+				// (text/plain) and Notion-friendly HTML (text/html) so the paste
+				// target picks the representation it understands. Compatibility,
+				// never live sync. Falls back to the native copy on any failure.
+				copy: (view, event) => {
+					const { state } = view
+					const { selection } = state
+					if (selection.empty) return false
+					try {
+						const { from, to } = selection
+						const wholePage = from <= 0 && to >= state.doc.content.size
+						const doc = (wholePage ? state.doc : state.doc.cut(from, to)).toJSON() as JSONContent
+						const payload = buildClipboardPayload(doc, clipboardMetaRef.current, { wholePage })
+						if (!writeClipboardPayload(event, payload)) return false
+						track('copy_out_resolved', { whole_page: wholePage })
+						event.preventDefault()
+						return true
+					} catch (err) {
+						console.warn('Clipboard copy-out failed; falling back to native copy:', err)
+						return false
+					}
+				},
 			},
 			handlePaste: (_view, event) => {
 				// Use the live editor instance. useEditor may recreate the editor

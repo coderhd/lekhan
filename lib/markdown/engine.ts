@@ -90,6 +90,21 @@ export function stripAutoHeading(doc: JSONContent): JSONContent {
 	return { ...doc, content }
 }
 
+/**
+ * Wikilinks are inline text (`[[Page]]`, not a schema node), so the markdown
+ * serializer escapes their brackets to avoid emitting link syntax. The Obsidian
+ * profile is the only place that escaped form should be reversed: `\[\[Page\]\]`
+ * and `\[\[Page|Alias\]\]` become the native wikilink. The alias pipe is
+ * optionally escaped by the serializer too.
+ */
+const ESCAPED_WIKILINK_RE = /\\\[\\\[([^[\]\\]+?)(?:\\?\|([^[\]\\]+?))?\\\]\\\]/g
+
+export function restoreWikilinks(markdown: string): string {
+	return markdown.replace(ESCAPED_WIKILINK_RE, (_match, target: string, alias?: string) =>
+		alias ? `[[${target}|${alias}]]` : `[[${target}]]`,
+	)
+}
+
 export function uint8ArrayToBase64(bytes: Uint8Array): string {
 	let binary = ''
 	const chunkSize = 0x8000
@@ -196,7 +211,7 @@ export class MarkdownEngine {
 	 * copy-out and the S4 vault export.
 	 */
 	serializeObsidianBody(doc: JSONContent): string {
-		return this.serializeExport(stripAutoHeading(doc))
+		return restoreWikilinks(this.serializeExport(stripAutoHeading(doc)))
 	}
 
 	/**
