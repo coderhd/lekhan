@@ -4,11 +4,17 @@ import { track } from '@/lib/analytics'
 
 interface FidelityReportCardProps {
 	report: FidelityReport
-	/** Per-page server-side warnings (snapshot/index failures). */
+	/** Per-page warnings: import server-side snapshot/index failures, or export content reads. */
 	serverWarnings?: FidelityWarning[]
 	/** Import-only: pages created, surfaced as quick-open chips. */
 	createdPages?: Array<{ id: string; title: string }>
 	onOpenPage?: (pageId: string) => void
+}
+
+/** Warning copy differs by direction: import warns about writes/indexing, export about reads. */
+function warningReason(warning: FidelityWarning, isExport: boolean): string {
+	if (isExport) return 'content could not be read'
+	return warning.stage === 'snapshot' ? 'content could not be saved' : 'search/links could not be indexed'
 }
 
 /**
@@ -82,7 +88,7 @@ export function FidelityReportCard({
 					<ul className="list-disc list-inside text-on-surface-variant">
 						{serverWarnings.map((warning, i) => (
 							<li key={i}>
-								<span className="font-medium">{warning.title}</span> — {warning.stage === 'snapshot' ? 'content could not be saved' : 'search/links could not be indexed'}: {warning.error}
+								<span className="font-medium">{warning.title}</span> — {warningReason(warning, isExport)}: {warning.error}
 							</li>
 						))}
 					</ul>

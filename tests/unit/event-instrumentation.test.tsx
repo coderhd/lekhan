@@ -5,6 +5,7 @@ import React from 'react'
 import * as analytics from '@/lib/analytics'
 import PricingMatrix from '@/components/pricing-plans'
 import { ImportReportCard } from '@/components/import-report-card'
+import { FidelityReportCard } from '@/components/fidelity-report-card'
 import ShareModal from '@/components/share-modal'
 import { CollaboratorLimitError } from '@/services/graph'
 
@@ -92,8 +93,36 @@ describe('Event Instrumentation', () => {
 				links_resolved: 8,
 				links_unresolved: 1,
 				degraded_blocks: 0,
+				omissions: 0,
 				warnings_count: 0,
 			})
+		})
+	})
+
+	describe('FidelityReportCard (export direction)', () => {
+		it('emits export_report_viewed and renders export copy + content warnings', () => {
+			render(
+				<FidelityReportCard
+					report={{
+						direction: 'export',
+						pages: 3,
+						folderPages: 1,
+						linksResolved: 2,
+						linksUnresolved: 1,
+						degradedBlocks: 0,
+						omissions: [],
+						warnings: [],
+					}}
+					serverWarnings={[{ title: 'Broken', stage: 'content', error: 'timed out' }]}
+				/>
+			)
+
+			expect(analytics.track).toHaveBeenCalledWith(
+				'export_report_viewed',
+				expect.objectContaining({ pages: 3, links_unresolved: 1, warnings_count: 1 }),
+			)
+			expect(screen.getByTestId('export-report')).toBeInTheDocument()
+			expect(screen.getByText(/content could not be read/)).toBeInTheDocument()
 		})
 	})
 
