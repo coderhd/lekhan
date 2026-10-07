@@ -158,10 +158,9 @@ describe('MarkdownEngine deep module', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Migrated from the retired facade tests (tests/unit/markdown-io.test.ts,
-// tests/unit/yjs-seed.test.ts) under ADR 0005. Assertions are unchanged; the
-// call form moves from the `markdownEngine` singleton facade to per-test
-// `new MarkdownEngine()` instances.
+// Migrated from the retired facade test suites under ADR 0005. Assertions are
+// unchanged; the call form moves from the `markdownEngine` singleton facade to
+// per-test `new MarkdownEngine()` instances.
 // ---------------------------------------------------------------------------
 
 describe('parse / serialize — block round-trip stability (migrated: markdown-io)', () => {

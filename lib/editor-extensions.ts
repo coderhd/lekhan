@@ -32,7 +32,7 @@ const CustomDocument = Document.extend({
 /**
  * The single Tiptap extension list shared by the live editor, the markdown
  * paste path, the version-restore headless editors, and the round-trip
- * engine (`lib/markdown-io.ts`). Page-context-only extensions
+ * engine (`lib/markdown/engine.ts`). Page-context-only extensions
  * (collaboration, cursors, slash menu, mentions) stay in
  * `editor-workspace.tsx`.
  *
