@@ -66,3 +66,31 @@ Scope discipline: **PASS** — diff is exactly the owned files; `gateway.ts`, `g
 - F1: checkout route → pass `gateway_customer_id` for resubscribe (US-6 AC2 end-to-end; contract decision: add optional `customerRef` to `CheckoutRequest` or per-rail cast at route).
 - F2: merged-tree checkpoint B re-run incl. `gatewayForCurrency('INR')` routing pin (after T7).
 - F3: worktree hygiene note — copy `.env`/`.env.local` into new worktrees before `npm run build` (page-data collection evaluates `lib/supabase.ts`).
+
+---
+
+## Cycle 2 re-review — `feat/29-t6-stripe-rail` @ `c0382a9` (verdict: APPROVE)
+
+Delta reviewed: `git diff e7be599 c0382a9` — exactly the 3 owned files (`gateway-factory.ts`, `stripe.ts`, `billing-stripe.test.ts`). Cumulative branch scope unchanged (6 files from base `27e72c7`); `gateway.ts`, fake, `prices.ts`, tier-limits and the three route wrappers remain hash-identical base↔head.
+
+### Deterministic gate (Tech Lead's own run at `c0382a9`, `.env*` copied per F3)
+- Focused `billing-stripe.test.ts` + `billing-gateway.test.ts` — **37/37 passed** (16 + 21)
+- `npm run typecheck` — clean · `npm run lint` — clean
+- `npm test` — **84 files / 647 tests passed** (+1 = the new R2 pin)
+- `npm run build` — **passes fresh at `c0382a9`** (&&-chained completion marker observed)
+- Re-confirmed by the stage-0 recovery run after the review session was interrupted: focused **37/37**, `typecheck` clean, `lint` clean, full suite **84 files / 647 tests** (94.96s), fresh `npm run build` emits the full route table — all executed at `c0382a9` in the rail worktree, reproducing every number above.
+
+### Required changes — adjudication
+- **R1 — PASS.** `builtinRails: Partial<Record<Rail, () => PaymentGateway>> = { stripe: () => getStripeGateway() }`; `ensureRegistered` is now a generic map lookup (`const load = builtinRails[rail]; if (load) registerGateway(rail, load())`) — no rail-specific branch remains in routing logic, and T7 adds exactly one map entry. Entry is an arrow wrapper (binding read deferred to loader call, safe under the `gateway` ⇄ `gateway-factory` cycle). Fake short-circuit and `GatewayNotRegisteredError` fallthrough untouched. Factory header + `stripe.ts` doc comments now describe the map-entry seam. Existing registration + fail-closed pins pass **unmodified** — `billing-gateway.test.ts` has zero delta this cycle (verified: 0-line diff).
+- **R2 — PASS.** `effectiveAt ?? ""` sentinel removed. `subscriptionPeriodEnd(subscription)` is checked immediately after `subscriptions.retrieve` and throws `StripeConfigError` **before** `billingPortal.sessions.create` (no discarded side effect). New pin: subscription stub with `items.data: []` → rejects `StripeConfigError` **and** asserts `portalCreate` not called — non-vacuous (it fails under the old sentinel behavior and under a post-session throw).
+- **R3 — PASS.** Re-verification bar met in-worktree as specified.
+
+### Independent fresh-context verification (cycle-2)
+- **Clean-room subagent**: dispatch #1 died on adapter infra (`getaddrinfo ENOTFOUND opencode.ai`, ~26 min, no report). Dispatch #2 completed a full fresh-context adversarial pass on the delta — author narrative withheld, evidence self-gathered, mutations executed only on a throwaway repo copy. **VERDICT: APPROVE.** R1 PASS (loader map with arrow-only reference at gateway-factory.ts:41-43; cycle confirmed both directions — factory imports `./gateway`, gateway.ts:164 re-exports the factory; zero rail conditionals; fake short-circuit + fail-closed pins green; header docs match the delivered seam). R2 PASS (sentinel gone at HEAD; retrieve→check→create ordering at stripe.ts:184/187/193; new pin non-vacuous by **executed mutation**: restoring the old `e7be599` file → `promise resolved with effectiveAt "" instead of rejecting`; relocating the guard after `sessions.create` → `portalCreate` calls: 1). R3 PASS (3-file delta; 6-file cumulative; all protected paths + `supabase/` zero-diff; `billing-gateway.test.ts` zero-delta with its genuine fail-closed pin at L110-112). Adversarial 1–5 PASS (no double-register path — `registry.has` early-return, lookup cannot fabricate entries for unknown rails; hoisted `getStripeGateway` resolves under any import order; `getSubscriptionState` doctrine unchanged incl. honest `null` period-end; pricing env-resolved server-only, client lazy; per-test stub isolation).
+- Subagent findings — both **non-blocking**: 💡 [LOW] `schedulePlanChange` retrieves without `expand: ['items']`; the fail-closed throw turns any provider shape-drift into a total block of plan-change (safe direction by doctrine). Follow-up: pin the required expand params at T8 wire-level tests. 🔍 [LOW] `registerGateway` silent overwrite (pre-existing T5 behavior; already on the cycle-1 non-blocking list).
+- **Watchdog** (third, independent agent): verified R1 + R2 in the pushed diff at `c0382a9` and re-ran typecheck/lint/full suite itself (comment `0042a252`, 11:02Z).
+- **Tech Lead first-party falsification** (reviewer ≠ author): full reads of `gateway-factory.ts` (L41-50 map seam, L57 fake short-circuit, L60 fail-closed throw) and `stripe.ts` (L187-192 guard before L193 portal session; L240 hoisted loader; L72-80 lazy client; L214-227 read-back doctrine); scope re-derived from git — 3-file delta, 6-file cumulative, protected paths (`gateway.ts` incl. L164 re-export, fake, prices, tier-limits, 3 routes, schema) hash-identical, `billing-gateway.test.ts` zero delta this cycle.
+- **Empirical non-vacuity of the R2 pin — Tech Lead mutation tests in the rail worktree** (mutate → focused run → `git checkout` restore; tree confirmed clean at `c0382a9` after each): guard disabled (`if (false && !effectiveAt)`) → new pin **FAILS** (`1 failed | 15 skipped`); portal session reordered **before** the guard → new pin **FAILS** (portalCreate called); post-restore **16/16** stripe + **37/37** focused pair green. The subagent's scratch-copy mutations reproduce both failure modes independently — 2×2 agreement.
+
+### Disposition
+**APPROVE** — R1–R3 closed; nothing else changed behavior. Stage-0 review gate passes; T6 advances under the execution flow. Merged-tree work (T6+T7 integration, checkpoints, F1–F3) stays with the parent [SIL-32](/SIL/issues/SIL-32) lead per protocol rule 5.
