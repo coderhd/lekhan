@@ -285,6 +285,26 @@ describe("Stripe schedulePlanChange", () => {
 			},
 		})
 	})
+
+	it("fails closed when the provider read-back omits the period end", async () => {
+		const { createStripeGateway, StripeConfigError } = await importRail()
+		const { client, portalCreate, subscriptionRetrieve } = stripeStub()
+		const gateway = createStripeGateway(client)
+
+		// A subscription whose items carry no `current_period_end`: the rail must not
+		// emit a "" sentinel into `effectiveAt` (module doctrine: fails closed).
+		subscriptionRetrieve.mockResolvedValueOnce(makeSubscription({ items: { data: [] } }) as any)
+
+		await expect(
+			gateway.schedulePlanChange({
+				subscriptionRef: "sub_test_1",
+				tier: "pro",
+				cycle: "annual",
+			}),
+		).rejects.toBeInstanceOf(StripeConfigError)
+		// Fail before opening a portal session we would then have to discard.
+		expect(portalCreate).not.toHaveBeenCalled()
+	})
 })
 
 describe("Stripe cancelAtPeriodEnd", () => {

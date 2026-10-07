@@ -182,6 +182,14 @@ export function createStripeGateway(client?: Stripe): StripePaymentGateway {
 		async schedulePlanChange(req: SchedulePlanChangeRequest): Promise<SchedulePlanChangeResult> {
 			const stripeClient = stripe()
 			const subscription = await stripeClient.subscriptions.retrieve(req.subscriptionRef)
+			// Read-back first, fail closed before opening a portal flow we would discard:
+			// a missing period-end is a config/provider fault, never a `""` effect date.
+			const effectiveAt = subscriptionPeriodEnd(subscription)
+			if (!effectiveAt) {
+				throw new StripeConfigError(
+					`Stripe subscription "${req.subscriptionRef}" read-back omitted current_period_end; cannot report a plan-change effect.`,
+				)
+			}
 			const session = await stripeClient.billingPortal.sessions.create({
 				customer: customerIdOf(subscription.customer),
 				return_url: `${appUrl()}/settings?billing=plan_change_return`,
@@ -194,7 +202,7 @@ export function createStripeGateway(client?: Stripe): StripePaymentGateway {
 				subscriptionRef: req.subscriptionRef,
 				tier: req.tier,
 				cycle: req.cycle,
-				effectiveAt: subscriptionPeriodEnd(subscription) ?? "",
+				effectiveAt,
 				scheduledChangeRef: session.id,
 			}
 		},
@@ -223,10 +231,11 @@ export function createStripeGateway(client?: Stripe): StripePaymentGateway {
 /**
  * Build the lazily-configured Stripe rail for factory registration (T5 seam).
  *
- * A hoisted function declaration — not a top-level `const` — so the shared factory
- * can register it even when `stripe.ts` is imported first and the gateway cycle
- * (`gateway` ⇄ `gateway-factory`) is still resolving. The real Stripe client stays
- * lazy, so registration never requires `STRIPE_SECRET_KEY`.
+ * The factory lists this under exactly one `builtinRails` map entry as an arrow
+ * wrapper (`stripe: () => getStripeGateway()`), so the binding is read only when
+ * the loader runs — never during module evaluation inside the
+ * (`gateway` ⇄ `gateway-factory`) import cycle. The real Stripe client stays lazy,
+ * so registration never requires `STRIPE_SECRET_KEY`.
  */
 export function getStripeGateway(): StripePaymentGateway {
 	return createStripeGateway()
