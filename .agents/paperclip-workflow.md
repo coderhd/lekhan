@@ -1,7 +1,8 @@
 # Paperclip Operating Cadence — Silent Whisper / Lekhan
 
-How the virtual org runs day to day. Companions: `.agents/paperclip-org.md` (roster, models,
-skills), `docs/agents/organization.md` (roles + SDLC), `.agents/model-routing.md` (model policy).
+How the virtual org runs day to day. Companions: `docs/agents/organization.md` (roles + SDLC) and
+`CONTEXT.md` (domain model); `.agents/paperclip-org.md` (roster, models, skills) and
+`.agents/model-routing.md` (model policy) are added by the Paperclip setup PR.
 This file documents the **cadence** — standups, sprints, retros, and working sessions — all
 implemented as Paperclip **routines** (scheduled issues), plus the team's conventions.
 
@@ -46,8 +47,11 @@ committed issue; label it with the sprint; state the sprint goal in one sentence
 calibrated from measured velocity after 2–3 sprints.
 
 **Review & rollover (Fri):** every **unfinished committed** issue is moved to the next sprint's
-label, tagged `rollover`, **re-estimated** (adjusted up for partially-done work), and given a
-one-line reason it slipped. Nothing silently disappears. Velocity = points actually done.
+label, tagged `rollover`, and given a one-line reason it slipped. Record a **revised remaining-work
+estimate** in the rollover note for the next sprint's planning — but leave the **committed**
+estimate from planning unchanged, so the velocity baseline stays stable. **Velocity = the committed
+points of issues that reached `done`** (not the revised remaining estimate), so re-estimation can
+never inflate it. Nothing silently disappears.
 
 ## Weekly Retrospective (agenda)
 
