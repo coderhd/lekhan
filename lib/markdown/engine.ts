@@ -90,6 +90,22 @@ export function stripAutoHeading(doc: JSONContent): JSONContent {
 	return { ...doc, content }
 }
 
+/** `\[\[Page\]\]` / `\[\[Page\|Alias\]\]` as emitted by tiptap-markdown. */
+const ESCAPED_WIKILINK_RE = /\\\[\\\[([^\n]*?)\\\]\\\]/g
+
+/**
+ * Reverse tiptap-markdown's escaping of wikilink brackets/alias pipes so the
+ * Obsidian profile emits the raw `[[Page]]` / `[[Page|Alias]]` Obsidian
+ * resolves. Only the characters inside a wikilink are un-escaped; all other
+ * markdown escaping is left to the underlying serializer.
+ */
+export function unescapeObsidianWikilinks(markdown: string): string {
+	return markdown.replace(ESCAPED_WIKILINK_RE, (_match, inner: string) => {
+		const target = inner.replace(/\\([|\][])/g, '$1')
+		return `[[${target}]]`
+	})
+}
+
 export function uint8ArrayToBase64(bytes: Uint8Array): string {
 	let binary = ''
 	const chunkSize = 0x8000
@@ -194,9 +210,14 @@ export class MarkdownEngine {
 	 * export serializer; the placeholder title heading is stripped so frontmatter
 	 * (not a duplicated heading) carries the Page title. Shared by clipboard
 	 * copy-out and the S4 vault export.
+	 *
+	 * `tiptap-markdown` escapes markdown metacharacters in text, so a Page that
+	 * contains a literal `[[Page]]` would round-trip as `\[\[Page\]\]` — dead in
+	 * Obsidian. The Obsidian profile is the one place that un-escapes wikilink
+	 * syntax back to the raw form Obsidian resolves.
 	 */
 	serializeObsidianBody(doc: JSONContent): string {
-		return this.serializeExport(stripAutoHeading(doc))
+		return unescapeObsidianWikilinks(this.serializeExport(stripAutoHeading(doc)))
 	}
 
 	/**
