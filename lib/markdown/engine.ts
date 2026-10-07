@@ -5,7 +5,7 @@ import { Mention } from '@tiptap/extension-mention'
 import type { Schema } from '@tiptap/pm/model'
 import matter from 'gray-matter'
 import * as Y from 'yjs'
-import { prosemirrorJSONToYXmlFragment } from 'y-prosemirror'
+import { prosemirrorJSONToYXmlFragment, yXmlFragmentToProseMirrorRootNode } from 'y-prosemirror'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 import { insertParsedHtml } from '@/lib/insert-parsed-html'
 
@@ -240,6 +240,24 @@ export class MarkdownEngine {
 			prosemirrorJSONToYXmlFragment(schema, fitted, ydoc.getXmlFragment('default'))
 			const bytes = Y.encodeStateAsUpdate(ydoc)
 			return uint8ArrayToBase64(bytes)
+		} finally {
+			ydoc.destroy()
+		}
+	}
+
+	/**
+	 * Inverse of `seedToYjsBase64`: a live Yjs state snapshot → Tiptap JSON.
+	 * Used by the vault export (SIL-9 S4a) to turn each Page's collaborative
+	 * document into the doc the serializer consumes. Reads the same `default`
+	 * Y.XmlFragment the live editor's Collaboration extension writes, against
+	 * the live schema, so custom nodes/attrs survive the round trip.
+	 */
+	yjsStateToJson(state: Uint8Array): JSONContent {
+		const ydoc = new Y.Doc()
+		try {
+			Y.applyUpdate(ydoc, state)
+			const root = yXmlFragmentToProseMirrorRootNode(ydoc.getXmlFragment('default'), this.getLiveSchema())
+			return root.toJSON() as JSONContent
 		} finally {
 			ydoc.destroy()
 		}
