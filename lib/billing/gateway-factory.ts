@@ -29,6 +29,7 @@ import {
 	type Rail,
 } from "./gateway"
 import { getFakeGateway } from "./gateway-fake"
+import { razorpayGateway } from "./razorpay"
 import { getStripeGateway } from "./stripe"
 
 const registry = new Map<Rail, PaymentGateway>()
@@ -40,6 +41,12 @@ export function registerGateway(rail: Rail, gateway: PaymentGateway): void {
 /** Built-in rails: one lazy loader per rail (T6 stripe, T7 razorpay). */
 const builtinRails: Partial<Record<Rail, () => PaymentGateway>> = {
 	stripe: () => getStripeGateway(),
+	// REVIEW BLOCKING-1 (SIL-43): the razorpay binding must be read only at load
+	// time, never during this module's evaluation — under a razorpay-first import
+	// graph the singleton is still in TDZ here. The lazy-loader seam is the guard
+	// (T7's eager getter-delegate superseded at integration); the
+	// `billing-razorpay-import-order` pin keeps it pinned permanently.
+	razorpay: () => razorpayGateway,
 }
 
 /** Resolve a built-in rail's loader on first use (see module note). */
@@ -64,3 +71,4 @@ export function gatewayForRail(rail: Rail): PaymentGateway {
 export function gatewayForCurrency(currency: Currency): PaymentGateway {
 	return gatewayForRail(railForCurrency(currency))
 }
+
