@@ -56,6 +56,9 @@ export const RAZORPAY_TOTAL_COUNT: Record<BillingCycle, number> = {
 	annual: 100,
 }
 
+/** Per-request ceiling for provider round-trips (REVIEW MEDIUM-1). */
+export const RAZORPAY_HTTP_TIMEOUT_MS = 10_000
+
 /** Missing/invalid server-side Razorpay configuration. Fails closed. */
 export class RazorpayConfigError extends Error {
 	readonly code = "razorpay_config"
@@ -151,6 +154,9 @@ export function createRazorpayHttpClient(env: NodeJS.ProcessEnv = process.env): 
 				method,
 				headers: { authorization, "content-type": "application/json" },
 				body: body === undefined ? undefined : JSON.stringify(body),
+				// Bound every provider round-trip so a hung Razorpay call can never park
+				// a route handler indefinitely (REVIEW MEDIUM-1).
+				signal: AbortSignal.timeout(RAZORPAY_HTTP_TIMEOUT_MS),
 			})
 			const text = await response.text()
 			const parsed = text ? safeParse(text) : {}
@@ -201,17 +207,37 @@ interface IdentifiedPlan {
 
 /** Reverse-map a provider `plan_id` to its tier/cycle/cohort via env bindings. */
 function identifyPlan(planId: string, env: NodeJS.ProcessEnv): IdentifiedPlan | null {
+	const matches: IdentifiedPlan[] = []
 	for (const [key, value] of Object.entries(env)) {
 		if (value !== planId) continue
 		const match = PLAN_KEY_PATTERN.exec(key)
 		if (!match) continue
-		return {
+		matches.push({
 			tier: match[1].toLowerCase() as BillingTier,
 			cycle: match[2].toLowerCase() as BillingCycle,
 			cohort: match[3].toLowerCase() as PriceCohort,
-		}
+		})
 	}
-	return null
+
+	if (matches.length === 0) return null
+
+	// A plan id must map to exactly one tier/cycle/cohort. If a FOUNDING and a GA
+	// binding were misconfigured to the same id, first-match-wins would let a
+	// founding subscription be inferred GA — the exact PDEC-12 leak this rail
+	// exists to prevent. Refuse (fail closed) rather than guess.
+	const [first] = matches
+	const unanimous = matches.every(
+		(candidate) =>
+			candidate.tier === first.tier &&
+			candidate.cycle === first.cycle &&
+			candidate.cohort === first.cohort,
+	)
+	if (!unanimous) {
+		throw new RazorpayConfigError(
+			`Razorpay plan id "${planId}" is bound to multiple tier/cycle/cohort env keys; refusing to infer a cohort.`,
+		)
+	}
+	return first
 }
 
 /** Resolve the plan id for a target tier/cycle/cohort from server env only. */
@@ -293,8 +319,14 @@ export function createRazorpayGateway(options: RazorpayGatewayOptions = {}): Raz
 		async portalUrl(hostedPaymentPageUrl: string): Promise<PortalSession> {
 			// PDEC-1 / TL R-1: no portal session. The card-update path is the
 			// subscription's hosted payment-page link, returned as-is (no provider call).
-			if (typeof hostedPaymentPageUrl !== "string" || hostedPaymentPageUrl.trim() === "") {
-				throw new RazorpayConfigError("A hosted Razorpay payment-page link is required for card updates.")
+			// Fail closed (REVIEW BLOCKING-3): the current route passes a
+			// `gateway_customer_id`, which is NOT a redirectable URL — echoing it would
+			// produce a silently broken 200. Only a real hosted https link is accepted;
+			// the root source-of-truth fix is tracked as a lead/T5/T8 integration item.
+			if (typeof hostedPaymentPageUrl !== "string" || !/^https:\/\/\S+/.test(hostedPaymentPageUrl)) {
+				throw new RazorpayConfigError(
+					"Razorpay card updates require a hosted payment-page (https) link; refusing to fabricate one.",
+				)
 			}
 			return { url: hostedPaymentPageUrl, kind: "card_update" }
 		},
@@ -339,11 +371,21 @@ export function createRazorpayGateway(options: RazorpayGatewayOptions = {}): Raz
 		},
 
 		async retrieveScheduledChange(subscriptionRef: string): Promise<SchedulePlanChangeResult | null> {
+			// REVIEW BLOCKING-2: `retrieve_scheduled_changes` returns HTTP 400
+			// ("There is no scheduled update on the subscription to retrieve") when
+			// nothing is pending — it never sends a 200 with `has_scheduled_changes:false`.
+			// So pre-check the documented entity flag on the subscription; only fetch the
+			// pending update when the provider says one exists.
+			const current = await http.request<RazorpaySubscription>({
+				method: "GET",
+				path: `/subscriptions/${encodeURIComponent(subscriptionRef)}`,
+			})
+			if (current.has_scheduled_changes !== true) return null
+
 			const subscription = await http.request<RazorpaySubscription>({
 				method: "GET",
 				path: `/subscriptions/${encodeURIComponent(subscriptionRef)}/retrieve_scheduled_changes`,
 			})
-			if (subscription.has_scheduled_changes !== true) return null
 
 			const identified = subscription.plan_id ? identifyPlan(subscription.plan_id, process.env) : null
 			if (!identified) {

@@ -229,6 +229,18 @@ describe("razorpay portal seam", () => {
 		const gateway = createRazorpayGateway({ http: client })
 		await expect(gateway.portalUrl("")).rejects.toBeInstanceOf(RazorpayConfigError)
 	})
+
+	it("fails closed on a non-https argument instead of fabricating a card-update link", async () => {
+		const { client, calls } = recordingClient([])
+		const gateway = createRazorpayGateway({ http: client })
+
+		// BLOCKING-3: the portal route currently passes `gateway_customer_id`
+		// (`cust_…`); the rail must refuse it rather than 200 with a broken redirect.
+		await expect(gateway.portalUrl("cust_D00000000000006")).rejects.toBeInstanceOf(RazorpayConfigError)
+		await expect(gateway.portalUrl("http://rzp.io/i/insecure")).rejects.toBeInstanceOf(RazorpayConfigError)
+		await expect(gateway.portalUrl("rzp.io/i/relative")).rejects.toBeInstanceOf(RazorpayConfigError)
+		expect(calls).toHaveLength(0)
+	})
 })
 
 describe("razorpay scheduled plan change", () => {
@@ -288,20 +300,37 @@ describe("razorpay scheduled plan change", () => {
 		expect(calls.map((call) => call.method)).toEqual(["GET"])
 	})
 
-	it("maps a pending scheduled change and returns null when none is pending", async () => {
+	it("refuses to infer a cohort when one plan id is bound to multiple env keys", async () => {
+		// MEDIUM: a FOUNDING and a GA binding misconfigured to the same plan id must
+		// fail closed rather than let first-match-wins infer GA for a founder.
+		process.env.RAZORPAY_PLAN_PLUS_MONTHLY_GA_INR = PLAN.plusMonthlyFounding
 		const { client, calls } = recordingClient([
+			{ id: "sub_1", plan_id: PLAN.plusMonthlyFounding, status: "active", current_end: 1580841000 },
+		])
+		const gateway = createRazorpayGateway({ http: client })
+
+		await expect(
+			gateway.schedulePlanChange({ subscriptionRef: "sub_1", tier: "pro", cycle: "annual" }),
+		).rejects.toBeInstanceOf(RazorpayConfigError)
+		expect(calls.map((call) => call.method)).toEqual(["GET"])
+	})
+
+	it("maps a pending scheduled change via the entity flag, then retrieves the update entity", async () => {
+		const { client, calls } = recordingClient([
+			// 1) entity flag pre-check: a change is pending
+			{
+				id: "sub_1",
+				plan_id: PLAN.plusMonthlyFounding,
+				has_scheduled_changes: true,
+				change_scheduled_at: 1580841000,
+				current_end: 1580841000,
+			},
+			// 2) the pending-update entity carries the scheduled plan
 			{
 				id: "sub_1",
 				plan_id: PLAN.proAnnualFounding,
 				has_scheduled_changes: true,
 				change_scheduled_at: 1580841000,
-				current_end: 1580841000,
-			},
-			{
-				id: "sub_1",
-				plan_id: PLAN.plusMonthlyFounding,
-				has_scheduled_changes: false,
-				change_scheduled_at: null,
 				current_end: 1580841000,
 			},
 		])
@@ -314,11 +343,22 @@ describe("razorpay scheduled plan change", () => {
 			effectiveAt: new Date(1580841000 * 1000).toISOString(),
 			scheduledChangeRef: "sub_1:1580841000",
 		})
-		expect(await gateway.retrieveScheduledChange("sub_1")).toBeNull()
-		expect(calls[0]).toMatchObject({
-			method: "GET",
-			path: "/subscriptions/sub_1/retrieve_scheduled_changes",
-		})
+		expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+			"GET /subscriptions/sub_1",
+			"GET /subscriptions/sub_1/retrieve_scheduled_changes",
+		])
+	})
+
+	it("returns null from the entity flag without calling retrieve when nothing is pending", async () => {
+		// BLOCKING-2: `retrieve_scheduled_changes` returns 400 when nothing is pending,
+		// so the rail must never reach it for a clean subscription.
+		const { client, calls } = recordingClient([
+			{ id: "sub_1", plan_id: PLAN.plusMonthlyFounding, has_scheduled_changes: false },
+		])
+		const gateway = createRazorpayGateway({ http: client })
+
+		await expect(gateway.retrieveScheduledChange("sub_1")).resolves.toBeNull()
+		expect(calls.map((call) => call.path)).toEqual(["/subscriptions/sub_1"])
 	})
 
 	it("cancels a scheduled change", async () => {
@@ -409,6 +449,20 @@ describe("razorpay default HTTP client", () => {
 			`Basic ${Buffer.from("rzp_test_key:secret").toString("base64")}`,
 		)
 		expect(JSON.parse(init.body as string)).toEqual({ plan_id: "plan_x" })
+	})
+
+	it("bounds every provider request with an abort signal so a hung call cannot park a handler", async () => {
+		const fetchMock = vi.fn(async () => jsonResponse({ id: "sub_1" }))
+		vi.stubGlobal("fetch", fetchMock)
+		const client = createRazorpayHttpClient({
+			RAZORPAY_KEY_ID: "k",
+			RAZORPAY_KEY_SECRET: "s",
+		} as unknown as NodeJS.ProcessEnv)
+
+		await client.request({ method: "GET", path: "/subscriptions/sub_1" })
+
+		const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+		expect(init.signal).toBeInstanceOf(AbortSignal)
 	})
 
 	it("fails closed before any network call when credentials are missing", async () => {
