@@ -52,45 +52,68 @@ afterEach(() => {
 /** Minimal stand-in for the parts of `IDBFactory` the source touches. */
 function fakeFactory(opts: { names: string[]; enumerable: boolean }) {
 	const deleted: string[] = []
+	const open = vi.fn((name: string) => {
+		const exists = opts.names.includes(name)
+		const request: Record<string, unknown> = {}
+		queueMicrotask(() => {
+			// A missing database is created on open: oldVersion 0 upgrade.
+			if (!exists) (request.onupgradeneeded as ((e: unknown) => void) | undefined)?.({ oldVersion: 0 })
+			request.result = { close: vi.fn() }
+			;(request.onsuccess as (() => void) | undefined)?.()
+		})
+		return request as unknown as IDBOpenDBRequest
+	})
 	const factory = {
 		databases:
 			opts.enumerable === false
 				? undefined
 				: async () => opts.names.map((name) => ({ name })),
-		open(name: string) {
-			const exists = opts.names.includes(name)
-			const request: Record<string, unknown> = {}
-			queueMicrotask(() => {
-				// A missing database is created on open: oldVersion 0 upgrade.
-				if (!exists) (request.onupgradeneeded as ((e: unknown) => void) | undefined)?.({ oldVersion: 0 })
-				request.result = { close: vi.fn() }
-				;(request.onsuccess as (() => void) | undefined)?.()
-			})
-			return request as unknown as IDBOpenDBRequest
-		},
+		open,
 		deleteDatabase(name: string) {
 			deleted.push(name)
 			return {} as IDBOpenDBRequest
 		},
 	}
-	return { factory: factory as unknown as IDBFactory, deleted }
+	return { factory: factory as unknown as IDBFactory, deleted, open }
 }
 
 describe('hasLocalDatabase', () => {
-	it('reads the enumeration when it is available', async () => {
+	it('reads the enumeration when it is available (modern browsers)', async () => {
 		await expect(hasLocalDatabase('p1', fakeFactory({ names: ['p1'], enumerable: true }).factory)).resolves.toBe(true)
 		await expect(hasLocalDatabase('p1', fakeFactory({ names: [], enumerable: true }).factory)).resolves.toBe(false)
 	})
 
-	it('does not persist an empty database when enumeration is unavailable (absent → probe + delete)', async () => {
-		const { factory, deleted } = fakeFactory({ names: [], enumerable: false })
+	it('reports absent without opening or deleting when enumeration is unavailable (non-destructive fallback)', async () => {
+		const { factory, deleted, open } = fakeFactory({ names: [], enumerable: false })
 		await expect(hasLocalDatabase('p1', factory)).resolves.toBe(false)
-		expect(deleted).toEqual(['p1'])
+		// The fallback must not open (which would create an empty DB) or delete
+		// (which could race another tab's just-created cache).
+		expect(open).not.toHaveBeenCalled()
+		expect(deleted).toEqual([])
 	})
 
-	it('reports a present database without deleting it when enumeration is unavailable', async () => {
-		const { factory, deleted } = fakeFactory({ names: ['p1'], enumerable: false })
-		await expect(hasLocalDatabase('p1', factory)).resolves.toBe(true)
+	it('reports absent without deleting a present database when enumeration is unavailable', async () => {
+		const { factory, deleted, open } = fakeFactory({ names: ['p1'], enumerable: false })
+		await expect(hasLocalDatabase('p1', factory)).resolves.toBe(false)
+		expect(open).not.toHaveBeenCalled()
+		expect(deleted).toEqual([])
+	})
+
+	it('reports absent without opening or deleting when the enumeration call throws', async () => {
+		const deleted: string[] = []
+		const open = vi.fn()
+		const factory = {
+			databases: async () => {
+				throw new Error('enumeration blocked')
+			},
+			open,
+			deleteDatabase(name: string) {
+				deleted.push(name)
+				return {} as IDBOpenDBRequest
+			},
+		} as unknown as IDBFactory
+		await expect(hasLocalDatabase('p1', factory)).resolves.toBe(false)
+		expect(open).not.toHaveBeenCalled()
 		expect(deleted).toEqual([])
 	})
 })
