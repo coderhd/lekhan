@@ -17,6 +17,7 @@ import { InlineEdit } from '@/components/inline-edit'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { ImportDialog } from '@/components/import-dialog'
+import { VaultExportDialog } from '@/components/vault-export-dialog'
 import { track } from '@/lib/analytics'
 
 interface DashboardProps {
@@ -160,6 +161,7 @@ export default function Dashboard({ user }: DashboardProps) {
 	}
 
 	const [importDialogOpen, setImportDialogOpen] = useState(false)
+	const [vaultExportOpen, setVaultExportOpen] = useState(false)
 
 	const handleImportMarkdown = async (file: File) => {
 		if (!file.name.toLowerCase().match(/\.(md|markdown|mdown|txt)$/)) {
@@ -284,6 +286,11 @@ export default function Dashboard({ user }: DashboardProps) {
 				onMarkdownFile={(file) => handleImportMarkdown(file)}
 				onOpenPage={(pageId) => router.push(`/page/${pageId}`)}
 				onImportComplete={() => fetchPages()}
+			/>
+			<VaultExportDialog
+				open={vaultExportOpen}
+				onOpenChange={setVaultExportOpen}
+				pages={myPages}
 			/>
 			<GlobalHeaderSlot slot="right">
 				<div className="flex items-center gap-md">
@@ -468,6 +475,10 @@ export default function Dashboard({ user }: DashboardProps) {
 											<span className="material-symbols-outlined">upload_file</span>
 											Import
 										</button>
+										<button onClick={() => setVaultExportOpen(true)} className="hidden md:flex items-center gap-sm bg-surface-container text-on-surface font-bold px-lg py-2 rounded-lg hover:bg-surface-container-high hover:shadow-md premium-transition ml-2" title="Export workspace to an Obsidian vault (compatible, not synced)">
+											<span className="material-symbols-outlined">download</span>
+											Export
+										</button>
 									</div>
 								</div>
 
@@ -651,6 +662,9 @@ export default function Dashboard({ user }: DashboardProps) {
 			</main>
 
 			{/* FABs for mobile */}
+			<button onClick={() => setVaultExportOpen(true)} className="md:hidden fixed bottom-40 right-8 z-[100] w-14 h-14 bg-surface-container text-on-surface rounded-full shadow-2xl border border-black/10 dark:border-white/10 flex items-center justify-center active:scale-90 premium-transition" title="Export workspace to an Obsidian vault (compatible, not synced)">
+				<span className="material-symbols-outlined text-3xl">download</span>
+			</button>
 			<button onClick={() => setImportDialogOpen(true)} className="md:hidden fixed bottom-24 right-8 z-[100] w-14 h-14 bg-surface-container text-on-surface rounded-full shadow-2xl border border-black/10 dark:border-white/10 flex items-center justify-center active:scale-90 premium-transition" title="Import">
 				<span className="material-symbols-outlined text-3xl">upload_file</span>
 			</button>
