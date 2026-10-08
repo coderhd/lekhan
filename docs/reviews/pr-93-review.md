@@ -37,7 +37,7 @@
 |---|---|
 | 4 export formats (markdown/HTML/PDF/DOCX) | `ExportType` union, `editor-workspace.tsx:49`; generators in `lib/export-utils.ts`; PRODUCT.md corrected 5→4 |
 | 0 round-trips per keystroke / saved locally first | local-first save path; same statement in FAQ "local-first" answer |
-| BYOK providers (OpenAI, Anthropic, Gemini, Sarvam, custom) + Ollama/LM Studio browser-direct | `lib/ai/provider-registry.ts` (`isLocalDirect` only for local; cloud relayed) |
+| BYOK: own key or local model — cloud calls relayed through our API to the chosen provider, local models (Ollama/LM Studio) browser-direct; on your own key, no plan credits consumed | `lib/ai/provider-registry.ts` (`isLocalDirect` only for local; cloud → `/api/ai/stream` pass-through relay, no persistence in route); `app/api/ai/route.ts` quota gate (`remainingCredits < requiredCredits && !hasValidByokKey`) |
 | "on your own key, AI never consumes plan credits" | `app/api/ai/route.ts` — quota gate + deduction both skip when `hasValidByokKey` |
 | 500 founding spots, price locked for life, closes when full | `app/early/page.tsx` `FOUNDING_CAP = 500` + founding-pricing section |
 | Obsidian fidelity: wikilinks, callouts, frontmatter, tags + honest report | `services/obsidian-import.ts` + `tests/unit/obsidian-import.test.ts` |
@@ -56,6 +56,13 @@
 
 - Axis 3 CRDT/storage: diff touches zero `lib/`/`services/`/`hooks/`/storage code (9 marketing files + 2 docs)
 - Axis 4 backend security: no routes/migrations/server code changed
+
+## External review round 2 — pullfrog on PR #135 (2026-10-08)
+
+| # | Sev | Finding | Disposition |
+|---|-----|---------|-------------|
+| P1 | major | Public copy (landing :77/:198, about :24, faq :56) contrasts own-keys vs local models but never states cloud BYOK calls are relayed through Lekhan's API — material to the privacy claim | **FIXED.** Relay language added at every AI-claim surface: "cloud calls are relayed through our API to the provider you pick … local models connect straight from your browser." Verified against `app/api/ai/stream/route.ts` — pure pass-through, no persistence in route. Hero positioning lines stay as-is: PRODUCT.md declares the positioning line binding everywhere; the card directly under it carries the architecture detail. |
+| P2 | major | PRODUCT.md positioning/constraints still call user-key AI a strategic target / "do not market until shipped" (lines 20/24/32/34), contradicting shipped reality and inviting future copy reverts | **FIXED.** Product Purpose, Positioning, Capabilities and Constraints reconciled to shipped truth (BYOK live: relay on user key, local browser-direct, plan-credit fallback without key). Bright line corrected from false "no hosted AI inference ever" to "the AI bill is the user's — their key, their local model, or an explicit plan credit; no silent hosted inference". |
 
 ## Follow-ups surfaced by review (not diff defects)
 

@@ -195,7 +195,7 @@ export default function LandingPage () {
 								</span>
 								<h3 className="font-headline-md text-xl font-bold text-on-surface">AI on Your Own Keys</h3>
 							</div>
-							<p className="font-body-md text-body-md text-on-surface-variant leading-relaxed">Bring a key for OpenAI, Anthropic, Gemini or Sarvam — or point Lekhan at a local model like Ollama. On your own key, AI never consumes plan credits. The AI bill stays yours.</p>
+							<p className="font-body-md text-body-md text-on-surface-variant leading-relaxed">Bring a key for OpenAI, Anthropic, Gemini or Sarvam — cloud calls are relayed through our API to the provider you pick. Or point Lekhan at a local model like Ollama, which connects straight from your browser. On your own key, AI never consumes plan credits. The AI bill stays yours.</p>
 						</div>
 					</div>
 				</section>

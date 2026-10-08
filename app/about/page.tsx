@@ -21,7 +21,7 @@ const values = [
 	},
 	{
 		title: 'Privacy by Default',
-		description: 'Your data lives on your device first. We don\'t scan your documents, sell your data, or train models on your writing. And AI runs on your own keys — bring a provider key or point it at a local model on your machine. Your words stay yours.',
+		description: 'Your data lives on your device first. We don\'t scan your documents, sell your data, or train models on your writing. And AI runs on your own keys — cloud calls relay through our API to the provider you choose, local models connect straight from your browser. Your words stay yours.',
 		Icon: Lock,
 	},
 	{
