@@ -8,8 +8,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
  *    `total_count`/`customer_notify`/`notes.workspace_id`, hosted `short_url`
  *  - cancel-at-cycle-end semantics
  *  - scheduled plan-change surface (schedule + retrieve + cancel mapping)
- *  - seam honesty: no Stripe-style portal session — `portalUrl` returns the
- *    hosted card-update link and makes no provider call
+ *  - seam honesty: no Stripe-style portal session — `portalUrl` resolves the
+ *    subscription's hosted payment-page `short_url` from a live GET read-back and
+ *    never fabricates or persists it (SIL-56 escalation-1 ruling)
  *  - read-back status/period mapping used by the invariant + webhook processors
  *  - Basic-auth HTTP client fails closed on missing credentials
  */
@@ -23,6 +24,7 @@ import { PriceConfigError } from "@/lib/billing/prices"
 import { gatewayForRail } from "@/lib/billing/gateway-factory"
 import {
 	RAZORPAY_API_BASE,
+	RazorpayApiError,
 	RazorpayConfigError,
 	createRazorpayGateway,
 	createRazorpayHttpClient,
@@ -214,32 +216,53 @@ describe("razorpay cancel", () => {
 })
 
 describe("razorpay portal seam", () => {
-	it("returns the hosted card-update link without creating a portal session", async () => {
-		const { client, calls } = recordingClient([])
+	it("resolves the hosted card-update link from the live subscription read-back", async () => {
+		// SIL-56 escalation-1 ruling (option b): `short_url` is fetched from the
+		// provider at portal-open time — never persisted, never echoed.
+		const { client, calls } = recordingClient([
+			{ id: "sub_1", status: "authenticated", short_url: "https://rzp.io/i/abc" },
+		])
 		const gateway = createRazorpayGateway({ http: client })
 
-		const session = await gateway.portalUrl("https://rzp.io/i/abc")
+		const session = await gateway.portalUrl("sub_1")
 
 		expect(session).toEqual({ url: "https://rzp.io/i/abc", kind: "card_update" })
-		expect(calls).toHaveLength(0)
+		expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual(["GET /subscriptions/sub_1"])
 	})
 
-	it("rejects an empty hosted link rather than fabricating one", async () => {
-		const { client } = recordingClient([])
-		const gateway = createRazorpayGateway({ http: client })
-		await expect(gateway.portalUrl("")).rejects.toBeInstanceOf(RazorpayConfigError)
-	})
-
-	it("fails closed on a non-https argument instead of fabricating a card-update link", async () => {
+	it("refuses a non-subscription ref rather than fabricating a link (zero provider calls)", async () => {
 		const { client, calls } = recordingClient([])
 		const gateway = createRazorpayGateway({ http: client })
 
-		// BLOCKING-3: the portal route currently passes `gateway_customer_id`
-		// (`cust_…`); the rail must refuse it rather than 200 with a broken redirect.
+		// The T5 portal route passes the stored SUBSCRIPTION ref for this rail. A
+		// customer id (`cust_…`) and any direct URL are not refs — passing them
+		// through was the BLOCKING-3 broken-redirect vector, now refused before
+		// any network.
 		await expect(gateway.portalUrl("cust_D00000000000006")).rejects.toBeInstanceOf(RazorpayConfigError)
+		await expect(gateway.portalUrl("https://rzp.io/i/abc")).rejects.toBeInstanceOf(RazorpayConfigError)
 		await expect(gateway.portalUrl("http://rzp.io/i/insecure")).rejects.toBeInstanceOf(RazorpayConfigError)
-		await expect(gateway.portalUrl("rzp.io/i/relative")).rejects.toBeInstanceOf(RazorpayConfigError)
+		await expect(gateway.portalUrl("")).rejects.toBeInstanceOf(RazorpayConfigError)
 		expect(calls).toHaveLength(0)
+	})
+
+	it("fails closed when the read-back link is missing or unsafe (REVIEW M-1)", async () => {
+		// The guard is a URL parse, not `^https://\S+`: WHATWG normalization SILENTLY
+		// drops tabs/newlines (host mutation), and credentials must never ride a
+		// redirect we hand to the browser.
+		for (const shortUrl of [
+			undefined,
+			null,
+			"",
+			"http://rzp.io/i/insecure",
+			"//rzp.io/i/relative",
+			"https://user@rzp.io/i/abc",
+			"https://ok.example.com\t.evil.example",
+			"https://rzp.io\n/i/abc",
+		]) {
+			const { client } = recordingClient([{ id: "sub_1", short_url: shortUrl }])
+			const gateway = createRazorpayGateway({ http: client })
+			await expect(gateway.portalUrl("sub_1")).rejects.toBeInstanceOf(RazorpayApiError)
+		}
 	})
 })
 
@@ -361,6 +384,22 @@ describe("razorpay scheduled plan change", () => {
 		expect(calls.map((call) => call.path)).toEqual(["/subscriptions/sub_1"])
 	})
 
+	it("falls back to `charge_at` when the updated entity omits current_end (REVIEW M-2)", async () => {
+		// The docs' own update-response example shows `current_end: null` for an
+		// authenticated subscription; `charge_at` is the documented next-billing time
+		// for that window. Without the fallback a provider-valid schedule fails closed.
+		const { client, calls } = recordingClient([
+			{ id: "sub_1", plan_id: PLAN.plusMonthlyFounding, status: "authenticated", current_end: 1580841000 },
+			{ id: "sub_1", plan_id: PLAN.proAnnualFounding, status: "authenticated", current_end: null, charge_at: 1591123200 },
+		])
+		const gateway = createRazorpayGateway({ http: client })
+
+		const result = await gateway.schedulePlanChange({ subscriptionRef: "sub_1", tier: "pro", cycle: "annual" })
+
+		expect(result.effectiveAt).toBe(new Date(1591123200 * 1000).toISOString())
+		expect(calls).toHaveLength(2)
+	})
+
 	it("cancels a scheduled change", async () => {
 		const { client, calls } = recordingClient([{ id: "sub_1", has_scheduled_changes: false }])
 		const gateway = createRazorpayGateway({ http: client })
@@ -463,6 +502,41 @@ describe("razorpay default HTTP client", () => {
 
 		const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
 		expect(init.signal).toBeInstanceOf(AbortSignal)
+	})
+
+	it("omits the JSON content-type when sending no body (REVIEW L-3)", async () => {
+		const fetchMock = vi.fn(async () => jsonResponse({ id: "sub_1" }))
+		vi.stubGlobal("fetch", fetchMock)
+		const client = createRazorpayHttpClient({
+			RAZORPAY_KEY_ID: "k",
+			RAZORPAY_KEY_SECRET: "s",
+		} as unknown as NodeJS.ProcessEnv)
+
+		await client.request({ method: "POST", path: "/subscriptions/sub_1/cancel_scheduled_changes" })
+		const [, getInit] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+		expect(getInit.headers).not.toHaveProperty("content-type")
+		expect(getInit.body).toBeUndefined()
+
+		await client.request({ method: "POST", path: "/subscriptions", body: { plan_id: "plan_x" } })
+		const [, postInit] = fetchMock.mock.calls[1] as unknown as [string, RequestInit]
+		expect((postInit.headers as Record<string, string>)["content-type"]).toBe("application/json")
+		expect(postInit.body).toBe('{"plan_id":"plan_x"}')
+	})
+
+	it("trims credential env values so a pasted whitespace cannot produce a provider 401 (REVIEW L-4)", async () => {
+		const fetchMock = vi.fn(async () => jsonResponse({ id: "sub_1" }))
+		vi.stubGlobal("fetch", fetchMock)
+		const client = createRazorpayHttpClient({
+			RAZORPAY_KEY_ID: "  rzp_test_key\t",
+			RAZORPAY_KEY_SECRET: " secret ",
+		} as unknown as NodeJS.ProcessEnv)
+
+		await client.request({ method: "GET", path: "/subscriptions/sub_1" })
+
+		const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+		expect((init.headers as Record<string, string>).authorization).toBe(
+			`Basic ${Buffer.from("rzp_test_key:secret").toString("base64")}`,
+		)
 	})
 
 	it("fails closed before any network call when credentials are missing", async () => {

@@ -43,6 +43,7 @@ import {
 	TierUnavailableError,
 	railForCurrency,
 	classifySubscription,
+	withStoredCancelFlag,
 	type GatewaySubscriptionState,
 	type PaymentGateway,
 	type Rail,
@@ -158,6 +159,37 @@ describe('gateway routing matrix', () => {
 			isFounding: false,
 		})
 		expect(session.checkoutUrl).toBe('#fake-checkout')
+	})
+})
+
+describe('PDEC-11 transfer-window overlay (SIL-56 ruling)', () => {
+	const state = (cancelAtPeriodEnd: boolean): GatewaySubscriptionState => ({
+		subscriptionRef: 'sub-1',
+		status: 'active',
+		cancelAtPeriodEnd,
+		currentPeriodEnd: '2026-02-01T00:00:00.000Z',
+	})
+
+	it('softens live to detaching when the stored cancel flag is set', () => {
+		// Razorpay never echoes cancel_at_cycle_end on GET: the stored column is the
+		// provenanced accepted-cancel-action supplement, applied at classification time.
+		expect(classifySubscription(withStoredCancelFlag(state(false), true))).toBe('detaching')
+	})
+
+	it('never rewrites provider read-back: stored false/null cannot unset a read-back true', () => {
+		expect(withStoredCancelFlag(state(true), false).cancelAtPeriodEnd).toBe(true)
+		expect(withStoredCancelFlag(state(true), null).cancelAtPeriodEnd).toBe(true)
+		expect(withStoredCancelFlag(state(true), undefined).cancelAtPeriodEnd).toBe(true)
+	})
+
+	it('cannot make a terminal (non-live) subscription appear billable', () => {
+		const canceled: GatewaySubscriptionState = {
+			subscriptionRef: 'sub-1',
+			status: 'canceled',
+			cancelAtPeriodEnd: false,
+			currentPeriodEnd: null,
+		}
+		expect(classifySubscription(withStoredCancelFlag(canceled, true))).toBe('inactive')
 	})
 })
 
@@ -290,6 +322,38 @@ describe('/api/billing/checkout — single-live-subscription invariant', () => {
 		expect(body.checkoutUrl).toBe('#fake-checkout')
 	})
 
+	it('permits a checkout when the stored cancel flag marks the INR predecessor detaching (PDEC-11 / SIL-56)', async () => {
+		// Razorpay's GET never echoes cancel_at_cycle_end, so the rail honestly reads
+		// back live; the stored ACCEPTED-CANCEL-ACTION flag is the provenanced
+		// supplement that opens the transfer window.
+		h.state.plan = {
+			workspace_id: 'ws-1',
+			gateway: 'razorpay',
+			gateway_subscription_id: 'sub-inr-window',
+			gateway_customer_id: 'cus-inr',
+			currency: 'INR',
+			is_founding: false,
+			tier: 'plus',
+			cancel_at_period_end: true,
+		}
+		getFakeBillingStore().seed({
+			subscriptionRef: 'sub-inr-window',
+			workspaceId: 'ws-1',
+			rail: 'razorpay',
+			status: 'active',
+			cancelAtPeriodEnd: false,
+			currentPeriodEnd: '2026-02-01T00:00:00.000Z',
+			tier: 'plus',
+			cycle: 'monthly',
+			currency: 'INR',
+			isFounding: false,
+		})
+
+		const res = await checkoutPOST(request('/api/billing/checkout', { tier: 'plus', cycle: 'monthly', currency: 'INR' }))
+		expect(res.status).toBe(200)
+		expect((await res.json()).checkoutUrl).toBe('#fake-checkout')
+	})
+
 	it('resolves isFounding from server state, never from the request body', async () => {
 		h.state.plan = { workspace_id: 'ws-1', gateway: 'none', is_founding: false, tier: 'free' }
 		const res = await checkoutPOST(request('/api/billing/checkout', { tier: 'pro', cycle: 'monthly', currency: 'USD', isFounding: true }))
@@ -326,11 +390,35 @@ describe('/api/billing/portal — rail routing', () => {
 		expect((await res.json()).kind).toBe('billing_portal')
 	})
 
-	it('routes INR/razorpay to the hosted card-update link', async () => {
-		h.state.plan = { workspace_id: 'ws-1', gateway: 'razorpay', gateway_customer_id: 'cus-1', currency: 'INR', tier: 'pro' }
+	it('routes INR/razorpay to the hosted card-update link from the subscription ref', async () => {
+		// SIL-56 escalation-1 ruling: the INR portal key is the stored SUBSCRIPTION
+		// ref (rail resolves the hosted short_url from provider read-back), not the
+		// customer id.
+		h.state.plan = {
+			workspace_id: 'ws-1', gateway: 'razorpay',
+			gateway_customer_id: 'cus-1', gateway_subscription_id: 'sub-inr-1',
+			currency: 'INR', tier: 'pro',
+		}
 		const res = await portalPOST(request('/api/billing/portal'))
 		expect(res.status).toBe(200)
-		expect((await res.json()).kind).toBe('card_update')
+		const body = await res.json()
+		expect(body.kind).toBe('card_update')
+		expect(body.url).toBe('#fake-card-update')
+	})
+
+	it('fails closed when the rail-specific portal ref is missing (never a guessed link)', async () => {
+		// Razorpay without a subscription ref: the customer id alone must not be
+		// echoed as a card-update link (the BLOCKING-3 broken-redirect vector).
+		h.state.plan = { workspace_id: 'ws-1', gateway: 'razorpay', gateway_customer_id: 'cus-1', currency: 'INR', tier: 'pro' }
+		const res = await portalPOST(request('/api/billing/portal'))
+		expect(res.status).toBe(400)
+		expect((await res.json()).code).toBe('no_billing_account')
+
+		// Stripe without a customer ref: the subscription id alone must not open a
+		// Billing Portal session against the wrong object.
+		h.state.plan = { workspace_id: 'ws-1', gateway: 'stripe', gateway_subscription_id: 'sub-1', currency: 'USD', tier: 'pro' }
+		const res2 = await portalPOST(request('/api/billing/portal'))
+		expect(res2.status).toBe(400)
 	})
 
 	it('rejects a portal request with no stored customer', async () => {

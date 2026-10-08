@@ -144,6 +144,44 @@ Tasks tracked as Paperclip child issues at BUILD dispatch (external-tracker note
 
 **Story coverage (PRD US-1…US-12):** US-1→T6 · US-2→T7+T12 · US-3→T3/T4/T11 · US-4→T12(a) · US-5→T6/T7/T12 · US-6→T6/T7/T12 · US-7→T8(grace)/T10/T12 · US-8→T13 · US-9→T2/T6/T14 · US-10→T3(trigger)/T9/T12(summary UI) · US-11→T9/T10(settle)/T12 · US-12→T8/T10.
 
+## SIL-56 integration rulings (2026-10-08 — Tech Lead; binding on T8/T10/T12/T13)
+
+Rails merged onto this branch (`df4940a` T6, `af7ed43` T7). Seam: T6's data-driven
+`builtinRails` lazy-loader **supersedes** T7's eager getter-delegate — the rail binding is
+read only when the loader runs (call time), never during module evaluation; both
+import-order pins (`billing-razorpay-import-order`, `billing-stripe-import-order`) prove
+real-rail resolution under rail-first graph entry, including runtime member completeness
+(REVIEW L-1) and no-silent-fallback identity (`gatewayForCurrency('INR') === razorpayGateway`).
+
+- **R-INR-PORTAL (escalation 1 / M-3, resolved):** source of truth for the INR card-update
+  link is **option (b)** — the Razorpay rail resolves the subscription's hosted payment-page
+  `short_url` from a live `GET /v1/subscriptions/:id` **read-back at portal-open time**.
+  The link is NEVER persisted (no schema column; a stored payable short_url was escalation 3's
+  double-charge vector) and never fabricated (BLOCKING-3). The T5 portal route passes the
+  **rail-specific** ref: `gateway_subscription_id` for razorpay, `gateway_customer_id` for
+  stripe; missing ref fails closed 400. Contract param renamed `customerRef` → `portalRef`
+  (`gateway.ts`), the T5-owned rename the review deferred to integration.
+- **R-CANCEL-FLAG (escalation 2, PDEC-11):** `workspace_plans.cancel_at_period_end` is written
+  with rail-honest provenance. **Stripe/USD:** read-back mirror — T8/T10 populate it from the
+  provider's echoed `cancel_at_period_end` on subscription read-back/webhook. **Razorpay/INR:**
+  the provider treats `cancel_at_cycle_end` as a request param and NEVER echoes it, so the
+  column records the **accepted cancel action** — our own `POST /subscriptions/:id/cancel
+  {cancel_at_cycle_end:true}` returning 2xx (provider-acknowledged, not inferred). T8 must NOT
+  clear a stored `true` on INR while the subscription is non-terminal (GET cannot confirm the
+  flag); terminal `cancelled` read-back converges status and the flag becomes moot (status wins).
+  The checkout gate consumes the flag via `withStoredCancelFlag` (overlay may only soften
+  `live`→`detaching`; status remains provider-read-back truth). T12 copy must state the INR
+  window honestly: "cancels at end of period" reflects our accepted instruction; entitlement
+  honors the paid remainder.
+- **R-REF-PERSIST (escalation 3, discipline):** T8 persists `gateway_customer_id` /
+  `gateway_subscription_id` ONLY from `subscription.authenticated` (Razorpay) and
+  `checkout.session.completed` + read-back (Stripe) — never from a `created` object, whose
+  payable short_url + persisted ref is a double-charge vector. No payable link is ever stored.
+- **Deferred to live-sandbox verification (T8/T14):** REVIEW L-2 (`customer_notify` on PATCH —
+  docs contradict themselves; possible provider 400), cross-frequency monthly→annual
+  cycle-end changes (undocumented permissiveness), and L-5 (`expire_by` hygiene on created
+  subscriptions). No rail code changes pending for these; verify against test credentials.
+
 ## Risks & mitigations (delta beyond spec §15 — build-order level)
 
 | Risk | Impact | Mitigation |

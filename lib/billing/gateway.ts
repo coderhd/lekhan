@@ -100,10 +100,42 @@ export function isLiveNonDetaching(state: GatewaySubscriptionState): boolean {
 	return classifySubscription(state) === "live"
 }
 
+/**
+ * PDEC-11 transfer-window overlay (SIL-56 ruling). Provider read-back stays the
+ * ONLY source of status/liveness; the stored `workspace_plans.cancel_at_period_end`
+ * is consumed as a provenanced supplement for the detaching classification only:
+ *  - Stripe/USD — the provider echoes the flag on subscription read-back/webhooks,
+ *    so the column itself is a read-back mirror.
+ *  - Razorpay/INR — `cancel_at_cycle_end` is a request param and is NEVER echoed on
+ *    GET, so the column records the ACCEPTED CANCEL ACTION: our own
+ *    `POST /v1/subscriptions/:id/cancel {cancel_at_cycle_end:true}` returned 2xx.
+ *    Provider-acknowledged — never inferred from timing or webhook absence.
+ * The overlay may only soften `live` into `detaching`; it can never mark a non-live
+ * subscription billable and can never unset a read-back `true`.
+ */
+export function withStoredCancelFlag(
+	state: GatewaySubscriptionState,
+	storedCancelAtPeriodEnd: boolean | null | undefined,
+): GatewaySubscriptionState {
+	if (storedCancelAtPeriodEnd !== true || state.cancelAtPeriodEnd) return state
+	return { ...state, cancelAtPeriodEnd: true }
+}
+
 export interface PaymentGateway {
 	readonly rail: Rail
 	createCheckout(req: CheckoutRequest): Promise<CheckoutSession>
-	portalUrl(customerRef: string): Promise<PortalSession>
+	/**
+	 * SIL-56 integration ruling — renamed from `customerRef`, whose name contradicted
+	 * PDEC-1 (Razorpay has no portal session and no customer-keyed card-update path).
+	 * `portalRef` is a RAIL-SPECIFIC portal lookup key, resolved server-side from
+	 * `workspace_plans`; the caller must select the ref by rail:
+	 *  - Stripe: stored `gateway_customer_id` (`cus_…`) — opens a Billing Portal session.
+	 *  - Razorpay: stored `gateway_subscription_id` (`sub_…`) — the rail resolves the
+	 *    subscription's hosted payment-page `short_url` from a live GET read-back
+	 *    (PDEC-1: the link is never fabricated and never persisted).
+	 * Passing the wrong ref for a rail fails closed, never a silent fallback.
+	 */
+	portalUrl(portalRef: string): Promise<PortalSession>
 	schedulePlanChange(req: SchedulePlanChangeRequest): Promise<SchedulePlanChangeResult>
 	cancelAtPeriodEnd(subscriptionRef: string): Promise<void>
 	getSubscriptionState(subscriptionRef: string): Promise<GatewaySubscriptionState>

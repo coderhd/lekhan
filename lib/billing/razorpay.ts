@@ -16,8 +16,9 @@
  *   PATCH /v1/subscriptions/:id                      (schedule_change_at: cycle_end)
  *   GET   /v1/subscriptions/:id/retrieve_scheduled_changes
  *   POST  /v1/subscriptions/:id/cancel_scheduled_changes
- * There is no Razorpay Billing-Portal equivalent: `portalUrl` returns the hosted
- * card-update payment-page link and never fabricates a portal session (TL R-1).
+ * There is no Razorpay Billing-Portal equivalent: `portalUrl` resolves the
+ * subscription's hosted card-update payment-page link (`short_url`) from a live GET
+ * read-back and never fabricates or persists it (TL R-1; SIL-56 escalation-1 ruling).
  *
  * Credentials are read lazily on each call, so importing this module never
  * requires secrets and every network path fails closed when they are absent.
@@ -106,6 +107,7 @@ export interface RazorpaySubscription {
 	short_url?: string | null
 	customer_id?: string | null
 	current_end?: number | null
+	charge_at?: number | null
 	change_scheduled_at?: number | null
 	has_scheduled_changes?: boolean
 	cancel_at_cycle_end?: boolean
@@ -128,7 +130,10 @@ function requireEnv(env: NodeJS.ProcessEnv, key: string): string {
 	if (typeof value !== "string" || value.trim() === "") {
 		throw new RazorpayConfigError(`Missing server-side Razorpay configuration: ${key} must be set.`)
 	}
-	return value
+	// REVIEW L-4: Razorpay rejects keys with surrounding whitespace ("no whitespace
+	// before or after"); return the TRIMMED value so a pasted `.env` line cannot
+	// produce a confusing provider 4xx.
+	return value.trim()
 }
 
 function safeParse(text: string): unknown {
@@ -152,7 +157,10 @@ export function createRazorpayHttpClient(env: NodeJS.ProcessEnv = process.env): 
 
 			const response = await fetch(`${RAZORPAY_API_BASE}${path}`, {
 				method,
-				headers: { authorization, "content-type": "application/json" },
+				// REVIEW L-3: `cancel_at_cycle_end`-style POSTs and GETs carry no body —
+				// the documented examples send no content-type either. Only declare JSON
+				// when a body is actually serialized.
+				headers: body === undefined ? { authorization } : { authorization, "content-type": "application/json" },
 				body: body === undefined ? undefined : JSON.stringify(body),
 				// Bound every provider round-trip so a hung Razorpay call can never park
 				// a route handler indefinitely (REVIEW MEDIUM-1).
@@ -254,8 +262,36 @@ function resolvePlanId(
 	return requireEnv(env, resolution.planEnvKey)
 }
 
+const SUBSCRIPTION_REF_PATTERN = /^sub_[A-Za-z0-9_]+$/
+
+/**
+ * REVIEW M-1 (SIL-56): validate a redirectable link with the URL parser, never
+ * `^https://\S+` without an end anchor. WHATWG `new URL()` SILENTLY DROPS tabs and
+ * newlines, so a shaped value like `https://ok.example\t.evil.example` normalizes to
+ * a HOST-MUTATED redirect. Reject any control/space/line-separator code point first,
+ * then require an https URL without embedded credentials.
+ */
+function isSafeHostedUrl(value: string | null | undefined): value is string {
+	if (typeof value !== "string" || value.length === 0) return false
+	for (const ch of value) {
+		const code = ch.codePointAt(0) ?? 0
+		if (code <= 0x20 || code === 0x7f || code === 0x2028 || code === 0x2029 || code === 0xfeff) return false
+	}
+	let parsed: URL
+	try {
+		parsed = new URL(value)
+	} catch {
+		return false
+	}
+	return parsed.protocol === "https:" && !parsed.username && !parsed.password
+}
+
 function effectiveAtFor(subscription: RazorpaySubscription): string {
-	const effectiveAt = unixToIso(subscription.change_scheduled_at ?? subscription.current_end)
+	// REVIEW M-2: the documented update response can carry `current_end: null` for an
+	// `authenticated` subscription; `charge_at` (the next billing time) is the
+	// documented effective time for that window. Without it the schedule would fail
+	// closed ("did not report an effective time") on a provider-valid response.
+	const effectiveAt = unixToIso(subscription.change_scheduled_at ?? subscription.current_end ?? subscription.charge_at)
 	if (!effectiveAt) {
 		throw new RazorpayApiError(
 			200,
@@ -316,19 +352,34 @@ export function createRazorpayGateway(options: RazorpayGatewayOptions = {}): Raz
 			return { checkoutUrl: subscription.short_url, opaqueRef: subscription.id }
 		},
 
-		async portalUrl(hostedPaymentPageUrl: string): Promise<PortalSession> {
-			// PDEC-1 / TL R-1: no portal session. The card-update path is the
-			// subscription's hosted payment-page link, returned as-is (no provider call).
-			// Fail closed (REVIEW BLOCKING-3): the current route passes a
-			// `gateway_customer_id`, which is NOT a redirectable URL — echoing it would
-			// produce a silently broken 200. Only a real hosted https link is accepted;
-			// the root source-of-truth fix is tracked as a lead/T5/T8 integration item.
-			if (typeof hostedPaymentPageUrl !== "string" || !/^https:\/\/\S+/.test(hostedPaymentPageUrl)) {
+		async portalUrl(subscriptionRef: string): Promise<PortalSession> {
+			// PDEC-1 / TL R-1 / SIL-56 escalation-1 ruling (option b): there is no Razorpay
+			// portal session. The card-update source of truth is the PROVIDER — the
+			// subscription's hosted payment-page `short_url` is resolved from a live
+			// GET read-back at portal time; it is never persisted, never echoed, never
+			// fabricated. The T5 portal route passes the stored SUBSCRIPTION ref for this
+			// rail (renamed contract param `portalRef`). A non-`sub_` ref (e.g. a stale
+			// `cust_…` customer id) fails loudly with ZERO provider calls, preserving the
+			// BLOCKING-3 posture: a loud 502 beats a silently broken redirect.
+			if (typeof subscriptionRef !== "string" || !SUBSCRIPTION_REF_PATTERN.test(subscriptionRef)) {
 				throw new RazorpayConfigError(
-					"Razorpay card updates require a hosted payment-page (https) link; refusing to fabricate one.",
+					"Razorpay card updates resolve from the subscription ref (sub_…); refusing to fabricate a link.",
 				)
 			}
-			return { url: hostedPaymentPageUrl, kind: "card_update" }
+			const subscription = await http.request<RazorpaySubscription>({
+				method: "GET",
+				path: `/subscriptions/${encodeURIComponent(subscriptionRef)}`,
+			})
+			const hosted = subscription.short_url
+			if (!isSafeHostedUrl(hosted)) {
+				throw new RazorpayApiError(
+					200,
+					undefined,
+					undefined,
+					`Razorpay subscription "${subscriptionRef}" did not report a usable https payment-page link.`,
+				)
+			}
+			return { url: hosted, kind: "card_update" }
 		},
 
 		async cancelAtPeriodEnd(subscriptionRef: string): Promise<void> {
