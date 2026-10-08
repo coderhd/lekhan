@@ -26,8 +26,38 @@ const OBSIDIAN_FRONTMATTER_RE = /^---\r?\n/
 const OBSIDIAN_CALLOUT_RE = /^\s*>\s*\[![a-zA-Z0-9 ]+\]/m
 const WIKILINK_RE = /\[\[[^[\]]+\]\]/
 
-// Notion's clipboard HTML carries its own host or data/class markers.
-const NOTION_HTML_RE = /(?:www\.)?notion\.(?:so|site)|data-notion|class="[^"]*notion/i
+// Notion's clipboard HTML carries data/class markers or links to a Notion host.
+// The host is matched by parsing each URL and comparing its hostname, so a
+// foreign URL whose *path* merely looks Notion-ish (e.g.
+// `https://example.com/notion.so/guide`) is not mistaken for Notion content.
+const NOTION_MARKER_RE = /data-notion|class=["'][^"']*notion/i
+const NOTION_HOSTS = new Set(['notion.so', 'www.notion.so', 'notion.site', 'www.notion.site'])
+const HREF_RE = /(?:href|src)\s*=\s*["']([^"']*)["']/gi
+
+/** True when `hostname` belongs to a Notion host (`www.` optional). */
+export function isNotionHostname(hostname: string): boolean {
+	return NOTION_HOSTS.has(hostname.toLowerCase().replace(/\.$/, ''))
+}
+
+/**
+ * True when `href` points at a Notion page. The URL is parsed and its hostname
+ * compared — `https://example.com/notion.so/guide` is *not* a Notion link.
+ * Scheme-less values (`www.notion.so/x`) are retried with an `https://` prefix.
+ */
+export function isNotionUrl(href: string): boolean {
+	if (!href) return false
+	let url: URL
+	try {
+		url = new URL(href)
+	} catch {
+		try {
+			url = new URL(`https://${href}`)
+		} catch {
+			return false
+		}
+	}
+	return isNotionHostname(url.hostname)
+}
 
 // Obsidian's own clipboard HTML links wikilinks through its custom URL scheme
 // (`obsidian://open?…`), which never appears in code or any other app.
@@ -47,7 +77,16 @@ export function isObsidianMarkdown(text: string | undefined): boolean {
 }
 
 export function isNotionHtml(html: string | undefined): boolean {
-	return typeof html === 'string' && NOTION_HTML_RE.test(html)
+	if (typeof html !== 'string') return false
+	if (NOTION_MARKER_RE.test(html)) return true
+	// Fresh regex per call: the module-level `/g` regex would carry lastIndex
+	// state across calls.
+	const hrefRe = new RegExp(HREF_RE.source, 'gi')
+	let match: RegExpExecArray | null
+	while ((match = hrefRe.exec(html)) !== null) {
+		if (isNotionUrl(match[1])) return true
+	}
+	return false
 }
 
 /** True when the clipboard HTML came from Obsidian itself (custom URL scheme). */

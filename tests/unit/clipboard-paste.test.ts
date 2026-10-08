@@ -272,3 +272,67 @@ describe('three link states from pasted content', () => {
 		editor.destroy()
 	})
 })
+
+// ---------------------------------------------------------------------------
+// T4/T6 — Notion converter hardening (review findings)
+// External behavior only: the emitted markdown and the parsed document.
+// ---------------------------------------------------------------------------
+
+describe('notionHtmlToMarkdown hardening', () => {
+	it('preserves direct text nodes beside converting children in a wrapper', () => {
+		expect(notionHtmlToMarkdown('<div>Intro <span>x</span> tail</div>')).toBe('Intro x tail')
+	})
+
+	it('keeps explicitly non-page mentions as plain text but still converts page mentions', () => {
+		// A date mention must not become a Page link.
+		expect(notionHtmlToMarkdown('<p><span class="mention" data-type="date">Tomorrow</span></p>')).toBe('Tomorrow')
+		expect(notionHtmlToMarkdown('<p><span class="mention" data-type="date">Tomorrow</span></p>')).not.toContain('[[')
+		// Page-mention forms still convert: explicit page id, untyped span, typed page.
+		expect(notionHtmlToMarkdown('<p><span class="mention" data-mention-page-id="1a2b3c">Design Tokens</span></p>')).toBe(
+			'[[Design Tokens]]',
+		)
+		expect(notionHtmlToMarkdown('<p><span class="mention">Unreleased Page</span></p>')).toBe('[[Unreleased Page]]')
+		expect(notionHtmlToMarkdown('<p><span class="mention" data-type="page">Design Tokens</span></p>')).toBe(
+			'[[Design Tokens]]',
+		)
+	})
+
+	it('emits a fence longer than the longest backtick run in a code block', () => {
+		const md = notionHtmlToMarkdown('<pre><code>before\n```\nafter</code></pre>')
+		expect(md.startsWith('````')).toBe(true)
+		expect(md.endsWith('````')).toBe(true)
+		expect(md).toContain('before\n```\nafter')
+	})
+
+	it('parses a code block containing a three-backtick line as a single code block', () => {
+		const editor = buildEditor()
+		const md = notionHtmlToMarkdown('<pre><code>before\n```\nafter</code></pre>')
+		const parsedHtml = (editor as any).storage.markdown.parser.parse(md)
+
+		// With a three-backtick fence this would close early and the tail would
+		// become a heading/paragraph; the whole block must stay inside one <pre>.
+		expect(parsedHtml).toBe('<pre><code>before\n```\nafter</code></pre>')
+		expect(parsedHtml).not.toContain('<h1')
+		editor.destroy()
+	})
+
+	it('treats a URL whose path looks like Notion as an external link, not Notion content', () => {
+		const html = '<p><a href="https://example.com/notion.so/guide">Guide</a></p>'
+		expect(isNotionHtml(html)).toBe(false)
+		expect(classifyClipboardPaste('Guide', html)).not.toBe('notion-html')
+		expect(notionHtmlToMarkdown(html)).toBe('[Guide](https://example.com/notion.so/guide)')
+	})
+
+	it('wraps an external href containing a space so it stays one link destination', () => {
+		const md = notionHtmlToMarkdown('<p><a href="https://example.com/a b">Guide</a></p>')
+		expect(md).toBe('[Guide](<https://example.com/a%20b>)')
+
+		const editor = buildEditor()
+		const parsedHtml = (editor as any).storage.markdown.parser.parse(md)
+		insertParsedHtml(editor, parsedHtml, { replaceDocument: true })
+		const hrefs = collectMarks(editor.getJSON(), 'link').map((mark) => mark.attrs?.href)
+		expect(hrefs).toHaveLength(1)
+		expect(String(hrefs[0])).toMatch(/example\.com\/a( |%20)b/)
+		editor.destroy()
+	})
+})

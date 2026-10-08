@@ -588,24 +588,27 @@ export default function EditorWorkspace({	pageId,
 					// Strip leading frontmatter before parsing the body, and land
 					// the extracted keys as Page properties (Obsidian dialect).
 					const { properties, body } = splitObsidianFrontmatter(plainText)
-					const parsedHtml = parser.parse(body)
-					if (parsedHtml) {
+					const parsedHtml = body ? parser.parse(body) : ''
+					const hasProperties = Object.keys(properties).length > 0
+					// A frontmatter-only note has no body HTML; it must still apply
+					// its properties and must not fall through to the native paste,
+					// which would leave the raw YAML in the document.
+					if (parsedHtml || hasProperties) {
 						event.preventDefault()
 						track('paste_in_resolved', { kind: 'obsidian-markdown' })
-						const applyPaste = () => insertParsedHtml(currentEditor, parsedHtml, { replaceDocument })
-						if (Object.keys(properties).length > 0) {
-							// Land the properties BEFORE inserting the body: the insert
-							// triggers the save/graph re-index that reads `properties`
-							// for tag indexing, so writing first keeps frontmatter tags
-							// and content in one deterministic order.
-							updatePageProperties(pageId, properties)
-								.then(applyPaste)
-								.catch((err) => {
-									console.error('Error applying pasted Page properties:', err)
-									applyPaste()
-								})
-						} else {
-							applyPaste()
+						if (hasProperties) {
+							// Start the atomic properties merge before inserting the
+							// body so the save/re-index the insert triggers reads them
+							// (the server persists on a debounce, giving this RPC a
+							// head start). It is deliberately NOT awaited: deferring
+							// the insert behind the RPC would let edits typed in the
+							// meantime be clobbered by `replaceDocument`.
+							updatePageProperties(pageId, properties).catch((err) => {
+								console.error('Error applying pasted Page properties:', err)
+							})
+						}
+						if (parsedHtml) {
+							insertParsedHtml(currentEditor, parsedHtml, { replaceDocument })
 						}
 						return true
 					}

@@ -1,8 +1,7 @@
-import { isNotionHtml } from '@/lib/markdown-paste'
+import { isNotionHtml, isNotionUrl } from '@/lib/markdown-paste'
 
 export { isNotionHtml }
 
-const NOTION_URL_RE = /(?:^https?:\/\/)?(?:www\.)?notion\.(?:so|site)\//i
 const NOTION_TAIL_ID_RE = /-[\da-f]{32}$/i
 const BLANK_LINES_RE = /\n{3,}/g
 
@@ -25,6 +24,41 @@ function titleFromNotionHref(href: string): string {
 
 function escapeTableCell(text: string): string {
 	return text.replace(/\|/g, '\\|').replace(/\n+/g, ' ').trim()
+}
+
+/**
+ * A Markdown link destination that stays a single token. Bare destinations
+ * break on whitespace (and angle brackets close the `<…>` form early), so any
+ * such destination is wrapped in `<…>` with those characters percent-encoded.
+ */
+function markdownLinkDestination(href: string): string {
+	if (!/[\s<>]/.test(href)) return href
+	return `<${href.replace(/[\s<>]/g, (c) => encodeURIComponent(c))}>`
+}
+
+/** Length of the longest run of backticks in `text` (0 when none). */
+function longestBacktickRun(text: string): number {
+	let longest = 0
+	for (const run of text.match(/`+/g) ?? []) {
+		if (run.length > longest) longest = run.length
+	}
+	return longest
+}
+
+/** The shortest fence that will not be closed by a backtick run in `code`. */
+function codeFenceFor(code: string): string {
+	return '`'.repeat(Math.max(3, longestBacktickRun(code) + 1))
+}
+
+// Element tags that renderBlock treats as their own block. Everything else is
+// inline and is folded into the surrounding paragraph when traversing children.
+const BLOCK_TAGS = new Set([
+	'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'blockquote', 'aside', 'ul', 'ol',
+	'pre', 'table', 'hr', 'div', 'section', 'article', 'main', 'body', 'header', 'footer',
+])
+
+function isBlockNode(node: Node): node is HTMLElement {
+	return isElement(node) && BLOCK_TAGS.has(node.tagName.toLowerCase())
 }
 
 function isElement(node: Node): node is HTMLElement {
@@ -53,19 +87,26 @@ function renderInline(node: Node): string {
 	if (tag === 'a') {
 		const href = node.getAttribute('href') ?? ''
 		const label = notionTitleFromText(node.textContent ?? '')
-		if (NOTION_URL_RE.test(href)) {
+		if (isNotionUrl(href)) {
 			return `[[${label || titleFromNotionHref(href)}]]`
 		}
 		if (!href) return label
-		return `[${label || href}](${href})`
+		return `[${label || href}](${markdownLinkDestination(href)})`
 	}
 	// Notion page mentions. Some clipboard shapes use a `<span class="mention">`
 	// (possibly with `data-*` markers); newer exports use `<mention-page>`.
 	if (tag === 'span') {
 		const cls = node.getAttribute('class') ?? ''
-		const dataType = node.getAttribute('data-type') ?? ''
+		const dataType = (node.getAttribute('data-type') ?? '').toLowerCase()
 		const mentionId = node.getAttribute('data-mention-page-id') ?? ''
-		if (/mention/i.test(cls) || /mention/i.test(dataType) || mentionId) {
+		// Page mentions: an explicit page id, or a span with no `data-type` /
+		// the generic `mention`/`page` type. A span typed as something else
+		// (e.g. `data-type="date"`) is a non-page mention and keeps its text so
+		// it is not turned into a Page link.
+		const isPageMention =
+			Boolean(mentionId) || dataType === '' || dataType === 'mention' || dataType === 'page'
+		const looksLikeMention = /mention/i.test(cls) || /mention/i.test(dataType) || Boolean(mentionId)
+		if (looksLikeMention && isPageMention) {
 			const label = notionTitleFromText(node.textContent ?? '')
 			if (label) return `[[${label}]]`
 		}
@@ -135,8 +176,11 @@ function renderCodeBlock(el: HTMLElement): string {
 	const codeEl = el.querySelector('code')
 	const languageMatch = codeEl?.className.match(/language-([\w-]+)/)
 	const language = languageMatch ? languageMatch[1] : ''
-	const code = (codeEl ?? el).textContent ?? ''
-	return `\`\`\`${language}\n${code.replace(/\n$/, '')}\n\`\`\``
+	const code = ((codeEl ?? el).textContent ?? '').replace(/\n$/, '')
+	// The fence must be longer than the longest backtick run inside the block,
+	// otherwise a line of ``` in the Notion code closes the fence early.
+	const fence = codeFenceFor(code)
+	return `${fence}${language}\n${code}\n${fence}`
 }
 
 function renderBlock(el: HTMLElement, blocks: string[]): void {
@@ -175,13 +219,37 @@ function renderBlock(el: HTMLElement, blocks: string[]): void {
 		return
 	}
 	if (['div', 'section', 'article', 'main', 'body', 'header', 'footer'].includes(tag)) {
-		for (const child of Array.from(el.children)) renderBlock(child as HTMLElement, blocks)
+		renderBlockChildren(el, blocks)
 		return
 	}
 
 	// Fallback: treat unknown block as a paragraph if it has inline text.
 	const text = notionTitleFromText(renderChildren(el))
 	if (text) blocks.push(text)
+}
+
+/**
+ * Render a container's child nodes in source order, preserving direct text and
+ * inline elements as paragraph text while emitting block children as their own
+ * blocks. Visiting only `children` would silently drop direct text nodes beside
+ * a converting element (e.g. `<div>Intro <span>x</span> tail</div>`).
+ */
+function renderBlockChildren(el: Node, blocks: string[]): void {
+	let inline = ''
+	const flush = () => {
+		const text = notionTitleFromText(inline)
+		if (text) blocks.push(text)
+		inline = ''
+	}
+	for (const child of Array.from(el.childNodes)) {
+		if (isBlockNode(child)) {
+			flush()
+			renderBlock(child, blocks)
+		} else {
+			inline += renderInline(child)
+		}
+	}
+	flush()
 }
 
 /**
@@ -203,7 +271,7 @@ export function notionHtmlToMarkdown(html: string): string {
 	if (!root) return ''
 
 	const blocks: string[] = []
-	for (const child of Array.from(root.children)) renderBlock(child as HTMLElement, blocks)
+	renderBlockChildren(root, blocks)
 
 	return blocks
 		.filter((block) => block.length > 0)
