@@ -604,18 +604,27 @@ export default function EditorWorkspace({	pageId,
 							to: currentEditor.state.selection.to,
 						}
 						const docAtPaste = currentEditor.state.doc
+						const pastePageId = pageId
 						const applyBody = () => {
-							if (currentEditor.isDestroyed || !parsedHtml) return
-							if (currentEditor.state.doc.eq(docAtPaste)) {
+							if (!parsedHtml) return
+							// A page change must not redirect the deferred body into
+							// another document.
+							if (pageIdRef.current !== pastePageId) return
+							// Prefer the live editor: useEditor may have recreated it
+							// while the RPC was pending. Never drop the body just
+							// because the paste captured the previous instance.
+							const liveEditor = editorRef.current ?? currentEditor
+							if (!liveEditor || liveEditor.isDestroyed) return
+							if (liveEditor.state.doc.eq(docAtPaste)) {
 								// Document untouched: insert at the original paste
 								// target with the original replace decision.
-								currentEditor.commands.setTextSelection(pasteSelection)
-								insertParsedHtml(currentEditor, parsedHtml, { replaceDocument })
+								liveEditor.commands.setTextSelection(pasteSelection)
+								insertParsedHtml(liveEditor, parsedHtml, { replaceDocument })
 							} else {
 								// Edits landed while the RPC was pending. Never
 								// replace the document the user has been typing in;
 								// insert at the live selection instead.
-								insertParsedHtml(currentEditor, parsedHtml, { replaceDocument: false })
+								insertParsedHtml(liveEditor, parsedHtml, { replaceDocument: false })
 							}
 						}
 						if (hasProperties) {
@@ -703,6 +712,12 @@ export default function EditorWorkspace({	pageId,
 	// extension storage (e.g. markdown parser) is empty. Keep a ref to the
 	// live editor so paste always reads the current instance.
 	const editorRef = useRef<Editor | null>(null)
+
+	// The page the editor currently shows. A deferred Obsidian paste captures
+	// this at paste time so it can never be redirected into a different document
+	// if the component switches pages while the properties RPC is in flight.
+	const pageIdRef = useRef(pageId)
+	pageIdRef.current = pageId
 
 	// Keep the ref in sync after commit instead of mutating it during render.
 	// handlePaste reads editorRef.current inside a user event (post-commit), so

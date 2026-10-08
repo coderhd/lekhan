@@ -78,25 +78,31 @@ vi.mock('@tiptap/react', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('@tiptap/react')>()
 	return {
 		...actual,
-		useEditor(options: Parameters<typeof actual.useEditor>[0]) {
-			const editor = actual.useEditor(options)
+		// Forward every argument (especially the deps array) so useEditor can
+		// actually recreate the editor when [ydoc, provider] change.
+		useEditor(...args: Parameters<typeof actual.useEditor>) {
+			const editor = actual.useEditor(...args)
 			captured.editor = editor as unknown as typeof captured.editor
 			return editor
 		},
 	}
 })
 
-function renderEditor() {
-	return render(
+function editorTree(pageId = 'page-1') {
+	return (
 		<GlobalSearchPalette>
 			<EditorWorkspace
-				pageId="page-1"
+				pageId={pageId}
 				initialTitle="Test Doc"
 				token="token-1"
 				currentUser={{ id: 'test-user', email: 'test@example.com' }}
 			/>
-		</GlobalSearchPalette>,
+		</GlobalSearchPalette>
 	)
+}
+
+function renderEditor() {
+	return render(editorTree())
 }
 
 async function getProseMirror(): Promise<HTMLElement> {
@@ -190,5 +196,49 @@ describe('Obsidian paste through the live editor', () => {
 		resolveRpc?.()
 		await waitFor(() => expect(proseMirror.textContent ?? '').toContain('Pasted heading'))
 		expect(proseMirror.textContent ?? '').toContain('typed while pending')
+	})
+
+	it('keeps the deferred body when useEditor recreates the instance mid-flight', async () => {
+		let resolveRpc: (() => void) | undefined
+		updatePagePropertiesMock.mockReturnValue(
+			new Promise<void>((resolve) => {
+				resolveRpc = resolve
+			}),
+		)
+		const { rerender } = renderEditor()
+		const proseMirror = await getProseMirror()
+
+		dispatchPaste(proseMirror, '---\nstatus: active\n---\n\n# Body heading\n', '')
+		await waitFor(() => expect(updatePagePropertiesMock).toHaveBeenCalled())
+
+		// Simulate async collab setup swapping the Y.Doc, which makes useEditor
+		// recreate the editor while the properties RPC is still pending.
+		captured.doc = new Y.Doc()
+		rerender(editorTree())
+
+		resolveRpc?.()
+		await waitFor(() =>
+			expect(document.querySelector('.ProseMirror')?.textContent ?? '').toContain('Body heading'),
+		)
+	})
+
+	it('does not redirect a deferred paste into a different page', async () => {
+		let resolveRpc: (() => void) | undefined
+		updatePagePropertiesMock.mockReturnValue(
+			new Promise<void>((resolve) => {
+				resolveRpc = resolve
+			}),
+		)
+		const { rerender } = renderEditor()
+		const proseMirror = await getProseMirror()
+
+		dispatchPaste(proseMirror, '---\nstatus: active\n---\n\n# Body heading\n', '')
+		await waitFor(() => expect(updatePagePropertiesMock).toHaveBeenCalled())
+
+		rerender(editorTree('page-2'))
+		resolveRpc?.()
+		await new Promise((resolve) => setTimeout(resolve, 10))
+
+		expect(document.querySelector('.ProseMirror')?.textContent ?? '').not.toContain('Body heading')
 	})
 })
