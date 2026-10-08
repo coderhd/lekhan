@@ -79,6 +79,23 @@ describe('classifyClipboardPaste', () => {
 		expect(classifyClipboardPaste(plain, html)).toBe('codeBlock')
 	})
 
+	it('keeps code containing double-bracket indexing as a code block (R6)', () => {
+		const plain = 'matrix[[i]][[j]] = 1\nconst arr = [[1], [2]]'
+		const html = '<pre style="color:#d4d4d4">matrix[[i]][[j]] = 1\nconst arr = [[1], [2]]</pre>'
+		// The naive signal is present, but a bare `[[…]]` must not divert a code
+		// paste away from the code-block branch.
+		expect(isObsidianMarkdown(plain)).toBe(true)
+		expect(classifyClipboardPaste(plain, html)).toBe('codeBlock')
+	})
+
+	it('still treats a real wikilink note as Obsidian markdown', () => {
+		expect(classifyClipboardPaste('See [[Design System]]', '')).toBe('obsidian-markdown')
+	})
+
+	it('lets a structural Obsidian signal override a <pre> wrapper', () => {
+		expect(classifyClipboardPaste('> [!note] Heads up\nbody', '<pre>x</pre>')).toBe('obsidian-markdown')
+	})
+
 	it('does not treat a bare inline tag as Obsidian markdown', () => {
 		expect(isObsidianMarkdown('Note about #1 priority')).toBe(false)
 		expect(isObsidianMarkdown('A #tag in prose')).toBe(false)

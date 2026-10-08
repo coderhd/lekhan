@@ -27,13 +27,17 @@ const WIKILINK_RE = /\[\[[^[\]]+\]\]/
 // Notion's clipboard HTML carries its own host or data/class markers.
 const NOTION_HTML_RE = /(?:www\.)?notion\.(?:so|site)|data-notion|class="[^"]*notion/i
 
+// Structural signals that only ever occur in the Obsidian dialect (never in
+// ordinary prose or code): leading YAML frontmatter or a callout marker. A bare
+// `[[...]]` is deliberately excluded here because it is also valid array
+// indexing in source code (`matrix[[i]][[j]]`, `arr = [[1]]`).
+function hasObsidianStructure(text: string): boolean {
+	return OBSIDIAN_FRONTMATTER_RE.test(text) || OBSIDIAN_CALLOUT_RE.test(text)
+}
+
 export function isObsidianMarkdown(text: string | undefined): boolean {
 	if (typeof text !== 'string') return false
-	return (
-		OBSIDIAN_FRONTMATTER_RE.test(text) ||
-		OBSIDIAN_CALLOUT_RE.test(text) ||
-		WIKILINK_RE.test(text)
-	)
+	return hasObsidianStructure(text) || WIKILINK_RE.test(text)
 }
 
 export function isNotionHtml(html: string | undefined): boolean {
@@ -53,9 +57,15 @@ export function classifyClipboardPaste(
 	htmlText: string | undefined,
 ): ClipboardPasteKind {
 	if (!plainText) return 'default'
+	const generic = decideMarkdownPaste(plainText, htmlText)
+	// A real code block copied from an editor must stay a code block even when
+	// it happens to contain `[[…]]` (array indexing). Only an unambiguous
+	// structural Obsidian signal (frontmatter/callout) may override that; a
+	// bare wikilink match is too weak to distinguish a wiki page from code.
+	if (generic === 'codeBlock' && !hasObsidianStructure(plainText)) return 'codeBlock'
 	if (isObsidianMarkdown(plainText)) return 'obsidian-markdown'
 	if (isNotionHtml(htmlText)) return 'notion-html'
-	return decideMarkdownPaste(plainText, htmlText)
+	return generic
 }
 
 // A GFM table delimiter row, e.g. `| --- | --- |` or `---|---`. Pipes on their
