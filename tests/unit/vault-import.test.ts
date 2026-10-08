@@ -10,12 +10,13 @@ import {
 function makePage (title: string, base64Length: number) {
 	return {
 		title,
-		folderPath: null,
-		properties: {},
-		tags: [],
+		folderPath: null as string | null,
+		properties: {} as Record<string, unknown>,
+		tags: [] as string[],
 		contentYjsBase64: 'A'.repeat(base64Length),
 		plainText: '',
 		isFolder: false,
+		contentHash: `hash-${title}`,
 	}
 }
 
@@ -90,8 +91,65 @@ describe('vaultFingerprint', () => {
 
 	it('diverges for different content or workspace', () => {
 		const base = makeIR([makePage('a', 10)])
-		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(makeIR([makePage('a', 11)])))
+		const differentContent = makeIR([{ ...makePage('a', 10), plainText: 'a different body' }])
+		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(differentContent))
 		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint({ ...base, workspaceId: 'ws-2' }))
+	})
+
+	it('is stable when only the nondeterministic Yjs encoding differs', () => {
+		// Two ingestions of the same vault seed Yjs with different random
+		// clientIDs, so contentYjsBase64 (and its length) varies. The fingerprint
+		// must ignore it — otherwise a retry mints a new clientImportId (#87 AC1).
+		const a = makeIR([makePage('a', 10)])
+		const b = makeIR([{ ...makePage('a', 10), contentYjsBase64: 'B'.repeat(99) }])
+		expect(vaultFingerprint(a)).toBe(vaultFingerprint(b))
+	})
+
+	it('diverges when rich-text content changes but plain text does not', () => {
+		// `plainText` drops marks/structure, so an italic-only edit can leave it
+		// unchanged while the imported doc materially differs. The content hash
+		// must carry that difference (external review finding, PR #132).
+		const base = makeIR([makePage('a', 10)])
+		const restyled = makeIR([{ ...makePage('a', 10), contentHash: 'different-content' }])
+		expect(base.pages[0].plainText).toBe(restyled.pages[0].plainText)
+		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(restyled))
+	})
+
+	it('diverges when page properties or tags change', () => {
+		const base = makeIR([makePage('a', 10)])
+		const withProps = makeIR([{ ...makePage('a', 10), properties: { author: 'Harsh' } }])
+		const withTags = makeIR([{ ...makePage('a', 10), tags: ['work'] }])
+		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(withProps))
+		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(withTags))
+	})
+
+	it('diverges when folder/note role changes for the same path', () => {
+		const base = makeIR([makePage('a', 10)])
+		const asFolder = makeIR([{ ...makePage('a', 10), isFolder: true }])
+		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(asFolder))
+	})
+
+	it('diverges when a Date-valued property changes but serializes the same shape', () => {
+		// `gray-matter` parses unquoted YAML timestamps into `Date`. A naive
+		// object walk sees no enumerable keys and collapses every date to `{}`,
+		// so a timestamp-only edit would reuse the stale id and replay the old
+		// batch (external review finding, PR #132). Different dates must diverge.
+		const first = makeIR([{
+			...makePage('a', 10),
+			properties: { updated: new Date('2026-01-01T00:00:00Z') },
+		}])
+		const second = makeIR([{
+			...makePage('a', 10),
+			properties: { updated: new Date('2026-06-01T00:00:00Z') },
+		}])
+		expect(vaultFingerprint(first)).not.toBe(vaultFingerprint(second))
+	})
+
+	it('is stable for identical Date-valued properties across ingestions', () => {
+		const stamp = () => new Date('2026-01-01T00:00:00Z')
+		const a = makeIR([{ ...makePage('a', 10), properties: { updated: stamp() } }])
+		const b = makeIR([{ ...makePage('a', 10), properties: { updated: stamp() } }])
+		expect(vaultFingerprint(a)).toBe(vaultFingerprint(b))
 	})
 })
 

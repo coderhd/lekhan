@@ -40,12 +40,12 @@ const fixtureIR = {
 		{
 			title: 'Note A', folderPath: null, properties: {}, tags: [],
 			contentYjsBase64: Buffer.from('a').toString('base64'),
-			plainText: 'a', isFolder: false,
+			plainText: 'a', isFolder: false, contentHash: 'hash-note-a',
 		},
 		{
 			title: 'Note B', folderPath: null, properties: {}, tags: [],
 			contentYjsBase64: Buffer.from('b').toString('base64'),
-			plainText: 'b', isFolder: false,
+			plainText: 'b', isFolder: false, contentHash: 'hash-note-b',
 		},
 	],
 }
@@ -207,7 +207,18 @@ describe('ImportDialog', () => {
 			files: [{ path: 'a.md', data: new Uint8Array([104, 105]) }],
 			directories: [],
 		})
-		importObsidianVaultMock.mockReturnValue({ ir: fixtureIR, report: fixtureReport })
+		// Simulate real re-ingestion: each run re-encodes Yjs with a fresh random
+		// clientID, so the encoded bytes differ. The attempt-session id must still
+		// be reused (fingerprint is content-based, not Yjs-byte based).
+		let ingest = 0
+		importObsidianVaultMock.mockImplementation(() => {
+			ingest += 1
+			const pages = fixtureIR.pages.map(page => ({
+				...page,
+				contentYjsBase64: 'A'.repeat(ingest * 8),
+			}))
+			return { ir: { ...fixtureIR, pages }, report: fixtureReport }
+		})
 
 		let call = 0
 		const fetchMock = vi.fn(async () => {
