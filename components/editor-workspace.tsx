@@ -596,19 +596,42 @@ export default function EditorWorkspace({	pageId,
 					if (parsedHtml || hasProperties) {
 						event.preventDefault()
 						track('paste_in_resolved', { kind: 'obsidian-markdown' })
-						if (hasProperties) {
-							// Start the atomic properties merge before inserting the
-							// body so the save/re-index the insert triggers reads them
-							// (the server persists on a debounce, giving this RPC a
-							// head start). It is deliberately NOT awaited: deferring
-							// the insert behind the RPC would let edits typed in the
-							// meantime be clobbered by `replaceDocument`.
-							updatePageProperties(pageId, properties).catch((err) => {
-								console.error('Error applying pasted Page properties:', err)
-							})
+						// Snapshot the paste target so a deferred apply can tell
+						// whether the document moved on while the properties RPC
+						// was in flight.
+						const pasteSelection = {
+							from: currentEditor.state.selection.from,
+							to: currentEditor.state.selection.to,
 						}
-						if (parsedHtml) {
-							insertParsedHtml(currentEditor, parsedHtml, { replaceDocument })
+						const docAtPaste = currentEditor.state.doc
+						const applyBody = () => {
+							if (currentEditor.isDestroyed || !parsedHtml) return
+							if (currentEditor.state.doc.eq(docAtPaste)) {
+								// Document untouched: insert at the original paste
+								// target with the original replace decision.
+								currentEditor.commands.setTextSelection(pasteSelection)
+								insertParsedHtml(currentEditor, parsedHtml, { replaceDocument })
+							} else {
+								// Edits landed while the RPC was pending. Never
+								// replace the document the user has been typing in;
+								// insert at the live selection instead.
+								insertParsedHtml(currentEditor, parsedHtml, { replaceDocument: false })
+							}
+						}
+						if (hasProperties) {
+							// Persist the properties BEFORE inserting the body: the
+							// insert triggers the debounced save/graph re-index,
+							// which derives tag rows from `pages.properties`. The
+							// apply above re-validates the document so edits typed
+							// during the RPC are never clobbered.
+							updatePageProperties(pageId, properties)
+								.then(applyBody)
+								.catch((err) => {
+									console.error('Error applying pasted Page properties:', err)
+									applyBody()
+								})
+						} else {
+							applyBody()
 						}
 						return true
 					}
