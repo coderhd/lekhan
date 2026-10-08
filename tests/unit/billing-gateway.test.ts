@@ -45,6 +45,7 @@ import {
 	classifySubscription,
 	type GatewaySubscriptionState,
 	type PaymentGateway,
+	type Rail,
 } from '@/lib/billing/gateway'
 import {
 	gatewayForCurrency,
@@ -106,8 +107,9 @@ afterEach(() => {
 
 describe('gateway routing matrix', () => {
 	it('rejects an unregistered rail instead of silently falling back', () => {
-		expect(() => gatewayForCurrency('USD')).toThrow(/no gateway registered/i)
-		expect(() => gatewayForCurrency('INR')).toThrow(/no gateway registered/i)
+		// Rails self-register at first use (T6 Stripe, T7 Razorpay). An unknown rail has
+		// no loader, so the factory still fails closed rather than falling back to another.
+		expect(() => gatewayForRail('unknown' as Rail)).toThrow(/no gateway registered/i)
 	})
 
 	it('routes USD to stripe and INR to razorpay via the registry', () => {
