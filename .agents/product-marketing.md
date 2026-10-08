@@ -7,8 +7,10 @@ Keep current; single source of truth for voice and claims.
 
 A local-first collaborative knowledge workspace. Pages live as a graph
 (backlinks, tags, search), sync offline-first via CRDT, support real-time
-multiplayer editing, and every AI feature runs on the user's own keys or local
-models — never on our servers.
+multiplayer editing. AI runs on the user's own keys or local models — on your
+own key, AI never consumes plan credits. (Cloud BYOK calls are relayed through
+our API using the user's key; without a key, Sarvam chat, translation, TTS, and
+transliteration actions handled by `/api/ai` use a plan-credit allowance.)
 
 ## Positioning line
 
@@ -26,8 +28,8 @@ faithfully, including callouts, wikilinks, and frontmatter.
 
 - "Will my notes survive if you die?" → markdown export, open vault format,
   honest import/export reports.
-- "AI here means subscription creep" → BYOK/BYOL/free-key presets; we never
-  host inference or meter credits.
+- "AI here means subscription creep" → BYOK/BYOL; on your own key we never
+  meter credits. Without a key, actions run on a plan credit allowance.
 - "Another Notion clone?" → local-first is architectural, not a checkbox;
   your files stay on your disk.
 - "Is my data encrypted?" → encrypted at rest by default (E2E tier planned).

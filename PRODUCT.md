@@ -17,11 +17,11 @@ Secondary (later waves): Notion refugees (after Notion import ships, H1); teams 
 
 ## Product Purpose
 
-Lekhan is a local-first collaborative knowledge workspace. Pages live as a graph (backlinks, tags, search), sync offline-first via CRDT, and support real-time multiplayer editing. The AI layer is being rebuilt by the provider epic (#28) — strategic target: user-owned keys; marketing makes no AI architecture claims until it ships. Success: founding cohort (500 numbered spots) filled with users who stay; public launch ~Oct 12; $50k ARR via ~500 paying workspaces.
+Lekhan is a local-first collaborative knowledge workspace. Pages live as a graph (backlinks, tags, search), sync offline-first via CRDT, and support real-time multiplayer editing. AI runs on the user's own keys or local models, live today: cloud BYOK calls are relayed through the API on the user's key, Ollama/LM Studio connect browser-direct, and actions without a key use a plan-credit allowance. The provider epic (#28) is rebuilding the AI UX layer, not the key model. Success: founding cohort (500 numbered spots) filled with users who stay; public launch ~Oct 12; $50k ARR via ~500 paying workspaces.
 
 ## Positioning
 
-"Your second brain, your files, your AI. Local-first like Obsidian, collaborative like Notion — AI runs on your own keys." The mechanism a neighbor could not truthfully copy: notes live as files on the user's disk (architectural, not a checkbox) while real-time CRDT collaboration runs over them, and AI ownership is the strategic target (provider epic #28, in redesign — not marketed until shipped).
+"Your second brain, your files, your AI. Local-first like Obsidian, collaborative like Notion — AI runs on your own keys." The mechanism a neighbor could not truthfully copy: notes live as files on the user's disk (architectural, not a checkbox) while real-time CRDT collaboration runs over them, and AI ownership is live — user keys or local models, with the #28 epic continuing the provider UX redesign.
 
 ## Operating Context
 
@@ -29,9 +29,9 @@ Individuals and small teams evaluating PKM tools against Obsidian and Notion. Tr
 
 ## Capabilities and Constraints
 
-Shipped today: Obsidian vault import preserving wikilinks/callouts/frontmatter/tags; markdown round-trip export (.md/.html/.pdf/.docx); real-time CRDT collaboration on shared pages; global search across the link graph; AI assistance (chat/translate/TTS via a single provider integration) — being redesigned by #28; no AI architecture claims in marketing until it lands; encrypted at rest by default (E2E tier in build, #81); founding waitlist with numbered spots (#85).
+Shipped today: Obsidian vault import preserving wikilinks/callouts/frontmatter/tags; markdown round-trip export (.md/.html/.pdf/.docx); real-time CRDT collaboration on shared pages; global search across the link graph; AI assistance (chat/translate/TTS) with BYOK — OpenAI/Anthropic/Gemini/Sarvam/custom endpoints relayed through the API on the user's key, Ollama/LM Studio browser-direct, plan-credit allowance when no key is set; provider UX being redesigned by #28; encrypted at rest by default (E2E tier in build, #81); founding waitlist with numbered spots (#85).
 
-Constraints: no hosted AI inference ever (positioning bright line); no invented metrics or testimonials; interop ≤25% of any delivery horizon; Reddit is replies-only (account ban history).
+Constraints: the AI bill is the user's — their key, their local model, or an explicit plan credit; no silent hosted inference (positioning bright line); no invented metrics or testimonials; interop ≤25% of any delivery horizon; Reddit is replies-only (account ban history).
 
 ## Brand Commitments
 
@@ -39,7 +39,7 @@ Name: Lekhan (Hindi: writing). Voice: plain, confident, specific; developer-resp
 
 ## Evidence on Hand
 
-Real, demonstrable: vault import with fidelity report; live multiplayer editing; export in five formats; BYOK settings flow. No testimonials, no customer counts, no benchmark numbers exist — future work must not fabricate any. Product screenshots exist in public/early/ (editor, import, share).
+Real, demonstrable: vault import with fidelity report; live multiplayer editing; export in four formats (md/html/pdf/docx); BYOK settings flow. No testimonials, no customer counts, no benchmark numbers exist — future work must not fabricate any. Product screenshots exist in public/early/ (editor, import, share).
 
 ## Product Principles
 
