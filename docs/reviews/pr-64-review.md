@@ -150,15 +150,17 @@ Re-verified after the external-review fixes: `npm run typecheck` ✅ · `npm run
 
 ## Addendum 2 — Pullfrog re-review of the fix itself (`bf815e3`) → non-destructive fallback
 
-Pullfrog's re-review of `bf815e3` (2026-10-08T07:05:55Z, [pullrequestreview-5452928149](https://github.com/coderhd/lekhan/pull/133#pullrequestreview-5452928149)), independently confirmed by the Tech Lead at the gate, flagged that the `probeExisted` fallback was itself destructive. Fixed on this branch.
+Pullfrog's re-review of `bf815e3` (2026-10-08T07:05:55Z, [pullrequestreview-5452928149](https://github.com/coderhd/lekhan/pull/133#pullrequestreview-5452928149)), independently confirmed by the Tech Lead at the gate, flagged that the `probeExisted` fallback was itself destructive. Fixed on this branch; Pullfrog's follow-up review of the fix (2026-10-08T07:29Z, [pullrequestreview-5453216442](https://github.com/coderhd/lekhan/pull/133#pullrequestreview-5453216442)) then noted that a bare "absent" fallback would drop cached bodies from offline exports on legacy browsers.
 
 | # | Severity | Finding | Fix |
 |---|---|---|---|
-| C | ⚠️ HIGH | `probeExisted` deleted the database it opened for create-detection: if another tab opened the just-created Page database between `request.result.close()` and `factory.deleteDatabase(pageId)`, the pending delete either (a) wiped a cache that session subsequently populated, or (b) fired `versionchange` into an active editor session and halted its persistence. It ran for **every Page** in a bulk export on browsers without `indexedDB.databases()` (Firefox 111–125). | Removed `probeExisted` entirely. When `indexedDB.databases()` is unavailable — or the enumeration call throws — `hasLocalDatabase` now returns `false` and never opens or deletes a database. The remote batch-sync path already covers correctness; the fallback only costs export speed on legacy browsers (`lib/markdown/vault-export-source.ts:79-112`). |
+| C | ⚠️ HIGH | `probeExisted` deleted the database it opened for create-detection: if another tab opened the just-created Page database between `request.result.close()` and `factory.deleteDatabase(pageId)`, the pending delete either (a) wiped a cache that session subsequently populated, or (b) fired `versionchange` into an active editor session and halted its persistence. It ran for **every Page** in a bulk export on browsers without `indexedDB.databases()` (Firefox 111–125). | Reworked `probeExisted` to **abort the create instead of deleting it**. When the open would create the database (`oldVersion === 0`), it aborts the versionchange transaction; per IndexedDB spec §5.8 an aborted upgrade reverts the creation, so nothing is persisted and `deleteDatabase` is never called (`lib/markdown/vault-export-source.ts:77-150`). |
+| D | ⚠️ HIGH | Pullfrog follow-up: making the fallback return `false` outright skipped local reads even for **cached** Pages, so an offline export on Firefox 111–125 timed out the gap-sync and emitted title-only notes — contradicting ADR 0006's explicit offline local-read contract. | The abort probe still reports an **existing** database as present (an existing DB opens at its current version with no upgrade), so cached Pages are read locally and offline exports keep their bodies. No empty database is left behind for uncached Pages, and no `versionchange` reaches a live editor. |
 
 Contract locked in by `tests/unit/vault-export-source.test.ts`:
 - Modern browsers keep enumeration-first behavior (`databases()` present → `true`/`false` from the enumeration).
-- Enumeration absent or throwing → resolves `false`, and **never** calls `open` or `deleteDatabase` (asserted with spies on both).
-- A present-but-unenumerable database is still reported absent and is **not** deleted.
+- Enumeration unavailable → existing DB resolves `true` and is never deleted; a missing DB resolves `false` after aborting the create, and `deleteDatabase` is **never** called (asserted with a spy).
+- Enumeration throwing → falls through to the same non-destructive probe.
+- Source-level: with enumeration unavailable but a cached Page, `createClientPageDocSource` still takes the local read path (no WebSocket provider) — the offline guarantee Pullfrog flagged.
 
-Re-verified after the non-destructive fix: `npm run typecheck` ✅ · `npm run lint` ✅ · `npm test` **82 files / 614 tests** ✅ · `npm run build` ✅.
+Re-verified after the non-destructive fix: `npm run typecheck` ✅ · `npm run lint` ✅ · `npm test` **82 files / 615 tests** ✅ · `npm run build` ✅.

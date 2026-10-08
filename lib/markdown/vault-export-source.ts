@@ -81,31 +81,69 @@ function toJson(doc: Y.Doc): JSONContent {
  * side effect (y-indexeddb writes an auto-key update on load), so a bulk export
  * must not do that for thousands of Pages.
  *
- * The only safe check is `indexedDB.databases()` (Chrome/Edge/Safari, Firefox
- * 126+). Where that is unavailable — Firefox 111–125 is inside Next.js's default
- * browser range — we report "absent" instead of probing by opening the database.
- * An open-then-delete probe cannot be made race-free: between our
- * `result.close()` and `deleteDatabase(pageId)`, another tab can open the same
- * database, after which the pending delete either wipes a cache that session
- * just populated (once it closes) or fires `versionchange` into its live editor
- * and halts persistence. Reporting "absent" only costs export speed on legacy
- * browsers — `createClientPageDocSource` gap-syncs every Page from the collab
- * server — so correctness is unchanged without ever deleting a database we did
- * not exclusively create-and-close with zero intervening connections.
+ * The cheap path is `indexedDB.databases()` (Chrome/Edge/Safari, Firefox 126+).
+ * Where that is unavailable — Firefox 111–125 is inside Next.js's default
+ * browser range — `probeExisted` opens the database once and, when this open
+ * would create it (`oldVersion === 0`), aborts the versionchange transaction.
+ * An aborted upgrade is rolled back per IndexedDB spec §5.8, so the probe leaves
+ * no database behind and never issues `deleteDatabase`: it cannot wipe a cache
+ * another tab just populated, nor fire `versionchange` into a live editor. A
+ * database that already exists opens at its current version (no upgrade), so its
+ * cached copy is still read locally — including offline (ADR 0006).
  */
 export async function hasLocalDatabase(
 	pageId: string,
 	factory: IDBFactory | undefined = typeof indexedDB !== 'undefined' ? indexedDB : undefined,
 ): Promise<boolean> {
 	if (!factory) return false
-	if (typeof factory.databases !== 'function') return false
-	try {
-		const databases = await factory.databases()
-		return databases.some((entry) => entry.name === pageId)
-	} catch {
-		// Enumeration unavailable/failed; fall back to the remote sync path.
-		return false
+	if (typeof factory.databases === 'function') {
+		try {
+			const databases = await factory.databases()
+			return databases.some((entry) => entry.name === pageId)
+		} catch {
+			// Enumeration unavailable/failed; fall through to the non-destructive probe.
+		}
 	}
+	return probeExisted(factory, pageId)
+}
+
+/**
+ * Whether the named database already exists, without persisting one. Opening a
+ * missing database runs a versionchange transaction with `oldVersion === 0`;
+ * aborting it reverts the creation (IndexedDB spec §5.8) so nothing is left
+ * behind. An existing database opens at its current version with no upgrade — so
+ * no `versionchange` reaches a live editor's connection — and is closed at once.
+ */
+function probeExisted(factory: IDBFactory, pageId: string): Promise<boolean> {
+	return new Promise<boolean>((resolve) => {
+		let settled = false
+		const finish = (existed: boolean) => {
+			if (settled) return
+			settled = true
+			resolve(existed)
+		}
+		let request: IDBOpenDBRequest
+		try {
+			request = factory.open(pageId)
+		} catch {
+			finish(false)
+			return
+		}
+		request.onupgradeneeded = (event) => {
+			if ((event as IDBVersionChangeEvent).oldVersion !== 0) return
+			try {
+				request.transaction?.abort()
+			} catch {
+				/* transaction already finished; onerror/onsuccess decides the result */
+			}
+		}
+		request.onerror = () => finish(false)
+		request.onblocked = () => finish(false)
+		request.onsuccess = () => {
+			request.result.close()
+			finish(true)
+		}
+	})
 }
 
 /**
