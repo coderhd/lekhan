@@ -32,6 +32,8 @@ export function notionHtmlToMarkdown(html: string): string
 - **Files:** `supabase/migrations/20261007000000_resolve_unresolved_page_links.sql`
 - **Acceptance:** `normalize_page_title` + `resolve_unresolved_page_links` trigger creates;
   backfill resolves existing unresolved rows; scoped by `workspace_id`; `SECURITY DEFINER`.
+  Also adds `merge_page_properties(uuid, jsonb)` — the atomic, RLS-respecting properties merge used
+  by the paste path (not `SECURITY DEFINER`).
 - **Verify:** migration review + QA DB check (AC3). SQL not runnable in vitest.
 
 ### T2 — Obsidian frontmatter split (pure)
@@ -58,8 +60,8 @@ export function notionHtmlToMarkdown(html: string): string
 - **Verify:** fixtures consumed by T6.
 
 ### T6 — Paste routing in `handlePaste` + seam-3 integration tests
-- **Files:** `components/editor-workspace.tsx`, `services/graph.ts` (add `updatePageProperties`),
-  `tests/unit/clipboard-paste.test.ts`
+- **Files:** `components/editor-workspace.tsx`, `services/graph.ts` (add `updatePageProperties`,
+  which calls the atomic `merge_page_properties` RPC), `tests/unit/clipboard-paste.test.ts`
 - **Acceptance:** `handlePaste` routes `obsidian-markdown` (frontmatter→properties callback, body→parser)
   and `notion-html` (convert→parser, fallback to native HTML); code-block/default unchanged.
 - **Verify:** integration tests build a Tiptap editor, feed fixtures, assert native nodes +

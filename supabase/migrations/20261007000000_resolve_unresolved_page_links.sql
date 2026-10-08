@@ -52,3 +52,16 @@ FROM public.pages p
 WHERE l.to_page_id IS NULL
 	AND l.workspace_id = p.workspace_id
 	AND public.normalize_page_title(l.to_title) = public.normalize_page_title(p.title);
+
+-- Atomic Page-properties merge used by the paste path (Obsidian frontmatter →
+-- Page properties). Deliberately NOT SECURITY DEFINER: it runs as the caller so
+-- the owner-only `update_pages` RLS policy applies, and the single-statement
+-- jsonb `||` avoids the lost-update race of a client read-modify-write.
+CREATE OR REPLACE FUNCTION public.merge_page_properties(p_page_id uuid, p_patch jsonb)
+RETURNS void
+LANGUAGE sql
+AS $$
+	UPDATE public.pages
+	SET properties = coalesce(properties, '{}'::jsonb) || coalesce(p_patch, '{}'::jsonb)
+	WHERE id = p_page_id;
+$$;

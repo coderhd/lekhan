@@ -6,6 +6,7 @@ import type { JSONContent } from '@tiptap/core'
 import {
 	classifyClipboardPaste,
 	isObsidianMarkdown,
+	isObsidianHtml,
 	isNotionHtml,
 	decideMarkdownPaste,
 } from '@/lib/markdown-paste'
@@ -94,6 +95,14 @@ describe('classifyClipboardPaste', () => {
 
 	it('lets a structural Obsidian signal override a <pre> wrapper', () => {
 		expect(classifyClipboardPaste('> [!note] Heads up\nbody', '<pre>x</pre>')).toBe('obsidian-markdown')
+	})
+
+	it('routes Obsidian clipboard HTML to markdown even when wrapped in <pre> (R1)', () => {
+		const plain = 'See [[Design System]] before the release.'
+		const html =
+			"<pre>See <a href='obsidian://open?vault=V&file=Design%20System'>Design System</a> before the release.</pre>"
+		expect(isObsidianHtml(html)).toBe(true)
+		expect(classifyClipboardPaste(plain, html)).toBe('obsidian-markdown')
 	})
 
 	it('does not treat a bare inline tag as Obsidian markdown', () => {
@@ -220,6 +229,23 @@ describe('pasting the recorded Notion payload into the editor', () => {
 		const links = collectMarks(doc, 'link')
 		const hrefs = links.map((mark) => mark.attrs?.href)
 		expect(hrefs).toContain('https://obsidian.md')
+		editor.destroy()
+	})
+
+	it('renders resolved and unresolved Page links from the recorded mentions (AC2)', () => {
+		const editor = buildEditor()
+		const md = notionHtmlToMarkdown(notion.clipboard['text/html'])
+		const parsedHtml = (editor as any).storage.markdown.parser.parse(md)
+		insertParsedHtml(editor, parsedHtml, { replaceDocument: true })
+
+		const resolved = notion.expectations.resolvedPage as string
+		const pagesMap = new Map([[normalizeWikilinkTarget(resolved), { id: 'page-1', title: resolved }]])
+		const decorations = createWikilinkDecorations(editor.state.doc, pagesMap)
+		const classes = decorations.find().map((deco: any) => String(deco.type?.attrs?.class ?? ''))
+
+		expect(editor.getText()).toContain(`[[${notion.expectations.unresolvedPage}]]`)
+		expect(classes.some((c) => c.includes('wikilink-resolved'))).toBe(true)
+		expect(classes.some((c) => c.includes('wikilink-unresolved'))).toBe(true)
 		editor.destroy()
 	})
 })

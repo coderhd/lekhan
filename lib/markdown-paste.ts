@@ -16,16 +16,22 @@ export type ClipboardPasteKind =
 
 const MARKDOWN_INDICATOR_REGEX = /^ {0,3}#+\s|^\s*[-*+]\s|^\s*\d+\.\s|```|^\s*>\s|\*\*.+\*\*|__.+__|\[.+\]\(.+\)|^---$/m
 
-// Strong Obsidian signals only: YAML frontmatter, a callout marker, or a
-// wikilink. Inline `#tags` are intentionally excluded — they also appear in
-// plain prose and code comments, so on their own they must not divert a paste
-// away from the code-block branch. Tags still index from the pasted body.
+// Obsidian markers. Frontmatter/callout are *structural* (they never appear in
+// ordinary prose or code); a wikilink is a softer signal (code also uses
+// `[[…]]` indexing), so it is kept separate from `hasObsidianStructure` and
+// only overrides a code-block decision when the HTML is Obsidian's own.
+// Inline `#tags` are intentionally not a classifier signal — they appear in
+// prose and code comments; tags still index from the pasted body.
 const OBSIDIAN_FRONTMATTER_RE = /^---\r?\n/
 const OBSIDIAN_CALLOUT_RE = /^\s*>\s*\[![a-zA-Z0-9 ]+\]/m
 const WIKILINK_RE = /\[\[[^[\]]+\]\]/
 
 // Notion's clipboard HTML carries its own host or data/class markers.
 const NOTION_HTML_RE = /(?:www\.)?notion\.(?:so|site)|data-notion|class="[^"]*notion/i
+
+// Obsidian's own clipboard HTML links wikilinks through its custom URL scheme
+// (`obsidian://open?…`), which never appears in code or any other app.
+const OBSIDIAN_HTML_RE = /obsidian:\/\//i
 
 // Structural signals that only ever occur in the Obsidian dialect (never in
 // ordinary prose or code): leading YAML frontmatter or a callout marker. A bare
@@ -44,6 +50,11 @@ export function isNotionHtml(html: string | undefined): boolean {
 	return typeof html === 'string' && NOTION_HTML_RE.test(html)
 }
 
+/** True when the clipboard HTML came from Obsidian itself (custom URL scheme). */
+export function isObsidianHtml(html: string | undefined): boolean {
+	return typeof html === 'string' && OBSIDIAN_HTML_RE.test(html)
+}
+
 /**
  * Classify a clipboard payload by dialect:
  * - Obsidian signals win (they are unambiguous and must route to the markdown
@@ -59,11 +70,13 @@ export function classifyClipboardPaste(
 	if (!plainText) return 'default'
 	const generic = decideMarkdownPaste(plainText, htmlText)
 	// A real code block copied from an editor must stay a code block even when
-	// it happens to contain `[[…]]` (array indexing). Only an unambiguous
-	// structural Obsidian signal (frontmatter/callout) may override that; a
-	// bare wikilink match is too weak to distinguish a wiki page from code.
-	if (generic === 'codeBlock' && !hasObsidianStructure(plainText)) return 'codeBlock'
-	if (isObsidianMarkdown(plainText)) return 'obsidian-markdown'
+	// it happens to contain `[[…]]` (array indexing). It only yields to an
+	// unambiguous Obsidian signal: leading frontmatter/a callout, or Obsidian's
+	// own clipboard HTML. A bare `[[…]]` is too weak to tell a wiki page from
+	// code on its own.
+	const obsidianSignal = hasObsidianStructure(plainText) || isObsidianHtml(htmlText)
+	if (generic === 'codeBlock' && !obsidianSignal) return 'codeBlock'
+	if (isObsidianMarkdown(plainText) || isObsidianHtml(htmlText)) return 'obsidian-markdown'
 	if (isNotionHtml(htmlText)) return 'notion-html'
 	return generic
 }

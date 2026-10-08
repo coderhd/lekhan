@@ -59,6 +59,22 @@ function renderInline(node: Node): string {
 		if (!href) return label
 		return `[${label || href}](${href})`
 	}
+	// Notion page mentions. Some clipboard shapes use a `<span class="mention">`
+	// (possibly with `data-*` markers); newer exports use `<mention-page>`.
+	if (tag === 'span') {
+		const cls = node.getAttribute('class') ?? ''
+		const dataType = node.getAttribute('data-type') ?? ''
+		const mentionId = node.getAttribute('data-mention-page-id') ?? ''
+		if (/mention/i.test(cls) || /mention/i.test(dataType) || mentionId) {
+			const label = notionTitleFromText(node.textContent ?? '')
+			if (label) return `[[${label}]]`
+		}
+		return renderChildren(node)
+	}
+	if (tag === 'mention-page') {
+		const label = notionTitleFromText(node.textContent ?? '')
+		if (label) return `[[${label}]]`
+	}
 	return renderChildren(node)
 }
 

@@ -592,11 +592,20 @@ export default function EditorWorkspace({	pageId,
 					if (parsedHtml) {
 						event.preventDefault()
 						track('paste_in_resolved', { kind: 'obsidian-markdown' })
-						insertParsedHtml(currentEditor, parsedHtml, { replaceDocument })
+						const applyPaste = () => insertParsedHtml(currentEditor, parsedHtml, { replaceDocument })
 						if (Object.keys(properties).length > 0) {
-							updatePageProperties(pageId, properties).catch((err) => {
-								console.error('Error applying pasted Page properties:', err)
-							})
+							// Land the properties BEFORE inserting the body: the insert
+							// triggers the save/graph re-index that reads `properties`
+							// for tag indexing, so writing first keeps frontmatter tags
+							// and content in one deterministic order.
+							updatePageProperties(pageId, properties)
+								.then(applyPaste)
+								.catch((err) => {
+									console.error('Error applying pasted Page properties:', err)
+									applyPaste()
+								})
+						} else {
+							applyPaste()
 						}
 						return true
 					}

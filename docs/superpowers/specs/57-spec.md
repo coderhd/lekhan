@@ -66,8 +66,12 @@ comments/permissions/embeds; Lekhan→Lekhan clipboard as a UX; clipboard copy-o
 ## 5. Requirements
 
 ### R1 — Obsidian markdown paste
-- A paste whose `text/plain` carries Obsidian constructs is routed through the markdown parser
-  (never the code-block branch), including when `text/html` wraps it in `<pre>`.
+- A paste whose `text/plain` carries an **unambiguous Obsidian signal** (leading YAML frontmatter,
+  a callout marker, or Obsidian clipboard HTML carrying `obsidian://` links) is routed through the
+  markdown parser, including when `text/html` wraps it in `<pre>`. A lone `[[wikilink]]` also routes
+  to the markdown parser, **except** when the HTML is a bare code wrapper (`<pre>`/`<code>`) with no
+  Obsidian host marker — that case stays a code block so real editor code containing `[[…]]` array
+  indexing is not misclassified (see R6).
 - Callouts parse to `callout` nodes (type/title/collapsed).
 - Leading YAML frontmatter is extracted **before** body parsing: `title`/`tags` reserved; all other
   keys become Page properties; `tags` (string or array) become a Tag property and index.
@@ -120,7 +124,12 @@ type ClipboardPasteKind =
   1. no plain text → `default`
   2. Notion HTML detected (`notion.so`/`notion.site`/`data-notion` markers) **and** plain text not
      already Obsidian-markdown → `notion-html`
-  3. Obsidian markers present (`^---\n` frontmatter, `> [!`, `[[…]]`, `#tag`) → `obsidian-markdown`
+  3. Obsidian signals present — leading `^---\n` frontmatter or a `> [!type]` callout (structural,
+     never appear in code), or Obsidian clipboard HTML (`obsidian://` links) — → `obsidian-markdown`.
+     A bare `[[wikilink]]` also → `obsidian-markdown` unless the HTML is a code wrapper (`<pre>`/
+     `<code>`) without an Obsidian marker, which keeps array-indexing code on the `codeBlock` branch
+     (R6). Inline `#tags` are intentionally **not** a classifier signal — they appear in prose and
+     code comments; tags still index from the pasted body and from the `tags` property.
   4. existing `decideMarkdownPaste` result (`markdown`/`codeBlock`/`default`)
 - `decideMarkdownPaste` keeps its current return contract; `'obsidian-markdown'` is treated as
   `'markdown'` for any legacy consumer.
@@ -141,9 +150,12 @@ Wire-up in `handlePaste`:
 - `isNotionHtml(html)` — host/marker detection.
 - `notionHtmlToMarkdown(html)` — walk Notion's exported DOM, emit Obsidian-flavored markdown:
   - headings/lists/tables/blockquotes/code/fenced blocks → GFM
-  - internal mention anchors → `[[Title]]` (title from anchor text, decodes `%20` and Notion slugs)
+  - internal page mentions → `[[Title]]`: Notion URL anchors, mention spans
+    (`<span class="mention">`, `data-*` mention markers), and `<mention-page>` (title from the
+    element text, falling back to the decoded Notion slug for empty anchors)
   - external anchors → `[text](url)`
-  - callout blocks → `> [!type]` where a Notion callout is recognized
+  - Notion callouts currently map to ordinary blockquotes (`R2` treats them as callout-equivalent
+    blockquotes); emitting typed `> [!type]` callouts is a follow-up, not in this slice
 - The emitted markdown is then run through the existing markdown pipeline (so Notion paste reuses the
   same nodes and graph indexing as Obsidian paste). If conversion fails or yields empty output, fall
   back to the native HTML paste branch (never lose content).
