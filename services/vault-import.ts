@@ -145,11 +145,12 @@ export function splitIntoBatches (
 	// retry could send different pages under the same batchIndex — the server
 	// would replay the recorded batch and silently drop the new pages (#87).
 	const orderedPages = [...ir.pages].sort((a, b) => {
-		// Content identity is the tie-break so the order is total even when two
-		// pages share a path (same title in the same folder); this keeps
-		// ordinal → page mapping stable across retries.
-		const keyA = `${a.folderPath ?? ''}\u0000${a.title}\u0000${a.contentHash ?? stableHash(a.plainText)}`
-		const keyB = `${b.folderPath ?? ''}\u0000${b.title}\u0000${b.contentHash ?? stableHash(b.plainText)}`
+		// The page's full deterministic identity is the sort key: two pages that
+		// fingerprint identically are interchangeable, and any difference (role,
+		// properties, tags, content) yields a total, retry-stable order so
+		// `batchIndex` maps to the same page set on every attempt (#87).
+		const keyA = pageFingerprint(a)
+		const keyB = pageFingerprint(b)
 		if (keyA === keyB) return 0
 		return keyA < keyB ? -1 : 1
 	})

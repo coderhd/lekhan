@@ -56,7 +56,8 @@ hook (Date → ISO string), matching the request's own serialization.
 | BLOCKER | **Incomplete fingerprint → stale edit silently dropped (external Pullfrog review, #132).** `path`+`plainText` ignores marks/structure and `properties`/`tags`; a mark- or metadata-only edit left the fingerprint unchanged, so the dialog reused the id and the server replayed the old batch. | Each page gains `contentHash = stableHash(canonicalJson(fitted))` (marks/structure/attrs); `vaultFingerprint` also hashes canonical `properties`, `tags`, and folder/note role; batching tie-breaks on `contentHash` (`lib/stable-content.ts`, `services/obsidian-import.ts`, `services/vault-import.ts`). Tests: mark-only and metadata-only edits diverge despite identical `plainText`. |
 | BLOCKER | **Date-valued metadata collapsed in the fingerprint (external Pullfrog re-review, #132).** `canonicalJson` walked objects by enumerable keys, so a `Date` from a YAML timestamp became `{}`; two different timestamps hashed the same while the request serialized distinct ISO strings → stale replay. | `canonicalJson` honours `toJSON` (mirroring `JSON.stringify`) and omits `undefined` keys; tests cover Date divergence and repeat-ingestion stability (`lib/stable-content.ts`, `tests/unit/stable-content.test.ts`, `tests/unit/vault-import.test.ts`). |
 | BLOCKER | **`canonicalJson` collapsed `Date` to `{}` (external Pullfrog re-review, #132).** gray-matter parses unquoted YAML timestamps into `Date`; with no enumerable own keys a timestamp-only property edit produced an identical fingerprint, so the stale batch was replayed. | `canonicalJson` honours the `toJSON` hook (exactly as `JSON.stringify` does) so `Date` → ISO string, matching the bytes the request serializes; `undefined`-valued keys are dropped like `JSON.stringify`. Tests: `canonicalJson(date)` equals `JSON.stringify(date)`, distinct timestamps diverge, and an ingestion-level YAML-timestamp edit changes the fingerprint (`tests/unit/stable-content.test.ts`, `tests/unit/obsidian-import.test.ts`). |
-| MAJOR | Order-blind fingerprint + positional `batchIndex`: enumeration reorder maps a batchIndex to different pages; the server replays the recorded set and drops the new pages. | `splitIntoBatches` sorts deterministically (path, then content hash) so `batchIndex` ↔ page set is stable. |
+| MAJOR | Order-blind fingerprint + positional `batchIndex`: enumeration reorder maps a batchIndex to different pages; the server replays the recorded set and drops the new pages. | `splitIntoBatches` sorts by the page's full deterministic identity (`pageFingerprint`: path, role, canonical properties/tags, content hash, plain text) so `batchIndex` ↔ page set is stable. |
+| MAJOR | **Byte-unstable batching input → a page can cross a batch boundary on retry (external CodeRabbit review, #132).** `vaultFingerprint` excluded `contentYjsBase64`, but `batchByteLength` includes it; a random seed `clientID` made the encoded length drift, so near the 48 MB budget the same `clientImportId` could map a page to a different `batchIndex` — replaying the wrong page set or writing a duplicate under a different positional id. | `MarkdownEngine.seedToYjsBase64` now derives the Y.Doc `clientID` from `stableHash(canonicalJson(fitted))`, making the encoded bytes deterministic across ingestions of the same content (distinct docs keep distinct origins). Batching input is therefore byte-stable and batch boundaries are stable; tests assert equal `contentYjsBase64` and identical batch layout across ingestions (`lib/markdown/engine.ts`, `tests/unit/obsidian-import.test.ts`). |
 | MINOR | No client retry on `409 batch_in_progress` (contradicts spec D2). | Bounded backoff (`MAX_BATCH_ATTEMPTS = 4`, 400 ms × attempt). |
 | MINOR | `cleanup_import_batches` pruned only `completed`. | Prunes any stale row. |
 | MINOR | Report headline double-counted resumed pages. | Resumed line reworded to be non-additive. |
@@ -91,3 +92,20 @@ hook (Date → ISO string), matching the request's own serialization.
   batchIndex)` without re-comparing the request payload. This is by design: the client owns vault content,
   and the (now complete) fingerprint is what guarantees a changed vault gets a fresh id. A defensive
   server-side payload hash in the ledger is deliberately out of scope for #87 and could be a follow-up.
+
+## Addendum — external review round 2 (CodeRabbit, PR #132)
+
+Two findings were raised after the Pullfrog round; both are fixed:
+
+1. **MAJOR — batch boundaries could shift under a reused `clientImportId`.** The vault fingerprint
+   excluded `contentYjsBase64`, but `batchByteLength` (which decides batch membership) includes it.
+   A random Y.Doc `clientID` made the encoded length vary run-to-run, so a page near the 48 MB budget
+   could move to a different `batchIndex` on retry while the fingerprint — and therefore the reused
+   `clientImportId` — stayed the same, replaying the wrong page set (or writing a duplicate under a
+   different positional id). Fixed by deriving the seed `clientID` from the fitted content
+   (`stableHash(canonicalJson(fitted))`), making seeded bytes deterministic and batching byte-stable;
+   the sort key is also the full `pageFingerprint`. Regression tests: identical `contentYjsBase64` and
+   identical batch layout across ingestions (`tests/unit/obsidian-import.test.ts`).
+2. **MINOR — plan doc described the fingerprint as paths + source text only.** The note now lists the
+   complete inputs (role, canonical properties/tags, fitted-content hash, plain text) and records that
+   Yjs bytes stay excluded (`docs/superpowers/plans/2026-10-07-h0-idempotent-bulk-imports.md`).

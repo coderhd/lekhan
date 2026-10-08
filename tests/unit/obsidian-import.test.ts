@@ -6,7 +6,7 @@ import * as Y from 'yjs'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 import { readVaultZip } from '@/services/obsidian-import'
 import { importObsidianVault, type ObsidianImportPage } from '@/services/obsidian-import'
-import { vaultFingerprint } from '@/services/vault-import'
+import { splitIntoBatches, vaultFingerprint } from '@/services/vault-import'
 import { base64ToUint8Array } from '@/lib/markdown/engine'
 
 async function fixtureVault(): Promise<Parameters<typeof importObsidianVault>[0]> {
@@ -216,16 +216,41 @@ describe('importObsidianVault — image embed resolution', () => {
 })
 
 describe('importObsidianVault — retry fingerprint stability (#87)', () => {
-	it('is stable across identical ingestions despite a fresh (random-clientID) Yjs encoding', async () => {
-		// Each ingestion re-seeds Yjs with a new random clientID, so the encoded
-		// bytes — and their length — differ run to run. The vault fingerprint must
-		// not depend on that, or the import dialog mints a new clientImportId on
-		// retry and the server re-creates every already-landed page (#87 AC1).
+	it('is byte-stable across identical ingestions and shares a fingerprint', async () => {
+		// Seeding must be deterministic: the encoded Yjs update is what batching
+		// measures, so any byte drift could shift a page across a batch boundary
+		// between retries while the fingerprint stayed the same (#87). The seed
+		// clientID is derived from the content, so two ingestions are identical.
 		const vault = await fixtureVault()
 		const options = { workspaceId: 'ws-1', existingPageTitles: ['Old Page'] }
 		const first = importObsidianVault(vault, options).ir
 		const second = importObsidianVault(vault, options).ir
+		expect(first.pages.map((p) => p.contentYjsBase64)).toEqual(
+			second.pages.map((p) => p.contentYjsBase64)
+		)
 		expect(vaultFingerprint(first)).toBe(vaultFingerprint(second))
+	})
+
+	it('assigns the same pages to the same batchIndex across ingestions', async () => {
+		// Batching measures the real serialized size, which includes the Yjs
+		// bytes. If those bytes drifted, a page could move across a batch
+		// boundary on retry under the same clientImportId and the server would
+		// replay the wrong page set (#87). Deterministic seeding removes the drift.
+		const vault = await fixtureVault()
+		const options = { workspaceId: 'ws-1', existingPageTitles: [] }
+		const first = importObsidianVault(vault, options).ir
+		const second = importObsidianVault(vault, options).ir
+		// A budget that forces several batches while still fitting each page alone.
+		const onePageBytes = Math.max(...first.pages.map((p) =>
+			new TextEncoder().encode(JSON.stringify({ workspaceId: 'ws-1', pages: [p] })).length
+		))
+		const layout = (ir: typeof first) =>
+			splitIntoBatches(ir, onePageBytes + 128).batches.map((b) =>
+				b.pages.map((p) => `${p.folderPath ?? ''}/${p.title}`)
+			)
+		const batches = layout(first)
+		expect(batches.length).toBeGreaterThan(1)
+		expect(batches).toEqual(layout(second))
 	})
 
 	function contentOf (files: Record<string, string>): Parameters<typeof importObsidianVault>[0] {

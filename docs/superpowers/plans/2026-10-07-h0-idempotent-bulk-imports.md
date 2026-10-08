@@ -25,10 +25,13 @@ blockers/majors were fixed and re-verified (`docs/reviews/pr-87-review.md`):
   (`deriveBatchPageId(workspace, clientImportId, batchIndex, ordinal)`) + `ON CONFLICT (id) DO
   NOTHING`, so a reclaimed batch (partial chunk, checkpoint failure, or crash-after-landing)
   re-runs without duplicating pages.
-- **Stable batch identity + retry id:** `splitIntoBatches` sorts pages deterministically so positional
-  `batchIndex` maps to the same page set across retries; `vaultFingerprint` hashes deterministic
-  content only (paths + source text) and **never** the nondeterministic Yjs bytes, so a retry keeps
-  the same `clientImportId` and the ledger actually resumes.
+- **Stable batch identity + retry id:** `splitIntoBatches` sorts pages by their full deterministic
+  identity (path, folder/note role, canonical properties/tags, fitted-content hash, plain text) so
+  positional `batchIndex` maps to the same page set across retries; `vaultFingerprint` hashes that
+  same identity and **never** the Yjs bytes, so a retry keeps the same `clientImportId` and the
+  ledger actually resumes. `seedToYjsBase64` derives the seed clientID from the content, making the
+  encoded bytes (which batching measures) deterministic across ingestions and so keeping batch
+  boundaries stable; `canonicalJson` honours `toJSON` so `Date` frontmatter is not collapsed.
 - **Client:** bounded 409 `batch_in_progress` backoff per spec D2.
 - **A11y/UX:** progress block `role="status" aria-live="polite"`; warning keys stabilized;
   resumed line no longer double-counts the headline.
@@ -36,7 +39,7 @@ blockers/majors were fixed and re-verified (`docs/reviews/pr-87-review.md`):
 ## Verification (run in the worktree, 2026-10-07, post-review)
 - `npm run typecheck` → clean.
 - `npm run lint` → clean (`eslint .`, exit 0).
-- `npm test` → **79 files / 603 tests passed**.
+- `npm test` → **80 files / 617 tests passed**.
 - `npm run build` → compiled successfully, `/api/import` emitted as a dynamic route.
 
 ## Acceptance criteria mapping
