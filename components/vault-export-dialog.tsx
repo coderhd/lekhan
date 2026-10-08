@@ -48,6 +48,9 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 	// Monotonic id for the in-flight export. Closing/cancelling (or starting a
 	// new run) bumps it so a late-resolving run cannot download or write state.
 	const runIdRef = useRef(0)
+	// Aborts the in-flight read so cancellation actually stops IndexedDB/WebSocket
+	// work instead of letting it run to completion behind a closed dialog.
+	const abortRef = useRef<AbortController | null>(null)
 	// Folders occupy no content read; the progress bar counts notes only.
 	const exportableCount = pages.filter((page) => page.properties?.importFolder !== true).length
 
@@ -61,9 +64,12 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 
 	const handleOpenChange = (next: boolean) => {
 		if (!next) {
-			// Invalidate any in-flight run so it cannot download behind the
-			// closed dialog or leave a stale report for the next open.
+			// Invalidate and abort any in-flight run so it cannot keep reading,
+			// download behind the closed dialog, or leave a stale report for the
+			// next open.
 			runIdRef.current += 1
+			abortRef.current?.abort()
+			abortRef.current = null
 			reset()
 		}
 		onOpenChange(next)
@@ -74,6 +80,10 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 			toast.error('There are no pages to export yet.')
 			return
 		}
+		// Supersede any run still in flight before starting the next one.
+		abortRef.current?.abort()
+		const controller = new AbortController()
+		abortRef.current = controller
 		const runId = ++runIdRef.current
 		setPhase('exporting')
 		setProgress({ done: 0, total: exportableCount })
@@ -94,13 +104,14 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 			const source = createClientPageDocSource({ token })
 			const { pages: loaded, warnings: loadWarnings } = await loadVaultPageDocs(vaultPages, {
 				loadDoc: source,
+				signal: controller.signal,
 				onProgress: ({ done, total }) => {
 					if (runId === runIdRef.current) setProgress({ done, total })
 				},
 			})
 
 			// Abandoned (dialog closed/cancelled) — never download a surprise zip.
-			if (runId !== runIdRef.current) return
+			if (runId !== runIdRef.current || controller.signal.aborted) return
 
 			const { files, report: exportReport } = buildVaultFiles(loaded)
 			downloadBlob(buildZipBlob(files), 'lekhan-vault.zip')
@@ -114,7 +125,7 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 				warnings: loadWarnings.length,
 			})
 		} catch (err) {
-			if (runId !== runIdRef.current) return
+			if (runId !== runIdRef.current || controller.signal.aborted) return
 			setErrorMessage(err instanceof Error ? err.message : 'Export failed — please try again.')
 			setPhase('error')
 			track('export_vault_failed', { reason: err instanceof Error ? err.message : 'unknown' })

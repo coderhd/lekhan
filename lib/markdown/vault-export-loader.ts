@@ -15,7 +15,7 @@ import type { VaultPage } from '@/lib/markdown/vault-export'
  */
 
 /** Resolve one Page's Tiptap doc, or `null` when it is not available. */
-export type LoadPageDoc = (pageId: string) => Promise<JSONContent | null>
+export type LoadPageDoc = (pageId: string, signal?: AbortSignal) => Promise<JSONContent | null>
 
 export interface LoadVaultPageDocsOptions {
 	loadDoc: LoadPageDoc
@@ -23,6 +23,12 @@ export interface LoadVaultPageDocsOptions {
 	concurrency?: number
 	/** Called once per non-folder Page as it resolves. */
 	onProgress?: (progress: { done: number; total: number }) => void
+	/**
+	 * Cooperative cancellation. When aborted, workers stop scheduling new Pages,
+	 * `loadDoc` is expected to reject/return early, and no further progress or
+	 * warnings are recorded. The returned Pages still echo the input shape.
+	 */
+	signal?: AbortSignal
 }
 
 export interface LoadedVaultPages {
@@ -73,24 +79,30 @@ export async function loadVaultPageDocs(
 	let cursor = 0
 
 	const runWorker = async (): Promise<void> => {
-		while (true) {
+		while (!options.signal?.aborted) {
 			const index = cursor
 			cursor += 1
 			if (index >= targets.length) return
 			const page = targets[index]
 			try {
-				const doc = await options.loadDoc(page.id)
+				const doc = await options.loadDoc(page.id, options.signal)
+				// A read that resolved after cancellation must not be reported.
+				if (options.signal?.aborted) return
 				if (doc) docs.set(page.id, doc)
 				else warnings.push({ title: page.title, stage: 'content', error: 'page content was not available' })
 			} catch (err) {
+				// A read stopped by cancellation is not a Page failure.
+				if (options.signal?.aborted) return
 				warnings.push({
 					title: page.title,
 					stage: 'content',
 					error: err instanceof Error ? err.message : String(err),
 				})
 			} finally {
-				done += 1
-				options.onProgress?.({ done, total })
+				if (!options.signal?.aborted) {
+					done += 1
+					options.onProgress?.({ done, total })
+				}
 			}
 		}
 	}

@@ -130,3 +130,18 @@ All three HIGH findings and both MEDIUM/LOW items were fixed; the one remaining 
 | 7 | 🔍 LOW | Progress `total` seeded with folder pages | Initial total now uses `exportableCount` (non-folder notes), matching the loader's own total (`components/vault-export-dialog.tsx:52,79`). |
 
 Re-verified after the fixes: `npm run typecheck` ✅ · `npm run lint` ✅ · `npm test` **81 files / 605 tests** ✅ · `npm run build` ✅.
+
+---
+
+## Addendum — external review (Pullfrog) findings on PR #133
+
+Pullfrog re-reviewed `ba374ae` and requested two changes before merge. Both are fixed on this branch.
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| A | ⚠️ HIGH | The visible Cancel invalidated `runId` but only *after* `loadVaultPageDocs` read every note — active and queued IndexedDB/WebSocket reads kept running, and cancelling during tag fetch could still start all reads. | Added a per-run `AbortController`. `handleOpenChange(false)` (and starting a new run) aborts it; `loadVaultPageDocs` now takes `signal`, stops scheduling, suppresses late warnings/progress, and `createClientPageDocSource` closes the in-flight `IndexeddbPersistence`/`WebsocketProvider` on abort (`vault-export-dialog.tsx:48-108`, `vault-export-loader.ts:20-46,75-101`, `vault-export-source.ts:31-66,150-215`). |
+| B | ⚠️ HIGH | `hasLocalDatabase` returned `true` when `indexedDB.databases()` was unavailable, so every uncached Page still created an empty database; Firefox 111–125 is inside Next.js's default range and predates the API. | Added `probeExisted`: it opens the database once, reads `upgradeneeded`'s `oldVersion === 0` to detect that the open itself created it, and immediately `deleteDatabase`s the empty database it made — reporting "absent". Local reads are still used where a cache exists and no empty database is left behind (`vault-export-source.ts:75-155`). |
+
+New coverage: `tests/unit/vault-export-source.test.ts` (enumeration present/absent, probe create-then-delete, cancellation of local and remote reads) and two abort cases in `tests/unit/vault-export-loader.test.ts`.
+
+Re-verified after the external-review fixes: `npm run typecheck` ✅ · `npm run lint` ✅ · `npm test` **82 files / 613 tests** ✅ · `npm run build` ✅.

@@ -157,4 +157,40 @@ describe('loadVaultPageDocs', () => {
 		expect(out).toEqual([])
 		expect(warnings).toEqual([])
 	})
+
+	it('does no reads when the signal is already aborted', async () => {
+		const controller = new AbortController()
+		controller.abort()
+		let calls = 0
+		const { warnings } = await loadVaultPageDocs([page('a'), page('b')], {
+			signal: controller.signal,
+			loadDoc: async () => {
+				calls += 1
+				return DOC('x')
+			},
+		})
+		expect(calls).toBe(0)
+		expect(warnings).toEqual([])
+	})
+
+	it('stops scheduling reads and reporting progress once aborted', async () => {
+		const controller = new AbortController()
+		const started: string[] = []
+		const progress: Array<{ done: number; total: number }> = []
+		const pages = Array.from({ length: 20 }, (_, i) => page(`p${i}`))
+		const { warnings } = await loadVaultPageDocs(pages, {
+			concurrency: 1,
+			signal: controller.signal,
+			onProgress: (p) => progress.push(p),
+			loadDoc: async (id, signal) => {
+				started.push(id)
+				if (started.length === 2) controller.abort()
+				if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
+				return DOC(id)
+			},
+		})
+		expect(started).toEqual(['p0', 'p1'])
+		expect(warnings).toEqual([])
+		expect(progress).toEqual([{ done: 1, total: 20 }])
+	})
 })
