@@ -3,7 +3,7 @@
 - **Change set**: `feat/29-t7-razorpay-rail` @ `d675f09` on base `plan/29-real-billing` @ `27e72c7` (single commit; origin == local verified three times incl. watchdog re-verify)
 - **Files**: `lib/billing/razorpay.ts` (new, 394), `lib/billing/gateway-factory.ts` (+5 one-line self-registration), `tests/unit/billing-razorpay.test.ts` (new, 447 / 20 tests), `tests/unit/billing-gateway.test.ts` (6-line T5 refresh)
 - **Author**: Dev Engineer (`fd5a904a`) · **Reviewer of record**: Tech Lead (`2a369db2`) — writer ≠ verifier · **Clean-room pass**: fresh-context adversarial reviewer (no author narrative) consolidated below; every blocking finding re-verified first-hand by the reviewer of record
-- **Verdict**: **REQUEST CHANGES** — 3 blocking findings, all fixable inside T7-owned files
+- **Verdict**: **REQUEST CHANGES** at `d675f09` (§2–§6) → rework landed at `48e3944` → **APPROVE** per re-review addendum **§7** (final disposition)
 
 ## 0. Deterministic gate (evidence, run at d675f09)
 
@@ -93,3 +93,54 @@ The gate masks Finding 1: every landed test file happens to import `gateway`/`ga
 ## 6. Disposition
 
 **REQUEST CHANGES** → returned to Dev Engineer (`fd5a904a`) on this issue with BLOCKING-1/2/3 + recommended MEDIUMs; re-review by Tech Lead on the new head before `done`. Epic-level escalations recorded here and as a follow-up integration issue under SIL-32 (blocked by SIL-42 + SIL-43). The reviewed branch head remains `d675f09`; worktree verified clean after review probes.
+
+## 7. Re-review addendum — `48e3944` (rework) → **APPROVE** (final disposition)
+
+- **Reviewed head**: `feat/29-t7-razorpay-rail` @ `48e3944` ("T7 razorpay rework — close clean-room BLOCKING-1/2/3 + MEDIUMs"), one commit atop `d675f09`; verified vs origin. Rework delta = exactly 4 files (`gateway-factory.ts` seam region, `razorpay.ts`, `billing-razorpay.test.ts`, new `billing-razorpay-import-order.test.ts`); boundary vs base unchanged (5 files total; no deps, no routes/types/schema/tier-limits).
+- **Process note**: the prior background clean-room reviewer was orphaned by run teardown; this re-pass ran **foreground in the live run**. Reviewer of record independently re-ran every gate and every falsification check first-hand; clean-room reviewer additionally mutation-tested each pin.
+
+### 7.1 Deterministic gate (evidence, re-run at `48e3944`)
+
+| Check | Result | Evidence |
+|---|---|---|
+| `npm run typecheck` | PASS | exit 0 |
+| `npm run lint` | PASS | exit 0 |
+| `npm test` | PASS | **85 files / 657 tests** (was 84/651; +pin file, +6 tests) |
+| Focused | PASS | billing-razorpay 24/24 + import-order pin 2/2 + billing-gateway 21/21 = **47/47** |
+| `npm run build` | Environmental | default Turbopack panics in this worktree ("symlink `node_modules` points out of the filesystem root"); base `27e72c7` fails **identically** in a throwaway worktree with the same symlinked deps → not attributable to this diff. `next build --webpack`: compile + TypeScript pass; page-data collection for `/api/waitlist/confirm` fails on `supabaseUrl is required` — **identical at base** in an env-less shell (author's exit-0 webpack run had env present). |
+
+### 7.2 Finding closure (independently re-verified, mutation-proved)
+
+| Finding | Status | Evidence |
+|---|---|---|
+| BLOCKING-1 registration eval-order | **CLOSED** | Call-time lazy delegate `gateway-factory.ts:55-66`, registration at `:68`, typed `RazorpayGateway` (tsc enforces member completeness — mutation dropping methods fails **TS2739**). Pin's first static import is the rail; `setupFiles` imports no billing module, vitest isolates per file, so the graph entry condition is real. Mutation (eager `d675f09` shape): pin goes **2/2 red** with `GatewayNotRegisteredError` at `:36`; restore → green. Bundled chunk shows getter/closures survive the build. Repo-wide grep: the factory is the singleton's only importer — no other eager capture. |
+| BLOCKING-2 `retrieveScheduledChange` null path | **CLOSED** | `razorpay.ts:379-383` pre-checks `has_scheduled_changes` via `GET /subscriptions/:id` and returns `null` **without** reaching `retrieve_scheduled_changes` (whose documented no-pending response is HTTP 400). Pending path maps the retrieve entity's scheduled `plan_id` — docs re-verified (entity carries `has_scheduled_changes`, `change_scheduled_at`, top-level `plan_id`). Pins assert exact call lists both ways; mutation (remove pre-check) fails 2 tests. |
+| BLOCKING-3 `portalUrl` fabrication | **CLOSED for T7 scope** | `RazorpayConfigError` unless arg matches `^https://…` (`razorpay.ts:326-330`); refuses `cust_…`, `http://`, relative, empty; zero provider calls; pinned directly and through the registry seam under the razorpay-first graph. Residual hardening → **M-1**; root source-of-truth fix remains lead/T5/T8 (escalation 1). |
+| MEDIUM-1 fetch timeout | **CLOSED** | `AbortSignal.timeout(RAZORPAY_HTTP_TIMEOUT_MS)` at `:159` on the module's **single** fetch site (grep-verified); pin asserts `init.signal` is an `AbortSignal`; mutation (strip signal) fails pin. |
+| MEDIUM-2 `identifyPlan` ambiguity | **CLOSED** | Collects **all** pattern-matching bindings and throws `RazorpayConfigError` unless unanimous (`:209-241`). `PLAN_KEY_PATTERN` carries no `/g` — no stateful-`lastIndex` bug (mutation adding `/g` fails 2 tests). Unanimous multi-binding never wrongly rejected (key ↔ tier/cycle/cohort is bijective). |
+
+### 7.3 Fresh findings at `48e3944` (clean-room re-pass; **non-blocking**) — route to SIL-56 (integration)
+
+- **M-1 (MEDIUM)** `portalUrl` guard bypassable via control whitespace: `/^https:\/\/\S+/` lacks an **end anchor** and accepts `https://ok.example.com\t.evil.example` / embedded `\n`, NUL, U+2028/9 — WHATWG `new URL()` normalization then mutates the **host** (host-suffix redirect shape). Unreachable through today's only caller (route passes `cust_…` → refuses) and no UI consumer exists, but T12 will navigate this value. Fix: `URL.canParse(v) && new URL(v).protocol === "https:" && !new URL(v).username` (or anchored regex + C0/U+2028·9/NUL filter); pin `"https://a\nb"`, `"https://a\t.evil"`.
+- **M-2 (MEDIUM)** `effectiveAtFor` (`:257-268`) ignores `charge_at`: for an `authenticated` subscription with `current_end: null` (docs' own update-response example), a cycle-end schedule fails closed ("did not report an effective time") and the ref degrades to `sub_x:null`. `charge_at` (next-charge time) is the documented effective time for that window — add it to the fallback chain.
+- **M-3 (MEDIUM, ownership)** the card-update source-of-truth fix is **not tracked in-repo** (plan §follow-ups still says "None open"): post-merge, every real INR "update card" honestly 502s (`portal_failed`) until the lead integration lands subscription-ref/`short_url` plumbing (escalation 1). Must be first-class on SIL-56.
+- **L-1 (LOW)** delegate completeness is compile-time-only (no CI typecheck gate in the repo; VERIFY convention only) — extend the import-order pin with a runtime `typeof === "function"` loop over all 8 delegate members resolved through `gatewayForRail`.
+- **L-2 (LOW)** `customer_notify` on PATCH: the docs page contradicts itself (curl example sends it; the "updatable" list omits it) — possible provider 400; integration live-verify, no code change now.
+- **L-3 (LOW)** `content-type: application/json` is sent with empty bodies; docs' `cancel_scheduled_changes` example sends neither header nor body — omit the header when `body === undefined`.
+- **L-4 (LOW)** `requireEnv` blank-checks but returns the **untrimmed** value; a pasted key with trailing whitespace yields a confusing provider 4xx (docs warn "no whitespace before or after").
+- **L-5 (LOW)** no `expire_by` on create → abandoned `created` subscriptions linger (docs default 30 years); unpaid and invisible to the single-live invariant, hygiene only.
+- **Provider-truth confirmations (not issues)**: `total_count` 1200/100 per the documented 100-year max; `STATUS_MAP` covers the complete documented enum (fail-closed `active` default only fires on future provider states); `cancel_at_cycle_end` is genuinely absent from read-back entities — the conservative `live` classification is the only honest answer (escalation 2 stands); `quantity: 1` matches the docs default; import-time env independence verified by a credentials-stripped probe.
+- **Reviewer's stated non-verifications**: live API behavior (no credentials/network); cross-frequency (`monthly→annual`) cycle-end changes are neither documented permissive nor forbidden — live smoke test warranted at integration.
+
+### 7.4 Axes (re-review)
+
+| Axis | Status | Summary |
+|---|---|---|
+| 1. Spec & ADRs (PDEC-1/8/12, TL R-1/B1) | **PASS** (note) | All five invariants hold at `48e3944`; cohort preservation mutation-proved; no SDK; hosted-only; no session fabrication. Note: INR upgrades also land at period end — sanctioned by the PDEC-12 Razorpay ruling + D5 "no proration engine"; T12 copy must state it plainly. |
+| 2. Frontend & a11y | N/A | Server-only diff; no UI callers of the billing routes exist yet. |
+| 3. CRDT & Storage | N/A | No storage edits; the rail writes nothing to `workspace_plans` (T8's). |
+| 4. Backend Security & Errors | **PASS** (residuals §7.3) | No credential-leak path (header never in URL/logs; typed errors name missing keys, not values); every money-adjacent guard fails closed. |
+
+### 7.5 Disposition (final)
+
+**APPROVE** — `feat/29-t7-razorpay-rail` @ `48e3944` closes the Stage-5 gate; SIL-43 marked `done`. With SIL-42 (T6 Stripe) already `done`, both rails now satisfy the parent epic SIL-32's rail blockers. Integration — rail merge onto the epic, Stripe adopting the same lazy-delegate seam shape, and the §7.3 findings M-1/M-2/M-3 + L-1..5 plus escalations 1–5 — proceeds under **SIL-56** (assignee: Tech Lead). Worktree verified clean after review; every mutation ran in scratch copies, never the worktree.
