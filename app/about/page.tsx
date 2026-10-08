@@ -5,7 +5,7 @@ import { Zap, Lock, Users, Plane } from 'lucide-react'
 
 export const metadata: Metadata = {
 	title: 'About Lekhan — The Story Behind the Editor',
-	description: 'Why we built a local-first collaborative editor: notes stay markdown files on your disk, multiplayer works offline, and AI runs on your own keys.',
+	description: 'Why we built a local-first collaborative editor: notes stay markdown files on your disk, multiplayer works offline, and AI runs on your own key, a local model, or a simple plan credit.',
 	openGraph: {
 			images: ['/og.png'],
 		title: 'About Lekhan',

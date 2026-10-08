@@ -64,6 +64,14 @@
 | P1 | major | Public copy (landing :77/:198, about :24, faq :56) contrasts own-keys vs local models but never states cloud BYOK calls are relayed through Lekhan's API — material to the privacy claim | **FIXED.** Relay language added at every AI-claim surface: "cloud calls are relayed through our API to the provider you pick … local models connect straight from your browser." Verified against `app/api/ai/stream/route.ts` — pure pass-through, no persistence in route. Hero positioning lines stay as-is: PRODUCT.md declares the positioning line binding everywhere; the card directly under it carries the architecture detail. |
 | P2 | major | PRODUCT.md positioning/constraints still call user-key AI a strategic target / "do not market until shipped" (lines 20/24/32/34), contradicting shipped reality and inviting future copy reverts | **FIXED.** Product Purpose, Positioning, Capabilities and Constraints reconciled to shipped truth (BYOK live: relay on user key, local browser-direct, plan-credit fallback without key). Bright line corrected from false "no hosted AI inference ever" to "the AI bill is the user's — their key, their local model, or an explicit plan credit; no silent hosted inference". |
 
+## External review round 3 — CodeRabbit full pass on 791c12a (2026-10-08)
+
+| # | Sev | Finding | Disposition |
+|---|-----|---------|-------------|
+| C1 | minor | Metadata/OG descriptions (`about` :8, `faq` :7/:11) implied own-key is the only AI route; `app/api/ai/route.ts` falls back to the platform Sarvam key (credits) when no BYOK is set | **FIXED.** FAQ + About descriptions now read "your own key, a local model, or a simple plan credit"; FAQ AI answer gained the explicit fallback clause ("without one, assistant actions run on a plan-credit allowance"). |
+| C2 | minor | FAQ "Is my data secure?" promised account-only access while the sharing answer discloses no-signin public links | **FIXED.** Security answer now carries the same public-link exception. |
+| C3 | minor | Voice doc said "assistant actions fall back to a plan-credit allowance" — vague about which path consumes credits | **FIXED.** `.agents/product-marketing.md` now names the route and actions: "Sarvam chat, translation, TTS, and transliteration actions handled by `/api/ai` use a plan-credit allowance." |
+
 ## Follow-ups surfaced by review (not diff defects)
 
 1. **[security, tech lead]** `app/api/ai/stream/route.ts` appears to relay user-supplied provider keys with no visible session check — open-relay risk; needs independent review.

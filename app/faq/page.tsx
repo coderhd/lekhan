@@ -4,11 +4,11 @@ import Link from 'next/link'
 
 export const metadata: Metadata = {
 	title: 'Frequently Asked Questions | Lekhan',
-	description: 'How Lekhan stores your notes, how offline multiplayer works, and why AI here runs on your own keys instead of another subscription.',
+	description: 'How Lekhan stores your notes, how offline multiplayer works, and how AI runs on your own key, a local model, or a simple plan credit.',
 	openGraph: {
 			images: ['/og.png'],
 		title: 'FAQ — Lekhan',
-		description: 'How Lekhan stores your notes, how offline multiplayer works, and why AI here runs on your own keys.',
+		description: 'How Lekhan stores your notes, how offline multiplayer works, and how AI runs on your own key, a local model, or a simple plan credit.',
 	},
 }
 
@@ -53,7 +53,7 @@ const faqData: FaqGroup[] = [
 			},
 			{
 				question: 'What AI features does Lekhan include?',
-				answer: 'An AI assistant panel inside every document: summarize, improve clarity, fix grammar, generate ideas. Bring your own API key (OpenAI, Anthropic, Gemini, Sarvam, or a custom endpoint) — cloud calls are relayed through our API to the provider you pick. Or run a local model like Ollama, and requests go straight from your browser. On your own key, AI never consumes plan credits.',
+				answer: 'An AI assistant panel inside every document: summarize, improve clarity, fix grammar, generate ideas. Bring your own API key (OpenAI, Anthropic, Gemini, Sarvam, or a custom endpoint) — cloud calls are relayed through our API to the provider you pick. Or run a local model like Ollama, and requests go straight from your browser. On your own key, AI never consumes plan credits; without one, assistant actions run on a plan-credit allowance.',
 			},
 			{
 				question: 'Can I move in from Obsidian?',
@@ -70,7 +70,7 @@ const faqData: FaqGroup[] = [
 		items: [
 			{
 				question: 'Is my data secure?',
-				answer: 'Your notes are encrypted in transit and at rest by default. Cloud sync runs on Supabase with row-level security, so only you and the accounts you explicitly share a document with can access it.',
+				answer: 'Your notes are encrypted in transit and at rest by default. Cloud sync runs on Supabase with row-level security, so only you and the accounts you explicitly share a document with can access it — unless you turn on the public link, which anyone holding it can read.',
 			},
 			{
 				question: 'Who can see my documents?',

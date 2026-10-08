@@ -9,8 +9,8 @@ A local-first collaborative knowledge workspace. Pages live as a graph
 (backlinks, tags, search), sync offline-first via CRDT, support real-time
 multiplayer editing. AI runs on the user's own keys or local models — on your
 own key, AI never consumes plan credits. (Cloud BYOK calls are relayed through
-our API using the user's key; without a key, assistant actions fall back to a
-plan-credit allowance.)
+our API using the user's key; without a key, Sarvam chat, translation, TTS, and
+transliteration actions handled by `/api/ai` use a plan-credit allowance.)
 
 ## Positioning line
 
