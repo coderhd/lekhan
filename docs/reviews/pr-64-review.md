@@ -145,3 +145,20 @@ Pullfrog re-reviewed `ba374ae` and requested two changes before merge. Both are 
 New coverage: `tests/unit/vault-export-source.test.ts` (enumeration present/absent, probe create-then-delete, cancellation of local and remote reads) and two abort cases in `tests/unit/vault-export-loader.test.ts`.
 
 Re-verified after the external-review fixes: `npm run typecheck` ✅ · `npm run lint` ✅ · `npm test` **82 files / 613 tests** ✅ · `npm run build` ✅.
+
+---
+
+## Addendum 2 — Pullfrog re-review of the fix itself (`bf815e3`) → non-destructive fallback
+
+Pullfrog's re-review of `bf815e3` (2026-10-08T07:05:55Z, [pullrequestreview-5452928149](https://github.com/coderhd/lekhan/pull/133#pullrequestreview-5452928149)), independently confirmed by the Tech Lead at the gate, flagged that the `probeExisted` fallback was itself destructive. Fixed on this branch.
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| C | ⚠️ HIGH | `probeExisted` deleted the database it opened for create-detection: if another tab opened the just-created Page database between `request.result.close()` and `factory.deleteDatabase(pageId)`, the pending delete either (a) wiped a cache that session subsequently populated, or (b) fired `versionchange` into an active editor session and halted its persistence. It ran for **every Page** in a bulk export on browsers without `indexedDB.databases()` (Firefox 111–125). | Removed `probeExisted` entirely. When `indexedDB.databases()` is unavailable — or the enumeration call throws — `hasLocalDatabase` now returns `false` and never opens or deletes a database. The remote batch-sync path already covers correctness; the fallback only costs export speed on legacy browsers (`lib/markdown/vault-export-source.ts:79-112`). |
+
+Contract locked in by `tests/unit/vault-export-source.test.ts`:
+- Modern browsers keep enumeration-first behavior (`databases()` present → `true`/`false` from the enumeration).
+- Enumeration absent or throwing → resolves `false`, and **never** calls `open` or `deleteDatabase` (asserted with spies on both).
+- A present-but-unenumerable database is still reported absent and is **not** deleted.
+
+Re-verified after the non-destructive fix: `npm run typecheck` ✅ · `npm run lint` ✅ · `npm test` **82 files / 614 tests** ✅ · `npm run build` ✅.
