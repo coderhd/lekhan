@@ -53,7 +53,7 @@ const faqData: FaqGroup[] = [
 			},
 			{
 				question: 'What AI features does Lekhan include?',
-				answer: 'An AI assistant panel inside every document: summarize, improve clarity, fix grammar, generate ideas. It runs browser-direct on your own API keys or a local model — we never host inference and never sell AI credits, so the AI bill stays yours.',
+				answer: 'An AI assistant panel inside every document: summarize, improve clarity, fix grammar, generate ideas. Bring your own API key (OpenAI, Anthropic, Gemini, Sarvam, or a custom endpoint) — on your key, AI never consumes plan credits. Or run a local model like Ollama, and requests go straight from your browser.',
 			},
 			{
 				question: 'Can I move in from Obsidian?',
@@ -61,7 +61,7 @@ const faqData: FaqGroup[] = [
 			},
 			{
 				question: 'Can I see the history of my document?',
-				answer: 'Yes — git-style history that lives on your own disk. Every version is kept, with visual diffs so you can time-travel through a document and restore any point. Local history is never paywalled.',
+				answer: 'Yes — git-style history that lives on your own disk. Pin any version and it stays forever; auto-snapshots roll inside a generous local budget (100 MB per document). Visual diffs let you time-travel and restore, and local history is never gated by plan.',
 			},
 		],
 	},
@@ -74,7 +74,7 @@ const faqData: FaqGroup[] = [
 			},
 			{
 				question: 'Who can see my documents?',
-				answer: 'Only you and the people you explicitly share with. Lekhan uses role-based access control (Owner, Editor, Viewer) so you always control who can read and edit your work.',
+				answer: 'Only you and the people you explicitly share with — unless you switch on the public link, which anyone holding it can read without signing in. Role-based access control (Owner, Editor, Viewer) governs who can edit your work.',
 			},
 			{
 				question: 'Where is my data stored?',
@@ -87,7 +87,7 @@ const faqData: FaqGroup[] = [
 		items: [
 			{
 				question: 'How do I invite someone to edit a document?',
-				answer: 'Open your document, click the "Share" button, and enter your collaborator\'s email. They\'ll receive an invite link and can join instantly.',
+				answer: 'Open your document, click the "Share" button, and enter your collaborator\'s email. They\'ll receive an invite link — once they sign in, they\'re in the document with you.',
 			},
 			{
 				question: 'What happens if two people edit the same section?',

@@ -65,7 +65,7 @@ export default function LandingPage () {
 					<div className="lg:col-span-7 flex flex-col items-center lg:items-start text-center lg:text-left min-w-0 animate-fade-in-up">
 						<div className="inline-flex items-center gap-2 px-3 py-1 glass rounded-full mb-8">
 							<span className="w-2 h-2 rounded-full bg-primary-container animate-pulse"></span>
-							<span className="text-label-sm font-label-sm text-on-surface-variant">Founding edition now open · 500 numbered spots</span>
+							<span className="text-label-sm font-label-sm text-on-surface-variant">Founding edition · 500 numbered spots · closes when full</span>
 						</div>
 
 						<h1 className="font-display-lg-mobile md:text-display-lg text-4xl sm:text-5xl md:text-6xl lg:text-[64px] font-bold text-on-surface mb-6 leading-[1.1] min-w-0 break-words">
@@ -74,8 +74,8 @@ export default function LandingPage () {
 						</h1>
 
 						<p className="text-md md:text-xl text-on-surface-variant mb-10 max-w-xl">
-							Local-first like Obsidian, collaborative like Notion — and every AI
-							feature runs on your keys, in your browser, never on our servers.
+							Local-first like Obsidian, collaborative like Notion — and AI
+							that runs on your own keys, or a local model on your machine.
 							Your notes stay markdown files on your disk.
 						</p>
 
@@ -108,6 +108,8 @@ export default function LandingPage () {
 							<img
 								src="/early/shot-editor.png"
 								alt="The Lekhan editor with pages as markdown files and a collaborator editing live"
+								width={1280}
+								height={661}
 								className="w-full h-auto"
 							/>
 							<figcaption className="text-xs text-on-surface-variant px-4 py-3 border-t border-border/60">
@@ -119,6 +121,7 @@ export default function LandingPage () {
 
 				{/* Proof strip — three real, checkable facts; hairline rules, no slab */}
 				<section className="border-y border-border/40">
+					<h2 className="sr-only">Proof, not adjectives</h2>
 					<div className="max-w-[1200px] mx-auto px-6 md:px-10 grid grid-cols-1 sm:grid-cols-3 gap-x-10 gap-y-8 py-12">
 						<div>
 							<div className="font-display-lg text-5xl md:text-6xl font-bold text-primary-ink mb-2 tabular-nums">4</div>
@@ -127,8 +130,8 @@ export default function LandingPage () {
 						</div>
 						<div className="sm:border-l sm:border-border/40 sm:pl-10">
 							<div className="font-display-lg text-5xl md:text-6xl font-bold text-primary-ink mb-2 tabular-nums">0</div>
-							<p className="text-label-md font-bold text-on-surface-variant uppercase tracking-widest">Servers hosting your AI</p>
-							<p className="text-sm text-on-surface-variant mt-1">BYOK, browser-direct</p>
+							<p className="text-label-md font-bold text-on-surface-variant uppercase tracking-widest">Round-trips per keystroke</p>
+							<p className="text-sm text-on-surface-variant mt-1">Saved to disk first — sync runs behind</p>
 						</div>
 						<div className="sm:border-l sm:border-border/40 sm:pl-10">
 							<div className="font-display-lg text-5xl md:text-6xl font-bold text-primary-ink mb-2 tabular-nums">500</div>
@@ -142,7 +145,7 @@ export default function LandingPage () {
 				<section id="features" className="px-6 md:px-10 py-20 md:py-28 max-w-[1200px] mx-auto">
 					<div className="mb-12 md:mb-16 text-center md:text-left">
 						<h2 className="font-display-md text-3xl md:text-4xl font-bold text-on-surface mb-4">Built for people who own their notes.</h2>
-						<p className="text-xl text-on-surface-variant max-w-2xl">Your vault in. Four formats out. AI that never touches our servers.</p>
+						<p className="text-xl text-on-surface-variant max-w-2xl">Your vault in. Four formats out. AI on your own keys.</p>
 					</div>
 					<div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 						{/* Card 1 */}
@@ -178,6 +181,8 @@ export default function LandingPage () {
 								<img
 									src="/early/shot-import.png"
 									alt="Lekhan importing an Obsidian vault, showing the mapping report"
+									width={1280}
+									height={657}
 									className="w-full h-auto"
 								/>
 							</figure>
@@ -190,7 +195,7 @@ export default function LandingPage () {
 								</span>
 								<h3 className="font-headline-md text-xl font-bold text-on-surface">AI on Your Own Keys</h3>
 							</div>
-							<p className="font-body-md text-body-md text-on-surface-variant leading-relaxed">Bring your own key and run AI browser-direct against it. Lekhan never hosts the inference and never meters credits — the AI bill stays yours and yours alone.</p>
+							<p className="font-body-md text-body-md text-on-surface-variant leading-relaxed">Bring a key for OpenAI, Anthropic, Gemini or Sarvam — or point Lekhan at a local model like Ollama. On your own key, AI never consumes plan credits. The AI bill stays yours.</p>
 						</div>
 					</div>
 				</section>
@@ -215,7 +220,7 @@ export default function LandingPage () {
 							<div className="font-display-lg text-3xl sm:text-5xl font-bold text-primary-ink tabular-nums leading-none">2</div>
 							<div className="min-w-0">
 								<h3 className="font-headline-md text-2xl font-bold text-on-surface mb-3">Invite Collaborators</h3>
-								<p className="text-lg text-on-surface-variant leading-relaxed max-w-2xl">Share your document with a link. They join instantly and see each keystroke as it happens.</p>
+								<p className="text-lg text-on-surface-variant leading-relaxed max-w-2xl">Share your document with a link. Once they sign in, they're editing alongside you — seeing each keystroke as it happens.</p>
 							</div>
 						</div>
 						{/* Step 3 */}

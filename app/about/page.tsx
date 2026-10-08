@@ -21,7 +21,7 @@ const values = [
 	},
 	{
 		title: 'Privacy by Default',
-		description: 'Your data lives on your device first. We don\'t scan your documents, sell your data, or train models on your writing. And every AI feature runs on your own keys, browser-direct — we never host inference. Your words stay yours.',
+		description: 'Your data lives on your device first. We don\'t scan your documents, sell your data, or train models on your writing. And AI runs on your own keys — bring a provider key or point it at a local model on your machine. Your words stay yours.',
 		Icon: Lock,
 	},
 	{
@@ -137,8 +137,8 @@ export default function AboutPage () {
 						{values.map((value) => (
 							<div key={value.title} className="glass rounded-xl p-6">
 								<div className="text-primary-ink mb-3">
-								<value.Icon className="w-6 h-6" />
-							</div>
+									<value.Icon className="w-6 h-6" />
+								</div>
 								<h3 className="font-headline-md text-lg font-bold text-on-surface mb-2">
 									{value.title}
 								</h3>
