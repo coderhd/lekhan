@@ -62,6 +62,7 @@ provider registry).
 | H0 — Tier limits & local-first version history | #82 | Git-style milestones, non-destructive restore, visual word-diff viewer, quota pruning |
 | H0 — AI Provider Registry & Unified Settings Suite | #28 | 3-tier access ladder (local BYOL, free presets, cloud BYOK), zero-knowledge encrypted vault, 5-tab settings |
 | H0 — Sync Server Hardening (durability, capped debounce, ledger, scale) | #77 | 2s/10s capped debounce snapshot engine, durable Postgres collaborator ledger, automated retention cron, load-shedding |
+| H0 — Trust-building redesign of public marketing pages | #93 | Asymmetric landing remix with real screenshots, voice-clean rewritten copy, claims-traced honesty audit across `/`, `/about`, `/faq`, `/contact` + legal consistency; shipped PR #135 after pullfrog approval + CodeRabbit waiver (docs/reviews/pr-93-review.md) |
 
 | Epic | Issue | Blocker edges | Notes |
 |---|---|---|---|
