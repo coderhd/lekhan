@@ -53,7 +53,7 @@ const faqData: FaqGroup[] = [
 			},
 			{
 				question: 'What AI features does Lekhan include?',
-				answer: 'An AI assistant panel inside every document: summarize, improve clarity, fix grammar, generate ideas. Bring your own API key (OpenAI, Anthropic, Gemini, Sarvam, or a custom endpoint) — cloud calls are relayed through our API to the provider you pick. Or run a local model like Ollama, and requests go straight from your browser. On your own key, AI never consumes plan credits; without one, assistant actions run on a plan-credit allowance.',
+				answer: 'An AI assistant panel inside every document: summarize, improve clarity, fix grammar, generate ideas. Bring your own API key (OpenAI, Anthropic, Gemini, Sarvam, or a custom endpoint) — cloud calls are relayed through our API to the provider you pick. Or run a local model like Ollama, and requests go straight from your browser. On your own key, AI never consumes plan credits; without one, the built-in Sarvam actions (chat, translate, TTS, transliterate) run on a plan-credit allowance.',
 			},
 			{
 				question: 'Can I move in from Obsidian?',
