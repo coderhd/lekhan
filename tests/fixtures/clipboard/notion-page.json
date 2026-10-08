@@ -1,0 +1,25 @@
+{
+	"source": "Notion (2026) — copy of a page section with internal page mentions (anchor + span), a missing-target mention, and an external link",
+	"recordedAt": "2026-10-07",
+	"clipboard": {
+		"text/plain": "Meeting notes\n\nDiscussed the Design System and the Roadmap.\n\n- Ship paste-in\n- Review fixtures\n\nMentions: Design Tokens and Unreleased Page.\n\nExternal: Obsidian",
+		"text/html": "<meta charset='utf-8'><h1>Meeting notes</h1><p>Discussed the <a href=\"https://www.notion.so/Design-System-1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d\">Design System</a> and the <a href=\"https://www.notion.so/Roadmap-ffffffffffffffffffffffffffffffff\">Roadmap</a>.</p><ul><li>Ship paste-in</li><li>Review fixtures</li></ul><p>Mentions: <span class=\"mention\" data-mention-page-id=\"1a2b3c\">Design Tokens</span> and <span class=\"mention\">Unreleased Page</span>.</p><p>External: <a href=\"https://obsidian.md\">Obsidian</a></p>"
+	},
+	"expectations": {
+		"kind": "notion-html",
+		"markdownIncludes": [
+			"# Meeting notes",
+			"[[Design System]]",
+			"[[Roadmap]]",
+			"[[Design Tokens]]",
+			"[[Unreleased Page]]",
+			"- Ship paste-in",
+			"- Review fixtures",
+			"[Obsidian](https://obsidian.md)"
+		],
+		"pageLinks": ["Design System", "Roadmap", "Design Tokens", "Unreleased Page"],
+		"resolvedPage": "Design Tokens",
+		"unresolvedPage": "Unreleased Page",
+		"externalLinks": ["https://obsidian.md"]
+	}
+}

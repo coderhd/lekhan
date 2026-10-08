@@ -71,6 +71,27 @@ export async function updatePageTitle (pageId: string, title: string): Promise<v
 	}
 }
 
+/**
+ * Merge a partial properties object into a page's existing Page properties via
+ * a single atomic jsonb merge (`merge_page_properties`). Used when a paste
+ * carries frontmatter (Obsidian dialect): a client-side read-modify-write would
+ * let concurrent writers clobber each other's keys. The RPC is not
+ * `SECURITY DEFINER`, so the owner-only `update_pages` RLS policy still applies.
+ */
+export async function updatePageProperties (
+	pageId: string,
+	patch: Record<string, unknown>
+): Promise<void> {
+	const { error } = await supabase.rpc('merge_page_properties', {
+		p_page_id: pageId,
+		p_patch: patch,
+	})
+
+	if (error) {
+		throw error
+	}
+}
+
 export async function deletePage (pageId: string): Promise<void> {
 	const { error } = await supabase
 		.from('pages')
