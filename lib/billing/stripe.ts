@@ -80,6 +80,18 @@ function defaultStripeClient(): Stripe {
 }
 
 /**
+ * The lazily-built, cached Stripe SDK client (same instance the rail uses).
+ *
+ * Exported for T9's `applyCreditsAtRenewal`, which talks to
+ * `customers.createBalanceTransaction` directly (PDEC-3) and stays mockable at
+ * the client seam. Reading `STRIPE_SECRET_KEY` is deferred to first use, so
+ * importing never requires the secret.
+ */
+export function getStripeClient(): Stripe {
+	return defaultStripeClient()
+}
+
+/**
  * Map a provider subscription status onto the entitlement vocabulary. Unknown or
  * trialing states are never treated as canceled (never blind-downgrade): trial is
  * entitled, unrecognized states are treated as incomplete.
