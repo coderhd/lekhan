@@ -180,14 +180,14 @@ export default function EditorWorkspace({	pageId,
 				console.error('Error fetching workspace pages for wikilinks:', err)
 			}
 		}
-		if (pageId) {
+		if (pageId && !anonVisitor) {
 			loadMentionables()
 			loadWorkspacePages()
 		}
 		return () => {
 			isMounted = false
 		}
-	}, [pageId])
+	}, [pageId, anonVisitor])
 
 	const inFlightPageCreationsRef = useRef<Set<string>>(new Set())
 
@@ -807,8 +807,11 @@ export default function EditorWorkspace({	pageId,
 		return () => clearTimeout(timer)
 	}, [editor, token, isViewer])
 
-	// Cmd/Ctrl+L opens the Lekhan Bot bar
+	// Cmd/Ctrl+L opens the Lekhan Bot bar; Cmd/Ctrl+Shift+S opens version
+	// history. Anonymous readers get neither — both features are hidden from
+	// the reading surface and history would read from an empty local store.
 	useEffect(() => {
+		if (anonVisitor) return
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
 				e.preventDefault()
@@ -821,7 +824,7 @@ export default function EditorWorkspace({	pageId,
 		}
 		document.addEventListener('keydown', handleKeyDown)
 		return () => document.removeEventListener('keydown', handleKeyDown)
-	}, [handleOpenLekhanBot])
+	}, [handleOpenLekhanBot, anonVisitor])
 
 	useEffect(() => {
 		if (editor && isViewer !== null) {

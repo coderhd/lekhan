@@ -39,4 +39,7 @@ Branch: `feat/30-public-pages-polish` (base: `origin/main`). Spec:
 2. Clean-room adversarial subagent review of `git diff origin/main...HEAD`, 4 axes →
    `docs/reviews/30-public-pages-polish-review.md`; fix valid findings (mentoring: noticings not
    blockers) before PR.
+   2a. Gate result: APPROVED-WITH-NOTICINGS, no blockers. Fixed S1 (anon shortcut gate), S6 (skip
+   anon member-shaped fetches), S2 (aria-haspopup/aria-expanded), N4 (next/link footer). Full suite
+   re-verified green post-fix.
 3. Commit per TDD slice; PR; waits external review (Pullfrog + CodeRabbit) + CI green per merge gate.

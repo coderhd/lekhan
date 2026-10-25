@@ -31,8 +31,10 @@ collaborator chrome, not a reading surface**:
     (visible on mobile too),
   - hidden: sync indicator, collaborator avatars, global search, history, AI settings, mobile menu,
     profile menu,
-  - a slim footer reads "Anyone with the link can view this page. **Create your own workspace →**"
-    linking to `/signup` (viral loop),
+  - a shared-link banner reads "Anyone with the link can view this page." (review note: the
+    spec-drafted single slim footer was split into this header banner plus the footer CTA below),
+  - a footer CTA "**Create your own workspace →**" linking to `/signup`, with a "Powered by
+    Lekhan" brand note (viral loop),
   - editing remains impossible (unchanged `isViewer` pipeline — RLS + anonymous token + `editable: false`).
 
 ### P2 — Access-denied screen instead of silent redirect
