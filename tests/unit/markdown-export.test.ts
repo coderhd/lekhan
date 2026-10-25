@@ -316,9 +316,28 @@ describe('buildStandaloneHtml stylesheet', () => {
 		expect(style).not.toBe('')
 		expect(out).not.toMatch(/<link\b/i)
 		expect(out).not.toMatch(/<script\b/i)
-		expect(style).not.toMatch(/@import|@font-face|url\(/i)
+		expect(style).not.toMatch(/@import|@font-face/i)
+		expect(style).not.toMatch(/url\(\s*['"]?(?:https?:)?\/\//i)
 		expect(style).not.toContain('http://')
 		expect(style).not.toContain('https://')
+	})
+
+	it('parses as valid CSS with no empty style rules', () => {
+		const style = stylesheetOf(buildStandaloneHtml('', 'CSS'))
+		const el = document.createElement('style')
+		el.textContent = style
+		document.head.appendChild(el)
+
+		const sheet = el.sheet
+		expect(sheet).not.toBeNull()
+		const rules = Array.from(sheet?.cssRules ?? [])
+		expect(rules.length).toBeGreaterThan(40)
+		const emptyRules = rules.filter(
+			(rule) => 'selectorText' in rule && (rule as CSSStyleRule).style.length === 0,
+		)
+		expect(emptyRules).toHaveLength(0)
+
+		el.remove()
 	})
 
 	it('defines a rule for every block node the editor can export', () => {
@@ -366,6 +385,32 @@ describe('buildStandaloneHtml stylesheet', () => {
 		expect(style).toMatch(
 			/\.callout\[data-callout-collapsed="true"\]\s+\.callout-content\s*\{\s*display:\s*none/,
 		)
+	})
+
+	it('gives an untitled callout a visible type title, even when collapsed', () => {
+		const doc = engine.parse('> [!warning]-\n> hidden body\n')
+		const body = serializeExportBodyHtml(doc)
+		const out = buildStandaloneHtml(body, 'Untitled callout')
+		const style = stylesheetOf(out)
+
+		expect(body).toContain('<div class="callout-title">Warning</div>')
+		expect(body).toContain('data-callout-collapsed="true"')
+		expect(body).not.toContain('callout-title"></div>')
+		// A printed page cannot expand a collapsed callout.
+		expect(style).toContain('.callout[data-callout-collapsed="true"] .callout-content { display: block; }')
+	})
+
+	it('gives an unknown callout type a readable fallback title', () => {
+		const body = serializeExportBodyHtml(engine.parse('> [!custom]\n> body\n'))
+		expect(body).toContain('<div class="callout-title">Custom</div>')
+	})
+
+	it('keeps wide tables in an internal scroll container at narrow widths', () => {
+		const style = stylesheetOf(buildStandaloneHtml('', 'Tables'))
+
+		expect(style).toMatch(/table\s*\{[^}]*display:\s*block/)
+		expect(style).toMatch(/table\s*\{[^}]*overflow-x:\s*auto/)
+		expect(style).toMatch(/table\s*\{[^}]*min-width:\s*0\s*!important/)
 	})
 
 	it('styles a fully serialized page: headings, tasks, code, quote, callout, table and rule', () => {

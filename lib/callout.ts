@@ -4,6 +4,32 @@ export const CALLOUT_TYPES = ['note', 'warning', 'info', 'tip', 'success', 'dang
 
 export type CalloutType = (typeof CALLOUT_TYPES)[number]
 
+const DEFAULT_CALLOUT_TITLES: Record<string, string> = {
+	note: 'Note',
+	warning: 'Warning',
+	info: 'Info',
+	tip: 'Tip',
+	success: 'Success',
+	danger: 'Danger',
+	question: 'Question',
+}
+
+/**
+ * Resolve the title shown for a callout. Untitled callouts need a visible
+ * label (the editor node view shows one too); without it, an untitled
+ * collapsed callout exports as an empty coloured box and its type is
+ * conveyed by colour alone.
+ */
+export function calloutDisplayTitle(type: string, title: string): string {
+	const explicit = title.trim()
+	if (explicit) return explicit
+	const normalized = type.trim().toLowerCase()
+	const known = DEFAULT_CALLOUT_TITLES[normalized]
+	if (known) return known
+	if (!normalized) return 'Callout'
+	return normalized.charAt(0).toUpperCase() + normalized.slice(1)
+}
+
 /** Minimal structural type for the markdown-it instance passed to `parse.setup`. */
 export interface MarkdownItLike {
 	core: {
@@ -203,7 +229,7 @@ export const Callout = Node.create({
 		return [
 			'div',
 			attrs,
-			title ? ['div', { class: 'callout-title' }, title] : ['div', { class: 'callout-title' }],
+			['div', { class: 'callout-title' }, calloutDisplayTitle(type, title)],
 			['div', { class: 'callout-content' }, 0],
 		]
 	},

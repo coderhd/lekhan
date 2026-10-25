@@ -147,7 +147,11 @@ h1, h2, h3, h4, h5, h6 {
 h1 { font-size: 2rem; }
 h2 { font-size: 1.5rem; }
 h3 { font-size: 1.25rem; }
-h4, h5, h6 { font-size: 1rem; }
+h4 { font-size: 1rem; }
+h5 { font-size: 0.9375rem; }
+h6 { font-size: 0.875rem; color: var(--export-muted); }
+
+body > :first-child { margin-top: 0; }
 
 p { margin: 0 0 1em; }
 
@@ -197,7 +201,16 @@ pre code {
   white-space: pre;
 }
 
-table { width: 100%; margin: 0 0 1.2em; border-collapse: collapse; font-size: 0.95em; }
+table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0 !important;
+  margin: 0 0 1.2em;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
 th, td { padding: 0.5rem 0.75rem; border: 1px solid var(--export-border); text-align: left; vertical-align: top; }
 th { background: var(--export-surface); font-weight: 600; }
 th > p, td > p { margin: 0; }
@@ -222,6 +235,9 @@ ul[data-type="taskList"] input[type="checkbox"] {
   height: 1rem;
   margin: 0;
   accent-color: var(--export-link);
+  /* Static export: clicking would toggle the DOM without persisting. */
+  pointer-events: none;
+  cursor: default;
 }
 ul[data-type="taskList"] ul[data-type="taskList"] { margin-top: 0.25rem; padding-left: 1.25rem; }
 
@@ -258,6 +274,7 @@ ul[data-type="taskList"] ul[data-type="taskList"] { margin-top: 0.25rem; padding
 .callout-content p { margin-bottom: 0.5em; }
 
 .callout-note, .callout-info { --callout-accent: #0969da; --callout-surface: #eef6ff; }
+/* Darker amber than the editor accent so the title clears AA contrast on its tint. */
 .callout-warning { --callout-accent: #9a6700; --callout-surface: #fff8e5; }
 .callout-tip, .callout-success { --callout-accent: #1a7f37; --callout-surface: #edf9f0; }
 .callout-danger { --callout-accent: #cf222e; --callout-surface: #fff0ef; }
@@ -272,7 +289,10 @@ ul[data-type="taskList"] ul[data-type="taskList"] { margin-top: 0.25rem; padding
 
 @media print {
   body { max-width: none; padding: 0; }
+  h1, h2, h3 { break-after: avoid; }
   .callout, pre, table, blockquote { break-inside: avoid; }
+  /* Paper cannot expand a collapsed callout — show its body in print. */
+  .callout[data-callout-collapsed="true"] .callout-content { display: block; }
   a { color: inherit; text-decoration: underline; }
 }
 `

@@ -24,7 +24,11 @@ In scope:
   fenced code blocks, blockquotes, horizontal rules, tables, images, links, and marks
   that do not carry inline styles.
 - Callouts: per-type accent + tinted surface, title row, collapsed body hidden from the
-  `data-callout-collapsed` attribute already emitted by the callout node.
+  `data-callout-collapsed` attribute already emitted by the callout node. Untitled
+  callouts get their type as a visible title (matching the editor node view) so a
+  collapsed callout can never export as an empty coloured box.
+- Wide tables scroll inside their own container instead of making the whole page
+  scroll horizontally on narrow screens.
 - Mention chips, because the HTML export schema already serializes mention nodes.
 
 Out of scope:
@@ -36,6 +40,8 @@ Out of scope:
   the code block's colour; the block itself is styled.
 - Automatic dark-mode switching. The export is a portable document and uses one
   predictable light palette.
+- Rewriting user content URLs. Links and images the user put in a page remain external
+  references; the export shell itself adds no external requests.
 
 ## Decisions
 
@@ -63,13 +69,15 @@ The stylesheet uses the platform system-font stacks
 `ui-monospace, SFMono-Regular, Menlo, …`) and contains no `@import`, `@font-face`,
 `url()`, `<link>`, or `<script>`. The exported file is fully offline-capable.
 
-### 3. Callout state comes from existing markup
+### 3. Callout state comes from existing markup, with a real fallback title
 
-`Callout.renderHTML` already emits `class="callout callout-<type>"`,
+`Callout.renderHTML` emits `class="callout callout-<type>"`,
 `data-callout-collapsed`, `.callout-title`, and `.callout-content`. The stylesheet
-reads those attributes; no schema or node change is needed. Titled callouts render a
-title row; an untitled callout's empty title element is hidden so it does not add a
-blank gap.
+reads those attributes. The one node change is a shared `calloutDisplayTitle`
+helper: untitled callouts now render their type as real title text (the same label
+the React node view already shows). This keeps the title accessible (not a CSS
+pseudo-element), avoids an empty box for `> [!note]-`, and matches the live editor.
+The title lives outside `.callout-content`, so markdown/HTML round-trip is unchanged.
 
 ### 4. Test at the export boundary
 
@@ -82,6 +90,21 @@ guard the offline contract and callout state/type coverage.
 
 | Criterion | Evidence |
 | --- | --- |
-| Exported `.html` opens in a browser with styled block nodes (incl. callouts) | Full-page serialization test + stylesheet selector coverage; manual browser check of a generated sample |
-| No external resources; works offline | Test rejects `http(s)://`, `@import`, `url(`, `@font-face`, `<link>`, `<script>` in the output |
+| Exported `.html` opens in a browser with styled block nodes (incl. callouts) | Full-page serialization test + stylesheet selector coverage; Chromium check of a generated sample (below) |
+| No external resources; works offline | Test rejects network URLs, `@import`, `@font-face`, `<link>`, `<script>` in the export shell; browser load made one `file://` request and no console errors |
 | Unit tests + lint + build green | Focused vitest suite, `npm run lint`, `npm run build` |
+
+## Verification
+
+- `npx vitest run tests/unit/markdown-export.test.ts tests/unit/callout.test.ts` —
+  **62 passed / 2 files**.
+- `npx eslint lib/markdown-export.ts lib/callout.ts components/callout-node-view.tsx tests/unit/markdown-export.test.ts`
+  — clean.
+- `npm run typecheck` — clean.
+- `npm run build` — Next.js production build succeeded (23 routes).
+- Chromium (agent-browser, 375px viewport) on a generated sample containing every
+  block: page `scrollWidth` stayed at 375px; the 6-column table stayed inside its
+  343px container; task checkboxes had `pointer-events: none`; titled, untitled,
+  collapsed, and unknown-type callouts all rendered the expected title/accent;
+  collapsed bodies computed `display: none`; one stylesheet, zero `<link>`/`<script>`
+  elements; no console errors.
