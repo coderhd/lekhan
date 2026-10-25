@@ -19,7 +19,7 @@ vi.mock('next/navigation', () => ({
 describe('ProfileMenu Credit Badge', () => {
 	it('displays AI Credits status pill when dropdown is opened', () => {
 		render(<ProfileMenu user={{ email: 'user@example.com', full_name: 'Test User' }} />)
-		const avatarBtn = screen.getByRole('button', { name: /TU/i })
+		const avatarBtn = screen.getByRole('button', { name: /Account menu/ })
 		fireEvent.click(avatarBtn)
 
 		expect(screen.getByText(/AI Credits/i)).toBeInTheDocument()
