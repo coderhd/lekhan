@@ -29,9 +29,9 @@ export function calloutDisplayTitle(
 	type: string | null | undefined,
 	title: string | null | undefined,
 ): string {
-	const explicit = title?.trim() ?? ''
+	const explicit = typeof title === 'string' ? title.trim() : ''
 	if (explicit) return explicit
-	const normalized = type?.trim().toLowerCase() ?? ''
+	const normalized = typeof type === 'string' ? type.trim().toLowerCase() : ''
 	if (Object.prototype.hasOwnProperty.call(DEFAULT_CALLOUT_TITLES, normalized)) {
 		return DEFAULT_CALLOUT_TITLES[normalized]
 	}
@@ -225,6 +225,9 @@ export const Callout = Node.create({
 		const { type, title, collapsed } = node.attrs
 		const attrs = mergeAttributes(HTMLAttributes, {
 			class: `callout callout-${type}`,
+			// Grouping role so assistive tech can announce the aside; the visible
+			// title stays the accessible name's natural reading order.
+			role: 'note',
 			'data-callout': 'true',
 			'data-callout-type': type,
 			'data-callout-title': title,

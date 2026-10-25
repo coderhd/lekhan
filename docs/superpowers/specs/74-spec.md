@@ -96,24 +96,34 @@ An earlier cut made the `<table>` itself the scroller (`display: block;
 overflow-x: auto`) and re-displayed `thead`/`tbody`/`tfoot` as tables. That turns
 each section into an independent table, so a header row can compute different
 column widths from the body it labels. Instead, `serializeExportBodyHtml` wraps
-each top-level table in `<div class="table-scroll">` (depth-aware, so a nested
-table is not split) and the wrapper owns `overflow-x: auto`. The table keeps the
-CSS table model and one shared column grid. The wrapper lives in the serialized
-body, so `buildStandaloneHtml`'s signature and call site are still unchanged.
+each top-level table in `<div class="table-scroll" tabindex="0" role="region"
+aria-label="Table">` and the wrapper owns `overflow-x: auto`. The table keeps the
+CSS table model and one shared column grid, and keyboard users can pan it.
+
+The wrap is done by parsing the serialized body once (a `<template>` element),
+not by scanning the string. Attribute values are serialized by ProseMirror with
+`<`/`>` left unescaped — only `&` and `"` are escaped — so a string scanner will
+match `<table></table>` inside an image `alt` or a callout title and inject a
+wrapper whose quotes close the user's attribute. That turns inert text into live
+markup in a file built for publishing (stored XSS), and an unbalanced token in an
+attribute also disabled wrapping for the whole document. The same pass marks
+task lists `role="list"` (WebKit drops the implicit role when
+`list-style: none`). Both run only in the client export path and in jsdom tests;
+on a server (no `document`) the pass returns the HTML untouched.
 
 ## Acceptance mapping
 
 | Criterion | Evidence |
 | --- | --- |
 | Exported `.html` opens in a browser with styled block nodes (incl. callouts) | Full-page serialization test + stylesheet selector coverage; Chromium check of a generated sample (below) |
-| No external resources; works offline | Test rejects network URLs, `@import`, `@font-face`, `<link>`, `<script>` in the export shell; browser load made one `file://` request and no console errors |
+| Export shell has no external resources; works offline | Test rejects network URLs, `@import`, `@font-face`, `<link>`, `<script>` in the export shell; browser load made one `file://` request and no console errors. Body links/images the user authored stay external by design (out of scope above) |
 | Unit tests + lint + build green | Focused vitest suite, `npm run lint`, `npm run build` |
 
 ## Verification
 
 - `npx vitest run tests/unit/markdown-export.test.ts tests/unit/callout.test.ts` —
-  **73 passed / 2 files** (cycle 4).
-- `npx vitest run tests/unit` — **81 files, 653 tests passed** (cycle 4).
+  **80 passed / 2 files** (cycle 5).
+- `npx vitest run tests/unit` — **81 files, 665 tests passed** (cycle 5).
 - `npx eslint lib/markdown-export.ts lib/callout.ts components/callout-node-view.tsx tests/unit/markdown-export.test.ts tests/unit/callout.test.ts`
   — clean.
 - `npm run typecheck` — clean.
@@ -133,3 +143,12 @@ body, so `buildStandaloneHtml`'s signature and call site are still unchanged.
     collapsed bodies as `display: block`. A callout typed `constructor` exports the
     title "Constructor" instead of failing on an inherited object key.
   - One stylesheet, zero `<link>`/`<script>` elements, no console errors.
+- Injection probe (cycle 5): image `alt` and `data-callout-title` values containing
+  `<table></table><img src=x onerror=…>` / `<script>…</script>` stay inside their
+  attributes — the parsed body has no injected `script`, no second `img`, and the
+  attribute text is preserved. An unbalanced `<table` in another attribute no longer
+  suppresses the wrapper for the real table.
+- Stylesheet contracts are asserted through the CSSOM: print-only overrides
+  (collapsed reveal, `overflow: visible`, wrapping code) live inside the `@media print`
+  rule and not in top-level rules; the `.mention` colour resolves to `#92400e`
+  (≥ 5.8:1 on every surface it sits on).
