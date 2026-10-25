@@ -7,6 +7,7 @@ import { fetchPageDetails } from '@/services/graph'
 import { consumePendingImport } from '@/services/import'
 import GlobalLoader from '@/components/global-loader'
 import EditorWorkspace from '@/components/editor-workspace'
+import PublicAccessDenied from '@/components/public-access-denied'
 import { toast } from 'sonner'
 
 export default function PageRoute({
@@ -21,6 +22,14 @@ export default function PageRoute({
 	const [pageTitle, setPageTitle] = useState<string | null>(null)
 	const [initialContent, setInitialContent] = useState<string | null>(null)
 	const [loading, setLoading] = useState(true)
+	// True once the signed-out public path granted a synthetic anonymous
+	// session; drives the public reading chrome (badge, footer CTA, reduced
+	// header) inside the workspace. `isViewer` alone cannot express this — a
+	// member with viewer role is a different experience.
+	const [isAnon, setIsAnon] = useState(false)
+	// Inline access-denied screen state; the old behaviour silently bounced to
+	// /login with no explanation for unshared or missing pages.
+	const [denied, setDenied] = useState<'public' | 'internal' | null>(null)
 
 	useEffect(() => {
 		let cancelled = false
@@ -58,12 +67,13 @@ export default function PageRoute({
 								full_name: 'Anonymous Viewer'
 							})
 							setToken('anonymous')
+							setIsAnon(true)
 						} else {
-							router.push('/login')
+							if (!cancelled) setDenied('public')
 							return
 						}
 					} catch {
-						router.push('/login')
+						if (!cancelled) setDenied('public')
 						return
 					}
 				}
@@ -77,8 +87,7 @@ export default function PageRoute({
 				setInitialContent(consumePendingImport(params.id))
 			} catch (err: unknown) {
 				console.error('Error loading page:', err)
-				toast.error('Page not found or access denied')
-				router.push('/')
+				if (!cancelled) setDenied('internal')
 			} finally {
 				if (!cancelled) {
 					setLoading(false)
@@ -96,6 +105,10 @@ export default function PageRoute({
 		return <GlobalLoader text="Loading page..." />
 	}
 
+	if (denied) {
+		return <PublicAccessDenied variant={denied} />
+	}
+
 	if (!user || !token || pageTitle === null) {
 		return null
 	}
@@ -111,6 +124,7 @@ export default function PageRoute({
 				email: user.email,
 				full_name: user.user_metadata?.full_name || user.full_name
 			}}
+			anonVisitor={isAnon}
 		/>
 	)
 }

@@ -26,6 +26,7 @@ import { SlashMenuExtension, buildSlashMenuItems } from '@/lib/slash-menu-extens
 import { SlashMenuComponent } from './slash-menu'
 import ProfileMenu from './profile-menu'
 import ThemeToggle from './theme-toggle'
+import PublicPageFooter from './public-page-footer'
 import { useGlobalSearch } from '@/components/global-search-palette'
 import { ColorHighlightPopover } from './color-highlight-popover'
 import { ImageUploadButton } from './image-upload-button'
@@ -65,6 +66,13 @@ interface EditorWorkspaceProps {
 		email: string
 		full_name?: string
 	}
+	/**
+	 * True when the route granted a synthetic anonymous session (signed-out
+	 * visitor on a public page). Drives the public reading chrome: reduced
+	 * header, Public badge, footer signup CTA. Never inferred from `isViewer`
+	 * — a member viewer is a different experience.
+	 */
+	anonVisitor?: boolean
 }
 
 const CURSOR_COLORS = [
@@ -112,6 +120,7 @@ export default function EditorWorkspace({	pageId,
 	token,
 	initialContent,
 	currentUser,
+	anonVisitor = false,
 }: EditorWorkspaceProps) {
 	const router = useRouter()
 	const [title, setTitle] = useState(initialTitle)
@@ -171,14 +180,14 @@ export default function EditorWorkspace({	pageId,
 				console.error('Error fetching workspace pages for wikilinks:', err)
 			}
 		}
-		if (pageId) {
+		if (pageId && !anonVisitor) {
 			loadMentionables()
 			loadWorkspacePages()
 		}
 		return () => {
 			isMounted = false
 		}
-	}, [pageId])
+	}, [pageId, anonVisitor])
 
 	const inFlightPageCreationsRef = useRef<Set<string>>(new Set())
 
@@ -798,8 +807,11 @@ export default function EditorWorkspace({	pageId,
 		return () => clearTimeout(timer)
 	}, [editor, token, isViewer])
 
-	// Cmd/Ctrl+L opens the Lekhan Bot bar
+	// Cmd/Ctrl+L opens the Lekhan Bot bar; Cmd/Ctrl+Shift+S opens version
+	// history. Anonymous readers get neither — both features are hidden from
+	// the reading surface and history would read from an empty local store.
 	useEffect(() => {
+		if (anonVisitor) return
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
 				e.preventDefault()
@@ -812,7 +824,7 @@ export default function EditorWorkspace({	pageId,
 		}
 		document.addEventListener('keydown', handleKeyDown)
 		return () => document.removeEventListener('keydown', handleKeyDown)
-	}, [handleOpenLekhanBot])
+	}, [handleOpenLekhanBot, anonVisitor])
 
 	useEffect(() => {
 		if (editor && isViewer !== null) {
@@ -856,13 +868,25 @@ export default function EditorWorkspace({	pageId,
 								</div>
 							)}
 						</div>
-						<div className="hidden md:flex items-center gap-xs ml-2 text-on-surface-variant/60 font-label-sm text-label-sm">
-							<SyncIndicator connectionState={connectionState} isSynced={isSynced} />
-						</div>
+						{anonVisitor && (
+							<span
+								className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold whitespace-nowrap"
+								title="This page is shared publicly — anyone with the link can view it"
+							>
+								<Globe className="w-3.5 h-3.5" />
+								<span>Public</span>
+								<span className="text-on-surface-variant/80 font-semibold">· view-only</span>
+							</span>
+						)}
+						{!anonVisitor && (
+							<div className="hidden md:flex items-center gap-xs ml-2 text-on-surface-variant/60 font-label-sm text-label-sm">
+								<SyncIndicator connectionState={connectionState} isSynced={isSynced} />
+							</div>
+						)}
 					</div>
 
 					<div className="flex items-center gap-sm md:gap-md">
-						<div className="hidden sm:flex -space-x-2 items-center mr-2 md:mr-4">
+						<div className={anonVisitor ? 'hidden' : 'hidden sm:flex -space-x-2 items-center mr-2 md:mr-4'}>
 							{activeUsers.slice(0, 3).map((activeUser, idx) => (
 								<div
 									key={idx}
@@ -898,43 +922,51 @@ export default function EditorWorkspace({	pageId,
 							)}
 						</div>
 
-						<button
-							onClick={openGlobalSearch}
-							className="hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium bg-surface-container-low"
-							title="Search (Cmd+K)"
-						>
-							<span className="material-symbols-outlined text-primary-container text-lg">search</span>
-						</button>
+						{!anonVisitor && (
+							<button
+								onClick={openGlobalSearch}
+								className="hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium bg-surface-container-low"
+								title="Search (Cmd+K)"
+							>
+								<span className="material-symbols-outlined text-primary-container text-lg">search</span>
+							</button>
+						)}
 
-						<button
-							onClick={() => { setIsHistoryOpen(!isHistoryOpen); setIsAIPanelOpen(false); }}
-							className={`hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium ${isHistoryOpen ? 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/30' : 'bg-surface-container-low'}`}
-							title="Version History"
-						>
-							<span className="material-symbols-outlined text-primary-container text-lg">history</span>
-							<span className="hidden lg:inline">History</span>
-						</button>
+						{!anonVisitor && (
+							<button
+								onClick={() => { setIsHistoryOpen(!isHistoryOpen); setIsAIPanelOpen(false); }}
+								className={`hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium ${isHistoryOpen ? 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/30' : 'bg-surface-container-low'}`}
+								title="Version History"
+							>
+								<span className="material-symbols-outlined text-primary-container text-lg">history</span>
+								<span className="hidden lg:inline">History</span>
+							</button>
+						)}
 
-						<button
-							onClick={() => { setIsAIPanelOpen(!isAIPanelOpen); setIsHistoryOpen(false); }}
-							className={`hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium ${isAIPanelOpen ? 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/30' : 'bg-surface-container-low'}`}
-							title="Settings"
-						>
-							<span className="material-symbols-outlined text-primary-container text-lg">settings</span>
-							<span className="hidden lg:inline">Settings</span>
-						</button>
+						{!anonVisitor && (
+							<button
+								onClick={() => { setIsAIPanelOpen(!isAIPanelOpen); setIsHistoryOpen(false); }}
+								className={`hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium ${isAIPanelOpen ? 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/30' : 'bg-surface-container-low'}`}
+								title="Settings"
+							>
+								<span className="material-symbols-outlined text-primary-container text-lg">settings</span>
+								<span className="hidden lg:inline">Settings</span>
+							</button>
+						)}
 
-						<MobileHeaderMenu
-							isHistoryOpen={isHistoryOpen}
-							setIsHistoryOpen={setIsHistoryOpen}
-							isAIPanelOpen={isAIPanelOpen}
-							setIsAIPanelOpen={setIsAIPanelOpen}
-							theme={theme}
-							toggleTheme={toggleTheme}
-							activeUsers={activeUsers}
-							connectionState={connectionState}
-							isSynced={isSynced}
-						/>
+						{!anonVisitor && (
+							<MobileHeaderMenu
+								isHistoryOpen={isHistoryOpen}
+								setIsHistoryOpen={setIsHistoryOpen}
+								isAIPanelOpen={isAIPanelOpen}
+								setIsAIPanelOpen={setIsAIPanelOpen}
+								theme={theme}
+								toggleTheme={toggleTheme}
+								activeUsers={activeUsers}
+								connectionState={connectionState}
+								isSynced={isSynced}
+							/>
+						)}
 
 						{!isViewer && (
 							<div className="flex items-center gap-sm">
@@ -949,7 +981,7 @@ export default function EditorWorkspace({	pageId,
 										aria-haspopup="menu"
 										aria-expanded={isExportOpen}
 										className="bg-surface-container-low border border-black/10 dark:border-white/10 text-on-surface px-2.5 h-8 rounded-lg font-medium text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50 disabled:pointer-events-none"
-										title="Export Document"
+										title="Export page"
 									>
 										<Download className="w-3.5 h-3.5 text-primary" />
 										<span className="hidden lg:inline font-bold">Export</span>
@@ -989,13 +1021,15 @@ export default function EditorWorkspace({	pageId,
 							</div>
 						)}
 
-						<div className="hidden md:block">
+						<div className={anonVisitor ? 'block' : 'hidden md:block'}>
 							<ThemeToggle />
 						</div>
 
-						<div>
-							<ProfileMenu user={currentUser} size="sm" />
-						</div>
+						{!anonVisitor && (
+							<div>
+								<ProfileMenu user={currentUser} size="sm" />
+							</div>
+						)}
 					</div>
 				</div>
 
@@ -1099,10 +1133,15 @@ export default function EditorWorkspace({	pageId,
 						<ColorHighlightPopover editor={editor} />
 					</div>
 					</div>
+				) : anonVisitor ? (
+					<div className="min-h-[40px] py-2 px-6 md:px-10 flex justify-center items-center bg-primary/10 border-y border-primary/20 text-on-surface-variant text-sm font-medium">
+						<span className="material-symbols-outlined mr-2 text-base">link</span>
+						Anyone with the link can view this page.
+					</div>
 				) : (
 					<div className="min-h-[40px] py-2 px-6 md:px-10 flex justify-center items-center bg-blue-500/10 border-y border-blue-500/20 text-blue-600 dark:text-blue-400 text-sm font-semibold">
 						<span className="material-symbols-outlined mr-2 text-base">visibility</span>
-						You only have viewing access to this document.
+						You have viewing access to this page.
 					</div>
 				)}
 
@@ -1143,6 +1182,8 @@ export default function EditorWorkspace({	pageId,
 								<EditorContent key={previewVersionName || 'preview'} editor={previewEditor} />
 							</div>
 						)}
+
+						{anonVisitor && <PublicPageFooter />}
 					</div>
 				</main>
 

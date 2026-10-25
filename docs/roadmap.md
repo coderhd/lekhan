@@ -99,7 +99,7 @@ provider registry).
 | #87 | Idempotent imports | P1 | 12h | Sep 23 → Sep 24 | **In review** (PR #130) |
 | #31 | i18n framework | P0 | 24h | Sep 25 → Sep 29 | Backlog |
 | #32 | Docs site (agent 32h; prose content owner-driven in parallel) | P0 | 32h | Sep 30 → Oct 7 | Backlog |
-| #30 | Publish polish | P0 | 12h | Oct 8 → Oct 9 | Backlog |
+| #30 | Publish polish | P0 | 12h | Oct 8 → Oct 9 | **In review** (PR #147) |
 | — | 🚀 **Public launch** | — | — | **Oct 12** (aggressive Oct 8) | — |
 
 *#85 inserted ahead of beta: content funnel has no conversion target without it. Shipped Aug 24 (#91): /early live, self-hosted double opt-in over Brevo transactional, race-safe spot numbering, outbox retry drain.*

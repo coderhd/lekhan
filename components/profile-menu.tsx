@@ -77,6 +77,9 @@ export default function ProfileMenu({ user, size = 'md', creditsRemaining }: Pro
 			<button
 				onClick={() => setIsOpen(!isOpen)}
 				className={triggerClasses}
+				aria-label={`Account menu (${displayName})`}
+				aria-haspopup="menu"
+				aria-expanded={isOpen}
 			>
 				{initials}
 			</button>
