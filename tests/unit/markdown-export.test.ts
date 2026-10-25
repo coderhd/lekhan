@@ -9,8 +9,17 @@ import {
 	buildStandaloneHtml,
 } from '@/lib/markdown-export'
 import { MarkdownEngine } from '@/lib/markdown/engine'
+import { CALLOUT_TYPES } from '@/lib/callout'
 
 let engine: MarkdownEngine
+
+function stylesheetOf(html: string): string {
+	return html.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? ''
+}
+
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
 
 beforeEach(() => {
 	engine = new MarkdownEngine()
@@ -296,6 +305,117 @@ describe('serializeExportBodyHtml', () => {
 			],
 		})
 		expect(html).toContain('<strong>Some </strong>bold<strong> text.</strong>')
+	})
+})
+
+describe('buildStandaloneHtml stylesheet', () => {
+	it('ships a self-contained stylesheet with no external resources', () => {
+		const out = buildStandaloneHtml('<p>Hello</p>', 'Offline Page')
+		const style = stylesheetOf(out)
+
+		expect(style).not.toBe('')
+		expect(out).not.toMatch(/<link\b/i)
+		expect(out).not.toMatch(/<script\b/i)
+		expect(style).not.toMatch(/@import|@font-face|url\(/i)
+		expect(style).not.toContain('http://')
+		expect(style).not.toContain('https://')
+	})
+
+	it('defines a rule for every block node the editor can export', () => {
+		const style = stylesheetOf(buildStandaloneHtml('', 'Blocks'))
+		const selectors = [
+			'h1',
+			'h2',
+			'h3',
+			'h4',
+			'h5',
+			'h6',
+			'p',
+			'ul',
+			'ol',
+			'blockquote',
+			'ul[data-type="taskList"]',
+			'input[type="checkbox"]',
+			'pre',
+			'code',
+			'table',
+			'th',
+			'td',
+			'hr',
+			'img',
+			'a',
+		]
+
+		for (const selector of selectors) {
+			expect(style, `missing CSS rule for ${selector}`).toMatch(
+				new RegExp(`${escapeRegExp(selector)}\\s*(?:,|\\{)`),
+			)
+		}
+	})
+
+	it('styles every callout type and the collapsed state', () => {
+		const style = stylesheetOf(buildStandaloneHtml('', 'Callouts'))
+
+		expect(style).toMatch(/\.callout\s*\{[^}]*--callout-accent/)
+		expect(style).toMatch(/\.callout-title\s*\{/)
+		for (const type of CALLOUT_TYPES) {
+			expect(style, `missing accent for ${type}`).toMatch(
+				new RegExp(`\\.callout-${escapeRegExp(type)}\\s*(?:,|\\{)`),
+			)
+		}
+		expect(style).toMatch(
+			/\.callout\[data-callout-collapsed="true"\]\s+\.callout-content\s*\{\s*display:\s*none/,
+		)
+	})
+
+	it('styles a fully serialized page: headings, tasks, code, quote, callout, table and rule', () => {
+		const markdown = [
+			'# Export title',
+			'',
+			'A paragraph with **bold** text and `inline code`.',
+			'',
+			'- bullet one',
+			'- bullet two',
+			'',
+			'1. first step',
+			'2. second step',
+			'',
+			'- [ ] open task',
+			'- [x] done task',
+			'',
+			'```ts',
+			'const answer = 42',
+			'```',
+			'',
+			'> A quoted line',
+			'',
+			'> [!tip] Helpful title',
+			'> Callout body',
+			'',
+			'| Column | Value |',
+			'| --- | --- |',
+			'| A | 1 |',
+			'',
+			'---',
+		].join('\n')
+
+		const body = serializeExportBodyHtml(engine.parse(markdown))
+		const out = buildStandaloneHtml(body, 'Export title')
+
+		expect(body).toContain('<h1>Export title</h1>')
+		expect(body).toContain('<p>A paragraph with <strong>bold</strong> text and <code>inline code</code>.</p>')
+		expect(body).toMatch(/<ul[ >]/)
+		expect(body).toMatch(/<ol[ >]/)
+		expect(body).toContain('data-type="taskList"')
+		expect(body).toContain('data-checked="true"')
+		expect(body).toContain('<input type="checkbox"')
+		expect(body).toContain('<pre>')
+		expect(body).toContain('<blockquote>')
+		expect(body).toContain('callout callout-tip')
+		expect(body).toContain('callout-title')
+		expect(body).toMatch(/<table[ >]/)
+		expect(body).toContain('<hr>')
+		expect(out).toContain('<style>')
 	})
 })
 
