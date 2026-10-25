@@ -93,43 +93,52 @@ export function serializeExportBodyMarkdown(doc: JSONContent): string {
  * "Unknown node type" and no file downloads.
  */
 export function serializeExportBodyHtml(doc: JSONContent): string {
-	return wrapTablesForScroll(staticizeTaskCheckboxes(generateHTML(stripAutoHeading(doc), exportExtensions())))
+	return prepareExportMarkup(staticizeTaskCheckboxes(generateHTML(stripAutoHeading(doc), exportExtensions())))
 }
 
 /**
- * Wide tables must scroll sideways without breaking their column grid.
- * `display: block` on the `<table>` itself turns each of its `thead`/`tbody`/
- * `tfoot` sections into an independent table, so headers and body rows can
- * compute different column widths. Wrapping the whole table in a scroll
- * container keeps one table model; only the wrapper scrolls.
+ * Post-process the serialized body for presentation:
  *
- * Depth-aware so a table nested inside a cell is not split mid-element.
+ * - Wide tables must scroll sideways without breaking their column grid.
+ *   `display: block` on the `<table>` itself turns each of its `thead`/`tbody`/
+ *   `tfoot` sections into an independent table, so headers and body rows can
+ *   compute different column widths. Wrapping the whole table in a scroll
+ *   container keeps one table model; only the wrapper scrolls.
+ * - Task lists hide their markers (`list-style: none`), which makes WebKit drop
+ *   the implicit list role; an explicit `role="list"` keeps it announced.
+ *
+ * Parse before mutating: attribute values serialized by ProseMirror may contain
+ * literal `<table>` text (an image `alt`, a callout title). A string scan would
+ * treat that text as an element and inject a wrapper — whose quotes close the
+ * user's attribute — turning inert text into live markup (stored XSS in a file
+ * meant for publishing). Building the wrapper through the DOM keeps the token
+ * inside the attribute. Nested tables stay inside their outer wrapper, and an
+ * unbalanced token cannot disable wrapping for the rest of the document.
  */
-function wrapTablesForScroll(html: string): string {
-	const out: string[] = []
-	const token = /<table\b[^>]*>|<\/table>/g
-	let depth = 0
-	let last = 0
-	let match: RegExpExecArray | null
-	while ((match = token.exec(html)) !== null) {
-		if (match[0].startsWith('</')) {
-			depth--
-			if (depth === 0) {
-				out.push(html.slice(last, match.index + match[0].length), '</div>')
-				last = match.index + match[0].length
-			}
-		} else {
-			if (depth === 0) {
-				out.push(html.slice(last, match.index), '<div class="table-scroll">')
-				last = match.index
-			}
-			depth++
-		}
+function prepareExportMarkup(html: string): string {
+	const hasTable = html.includes('<table')
+	const hasTaskList = html.includes('data-type="taskList"')
+	if (!hasTable && !hasTaskList) return html
+	// Called from the client export path (and jsdom in tests); server rendering
+	// must not crash, it just skips the presentation pass.
+	if (typeof document === 'undefined') return html
+	const template = document.createElement('template')
+	template.innerHTML = html
+	for (const list of Array.from(template.content.querySelectorAll('ul[data-type="taskList"]'))) {
+		list.setAttribute('role', 'list')
 	}
-	// Unbalanced markup: leave it untouched rather than emit a broken wrapper.
-	if (depth !== 0) return html
-	out.push(html.slice(last))
-	return out.join('')
+	for (const table of Array.from(template.content.querySelectorAll('table'))) {
+		if (table.parentElement?.closest('table')) continue
+		const wrapper = document.createElement('div')
+		wrapper.className = 'table-scroll'
+		// Keyboard users must be able to pan a clipped table (WCAG 2.1.1).
+		wrapper.setAttribute('tabindex', '0')
+		wrapper.setAttribute('role', 'region')
+		wrapper.setAttribute('aria-label', 'Table')
+		table.replaceWith(wrapper)
+		wrapper.appendChild(table)
+	}
+	return template.innerHTML
 }
 
 /**
@@ -299,7 +308,7 @@ ul[data-type="taskList"] ul[data-type="taskList"] { margin-top: 0.25rem; padding
   border: 1px solid rgba(255, 154, 0, 0.3);
   border-radius: 0.375rem;
   background: rgba(255, 154, 0, 0.15);
-  color: #b45309;
+  color: #92400e;
   font-size: 0.875em;
   font-weight: 500;
   box-decoration-break: clone;
@@ -344,6 +353,11 @@ ul[data-type="taskList"] ul[data-type="taskList"] { margin-top: 0.25rem; padding
   body { max-width: none; padding: 0; }
   h1, h2, h3 { break-after: avoid; }
   .callout, pre, table, blockquote { break-inside: avoid; }
+  /* Paper cannot scroll: let wide tables and long code lines reflow instead of
+     clipping at the page edge, and allow long tables to paginate. */
+  .table-scroll, pre { overflow: visible; }
+  table { width: auto; max-width: 100%; break-inside: auto; }
+  pre code { white-space: pre-wrap; }
   /* Paper cannot expand a collapsed callout — show its body in print. */
   .callout[data-callout-collapsed="true"] .callout-content { display: block; }
   a { color: inherit; text-decoration: underline; }

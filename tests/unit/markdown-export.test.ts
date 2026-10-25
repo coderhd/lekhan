@@ -306,6 +306,65 @@ describe('serializeExportBodyHtml', () => {
 		})
 		expect(html).toContain('<strong>Some </strong>bold<strong> text.</strong>')
 	})
+
+	it('keeps table-like text in attribute values inert', () => {
+		// ProseMirror does not escape `<`/`>` inside attribute values, so a
+		// string-scanning wrapper would inject markup into the user's alt text
+		// and break out of the quoted attribute.
+		const payload = 'a <table></table><img src=x onerror=alert(1)>'
+		const html = serializeExportBodyHtml({
+			type: 'doc',
+			content: [
+				{
+					type: 'paragraph',
+					content: [{ type: 'image', attrs: { src: 'x.png', alt: payload } }],
+				},
+			],
+		})
+		const doc = new DOMParser().parseFromString(html, 'text/html')
+
+		expect(doc.querySelector('script')).toBeNull()
+		expect(doc.querySelector('img[onerror]')).toBeNull()
+		expect(doc.querySelectorAll('img')).toHaveLength(1)
+		expect(doc.querySelector('img')?.getAttribute('alt')).toBe(payload)
+	})
+
+	it('keeps a table-like callout title inert', () => {
+		const payload = 't <table></table><script>alert(2)</script>'
+		const html = serializeExportBodyHtml({
+			type: 'doc',
+			content: [
+				{
+					type: 'callout',
+					attrs: { type: 'note', title: payload, collapsed: false },
+					content: [{ type: 'paragraph', content: [{ type: 'text', text: 'body' }] }],
+				},
+			],
+		})
+		const doc = new DOMParser().parseFromString(html, 'text/html')
+
+		expect(doc.querySelector('script')).toBeNull()
+		expect(doc.querySelector('[data-callout-title]')?.getAttribute('data-callout-title')).toBe(payload)
+		expect(doc.querySelector('.callout-title')?.textContent).toBe(payload)
+	})
+
+	it('wraps real tables even when an attribute holds an unbalanced table token', () => {
+		const parsed = engine.parse('| Column | Value |\n| --- | --- |\n| A | 1 |\n')
+		const html = serializeExportBodyHtml({
+			type: 'doc',
+			content: [
+				{
+					type: 'paragraph',
+					content: [{ type: 'image', attrs: { src: 'x.png', alt: 'literal <table text' } }],
+				},
+				...(parsed.content ?? []),
+			],
+		})
+
+		expect(html.match(/class="table-scroll"/g)).toHaveLength(1)
+		expect(html).toMatch(/<div class="table-scroll"[^>]*><table/)
+		expect(html).toContain('literal <table text')
+	})
 })
 
 describe('buildStandaloneHtml stylesheet', () => {
@@ -392,14 +451,43 @@ describe('buildStandaloneHtml stylesheet', () => {
 	it('gives an untitled callout a visible type title, even when collapsed', () => {
 		const doc = engine.parse('> [!warning]-\n> hidden body\n')
 		const body = serializeExportBodyHtml(doc)
-		const out = buildStandaloneHtml(body, 'Untitled callout')
-		const style = stylesheetOf(out)
 
 		expect(body).toContain('<div class="callout-title">Warning</div>')
 		expect(body).toContain('data-callout-collapsed="true"')
 		expect(body).not.toContain('callout-title"></div>')
-		// A printed page cannot expand a collapsed callout.
-		expect(style).toContain('.callout[data-callout-collapsed="true"] .callout-content { display: block; }')
+	})
+
+	it('scopes print-only overrides to print media', () => {
+		const style = stylesheetOf(buildStandaloneHtml('', 'Print'))
+		const el = document.createElement('style')
+		el.textContent = style
+		document.head.appendChild(el)
+
+		try {
+			const sheet = el.sheet
+			expect(sheet).not.toBeNull()
+			const rules = Array.from(sheet?.cssRules ?? [])
+			const screenRules = rules
+				.filter((rule) => rule.type === CSSRule.STYLE_RULE)
+				.map((rule) => rule.cssText)
+				.join('\n')
+			const printRule = rules.find(
+				(rule): rule is CSSMediaRule =>
+					rule.type === CSSRule.MEDIA_RULE && (rule as CSSMediaRule).media.mediaText === 'print',
+			)
+
+			expect(printRule).toBeTruthy()
+			const printRules = printRule?.cssText ?? ''
+			// A page cannot expand a collapse or scroll an overflow box.
+			expect(printRules).toMatch(/collapsed[^{]*\{[^}]*display:\s*block/)
+			expect(printRules).toMatch(/\.table-scroll,\s*pre\s*\{[^}]*overflow:\s*visible/)
+			expect(printRules).toMatch(/white-space:\s*pre-wrap/)
+			// …and neither must leak into screen rendering.
+			expect(screenRules).not.toMatch(/collapsed[^{]*\{[^}]*display:\s*block/)
+			expect(screenRules).not.toMatch(/overflow:\s*visible/)
+		} finally {
+			el.remove()
+		}
 	})
 
 	it('gives an unknown callout type a readable fallback title', () => {
@@ -450,12 +538,14 @@ describe('buildStandaloneHtml stylesheet', () => {
 		expect(style).not.toMatch(/table\s+>\s*thead[^{]*\{[^}]*display:\s*table/)
 	})
 
-	it('wraps serialized tables in the scroll container', () => {
+	it('wraps serialized tables in a keyboard-scrollable container', () => {
 		const body = serializeExportBodyHtml(
 			engine.parse('| Column | Value |\n| --- | --- |\n| A | 1 |\n'),
 		)
 
-		expect(body).toMatch(/<div class="table-scroll"><table[\s\S]*<\/table><\/div>/)
+		expect(body).toMatch(
+			/<div class="table-scroll" tabindex="0" role="region" aria-label="Table"><table[\s\S]*<\/table><\/div>/,
+		)
 		expect(body.match(/<table\b/g)).toHaveLength(1)
 	})
 
@@ -475,6 +565,15 @@ describe('buildStandaloneHtml stylesheet', () => {
 		expect(inputs[0]).toContain('aria-label="Not completed"')
 		expect(inputs[1]).toContain('disabled')
 		expect(inputs[1]).toContain('aria-label="Completed"')
+		// `list-style: none` makes WebKit drop the implicit list role.
+		expect(body).toContain('<ul data-type="taskList" role="list">')
+	})
+
+	it('uses an AA-contrast mention chip colour', () => {
+		const style = stylesheetOf(buildStandaloneHtml('', 'Mentions'))
+		// #92400e on white = 6.3:1, and >= 5.8:1 on every callout tint and on
+		// the th surface — the chip is 14px/500 text, so 4.5:1 is required.
+		expect(style).toMatch(/\.mention\s*\{[^}]*color:\s*#92400e/)
 	})
 
 	it('styles a fully serialized page: headings, tasks, code, quote, callout, table and rule', () => {

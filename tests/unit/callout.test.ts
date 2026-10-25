@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { MarkdownEngine } from '@/lib/markdown/engine'
-import { buildStandaloneHtml } from '@/lib/markdown-export'
+import { buildStandaloneHtml, serializeExportBodyHtml } from '@/lib/markdown-export'
 import { CALLOUT_TYPES, Callout, BLOCKQUOTE_MARKER_RE, calloutDisplayTitle, handleCalloutInputRule } from '@/lib/callout'
 import { InputRule, Editor } from '@tiptap/core'
 import { Document } from '@tiptap/extension-document'
@@ -139,6 +139,13 @@ describe('calloutDisplayTitle', () => {
 		expect(calloutDisplayTitle(null, '  ')).toBe('Callout')
 	})
 
+	it('ignores non-string attrs instead of throwing', () => {
+		// Attrs are typed `any` on the node; a hand-edited or imported doc can
+		// carry a number here and must not abort the whole export.
+		expect(calloutDisplayTitle('note', 123 as unknown as string)).toBe('Note')
+		expect(calloutDisplayTitle(42 as unknown as string, '')).toBe('Callout')
+	})
+
 	it('falls back to Callout when the type is empty', () => {
 		expect(calloutDisplayTitle('', '')).toBe('Callout')
 	})
@@ -149,6 +156,15 @@ describe('callout export HTML', () => {
 		const html = buildStandaloneHtml('<div class="callout callout-note">…</div>', 'Page')
 		expect(html).toContain('<style>')
 		expect(html).toContain('.callout')
+	})
+
+	it('marks the callout as a note for assistive tech', () => {
+		const doc = engine.parse('> [!tip] Title\n> body\n')
+		const html = buildStandaloneHtml(serializeExportBodyHtml(doc), 'Note role')
+		const parsed = new DOMParser().parseFromString(html, 'text/html')
+		const callout = parsed.querySelector('[data-callout]')
+		expect(callout?.getAttribute('role')).toBe('note')
+		expect(callout?.querySelector('.callout-title')?.textContent).toBe('Title')
 	})
 
 	it('restores a titled callout without duplicating the title in the body', () => {
