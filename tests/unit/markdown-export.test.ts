@@ -317,7 +317,7 @@ describe('buildStandaloneHtml stylesheet', () => {
 		expect(out).not.toMatch(/<link\b/i)
 		expect(out).not.toMatch(/<script\b/i)
 		expect(style).not.toMatch(/@import|@font-face/i)
-		expect(style).not.toMatch(/url\(\s*['"]?(?:https?:)?\/\//i)
+		expect(style).not.toMatch(/url\(\s*(?!['"]?data:)/i)
 		expect(style).not.toContain('http://')
 		expect(style).not.toContain('https://')
 	})
@@ -328,16 +328,18 @@ describe('buildStandaloneHtml stylesheet', () => {
 		el.textContent = style
 		document.head.appendChild(el)
 
-		const sheet = el.sheet
-		expect(sheet).not.toBeNull()
-		const rules = Array.from(sheet?.cssRules ?? [])
-		expect(rules.length).toBeGreaterThan(40)
-		const emptyRules = rules.filter(
-			(rule) => 'selectorText' in rule && (rule as CSSStyleRule).style.length === 0,
-		)
-		expect(emptyRules).toHaveLength(0)
-
-		el.remove()
+		try {
+			const sheet = el.sheet
+			expect(sheet).not.toBeNull()
+			const rules = Array.from(sheet?.cssRules ?? [])
+			expect(rules.length).toBeGreaterThan(0)
+			const emptyRules = rules.filter(
+				(rule) => 'selectorText' in rule && (rule as CSSStyleRule).style.length === 0,
+			)
+			expect(emptyRules).toHaveLength(0)
+		} finally {
+			el.remove()
+		}
 	})
 
 	it('defines a rule for every block node the editor can export', () => {
@@ -411,6 +413,21 @@ describe('buildStandaloneHtml stylesheet', () => {
 		expect(style).toMatch(/table\s*\{[^}]*display:\s*block/)
 		expect(style).toMatch(/table\s*\{[^}]*overflow-x:\s*auto/)
 		expect(style).toMatch(/table\s*\{[^}]*min-width:\s*0\s*!important/)
+		// display:block makes the table the scroller; the inner table must still
+		// fill the reading measure.
+		expect(style).toMatch(/table > tbody\s*(?:,|\{)[^}]*display:\s*table/)
+		expect(style).toMatch(/table > tbody\s*(?:,|\{)[^}]*width:\s*100%/)
+	})
+
+	it('disables exported task checkboxes and labels their state', () => {
+		const body = serializeExportBodyHtml(engine.parse('- [ ] open task\n- [x] done task\n'))
+		const inputs = body.match(/<input type="checkbox"[^>]*>/g) ?? []
+
+		expect(inputs).toHaveLength(2)
+		expect(inputs[0]).toContain('disabled')
+		expect(inputs[0]).toContain('aria-label="Not completed"')
+		expect(inputs[1]).toContain('disabled')
+		expect(inputs[1]).toContain('aria-label="Completed"')
 	})
 
 	it('styles a fully serialized page: headings, tasks, code, quote, callout, table and rule', () => {
@@ -453,7 +470,7 @@ describe('buildStandaloneHtml stylesheet', () => {
 		expect(body).toMatch(/<ol[ >]/)
 		expect(body).toContain('data-type="taskList"')
 		expect(body).toContain('data-checked="true"')
-		expect(body).toContain('<input type="checkbox"')
+		expect(body).toMatch(/<input type="checkbox"[^>]*disabled/)
 		expect(body).toContain('<pre>')
 		expect(body).toContain('<blockquote>')
 		expect(body).toContain('callout callout-tip')

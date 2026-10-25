@@ -93,7 +93,21 @@ export function serializeExportBodyMarkdown(doc: JSONContent): string {
  * "Unknown node type" and no file downloads.
  */
 export function serializeExportBodyHtml(doc: JSONContent): string {
-	return generateHTML(stripAutoHeading(doc), exportExtensions())
+	return staticizeTaskCheckboxes(generateHTML(stripAutoHeading(doc), exportExtensions()))
+}
+
+/**
+ * Task items serialize as live checkbox inputs. In a static export a click or
+ * Space press would toggle the DOM without persisting, and the bare input has
+ * no accessible name. Disable it and label its state so the visual checkmark
+ * remains but the control cannot mislead.
+ */
+function staticizeTaskCheckboxes(html: string): string {
+	return html.replace(/<input type="checkbox"([^>]*)>/g, (_match, attrs: string) => {
+		const checked = /\bchecked(?:="[^"]*")?/.test(attrs)
+		const label = checked ? 'Completed' : 'Not completed'
+		return `<input type="checkbox"${attrs} disabled aria-label="${label}">`
+	})
 }
 
 function escapeHtml(value: string): string {
@@ -211,6 +225,12 @@ table {
   border-collapse: collapse;
   font-size: 0.95em;
 }
+/* Keep the inner table full-width after display:block makes the outer box the scroller. */
+table > thead, table > tbody, table > tfoot {
+  display: table;
+  width: 100%;
+  border-collapse: inherit;
+}
 th, td { padding: 0.5rem 0.75rem; border: 1px solid var(--export-border); text-align: left; vertical-align: top; }
 th { background: var(--export-surface); font-weight: 600; }
 th > p, td > p { margin: 0; }
@@ -239,6 +259,7 @@ ul[data-type="taskList"] input[type="checkbox"] {
   pointer-events: none;
   cursor: default;
 }
+ul[data-type="taskList"] input[type="checkbox"]:disabled { opacity: 1; }
 ul[data-type="taskList"] ul[data-type="taskList"] { margin-top: 0.25rem; padding-left: 1.25rem; }
 
 .mention {

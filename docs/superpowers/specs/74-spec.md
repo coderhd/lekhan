@@ -78,6 +78,10 @@ helper: untitled callouts now render their type as real title text (the same lab
 the React node view already shows). This keeps the title accessible (not a CSS
 pseudo-element), avoids an empty box for `> [!note]-`, and matches the live editor.
 The title lives outside `.callout-content`, so markdown/HTML round-trip is unchanged.
+A collapsed callout stays collapsed in the static browser file (there is no script to
+expand it); print reveals its body because paper cannot expand a collapse. Exported
+task checkboxes are disabled and state-labelled so they cannot be toggled and lose the
+change on reload.
 
 ### 4. Test at the export boundary
 
@@ -97,14 +101,19 @@ guard the offline contract and callout state/type coverage.
 ## Verification
 
 - `npx vitest run tests/unit/markdown-export.test.ts tests/unit/callout.test.ts` —
-  **62 passed / 2 files**.
-- `npx eslint lib/markdown-export.ts lib/callout.ts components/callout-node-view.tsx tests/unit/markdown-export.test.ts`
+  **67 passed / 2 files**.
+- `npx eslint lib/markdown-export.ts lib/callout.ts components/callout-node-view.tsx tests/unit/markdown-export.test.ts tests/unit/callout.test.ts`
   — clean.
 - `npm run typecheck` — clean.
 - `npm run build` — Next.js production build succeeded (23 routes).
-- Chromium (agent-browser, 375px viewport) on a generated sample containing every
-  block: page `scrollWidth` stayed at 375px; the 6-column table stayed inside its
-  343px container; task checkboxes had `pointer-events: none`; titled, untitled,
-  collapsed, and unknown-type callouts all rendered the expected title/accent;
-  collapsed bodies computed `display: none`; one stylesheet, zero `<link>`/`<script>`
-  elements; no console errors.
+- Chromium (agent-browser) on a generated sample containing every block:
+  - 375px viewport: page `scrollWidth` 375px; the 6-column table stayed inside its
+    343px container.
+  - 768px viewport: the table filled the 696px reading measure (row 695px) with
+    collapsed 1px borders intact.
+  - Exported task checkboxes: `disabled`, `aria-label` set to `Completed` /
+    `Not completed`, `pointer-events: none`, and not focusable.
+  - Titled, untitled, collapsed, and unknown-type callouts all rendered the expected
+    title/accent; collapsed bodies computed `display: none`; print media computed
+    collapsed bodies as `display: block`.
+  - One stylesheet, zero `<link>`/`<script>` elements, no console errors.
