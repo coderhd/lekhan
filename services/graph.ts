@@ -158,6 +158,34 @@ export async function fetchPageTags (pageId: string): Promise<PageTag[]> {
 	return (data as PageTag[]) || []
 }
 
+/**
+ * Bulk-fetch tags for many Pages at once (whole-workspace vault export, SIL-9
+ * S4a). Chunked so a workspace of thousands of Pages does not overflow the
+ * request URL; the returned map is keyed by `page_id`.
+ */
+export async function fetchWorkspacePageTags (pageIds: string[]): Promise<Map<string, string[]>> {
+	const byPage = new Map<string, string[]>()
+	const CHUNK = 200
+	for (let i = 0; i < pageIds.length; i += CHUNK) {
+		const chunk = pageIds.slice(i, i + CHUNK)
+		const { data, error } = await supabase
+			.from('page_tags')
+			.select('page_id, tag')
+			.in('page_id', chunk)
+			.order('created_at', { ascending: true })
+
+		if (error) {
+			throw error
+		}
+		for (const row of (data as Array<{ page_id: string; tag: string }>) || []) {
+			const list = byPage.get(row.page_id)
+			if (list) list.push(row.tag)
+			else byPage.set(row.page_id, [row.tag])
+		}
+	}
+	return byPage
+}
+
 export async function fetchWorkspaceGraph (workspaceId: string): Promise<{ pages: Page[]; links: PageLink[] }> {
 	const [pagesResult, linksResult] = await Promise.all([
 		supabase.from('pages').select('*').eq('workspace_id', workspaceId),
