@@ -90,6 +90,17 @@ page through the markdown engine, build the standalone document, and check that 
 required block is present and that the stylesheet has a rule for it. Additional tests
 guard the offline contract and callout state/type coverage.
 
+### 5. Tables scroll via a wrapper, not `display: block`
+
+An earlier cut made the `<table>` itself the scroller (`display: block;
+overflow-x: auto`) and re-displayed `thead`/`tbody`/`tfoot` as tables. That turns
+each section into an independent table, so a header row can compute different
+column widths from the body it labels. Instead, `serializeExportBodyHtml` wraps
+each top-level table in `<div class="table-scroll">` (depth-aware, so a nested
+table is not split) and the wrapper owns `overflow-x: auto`. The table keeps the
+CSS table model and one shared column grid. The wrapper lives in the serialized
+body, so `buildStandaloneHtml`'s signature and call site are still unchanged.
+
 ## Acceptance mapping
 
 | Criterion | Evidence |
@@ -101,19 +112,24 @@ guard the offline contract and callout state/type coverage.
 ## Verification
 
 - `npx vitest run tests/unit/markdown-export.test.ts tests/unit/callout.test.ts` —
-  **67 passed / 2 files**.
+  **73 passed / 2 files** (cycle 4).
+- `npx vitest run tests/unit` — **81 files, 653 tests passed** (cycle 4).
 - `npx eslint lib/markdown-export.ts lib/callout.ts components/callout-node-view.tsx tests/unit/markdown-export.test.ts tests/unit/callout.test.ts`
   — clean.
 - `npm run typecheck` — clean.
 - `npm run build` — Next.js production build succeeded (23 routes).
 - Chromium (agent-browser) on a generated sample containing every block:
   - 375px viewport: page `scrollWidth` 375px; the 6-column table stayed inside its
-    343px container.
+    343px wrapper (`overflow-x: auto`), no page-level horizontal scroll.
   - 768px viewport: the table filled the 696px reading measure (row 695px) with
-    collapsed 1px borders intact.
+    collapsed 1px borders intact, and a header cell measured the same `left`/`width`
+    as the body cell beneath it (single shared column grid).
   - Exported task checkboxes: `disabled`, `aria-label` set to `Completed` /
-    `Not completed`, `pointer-events: none`, and not focusable.
+    `Not completed`, `pointer-events: none`, and not focusable. A bullet list nested
+    inside a task item keeps `display: list-item` (markers visible) while task items
+    stay `display: flex` rows.
   - Titled, untitled, collapsed, and unknown-type callouts all rendered the expected
     title/accent; collapsed bodies computed `display: none`; print media computed
-    collapsed bodies as `display: block`.
+    collapsed bodies as `display: block`. A callout typed `constructor` exports the
+    title "Constructor" instead of failing on an inherited object key.
   - One stylesheet, zero `<link>`/`<script>` elements, no console errors.

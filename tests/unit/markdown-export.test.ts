@@ -407,16 +407,63 @@ describe('buildStandaloneHtml stylesheet', () => {
 		expect(body).toContain('<div class="callout-title">Custom</div>')
 	})
 
+	it('exports a callout whose title attr is null', () => {
+		const body = serializeExportBodyHtml({
+			type: 'doc',
+			content: [
+				{
+					type: 'callout',
+					attrs: { type: 'warning', title: null, collapsed: false },
+					content: [{ type: 'paragraph', content: [{ type: 'text', text: 'body' }] }],
+				},
+			],
+		})
+		expect(body).toContain('<div class="callout-title">Warning</div>')
+	})
+
+	it('exports a custom callout type that collides with an inherited object key', () => {
+		for (const type of ['constructor', 'toString', 'hasOwnProperty']) {
+			const body = serializeExportBodyHtml({
+				type: 'doc',
+				content: [
+					{
+						type: 'callout',
+						attrs: { type, title: '', collapsed: false },
+						content: [{ type: 'paragraph', content: [{ type: 'text', text: 'body' }] }],
+					},
+				],
+			})
+			expect(body, `export failed for ${type}`).toMatch(
+				new RegExp(`<div class="callout-title">${type.charAt(0).toUpperCase() + type.slice(1).toLowerCase()}</div>`),
+			)
+		}
+	})
+
 	it('keeps wide tables in an internal scroll container at narrow widths', () => {
 		const style = stylesheetOf(buildStandaloneHtml('', 'Tables'))
 
-		expect(style).toMatch(/table\s*\{[^}]*display:\s*block/)
-		expect(style).toMatch(/table\s*\{[^}]*overflow-x:\s*auto/)
-		expect(style).toMatch(/table\s*\{[^}]*min-width:\s*0\s*!important/)
-		// display:block makes the table the scroller; the inner table must still
-		// fill the reading measure.
-		expect(style).toMatch(/table > tbody\s*(?:,|\{)[^}]*display:\s*table/)
-		expect(style).toMatch(/table > tbody\s*(?:,|\{)[^}]*width:\s*100%/)
+		// The wrapper scrolls; the table itself stays a table so `thead`/`tbody`
+		// share one column grid instead of laying out as separate tables.
+		expect(style).toMatch(/\.table-scroll\s*\{[^}]*overflow-x:\s*auto/)
+		expect(style).toMatch(/table\s*\{[^}]*border-collapse:\s*collapse/)
+		expect(style).not.toMatch(/table\s*\{[^}]*display:\s*block/)
+		expect(style).not.toMatch(/table\s+>\s*thead[^{]*\{[^}]*display:\s*table/)
+	})
+
+	it('wraps serialized tables in the scroll container', () => {
+		const body = serializeExportBodyHtml(
+			engine.parse('| Column | Value |\n| --- | --- |\n| A | 1 |\n'),
+		)
+
+		expect(body).toMatch(/<div class="table-scroll"><table[\s\S]*<\/table><\/div>/)
+		expect(body.match(/<table\b/g)).toHaveLength(1)
+	})
+
+	it('limits task-item flex layout to direct children of a task list', () => {
+		const style = stylesheetOf(buildStandaloneHtml('', 'Tasks'))
+
+		expect(style).toMatch(/ul\[data-type="taskList"\]\s*>\s*li\s*\{[^}]*display:\s*flex/)
+		expect(style).not.toMatch(/ul\[data-type="taskList"\]\s+li\s*\{/)
 	})
 
 	it('disables exported task checkboxes and labels their state', () => {

@@ -13,8 +13,14 @@ const TYPE_ICONS: Record<string, LucideIcon> = {
 	question: HelpCircle,
 }
 
+/**
+ * Resolve the icon for a callout type. `type` is user-controlled, so an
+ * accepted custom type such as `constructor` or `toString` must fall back to
+ * the default icon instead of resolving an inherited `Object.prototype` member
+ * (rendering that as a React component throws).
+ */
 function CalloutIcon({ type }: { type: string }) {
-	const Icon = TYPE_ICONS[type] ?? MessageSquare
+	const Icon = Object.prototype.hasOwnProperty.call(TYPE_ICONS, type) ? TYPE_ICONS[type] : MessageSquare
 	return <Icon aria-hidden />
 }
 

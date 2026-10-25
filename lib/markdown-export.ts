@@ -93,7 +93,43 @@ export function serializeExportBodyMarkdown(doc: JSONContent): string {
  * "Unknown node type" and no file downloads.
  */
 export function serializeExportBodyHtml(doc: JSONContent): string {
-	return staticizeTaskCheckboxes(generateHTML(stripAutoHeading(doc), exportExtensions()))
+	return wrapTablesForScroll(staticizeTaskCheckboxes(generateHTML(stripAutoHeading(doc), exportExtensions())))
+}
+
+/**
+ * Wide tables must scroll sideways without breaking their column grid.
+ * `display: block` on the `<table>` itself turns each of its `thead`/`tbody`/
+ * `tfoot` sections into an independent table, so headers and body rows can
+ * compute different column widths. Wrapping the whole table in a scroll
+ * container keeps one table model; only the wrapper scrolls.
+ *
+ * Depth-aware so a table nested inside a cell is not split mid-element.
+ */
+function wrapTablesForScroll(html: string): string {
+	const out: string[] = []
+	const token = /<table\b[^>]*>|<\/table>/g
+	let depth = 0
+	let last = 0
+	let match: RegExpExecArray | null
+	while ((match = token.exec(html)) !== null) {
+		if (match[0].startsWith('</')) {
+			depth--
+			if (depth === 0) {
+				out.push(html.slice(last, match.index + match[0].length), '</div>')
+				last = match.index + match[0].length
+			}
+		} else {
+			if (depth === 0) {
+				out.push(html.slice(last, match.index), '<div class="table-scroll">')
+				last = match.index
+			}
+			depth++
+		}
+	}
+	// Unbalanced markup: leave it untouched rather than emit a broken wrapper.
+	if (depth !== 0) return html
+	out.push(html.slice(last))
+	return out.join('')
 }
 
 /**
@@ -215,41 +251,37 @@ pre code {
   white-space: pre;
 }
 
-table {
-  display: block;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0 !important;
+.table-scroll {
   margin: 0 0 1.2em;
   overflow-x: auto;
+}
+table {
+  width: 100%;
+  max-width: 100%;
   border-collapse: collapse;
   font-size: 0.95em;
-}
-/* Keep the inner table full-width after display:block makes the outer box the scroller. */
-table > thead, table > tbody, table > tfoot {
-  display: table;
-  width: 100%;
-  border-collapse: inherit;
 }
 th, td { padding: 0.5rem 0.75rem; border: 1px solid var(--export-border); text-align: left; vertical-align: top; }
 th { background: var(--export-surface); font-weight: 600; }
 th > p, td > p { margin: 0; }
 
 ul[data-type="taskList"] { padding-left: 0; list-style: none; }
-ul[data-type="taskList"] li {
+/* Direct children only: an ordinary list nested inside a task item must keep
+   normal list-item layout (markers, spacing) instead of inheriting the flex row. */
+ul[data-type="taskList"] > li {
   display: flex;
   align-items: flex-start;
   gap: 0.55rem;
   margin: 0.35rem 0;
 }
-ul[data-type="taskList"] li > label {
+ul[data-type="taskList"] > li > label {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   margin-top: 0.25em;
 }
-ul[data-type="taskList"] li > div { flex: 1 1 auto; min-width: 0; }
-ul[data-type="taskList"] li > div > p { margin: 0; }
+ul[data-type="taskList"] > li > div { flex: 1 1 auto; min-width: 0; }
+ul[data-type="taskList"] > li > div > p { margin: 0; }
 ul[data-type="taskList"] input[type="checkbox"] {
   width: 1rem;
   height: 1rem;

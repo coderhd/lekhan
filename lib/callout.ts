@@ -19,13 +19,22 @@ const DEFAULT_CALLOUT_TITLES: Record<string, string> = {
  * label (the editor node view shows one too); without it, an untitled
  * collapsed callout exports as an empty coloured box and its type is
  * conveyed by colour alone.
+ *
+ * Titles and types come from JSON/HTML input, so both may be `null`/`undefined`,
+ * and `type` is user-controlled: an accepted custom type such as `constructor`
+ * or `toString` must not resolve to an inherited `Object.prototype` member
+ * (that leaks a function where a DOM string is required and breaks export).
  */
-export function calloutDisplayTitle(type: string, title: string): string {
-	const explicit = title.trim()
+export function calloutDisplayTitle(
+	type: string | null | undefined,
+	title: string | null | undefined,
+): string {
+	const explicit = title?.trim() ?? ''
 	if (explicit) return explicit
-	const normalized = type.trim().toLowerCase()
-	const known = DEFAULT_CALLOUT_TITLES[normalized]
-	if (known) return known
+	const normalized = type?.trim().toLowerCase() ?? ''
+	if (Object.prototype.hasOwnProperty.call(DEFAULT_CALLOUT_TITLES, normalized)) {
+		return DEFAULT_CALLOUT_TITLES[normalized]
+	}
 	if (!normalized) return 'Callout'
 	return normalized.charAt(0).toUpperCase() + normalized.slice(1)
 }

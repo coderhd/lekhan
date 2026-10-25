@@ -124,6 +124,21 @@ describe('calloutDisplayTitle', () => {
 		expect(calloutDisplayTitle('CUSTOM', '')).toBe('Custom')
 	})
 
+	it('treats inherited object keys as ordinary unknown types', () => {
+		// Accepted custom types are user input: an own-property lookup must not
+		// leak `Object.prototype` members (a function) as a title.
+		expect(calloutDisplayTitle('constructor', '')).toBe('Constructor')
+		expect(calloutDisplayTitle('toString', '')).toBe('Tostring')
+		expect(calloutDisplayTitle('hasOwnProperty', '')).toBe('Hasownproperty')
+		expect(calloutDisplayTitle('__proto__', '')).toBe('__proto__')
+	})
+
+	it('normalizes a null or undefined title from JSON input', () => {
+		expect(calloutDisplayTitle('note', null)).toBe('Note')
+		expect(calloutDisplayTitle('note', undefined)).toBe('Note')
+		expect(calloutDisplayTitle(null, '  ')).toBe('Callout')
+	})
+
 	it('falls back to Callout when the type is empty', () => {
 		expect(calloutDisplayTitle('', '')).toBe('Callout')
 	})
