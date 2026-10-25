@@ -9,8 +9,17 @@ import {
 	buildStandaloneHtml,
 } from '@/lib/markdown-export'
 import { MarkdownEngine } from '@/lib/markdown/engine'
+import { CALLOUT_TYPES } from '@/lib/callout'
 
 let engine: MarkdownEngine
+
+function stylesheetOf(html: string): string {
+	return html.match(/<style>([\s\S]*?)<\/style>/)?.[1] ?? ''
+}
+
+function escapeRegExp(value: string): string {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
 
 beforeEach(() => {
 	engine = new MarkdownEngine()
@@ -296,6 +305,226 @@ describe('serializeExportBodyHtml', () => {
 			],
 		})
 		expect(html).toContain('<strong>Some </strong>bold<strong> text.</strong>')
+	})
+})
+
+describe('buildStandaloneHtml stylesheet', () => {
+	it('ships a self-contained stylesheet with no external resources', () => {
+		const out = buildStandaloneHtml('<p>Hello</p>', 'Offline Page')
+		const style = stylesheetOf(out)
+
+		expect(style).not.toBe('')
+		expect(out).not.toMatch(/<link\b/i)
+		expect(out).not.toMatch(/<script\b/i)
+		expect(style).not.toMatch(/@import|@font-face/i)
+		expect(style).not.toMatch(/url\(\s*(?!['"]?data:)/i)
+		expect(style).not.toContain('http://')
+		expect(style).not.toContain('https://')
+	})
+
+	it('parses as valid CSS with no empty style rules', () => {
+		const style = stylesheetOf(buildStandaloneHtml('', 'CSS'))
+		const el = document.createElement('style')
+		el.textContent = style
+		document.head.appendChild(el)
+
+		try {
+			const sheet = el.sheet
+			expect(sheet).not.toBeNull()
+			const rules = Array.from(sheet?.cssRules ?? [])
+			expect(rules.length).toBeGreaterThan(0)
+			const emptyRules = rules.filter(
+				(rule) => 'selectorText' in rule && (rule as CSSStyleRule).style.length === 0,
+			)
+			expect(emptyRules).toHaveLength(0)
+		} finally {
+			el.remove()
+		}
+	})
+
+	it('defines a rule for every block node the editor can export', () => {
+		const style = stylesheetOf(buildStandaloneHtml('', 'Blocks'))
+		const selectors = [
+			'h1',
+			'h2',
+			'h3',
+			'h4',
+			'h5',
+			'h6',
+			'p',
+			'ul',
+			'ol',
+			'blockquote',
+			'ul[data-type="taskList"]',
+			'input[type="checkbox"]',
+			'pre',
+			'code',
+			'table',
+			'th',
+			'td',
+			'hr',
+			'img',
+			'a',
+		]
+
+		for (const selector of selectors) {
+			expect(style, `missing CSS rule for ${selector}`).toMatch(
+				new RegExp(`${escapeRegExp(selector)}\\s*(?:,|\\{)`),
+			)
+		}
+	})
+
+	it('styles every callout type and the collapsed state', () => {
+		const style = stylesheetOf(buildStandaloneHtml('', 'Callouts'))
+
+		expect(style).toMatch(/\.callout\s*\{[^}]*--callout-accent/)
+		expect(style).toMatch(/\.callout-title\s*\{/)
+		for (const type of CALLOUT_TYPES) {
+			expect(style, `missing accent for ${type}`).toMatch(
+				new RegExp(`\\.callout-${escapeRegExp(type)}\\s*(?:,|\\{)`),
+			)
+		}
+		expect(style).toMatch(
+			/\.callout\[data-callout-collapsed="true"\]\s+\.callout-content\s*\{\s*display:\s*none/,
+		)
+	})
+
+	it('gives an untitled callout a visible type title, even when collapsed', () => {
+		const doc = engine.parse('> [!warning]-\n> hidden body\n')
+		const body = serializeExportBodyHtml(doc)
+		const out = buildStandaloneHtml(body, 'Untitled callout')
+		const style = stylesheetOf(out)
+
+		expect(body).toContain('<div class="callout-title">Warning</div>')
+		expect(body).toContain('data-callout-collapsed="true"')
+		expect(body).not.toContain('callout-title"></div>')
+		// A printed page cannot expand a collapsed callout.
+		expect(style).toContain('.callout[data-callout-collapsed="true"] .callout-content { display: block; }')
+	})
+
+	it('gives an unknown callout type a readable fallback title', () => {
+		const body = serializeExportBodyHtml(engine.parse('> [!custom]\n> body\n'))
+		expect(body).toContain('<div class="callout-title">Custom</div>')
+	})
+
+	it('exports a callout whose title attr is null', () => {
+		const body = serializeExportBodyHtml({
+			type: 'doc',
+			content: [
+				{
+					type: 'callout',
+					attrs: { type: 'warning', title: null, collapsed: false },
+					content: [{ type: 'paragraph', content: [{ type: 'text', text: 'body' }] }],
+				},
+			],
+		})
+		expect(body).toContain('<div class="callout-title">Warning</div>')
+	})
+
+	it('exports a custom callout type that collides with an inherited object key', () => {
+		for (const type of ['constructor', 'toString', 'hasOwnProperty']) {
+			const body = serializeExportBodyHtml({
+				type: 'doc',
+				content: [
+					{
+						type: 'callout',
+						attrs: { type, title: '', collapsed: false },
+						content: [{ type: 'paragraph', content: [{ type: 'text', text: 'body' }] }],
+					},
+				],
+			})
+			expect(body, `export failed for ${type}`).toMatch(
+				new RegExp(`<div class="callout-title">${type.charAt(0).toUpperCase() + type.slice(1).toLowerCase()}</div>`),
+			)
+		}
+	})
+
+	it('keeps wide tables in an internal scroll container at narrow widths', () => {
+		const style = stylesheetOf(buildStandaloneHtml('', 'Tables'))
+
+		// The wrapper scrolls; the table itself stays a table so `thead`/`tbody`
+		// share one column grid instead of laying out as separate tables.
+		expect(style).toMatch(/\.table-scroll\s*\{[^}]*overflow-x:\s*auto/)
+		expect(style).toMatch(/table\s*\{[^}]*border-collapse:\s*collapse/)
+		expect(style).not.toMatch(/table\s*\{[^}]*display:\s*block/)
+		expect(style).not.toMatch(/table\s+>\s*thead[^{]*\{[^}]*display:\s*table/)
+	})
+
+	it('wraps serialized tables in the scroll container', () => {
+		const body = serializeExportBodyHtml(
+			engine.parse('| Column | Value |\n| --- | --- |\n| A | 1 |\n'),
+		)
+
+		expect(body).toMatch(/<div class="table-scroll"><table[\s\S]*<\/table><\/div>/)
+		expect(body.match(/<table\b/g)).toHaveLength(1)
+	})
+
+	it('limits task-item flex layout to direct children of a task list', () => {
+		const style = stylesheetOf(buildStandaloneHtml('', 'Tasks'))
+
+		expect(style).toMatch(/ul\[data-type="taskList"\]\s*>\s*li\s*\{[^}]*display:\s*flex/)
+		expect(style).not.toMatch(/ul\[data-type="taskList"\]\s+li\s*\{/)
+	})
+
+	it('disables exported task checkboxes and labels their state', () => {
+		const body = serializeExportBodyHtml(engine.parse('- [ ] open task\n- [x] done task\n'))
+		const inputs = body.match(/<input type="checkbox"[^>]*>/g) ?? []
+
+		expect(inputs).toHaveLength(2)
+		expect(inputs[0]).toContain('disabled')
+		expect(inputs[0]).toContain('aria-label="Not completed"')
+		expect(inputs[1]).toContain('disabled')
+		expect(inputs[1]).toContain('aria-label="Completed"')
+	})
+
+	it('styles a fully serialized page: headings, tasks, code, quote, callout, table and rule', () => {
+		const markdown = [
+			'# Export title',
+			'',
+			'A paragraph with **bold** text and `inline code`.',
+			'',
+			'- bullet one',
+			'- bullet two',
+			'',
+			'1. first step',
+			'2. second step',
+			'',
+			'- [ ] open task',
+			'- [x] done task',
+			'',
+			'```ts',
+			'const answer = 42',
+			'```',
+			'',
+			'> A quoted line',
+			'',
+			'> [!tip] Helpful title',
+			'> Callout body',
+			'',
+			'| Column | Value |',
+			'| --- | --- |',
+			'| A | 1 |',
+			'',
+			'---',
+		].join('\n')
+
+		const body = serializeExportBodyHtml(engine.parse(markdown))
+		const out = buildStandaloneHtml(body, 'Export title')
+
+		expect(body).toContain('<h1>Export title</h1>')
+		expect(body).toContain('<p>A paragraph with <strong>bold</strong> text and <code>inline code</code>.</p>')
+		expect(body).toMatch(/<ul[ >]/)
+		expect(body).toMatch(/<ol[ >]/)
+		expect(body).toContain('data-type="taskList"')
+		expect(body).toContain('data-checked="true"')
+		expect(body).toMatch(/<input type="checkbox"[^>]*disabled/)
+		expect(body).toContain('<pre>')
+		expect(body).toContain('<blockquote>')
+		expect(body).toContain('callout callout-tip')
+		expect(body).toContain('callout-title')
+		expect(body).toMatch(/<table[ >]/)
+		expect(body).toContain('<hr>')
+		expect(out).toContain('<style>')
 	})
 })
 

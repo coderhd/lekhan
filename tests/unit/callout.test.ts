@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { MarkdownEngine } from '@/lib/markdown/engine'
 import { buildStandaloneHtml } from '@/lib/markdown-export'
-import { CALLOUT_TYPES, Callout, BLOCKQUOTE_MARKER_RE, handleCalloutInputRule } from '@/lib/callout'
+import { CALLOUT_TYPES, Callout, BLOCKQUOTE_MARKER_RE, calloutDisplayTitle, handleCalloutInputRule } from '@/lib/callout'
 import { InputRule, Editor } from '@tiptap/core'
 import { Document } from '@tiptap/extension-document'
 import { StarterKit } from '@tiptap/starter-kit'
@@ -105,6 +105,42 @@ describe('callout parse/serialize round-trip', () => {
 describe('CALLOUT_TYPES', () => {
 	it('defines the canonical known set', () => {
 		expect(CALLOUT_TYPES).toEqual(['note', 'warning', 'info', 'tip', 'success', 'danger', 'question'])
+	})
+})
+
+describe('calloutDisplayTitle', () => {
+	it('prefers an explicit title and trims it', () => {
+		expect(calloutDisplayTitle('note', '  My title  ')).toBe('My title')
+	})
+
+	it('falls back to the known type label', () => {
+		expect(calloutDisplayTitle('note', '')).toBe('Note')
+		expect(calloutDisplayTitle('warning', '   ')).toBe('Warning')
+		expect(calloutDisplayTitle('question', '')).toBe('Question')
+	})
+
+	it('capitalizes unknown types instead of showing a blank title', () => {
+		expect(calloutDisplayTitle('custom', '')).toBe('Custom')
+		expect(calloutDisplayTitle('CUSTOM', '')).toBe('Custom')
+	})
+
+	it('treats inherited object keys as ordinary unknown types', () => {
+		// Accepted custom types are user input: an own-property lookup must not
+		// leak `Object.prototype` members (a function) as a title.
+		expect(calloutDisplayTitle('constructor', '')).toBe('Constructor')
+		expect(calloutDisplayTitle('toString', '')).toBe('Tostring')
+		expect(calloutDisplayTitle('hasOwnProperty', '')).toBe('Hasownproperty')
+		expect(calloutDisplayTitle('__proto__', '')).toBe('__proto__')
+	})
+
+	it('normalizes a null or undefined title from JSON input', () => {
+		expect(calloutDisplayTitle('note', null)).toBe('Note')
+		expect(calloutDisplayTitle('note', undefined)).toBe('Note')
+		expect(calloutDisplayTitle(null, '  ')).toBe('Callout')
+	})
+
+	it('falls back to Callout when the type is empty', () => {
+		expect(calloutDisplayTitle('', '')).toBe('Callout')
 	})
 })
 
