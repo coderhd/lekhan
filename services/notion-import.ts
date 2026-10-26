@@ -726,7 +726,7 @@ function imageDataUrl (entry: VaultEntry, path: string): string {
 	return `data:${mime};base64,${uint8ArrayToBase64(entry.data)}`
 }
 
-const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
+const MARKDOWN_IMAGE_RE = /!\[((?:[^[\]]|\[[^\]]*\])*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 const HTML_IMAGE_RE = /<img\b([^>]*?)\/?>/gi
 
 function replaceImages (body: string, ctx: BodyContext): string {

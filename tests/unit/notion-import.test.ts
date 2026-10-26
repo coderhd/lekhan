@@ -384,6 +384,17 @@ describe('importNotionExport — code safety and unrepresentable titles', () => 
 		expect(report.degradedBlocks).toBe(1)
 	})
 
+	it('keeps the alt text of a missing image whose alt contains brackets', () => {
+		const content = contentOf({
+			[`Seed ${'1'.repeat(32)}.md`]: '# Seed\n\n![Array[0] shot](missing.png)\n',
+		}) as Parameters<typeof importNotionExport>[0]
+		const { ir, report } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
+		const page = ir.pages.find(candidate => candidate.title === 'Seed')!
+
+		expect(page.plainText).toContain('Array[0] shot')
+		expect(report.attachmentsDropped).toBe(1)
+	})
+
 	it('reports an empty export as empty rather than "not a Notion export"', () => {
 		expect(() =>
 			importNotionExport(
