@@ -594,21 +594,36 @@ function transformOutsideFences (body: string, transform: (segment: string) => s
 	const lines = body.split('\n')
 	const out: string[] = []
 	let block: string[] = []
-	let inFence = false
+	let fenceChar: '`' | '~' | null = null
+	let fenceLength = 0
 	const flush = () => {
 		if (block.length === 0) return
 		out.push(transform(block.join('\n')))
 		block = []
 	}
 	for (const line of lines) {
-		if (/^\s*(```|~~~)/.test(line)) {
-			if (!inFence) flush()
-			out.push(line)
-			inFence = !inFence
+		if (fenceChar === null) {
+			const opener = line.match(/^\s*(`{3,}|~{3,})/)
+			if (opener) {
+				flush()
+				out.push(line)
+				fenceChar = opener[1][0] as '`' | '~'
+				fenceLength = opener[1].length
+				continue
+			}
+			block.push(line)
 			continue
 		}
-		if (inFence) out.push(line)
-		else block.push(line)
+
+		// Inside a fence: only a fence of the SAME character and at least the
+		// opener's run length closes it. A ```js block nested inside a ````
+		// markdown fence must not end the outer code region.
+		const closer = line.match(/^\s*(`{3,}|~{3,})\s*$/)
+		out.push(line)
+		if (closer && closer[1][0] === fenceChar && closer[1].length >= fenceLength) {
+			fenceChar = null
+			fenceLength = 0
+		}
 	}
 	flush()
 	return out.join('\n')
@@ -740,7 +755,7 @@ function replaceImages (body: string, ctx: BodyContext): string {
 	})
 }
 
-const MARKDOWN_LINK_RE = /(?<!!)\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
+const MARKDOWN_LINK_RE = /(?<!!)\[((?:[^[\]]|\[[^\]]*\])*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 
 /** `[[Title]]`-style links cannot encode `|`, `[` or `]]` inside the target. */
 function toWikilink (title: string, text: string): string | null {
@@ -773,6 +788,9 @@ function replaceLinks (body: string, ctx: BodyContext): string {
 		if (resolved) {
 			const link = toWikilink(resolved, textRaw)
 			if (link) {
+				// The alias cannot carry literal brackets; name that formatting
+				// change rather than silently altering the label.
+				if (textRaw.includes('[') || textRaw.includes(']')) ctx.stats.degradedBlocks += 1
 				recordTarget(ctx.linkStats, resolved, true)
 				return link
 			}
@@ -797,6 +815,7 @@ function replaceLinks (body: string, ctx: BodyContext): string {
 			ctx.stats.degradedBlocks += 1
 			return textRaw
 		}
+		if (textRaw.includes('[') || textRaw.includes(']')) ctx.stats.degradedBlocks += 1
 		recordTarget(ctx.linkStats, fallback, false)
 		return link
 	}))

@@ -348,6 +348,42 @@ describe('importNotionExport — code safety and unrepresentable titles', () => 
 		expect(report.degradedBlocks).toBe(1)
 	})
 
+	it('does not end a longer fence at a nested shorter fence', () => {
+		const content = contentOf({
+			[`Other ${'c'.repeat(32)}.md`]: '# Other\n\nTarget.\n',
+			[`Seed ${'d'.repeat(32)}.md`]: [
+				'# Seed',
+				'',
+				'````markdown',
+				'```js',
+				'[inside](Other.md)',
+				'```',
+				'````',
+				'',
+				`[real](Other%20${'c'.repeat(32)}.md)`,
+			].join('\n'),
+		}) as Parameters<typeof importNotionExport>[0]
+		const { ir, report } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
+		const page = ir.pages.find(candidate => candidate.title === 'Seed')!
+
+		expect(page.plainText).toContain('[inside](Other.md)')
+		expect(page.plainText).toContain('[[Other|real]]')
+		expect(report.linksResolved).toBe(1)
+	})
+
+	it('resolves links whose label contains nested brackets and reports the alias change', () => {
+		const content = contentOf({
+			[`Other ${'e'.repeat(32)}.md`]: '# Other\n\nTarget.\n',
+			[`Seed ${'f'.repeat(32)}.md`]: `# Seed\n\nSee [Array[0] notes](Other%20${'e'.repeat(32)}.md).\n`,
+		}) as Parameters<typeof importNotionExport>[0]
+		const { ir, report } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
+		const page = ir.pages.find(candidate => candidate.title === 'Seed')!
+
+		expect(page.plainText).toContain('[[Other|Array0 notes]]')
+		expect(report.linksResolved).toBe(1)
+		expect(report.degradedBlocks).toBe(1)
+	})
+
 	it('reports an empty export as empty rather than "not a Notion export"', () => {
 		expect(() =>
 			importNotionExport(
