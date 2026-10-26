@@ -17,6 +17,11 @@ output (workspace or page export):
 `multi-part/part-1.zip` + `part-2.zip` model a workspace export that Notion
 split into multiple downloads, including a page that appears in both parts.
 
+`sibling-databases.zip` models two databases exported into one page folder
+(`Workspace/Projects <id>.csv` beside `Workspace/Tasks <id>.csv`), with one
+database exported as `_all.csv` + a view. It exists to prove each database is
+parsed from its own CSV instead of one folder collapsing to a single database.
+
 ## Provenance and scope
 
 These fixtures are **hand-built from Notion's documented export layout and

@@ -1,11 +1,11 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
 import { Editor } from '@tiptap/core'
 import Collaboration from '@tiptap/extension-collaboration'
 import * as Y from 'yjs'
 import { getSharedExtensions } from '@/lib/editor-extensions'
-import { base64ToUint8Array } from '@/lib/markdown/engine'
+import { base64ToUint8Array, markdownEngine } from '@/lib/markdown/engine'
 import {
 	importNotionExport,
 	readNotionZips,
@@ -149,6 +149,58 @@ describe('importNotionExport — links', () => {
 		expect(report.linksResolved).toBe(6)
 		expect(report.linksUnresolved).toBe(0)
 	})
+
+	it('keeps raw and nested parentheses in link destinations', () => {
+		const content = {
+			files: [
+				{ path: `Private & Shared/Raw (Q3) ${'a'.repeat(32)}.md`, data: new TextEncoder().encode('# Raw\n') },
+				{ path: `Private & Shared/Nested ((Q3)) ${'c'.repeat(32)}.md`, data: new TextEncoder().encode('# Nested\n') },
+				{ path: `Private & Shared/Encoded (Q3) ${'d'.repeat(32)}.md`, data: new TextEncoder().encode('# Encoded\n') },
+				{
+					path: `Private & Shared/Seed ${'b'.repeat(32)}.md`,
+					data: new TextEncoder().encode([
+						`[raw](Raw%20(Q3)%20${'a'.repeat(32)}.md)`,
+						`[nested](Nested%20((Q3))%20${'c'.repeat(32)}.md)`,
+						`[encoded](Encoded%20%28Q3%29%20${'d'.repeat(32)}.md)`,
+					].join('\n\n')),
+				},
+			],
+			directories: [],
+			parts: 1,
+			duplicatePagesSkipped: 0,
+		} as Parameters<typeof importNotionExport>[0]
+		const { ir, report } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
+		const seed = ir.pages.find(page => page.title === 'Seed')!
+
+		// A regex destination would stop at the first raw `)` and leave a
+		// truncated target with no recoverable id; all three forms resolve here.
+		expect(seed.plainText).toContain('[[Raw (Q3)|raw]]')
+		expect(seed.plainText).toContain('[[Nested ((Q3))|nested]]')
+		expect(seed.plainText).toContain('[[Encoded (Q3)|encoded]]')
+		expect(report.linksResolved).toBe(3)
+		expect(report.linksUnresolved).toBe(0)
+	})
+
+	it('keeps balanced parentheses in bare Notion URLs', () => {
+		const content = {
+			files: [
+				{ path: `Private & Shared/Notes (Q3) ${'c'.repeat(32)}.md`, data: new TextEncoder().encode('# Notes\n') },
+				{
+					path: `Private & Shared/Seed ${'d'.repeat(32)}.md`,
+					data: new TextEncoder().encode(`See (https://www.notion.so/Notes-(Q3)-${'c'.repeat(32)}).\n`),
+				},
+			],
+			directories: [],
+			parts: 1,
+			duplicatePagesSkipped: 0,
+		} as Parameters<typeof importNotionExport>[0]
+		const { ir, report } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
+		const seed = ir.pages.find(page => page.title === 'Seed')!
+
+		expect(seed.plainText).toContain('[[Notes (Q3)]]')
+		expect(seed.plainText).not.toContain('notion.so')
+		expect(report.linksResolved).toBe(1)
+	})
 })
 
 describe('importNotionExport — media, callouts and degradations', () => {
@@ -161,6 +213,24 @@ describe('importNotionExport — media, callouts and degradations', () => {
 		expect(text).toContain('Missing screenshot')
 		expect(text).not.toContain('data:image')
 		expect(report.attachmentsDropped).toBe(2) // missing image + non-image PDF
+	})
+
+	it('keeps raw parentheses in image destinations', () => {
+		const content = {
+			files: [
+				{ path: `Private & Shared/Seed ${'1'.repeat(32)}.md`, data: new TextEncoder().encode(`# Seed\n\n![Chart (Q3) shot](Chart%20(Q3)%20${'2'.repeat(32)}.png)\n`) },
+				{ path: `Private & Shared/Chart (Q3) ${'2'.repeat(32)}.png`, data: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) },
+			],
+			directories: [],
+			parts: 1,
+			duplicatePagesSkipped: 0,
+		} as Parameters<typeof importNotionExport>[0]
+		const { ir, report } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
+		const seed = ir.pages.find(page => page.title === 'Seed')!
+		const { html } = renderHtml(seed.contentYjsBase64)
+
+		expect(html).toContain('data:image/png;base64,')
+		expect(report.attachmentsDropped).toBe(0)
 	})
 
 	it('converts Notion HTML callouts into native callouts', async () => {
@@ -220,6 +290,27 @@ describe('importNotionExport — database layout variants', () => {
 		expect(gamma.plainText).toContain('Gamma body.')
 
 		expect(ir.pages.some(page => /Private & Shared/i.test(page.title))).toBe(false)
+	})
+
+	it('parses two sibling databases that share one folder instead of collapsing them', async () => {
+		const content = await readNotionZips([fixtureFile('sibling-databases.zip')])
+		const { ir, report } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
+
+		const notes = ir.pages.filter(page => !page.isFolder)
+		// Beta has no Markdown row file: her CSV row still becomes a Page.
+		expect(notes.map(page => page.title).sort()).toEqual(['Alpha', 'Beta', 'One'])
+		expect(report.databaseRows).toBe(3)
+		expect(report.databaseViewsDeferred).toBe(3) // two Projects views + Tasks
+		expect(ir.pages.filter(page => page.isFolder).map(page => page.title).sort()).toEqual(['Projects', 'Tasks', 'Workspace'])
+
+		// `_all.csv` wins for Projects; the view-only CSV has no Owner column.
+		const alpha = notes.find(page => page.title === 'Alpha')!
+		expect(alpha.properties).toMatchObject({ Name: 'Alpha', Status: 'Active', Owner: 'Ada' })
+		expect(alpha.plainText).toContain('Alpha body.')
+		// The second database in the same directory was parsed, not dropped.
+		const one = notes.find(page => page.title === 'One')!
+		expect(one.properties).toMatchObject({ Name: 'One', Due: '2026-01-02' })
+		expect(one.folderPath).toBe('Workspace/Tasks')
 	})
 
 	it('does not consume a normal page beside a nested database CSV as a row', () => {
@@ -418,5 +509,25 @@ describe('importNotionExport — multi-part exports', () => {
 		expect(report.duplicatePagesSkipped).toBe(1)
 		expect(report.linksResolved).toBe(1) // Part One → Part Two
 		expect(report.degradations?.some(line => line.kind === 'duplicate-pages')).toBe(true)
+	})
+})
+
+describe('importNotionExport — safety envelope', () => {
+	it('rejects an over-limit export before converting any page body', () => {
+		const files = Array.from({ length: 2001 }, (_, index) => ({
+			path: `Private & Shared/Page ${index} ${index.toString(16).padStart(32, '0')}.md`,
+			data: new TextEncoder().encode('# Page\n\nbody\n'),
+		}))
+		const seed = vi.spyOn(markdownEngine, 'seedToYjsBase64')
+
+		expect(() =>
+			importNotionExport(
+				{ files, directories: [], parts: 1, duplicatePagesSkipped: 0 },
+				{ workspaceId: 'ws-1', existingPageTitles: [] }
+			)
+		).toThrow(/maximum of 2000 pages/)
+		// The guard runs before per-page body processing and Yjs conversion.
+		expect(seed).not.toHaveBeenCalled()
+		seed.mockRestore()
 	})
 })

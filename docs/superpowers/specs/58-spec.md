@@ -129,7 +129,10 @@ ignores unknown page fields — but it is kept on the IR for the report, tests, 
 ### D5 — Link, image, callout, and degradation handling
 
 - **Links:** rewrite Markdown links whose target is a relative path or a `notion.so` URL.
-  Extract the 32-hex id and resolve it against the page/row registry (UUID → cleaned title).
+  Destinations are parsed with balanced parentheses (a raw `Notes (Q3) <id>.md` stays one target;
+  `%28`/`%29` are ordinary characters). The 32-hex id is read from the decoded **final** path
+  segment and resolved against the page/row registry (UUID → cleaned title), so a folder id never
+  wins over the target page's id.
   Fall back to a cleaned path/title match. Resolved → `[[Title]]` or `[[Title|text]]`; unresolved →
   a visible unresolved link `[[CleanedTarget|text]]` and `linksUnresolved++`. External URLs are
   untouched. Link targets are resolved against the **raw** archive paths (before name cleaning),
@@ -177,9 +180,11 @@ Markdown). HTML export dropped into this path gets an actionable error naming Ma
 | Obsidian zip picked as Notion | Reject: "This doesn't look like a Notion export…" — no partial writes |
 | HTML export picked | Reject with the Markdown & CSV instruction |
 | Empty zip / no pages | Reject: nothing to import |
-| Page title contains `/`, `#`, `?`, `*`, `|` | Kept in the Page title/properties; path segments are cleaned independently |
+| Page title contains `/`, `#`, `?`, `*`, `\|` | Kept in the Page title/properties; path segments are cleaned independently |
 | Duplicate page UUID across multi-part zips | Keep first; report duplicate count |
 | CSV is a sibling of its database folder (`Tasks.csv` + `Tasks/`) or nested (`Product/Tasks.csv` + `Product/Tasks/`) | Row pages matched across all three layouts; no duplicate row pages, no `Private & Shared` wrapper page |
+| Two sibling databases share one page folder (`Workspace/Projects.csv` + `Workspace/Tasks.csv`) | Each database parsed from its own CSV; each CSV still counts as a deferred view |
+| Link/image target contains raw parentheses (`Notes (Q3) <id>.md`) | Balanced destination parsing keeps the full target; the trailing id resolves the page |
 | Markdown examples inside fenced/inline code | Never rewritten; no phantom dropped attachments |
 | Linked page title contains `\|` or `]]` | Link text kept visible; counted as a degraded block (wikilink syntax cannot encode it) |
 | Link uses `javascript:`/`data:`/`vbscript:`/`file:` | Dropped to text; counted as degraded |

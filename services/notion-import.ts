@@ -197,7 +197,7 @@ export function cleanNotionPath (path: string): string {
 }
 
 function csvDatabaseTitle (csvPath: string): string {
-	const stem = stemOf(csvPath).replace(/_all$/i, '').replace(/\s+_all$/i, '')
+	const stem = stemOf(csvPath).replace(/_all$/i, '')
 	return stripNotionId(stem) || 'Database'
 }
 
@@ -548,16 +548,13 @@ function toObsidianCallout (icon: string, content: string): string {
 	return [`> [!${type}]`, ...lines].join('\n')
 }
 
-function unwrapCallouts (body: string): { body: string; converted: number } {
-	let converted = 0
-	const next = transformOutsideFences(body, (segment) => segment.replace(CALLOUT_TABLE_RE, (whole, iconRaw: string, contentRaw: string) => {
+function unwrapCallouts (body: string): string {
+	return transformOutsideFences(body, (segment) => segment.replace(CALLOUT_TABLE_RE, (whole, iconRaw: string, contentRaw: string) => {
 		const icon = stripHtml(iconRaw)
 		// A real callout has a short icon cell; a content table must pass through.
 		if (icon.length > 8 || !stripHtml(contentRaw)) return whole
-		converted += 1
 		return toObsidianCallout(icon, contentRaw)
 	}))
-	return { body: next, converted }
 }
 
 const SYNCED_BLOCK_RE = /<!--\s*(?:notion[-_ ]?)?synced[_-]?block[^>]*-->/gi
@@ -629,25 +626,190 @@ function transformOutsideFences (body: string, transform: (segment: string) => s
 	return out.join('\n')
 }
 
+/** Offset ranges covered by inline-code spans (`\`…\``). */
+function inlineCodeRanges (text: string): Array<[number, number]> {
+	const ranges: Array<[number, number]> = []
+	const codeRe = /(`+)([^`\n]*?)\1/g
+	let codeMatch: RegExpExecArray | null
+	while ((codeMatch = codeRe.exec(text)) !== null) {
+		ranges.push([codeMatch.index, codeMatch.index + codeMatch[0].length])
+	}
+	return ranges
+}
+
+function offsetInRanges (offset: number, ranges: Array<[number, number]>): boolean {
+	return ranges.some(([start, end]) => offset >= start && offset < end)
+}
+
 /** `String.replace` for a region, skipping matches inside inline code spans. */
 function replaceOutsideInlineCode (
 	segment: string,
 	regex: RegExp,
 	replacer: (...args: string[]) => string
 ): string {
-	const ranges: Array<[number, number]> = []
-	const codeRe = /(`+)([^`\n]*?)\1/g
-	let codeMatch: RegExpExecArray | null
-	while ((codeMatch = codeRe.exec(segment)) !== null) {
-		ranges.push([codeMatch.index, codeMatch.index + codeMatch[0].length])
-	}
+	const ranges = inlineCodeRanges(segment)
 	return segment.replace(regex, (...args: unknown[]) => {
 		const offset = args[args.length - 2] as number
-		if (ranges.some(([start, end]) => offset >= start && offset < end)) {
+		if (offsetInRanges(offset, ranges)) {
 			return args[0] as string
 		}
 		return replacer(...(args.slice(0, -2) as string[]))
 	})
+}
+
+interface MarkdownLabel {
+	text: string
+	/** Offset just after the closing `]`. */
+	end: number
+}
+
+/**
+ * Read a `[...]` label whose content starts at `start`. Nested brackets and
+ * inline-code spans (`` [`Array[0]`] ``) belong to the label; a blank line ends
+ * it, as in CommonMark.
+ */
+function readMarkdownLabel (text: string, start: number): MarkdownLabel | null {
+	let depth = 0
+	for (let i = start; i < text.length; i++) {
+		const ch = text[i]
+		if (ch === '\\') {
+			i += 1
+			continue
+		}
+		if (ch === '`') {
+			const run = text.slice(i).match(/^`+/)?.[0] ?? '`'
+			const close = text.indexOf(run, i + run.length)
+			if (close !== -1) {
+				i = close + run.length - 1
+				continue
+			}
+		}
+		if (ch === '\n' && text[i + 1] === '\n') return null
+		if (ch === '[') {
+			depth += 1
+			continue
+		}
+		if (ch !== ']') continue
+		if (depth === 0) return { text: text.slice(start, i), end: i + 1 }
+		depth -= 1
+	}
+	return null
+}
+
+interface MarkdownDestination {
+	target: string
+	/** Offset just after the closing `)`. */
+	end: number
+}
+
+/**
+ * Read a CommonMark link destination beginning at `open` (the `(`).
+ *
+ * Raw parentheses are balanced, so a Notion filename like
+ * `Notes (Q3) abc….md` stays one target instead of being cut at `Q3)`.
+ * Percent-encoded `%28`/`%29` are ordinary characters and need no special case.
+ * `null` means "this is not a complete link/image", and the caller leaves the
+ * source untouched.
+ */
+function readMarkdownDestination (text: string, open: number): MarkdownDestination | null {
+	let i = open + 1
+	while (i < text.length && /\s/.test(text[i])) i += 1
+	if (text[i] === '<') {
+		const close = text.indexOf('>', i + 1)
+		if (close === -1) return null
+		return finishDestination(text, close + 1, text.slice(i + 1, close))
+	}
+	let depth = 0
+	let target = ''
+	for (; i < text.length; i++) {
+		const ch = text[i]
+		if (ch === '\\' && i + 1 < text.length) {
+			target += text[i + 1]
+			i += 1
+			continue
+		}
+		if (ch === '(') {
+			depth += 1
+			target += ch
+			continue
+		}
+		if (ch === ')') {
+			if (depth === 0) return finishDestination(text, i, target)
+			depth -= 1
+			target += ch
+			continue
+		}
+		if (/\s/.test(ch) && depth === 0) return finishDestination(text, i, target)
+		target += ch
+	}
+	return null
+}
+
+/** Skip an optional `"title"` / `'title'` / `(title)` and require the closing `)`. */
+function finishDestination (text: string, from: number, target: string): MarkdownDestination | null {
+	let i = from
+	while (i < text.length && /\s/.test(text[i])) i += 1
+	if (text[i] === '"' || text[i] === "'" || text[i] === '(') {
+		const closer = text[i] === '(' ? ')' : text[i]
+		i += 1
+		for (; i < text.length; i++) {
+			if (text[i] === '\\') {
+				i += 1
+				continue
+			}
+			if (text[i] === closer) break
+		}
+		if (i >= text.length) return null
+		i += 1
+		while (i < text.length && /\s/.test(text[i])) i += 1
+	}
+	if (text[i] !== ')' || !target) return null
+	return { target, end: i + 1 }
+}
+
+/**
+ * Rewrite Markdown links (`kind: 'link'`) or images (`kind: 'image'`) with the
+ * balanced-destination scanner. `visit` returns the replacement, or `null` to
+ * keep the original construct. Inline-code spans are never rewritten.
+ */
+function replaceMarkdownTargets (
+	segment: string,
+	kind: 'link' | 'image',
+	visit: (text: string, target: string) => string | null
+): string {
+	const code = inlineCodeRanges(segment)
+	let out = ''
+	let i = 0
+	while (i < segment.length) {
+		const image = kind === 'image' && segment[i] === '!' && segment[i + 1] === '['
+		const link = kind === 'link' && segment[i] === '[' && segment[i - 1] !== '!'
+		if (!image && !link) {
+			out += segment[i]
+			i += 1
+			continue
+		}
+		const label = readMarkdownLabel(segment, i + (image ? 2 : 1))
+		if (!label || segment[label.end] !== '(') {
+			out += segment[i]
+			i += 1
+			continue
+		}
+		const destination = readMarkdownDestination(segment, label.end)
+		if (!destination) {
+			out += segment[i]
+			i += 1
+			continue
+		}
+		if (offsetInRanges(i, code)) {
+			out += segment.slice(i, destination.end)
+			i = destination.end
+			continue
+		}
+		const replacement = visit(label.text, destination.target)
+		out += replacement ?? segment.slice(i, destination.end)
+		i = destination.end
+	}
+	return out
 }
 
 function isNotionUrl (target: string): boolean {
@@ -674,12 +836,17 @@ function resolvePageTarget (
 	target: string,
 	pagesById: Map<string, RawNotionPage>,
 	pagesByTitle: Map<string, RawNotionPage[]>,
-	databasesByFolder: Map<string, CsvDatabase>,
+	databasesByKey: Map<string, CsvDatabase>,
 	existingTitles: Set<string>
 ): string | null {
-	const id = target.match(UUID_ANY_RE)?.[0]
+	// Decode and read the *last* path segment before looking for the id. A real
+	// relative link is `Product%20Docs%202222…/Setup%20Guide%203333….md`; using
+	// the raw target would (a) let the `%20` glue onto the id (`2` + 31 hex
+	// chars) and (b) match the *folder's* id instead of the target page's.
+	const segments = safeDecode(target.split(/[?#]/)[0]).split('/').filter(Boolean)
+	const id = normalizeNotionId(segments[segments.length - 1] ?? '')
 	if (id) {
-		const page = pagesById.get(id.replace(/-/g, '').toLowerCase())
+		const page = pagesById.get(id)
 		if (page) return page.title
 	}
 	const isDbLink = /\.csv(?:[?#]|$)/i.test(target)
@@ -687,7 +854,7 @@ function resolvePageTarget (
 		const last = safeDecode(target.split(/[?#]/)[0].split('/').pop() ?? '')
 		const id = last.match(UUID_ANY_RE)?.[0]?.replace(/-/g, '').toLowerCase()
 		const stem = stripNotionId(last.replace(/\.csv$/i, '').replace(/_all$/i, ''))
-		const db = [...databasesByFolder.values()].find(candidate => {
+		const db = [...databasesByKey.values()].find(candidate => {
 			if (id && normalizeNotionId(basename(candidate.path)) === id) return true
 			return normalizeTitle(candidate.title) === normalizeTitle(stem)
 		})
@@ -709,13 +876,12 @@ interface BodyContext {
 	media: MediaIndex
 	pagesById: Map<string, RawNotionPage>
 	pagesByTitle: Map<string, RawNotionPage[]>
-	databasesByFolder: Map<string, CsvDatabase>
+	databasesByKey: Map<string, CsvDatabase>
 	existingTitles: Set<string>
 	linkStats: LinkStats
 	stats: {
 		attachmentsDropped: number
 		degradedBlocks: number
-		calloutsConverted: number
 		syncedBlocksFlattened: number
 	}
 }
@@ -726,13 +892,12 @@ function imageDataUrl (entry: VaultEntry, path: string): string {
 	return `data:${mime};base64,${uint8ArrayToBase64(entry.data)}`
 }
 
-const MARKDOWN_IMAGE_RE = /!\[((?:[^[\]]|\[[^\]]*\])*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 const HTML_IMAGE_RE = /<img\b([^>]*?)\/?>/gi
 
 function replaceImages (body: string, ctx: BodyContext): string {
 	return transformOutsideFences(body, (segment) => {
-		const withMarkdown = replaceOutsideInlineCode(segment, MARKDOWN_IMAGE_RE, (whole: string, altRaw: string, target: string) => {
-			if (isExternalTarget(target)) return whole
+		const withMarkdown = replaceMarkdownTargets(segment, 'image', (altRaw, target) => {
+			if (isExternalTarget(target)) return null
 			const alt = altRaw || 'Image'
 			const entry = resolveRelative(target, ctx.page.path, ctx.media)
 			if (entry && isImage(entry.path)) return `![${alt}](${imageDataUrl(entry, entry.path)})`
@@ -755,10 +920,7 @@ function replaceImages (body: string, ctx: BodyContext): string {
 	})
 }
 
-const MARKDOWN_LINK_RE = /(?<!!)\[((?:[^[\]]|\[[^\]]*\])*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
-
-/** `[[Title]]`-style links cannot encode `|`, `[` or `]]` inside the target. */
-function toWikilink (title: string, text: string): string | null {
+/** `[[Title]]`-style links cannot encode `|`, `[` or `]]` inside the target. */function toWikilink (title: string, text: string): string | null {
 	if (title.includes('|') || title.includes('[') || title.includes(']')) return null
 	// A label may contain inline code/brackets, which would split the wikilink
 	// into separate text nodes (and stop the decorator matching it). Keep the
@@ -769,7 +931,7 @@ function toWikilink (title: string, text: string): string | null {
 }
 
 function replaceLinks (body: string, ctx: BodyContext): string {
-	return transformOutsideFences(body, (segment) => replaceOutsideInlineCode(segment, MARKDOWN_LINK_RE, (whole: string, textRaw: string, target: string) => {
+	return transformOutsideFences(body, (segment) => replaceMarkdownTargets(segment, 'link', (textRaw, target) => {
 		if (target.startsWith('#')) {
 			// Same-page block reference: the page is intact, the block anchor is
 			// not representable. Keep the visible text and count the degradation.
@@ -781,10 +943,9 @@ function replaceLinks (body: string, ctx: BodyContext): string {
 			ctx.stats.degradedBlocks += 1
 			return textRaw
 		}
-		if (isExternalTarget(target) && !isNotionUrl(target)) return whole
-		if (target.startsWith('mailto:')) return whole
+		if (isExternalTarget(target) && !isNotionUrl(target)) return null
 
-		const resolved = resolvePageTarget(target, ctx.pagesById, ctx.pagesByTitle, ctx.databasesByFolder, ctx.existingTitles)
+		const resolved = resolvePageTarget(target, ctx.pagesById, ctx.pagesByTitle, ctx.databasesByKey, ctx.existingTitles)
 		if (resolved) {
 			const link = toWikilink(resolved, textRaw)
 			if (link) {
@@ -809,7 +970,7 @@ function replaceLinks (body: string, ctx: BodyContext): string {
 		}
 
 		const fallback = isNotionUrl(target) ? titleFromNotionUrl(target) : cleanLinkTitle(target)
-		if (!fallback) return whole
+		if (!fallback) return null
 		const link = toWikilink(fallback, textRaw)
 		if (!link) {
 			ctx.stats.degradedBlocks += 1
@@ -821,21 +982,39 @@ function replaceLinks (body: string, ctx: BodyContext): string {
 	}))
 }
 
-const BARE_NOTION_URL_RE = /(^|[\s(])(https?:\/\/(?:www\.)?notion\.(?:so|site)\/[^\s)]+)/gi
+const BARE_NOTION_URL_RE = /(^|[\s(])(https?:\/\/(?:www\.)?notion\.(?:so|site)\/[^\s]*)/gi
+
+/**
+ * Keep a URL's balanced parentheses and drop a trailing `)` that only closes
+ * the prose around it (`See (https://notion.so/Notes-(Q3)-abc123)`).
+ */
+function trimUnbalancedParens (url: string): string {
+	let depth = 0
+	for (let i = 0; i < url.length; i++) {
+		if (url[i] === '(') depth += 1
+		else if (url[i] === ')') {
+			if (depth === 0) return url.slice(0, i)
+			depth -= 1
+		}
+	}
+	return url
+}
 
 function replaceBareNotionUrls (body: string, ctx: BodyContext): string {
 	return transformOutsideFences(body, (segment) => replaceOutsideInlineCode(segment, BARE_NOTION_URL_RE, (whole: string, prefix: string, url: string) => {
-		const title = resolvePageTarget(url, ctx.pagesById, ctx.pagesByTitle, ctx.databasesByFolder, ctx.existingTitles)
+		const bare = trimUnbalancedParens(url)
+		const tail = url.slice(bare.length)
+		const title = resolvePageTarget(bare, ctx.pagesById, ctx.pagesByTitle, ctx.databasesByKey, ctx.existingTitles)
 		if (title) {
 			const link = toWikilink(title, title)
 			if (link) {
 				recordTarget(ctx.linkStats, title, true)
-				return `${prefix}${link}`
+				return `${prefix}${link}${tail}`
 			}
 			ctx.stats.degradedBlocks += 1
 			return whole
 		}
-		const fallback = titleFromNotionUrl(url)
+		const fallback = titleFromNotionUrl(bare)
 		if (!fallback) return whole
 		const link = toWikilink(fallback, fallback)
 		if (!link) {
@@ -843,7 +1022,7 @@ function replaceBareNotionUrls (body: string, ctx: BodyContext): string {
 			return whole
 		}
 		recordTarget(ctx.linkStats, fallback, false)
-		return `${prefix}${link}`
+		return `${prefix}${link}${tail}`
 	}))
 }
 
@@ -852,9 +1031,7 @@ const UNSUPPORTED_HTML_RE = /<(table|iframe|video|audio|figure|details|summary|e
 function processBody (page: RawNotionPage, ctx: BodyContext): string {
 	let body = stripDuplicateTitleHeading(page.raw, page.title)
 	body = replaceImages(body, ctx)
-	const callouts = unwrapCallouts(body)
-	ctx.stats.calloutsConverted += callouts.converted
-	body = callouts.body
+	body = unwrapCallouts(body)
 	const synced = stripSyncedMarkers(body)
 	ctx.stats.syncedBlocksFlattened += synced.count
 	body = synced.body
@@ -962,19 +1139,26 @@ export function importNotionExport (
 
 	// --- Databases ----------------------------------------------------------
 	const csvFiles = content.files.filter(file => isCsv(file.path))
-	const databasesByFolder = new Map<string, CsvDatabase>()
-	const csvByFolder = new Map<string, VaultEntry[]>()
+	// Keyed by database identity, not directory: Notion can export two sibling
+	// databases into the same folder (`Projects <id>.csv` beside
+	// `Tasks <id>.csv`), and each one's rows must still be parsed. View CSVs of
+	// one database share its id, so `_all.csv` and view exports stay together.
+	const databasesByKey = new Map<string, CsvDatabase>()
+	const csvByDatabase = new Map<string, VaultEntry[]>()
 	for (const file of csvFiles) {
-		const folder = cleanNotionPath(dirname(file.path))
-		const list = csvByFolder.get(folder) ?? []
+		const identity = normalizeNotionId(basename(file.path)) ?? normalizeTitle(csvDatabaseTitle(file.path))
+		const key = `${cleanNotionPath(dirname(file.path))}^@${identity}`
+		const list = csvByDatabase.get(key) ?? []
 		list.push(file)
-		csvByFolder.set(folder, list)
+		csvByDatabase.set(key, list)
 	}
-	for (const [folder, filesInFolder] of csvByFolder.entries()) {
+	for (const filesInDatabase of csvByDatabase.values()) {
 		// Prefer `_all.csv` (all properties, all rows) when Notion exported more
 		// than one view of the same database. Every CSV still counts as a view.
-		const primary = filesInFolder.find(file => /_all\.csv$/i.test(file.path)) ?? filesInFolder[0]
-		databasesByFolder.set(folder, parseDatabaseCsv(primary.path, primary.data))
+		const primary = filesInDatabase.find(file => /_all\.csv$/i.test(file.path)) ?? filesInDatabase[0]
+		// Sibling databases share a directory, so the folder cannot be the key;
+		// the selected primary CSV path is unique. Consumers iterate the values.
+		databasesByKey.set(primary.path, parseDatabaseCsv(primary.path, primary.data))
 	}
 
 	const pagesByTitle = new Map<string, RawNotionPage[]>()
@@ -988,7 +1172,7 @@ export function importNotionExport (
 
 	const usedRows = new Set<RawNotionPage>()
 	let databaseRows = 0
-	for (const db of databasesByFolder.values()) {
+	for (const db of databasesByKey.values()) {
 		// Notion layouts seen in the wild: rows live in the database folder
 		// (`Tasks/`), in a nested folder beside a sibling CSV
 		// (`Product/Tasks.csv` + `Product/Tasks/`), or directly under the export
@@ -1051,13 +1235,25 @@ export function importNotionExport (
 	}
 	// An exported database with no rows still gets its folder page, so the
 	// deferred-view notice points at a real place in the tree.
-	for (const db of databasesByFolder.values()) {
+	for (const db of databasesByKey.values()) {
 		if (db.folder) {
 			folderSet.add(db.folder)
 			for (const dir of ancestorDirs(db.folder)) folderSet.add(dir)
 		}
 	}
 	const sortedDirs = [...folderSet].sort((a, b) => a.split('/').length - b.split('/').length)
+
+	// Fail before paying for body processing and Yjs conversion: a small zip can
+	// still carry thousands of tiny pages. Synthetic database rows are already
+	// in `rawPages`, so the count is complete here.
+	if (rawPages.length === 0) {
+		throw new Error('No Notion pages or database rows found in that export. Nothing to import.')
+	}
+	if (rawPages.length + sortedDirs.length > MAX_IMPORT_PAGES) {
+		throw new Error(
+			`Export exceeds the maximum of ${MAX_IMPORT_PAGES} pages (${rawPages.length} pages + ${sortedDirs.length} folders). Import it in parts.`
+		)
+	}
 
 	// --- Link registry ------------------------------------------------------
 	const pagesById = new Map<string, RawNotionPage>()
@@ -1069,7 +1265,6 @@ export function importNotionExport (
 	const stats = {
 		attachmentsDropped: 0,
 		degradedBlocks: 0,
-		calloutsConverted: 0,
 		syncedBlocksFlattened: 0,
 	}
 
@@ -1094,7 +1289,7 @@ export function importNotionExport (
 			media,
 			pagesById,
 			pagesByTitle,
-			databasesByFolder,
+			databasesByKey,
 			existingTitles,
 			linkStats,
 			stats,
@@ -1126,16 +1321,6 @@ export function importNotionExport (
 	// `processBody` accumulates callout/synced/attachment counts in the shared
 	// stats object while each page is parsed.
 	const syncedBlocksFlattened = stats.syncedBlocksFlattened
-
-	const totalPages = folderPages.length + notePages.length
-	if (notePages.length === 0) {
-		throw new Error('No Notion pages or database rows found in that export. Nothing to import.')
-	}
-	if (totalPages > MAX_IMPORT_PAGES) {
-		throw new Error(
-			`Export exceeds the maximum of ${MAX_IMPORT_PAGES} pages (${notePages.length} pages + ${folderPages.length} folders). Import it in parts.`
-		)
-	}
 
 	let linksResolved = 0
 	let linksUnresolved = 0

@@ -2,7 +2,8 @@
 
 **Branch:** `feat/58-notion-import-zip` (base `origin/main` @ 9954aaf)
 **Reviewer:** independent clean-room reviewer subagent (fresh context, read-only)
-**Cycles:** 4 (REQUEST CHANGES → REQUEST CHANGES → REQUEST CHANGES → APPROVE)
+**Cycles:** 4 (REQUEST CHANGES → REQUEST CHANGES → REQUEST CHANGES → APPROVE), plus one
+post-approval pass for the automated review on PR #151.
 
 ## Verdict
 
@@ -28,7 +29,7 @@ lint and production build are green. No blocking or high findings remain.
 | Sev | Finding | Resolution |
 |---|---|---|
 | MEDIUM | Per-line inline-code splitting destroyed link labels containing code and multi-line `<img>` tags. | `transformOutsideFences` now transforms whole fence-free blocks; `replaceOutsideInlineCode` skips matches whose offset falls inside an inline-code span. |
-| MEDIUM | `[` in a linked title still emitted an unmatchable wikilink reported as resolved. | `toWikilink` rejects `|`, `[` and `]` in targets; alias strips formatting chars so the link stays a single text node. |
+| MEDIUM | `[` in a linked title still emitted an unmatchable wikilink reported as resolved. | `toWikilink` rejects `\|`, `[` and `]` in targets; alias strips formatting chars so the link stays a single text node. |
 | MEDIUM | A normal page beside a nested CSV (`Product/Overview.md` + `Product/Tasks.csv`) was consumed as a row and had its frontmatter overwritten. | `db.folder` only counts as a row location when it equals the database title; CSV-only rows synthesize into the nested database folder. Test added. |
 
 ### Cycle 3
@@ -39,16 +40,30 @@ lint and production build are green. No blocking or high findings remain.
 | MEDIUM | Link labels containing `]` (`[Array[0] notes](…)`) never matched, so the destination vanished unreported. | Label regex accepts one nesting level; bracket characters are removed from the alias and the change is counted as a degraded block. Test added. |
 | NIT | Mirror bug for image alt text containing brackets. | Same nested-label rule applied to `MARKDOWN_IMAGE_RE`; test asserts alt text survives and the drop is counted. |
 
+### Cycle 5 — post-approval review on PR #151
+
+Automated reviewers (pullfrog + CodeRabbit) reviewed the opened PR. Three nits and five
+correctness items were verified against the branch and addressed:
+
+| Sev | Finding | Resolution |
+|---|---|---|
+| MAJOR | CSVs were grouped by cleaned folder, so two sibling databases in one folder collapsed into one: the other database's rows vanished while its views still counted as deferred. | Group by database identity (Notion id, else cleaned title) + folder; the map is keyed by the selected primary CSV path. Committed `sibling-databases.zip` fixture + regression test (two sibling databases, `_all.csv` preference, CSV-only row). |
+| MEDIUM | Link/image/bare-URL destinations were matched by regex, so a raw `)` (`Notes (Q3) <id>.md`) truncated the target and lost the trailing id. | Regexes replaced by a balanced-destination scanner (`readMarkdownLabel`, `readMarkdownDestination`, `replaceMarkdownTargets`); optional titles, `<...>` targets, escapes and nested labels are handled. Tests cover raw, nested and percent-encoded parentheses for links, images and bare Notion URLs. |
+| MEDIUM | Id extraction for relative links matched the first 32-hex run in the raw URL: `%20` glued onto the target id and a folder id could win over the page id. | Extract the id from the decoded **last** path segment; folder ids are ignored and `%20<id>` decodes to ` <id>` before matching. |
+| MINOR | The empty-export/page-limit guard ran after body processing and Yjs conversion for every page. | Guard moved directly after `sortedDirs`, using `rawPages.length` + `sortedDirs.length`; a spy test proves no page body is converted when the export is over the limit. |
+| NIT | Unreachable `mailto:` guard; duplicated `_all` replace; dead `calloutsConverted` counter. | Removed. Callout conversion is lossless, so it is not a degradation and does not belong in the report. |
+| NIT | Two Markdown tables had an unescaped `\|`. | Escaped. |
+
 ## Verification evidence
 
 ```
 npm run typecheck   # clean
 npm run lint        # clean
-npm test            # 87 files / 729 tests passed
+npm test            # 87 files / 734 tests passed
 npm run build       # Next.js production build succeeded
 ```
 
-Targeted suites: `notion-import-read` (11), `notion-import` (24), `notion-import-identity` (4),
+Targeted suites: `notion-import-read` (11), `notion-import` (29), `notion-import-identity` (4),
 `import-dialog` (12).
 
 ## Accepted limitations / follow-ups
