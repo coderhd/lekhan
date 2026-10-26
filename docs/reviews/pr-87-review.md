@@ -129,3 +129,20 @@ One finding was raised against the deterministic-Yjs-seed commit; it was valid a
 The CodeRabbit MAJOR thread (line 117) is also covered by round 2's fix: `contentYjsBase64` is now
 deterministic because the seed `clientID` derives from content, so `batchByteLength` no longer
 drifts while `vaultFingerprint` correctly excludes Yjs bytes.
+
+## Addendum — external review round 4 (CodeRabbit, PR #132, `9e72b2f`)
+
+One finding was raised against the folder/title tuple commit; it was valid and is fixed:
+
+- **MAJOR — 32-bit identity digest collides at vault scale.** `stableHash` was 32-bit FNV-1a, and
+  `vaultFingerprint` fed it the concatenated per-page records. The review produced a reachable pair
+  of notes with identical content but different `source` frontmatter whose one-page vault
+  fingerprints both hashed to `ws-1:1:2b72a1f3`. A failed import keeps `importSessionRef`, so the
+  retry reuses `clientImportId`; the ledger keys only on `(workspace, clientImportId, batchIndex)`
+  and replays the stored report without comparing payloads, silently dropping the metadata edit.
+  Fixed by making `stableHash` synchronous **SHA-256** (256-bit, implemented in
+  `lib/stable-content.ts` with `TextEncoder`; Web Crypto is async and the fingerprint is computed in
+  sync render/event paths). This also widens the per-page `contentHash` that feeds the fingerprint,
+  and the Y.Doc seed clientID now derives from the SHA-256 prefix. Tests: NIST vectors including
+  multi-block and UTF-8 input, 64-hex width, and the review's exact colliding pair now fingerprints
+  differently (`tests/unit/stable-content.test.ts`, `tests/unit/vault-import.test.ts`).

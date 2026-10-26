@@ -68,7 +68,10 @@ structure, and page `properties`/`tags` are metadata the import writes, so a mar
 edit would otherwise leave the fingerprint unchanged and let the server silently replay the stale
 batch instead of applying the edit (external review finding on PR #132). Each page therefore carries a
 `contentHash` computed at ingestion from the *fitted* ProseMirror doc (`stableHash(canonicalJson(fitted))`),
-which captures marks, structure, and node attributes. It must **not** use the Yjs encoding: seeding a
+which captures marks, structure, and node attributes. `stableHash` is **SHA-256** (256-bit), not a
+short fingerprint: a 32-bit digest aliased reachable frontmatter values after ~65k candidates, which
+would let a metadata-only edit reuse the retry id (external review on PR #132). It must **not** use
+the Yjs encoding: seeding a
 `Y.Doc` embeds a fresh random `clientID`, so the encoded bytes (and their length) differ between two
 ingestions of the same vault. Depending on that would change the fingerprint on retry, mint a new id,
 and re-create every already-landed page — the exact failure this ticket exists to prevent.

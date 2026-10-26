@@ -33,7 +33,8 @@ blockers/majors were fixed and re-verified (`docs/reviews/pr-87-review.md`):
   separate so `("a", "b/c")` can never alias `("a/b", "c")`. `seedToYjsBase64` derives the seed
   clientID from the content, making the encoded bytes (which batching measures) deterministic
   across ingestions and so keeping batch boundaries stable; `canonicalJson` honours `toJSON` so
-  `Date` frontmatter is not collapsed.
+  `Date` frontmatter is not collapsed. Identity digests use **SHA-256** (`stableHash`), not the
+  earlier 32-bit FNV-1a, so distinct metadata cannot collide into one retry id at vault scale.
 - **Client:** bounded 409 `batch_in_progress` backoff per spec D2.
 - **A11y/UX:** progress block `role="status" aria-live="polite"`; warning keys stabilized;
   resumed line no longer double-counts the headline.

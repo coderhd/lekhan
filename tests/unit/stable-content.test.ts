@@ -6,6 +6,21 @@ describe('stableHash', () => {
 		expect(stableHash('abc')).toBe(stableHash('abc'))
 		expect(stableHash('abc')).not.toBe(stableHash('abd'))
 	})
+
+	it('is SHA-256 so import identity is collision-resistant', () => {
+		// A 32-bit FNV-1a digest aliased distinct page metadata after ~65k
+		// candidates, letting a changed vault reuse the retry's clientImportId and
+		// replay the stale batch (external review on PR #132). 256 bits keep
+		// accidental collisions out of reach at vault scale.
+		expect(stableHash('')).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
+		expect(stableHash('abc')).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
+		// Multi-block input (padding, length encoding across blocks) and UTF-8.
+		expect(stableHash('a'.repeat(1000)))
+			.toBe('41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3')
+		expect(stableHash('héllo ☃'))
+			.toBe('c3a3e84b30327c8e3f04a788d8b68da3fd94c22353c5a30e3fe6ca7ebde3ab3f')
+		expect(stableHash('abc')).toMatch(/^[0-9a-f]{64}$/)
+	})
 })
 
 describe('canonicalJson', () => {

@@ -161,6 +161,21 @@ describe('vaultFingerprint', () => {
 		expect(vaultFingerprint(nestedTitle)).not.toBe(vaultFingerprint(nestedFolder))
 	})
 
+	it('distinguishes metadata that collided under the old 32-bit digest', () => {
+		// Exact pair reported by external review: with FNV-1a both one-page
+		// vaults fingerprinted as `ws-1:1:2b72a1f3`, so a metadata-only edit
+		// reused the retry id and the server replayed the stale batch. SHA-256
+		// must keep them distinct (PR #132).
+		const page = (source: string) => makeIR([{
+			...makePage('Collision note', 10),
+			properties: { source },
+			contentHash: '6282d4f9',
+			plainText: 'same body',
+		}])
+		expect(vaultFingerprint(page('hVLr33HNxn')))
+			.not.toBe(vaultFingerprint(page('P3C4Z3fYdn')))
+	})
+
 	it('diverges when a Date-valued property changes but serializes the same shape', () => {
 		// `gray-matter` parses unquoted YAML timestamps into `Date`. A naive
 		// object walk sees no enumerable keys and collapses every date to `{}`,
