@@ -17,6 +17,8 @@ const importObsidianVaultMock = vi.hoisted(() => vi.fn())
 const readVaultZipMock = vi.hoisted(() => vi.fn())
 const readVaultFilesMock = vi.hoisted(() => vi.fn())
 const pickVaultDirectoryMock = vi.hoisted(() => vi.fn())
+const readNotionZipsMock = vi.hoisted(() => vi.fn())
+const importNotionExportMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/services/obsidian-import', () => ({
 	readVaultZip: readVaultZipMock,
@@ -24,6 +26,11 @@ vi.mock('@/services/obsidian-import', () => ({
 	readVaultDirectory: vi.fn(),
 	pickVaultDirectory: pickVaultDirectoryMock,
 	importObsidianVault: importObsidianVaultMock,
+}))
+
+vi.mock('@/services/notion-import', () => ({
+	readNotionZips: readNotionZipsMock,
+	importNotionExport: importNotionExportMock,
 }))
 
 // Minimal IR/report fixture the ingestion mock returns.
@@ -272,5 +279,115 @@ describe('ImportDialog', () => {
 		expect(second.clientImportId).toBe(first.clientImportId)
 		expect(second.batchIndex).toBe(0)
 		expect(screen.getByTestId('report-resumed').textContent).toContain('already imported')
+	})
+
+	it('offers the Notion export path with export-queue expectations', () => {
+		render(
+			<ImportDialog
+				open
+				onOpenChange={() => {}}
+				getWorkspace={async () => ({ id: 'ws-1' })}
+				existingPageTitles={[]}
+				onMarkdownFile={() => {}}
+				onOpenPage={() => {}}
+			/>
+		)
+		expect(screen.getByText('Notion export (.zip)')).toBeTruthy()
+		expect(screen.getByText(/Markdown & CSV/)).toBeTruthy()
+		expect(screen.getByText(/expire after 7 days/)).toBeTruthy()
+		expect(screen.getByText(/no Notion API/i)).toBeTruthy()
+	})
+
+	it('imports multi-part Notion zips through the same writer and renders honest degradations', async () => {
+		readNotionZipsMock.mockResolvedValue({
+			files: [],
+			directories: [],
+			parts: 2,
+			duplicatePagesSkipped: 0,
+		})
+		importNotionExportMock.mockReturnValue({
+			ir: {
+				workspaceId: 'ws-1',
+				source: 'notion',
+				pages: [
+					{
+						title: 'Getting Started', folderPath: null, properties: {}, tags: [],
+						contentYjsBase64: Buffer.from('a').toString('base64'),
+						plainText: 'a', isFolder: false, contentHash: 'hash-notion-a',
+					},
+					{
+						title: 'Tasks', folderPath: null, properties: {}, tags: [],
+						contentYjsBase64: Buffer.from('b').toString('base64'),
+						plainText: 'b', isFolder: true, contentHash: 'hash-notion-b',
+					},
+				],
+			},
+			report: {
+				source: 'notion',
+				pages: 1,
+				folderPages: 1,
+				linksResolved: 2,
+				linksUnresolved: 1,
+				degradedBlocks: 0,
+				databaseViewsDeferred: 1,
+				databaseRows: 2,
+				syncedBlocksFlattened: 0,
+				commentsOmitted: true,
+				formulasRollupsFlattened: true,
+				attachmentsDropped: 1,
+				exportParts: 2,
+				duplicatePagesSkipped: 0,
+				degradations: [
+					{ kind: 'database-views', count: 1, message: '1 database view deferred to Lekhan databases (H2 #47)' },
+					{ kind: 'attachments', count: 1, message: '1 non-image attachment was dropped' },
+					{ kind: 'comments', count: 0, message: 'Notion comments are not included in a Markdown & CSV export' },
+					{ kind: 'formulas-rollups', count: 0, message: 'Formula and rollup columns arrived as static values' },
+				],
+			},
+		})
+		const fetchMock = vi.fn(async () =>
+			new Response(JSON.stringify({
+				success: true,
+				importedCount: 2,
+				pages: [{ id: 'p-1', title: 'Getting Started' }, { id: 'p-2', title: 'Tasks' }],
+				warnings: [],
+			}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+		)
+		global.fetch = fetchMock as unknown as typeof global.fetch
+
+		render(
+			<ImportDialog
+				open
+				onOpenChange={() => {}}
+				getWorkspace={async () => ({ id: 'ws-1' })}
+				existingPageTitles={[]}
+				onMarkdownFile={() => {}}
+				onOpenPage={() => {}}
+			/>
+		)
+
+		fireEvent.click(screen.getByText('Notion export (.zip)'))
+		const input = screen.getByTestId('notion-zip-input') as HTMLInputElement
+		const partOne = new File([new Uint8Array([1])], 'part-1.zip', { type: 'application/zip' })
+		const partTwo = new File([new Uint8Array([2])], 'part-2.zip', { type: 'application/zip' })
+		fireEvent.change(input, { target: { files: [partOne, partTwo] } })
+
+		await waitFor(() => expect(screen.queryByTestId('import-progress')).not.toBeTruthy())
+
+		expect(readNotionZipsMock).toHaveBeenCalledWith([partOne, partTwo])
+		expect(importNotionExportMock).toHaveBeenCalledWith(
+			expect.objectContaining({ parts: 2 }),
+			expect.objectContaining({ workspaceId: 'ws-1' })
+		)
+		// The only network call is our own writer; no Notion API is involved.
+		expect(fetchMock).toHaveBeenCalledTimes(1)
+		const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+		const sentBody = JSON.parse(String(init.body))
+		expect(sentBody.source).toBe('notion')
+		expect(sentBody.pages).toHaveLength(2)
+
+		expect(await screen.findByTestId('report-degradations')).toBeTruthy()
+		expect(screen.getByTestId('degradation-database-views').textContent).toContain('deferred to Lekhan databases (H2 #47)')
+		expect(screen.getByTestId('degradation-attachments').textContent).toContain('non-image attachment')
 	})
 })

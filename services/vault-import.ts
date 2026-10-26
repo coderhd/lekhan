@@ -1,4 +1,4 @@
-import type { ObsidianImportIR } from '@/services/obsidian-import'
+import type { ImportIR } from '@/services/import-ir'
 import { canonicalJson, stableHash } from '@/lib/stable-content'
 
 /**
@@ -22,7 +22,7 @@ const RETRY_BASE_MS = 400
 
 const textEncoder = new TextEncoder()
 
-function batchByteLength (workspaceId: string, pages: ObsidianImportIR['pages']): number {
+function batchByteLength (workspaceId: string, pages: ImportIR['pages']): number {
 	// Measure the EXACT UTF-8 serialization the server will receive — field
 	// names, workspace id, and non-ASCII titles all count toward the limit,
 	// so estimating from base64 length alone can undercount and trip the
@@ -86,7 +86,7 @@ export function generateImportId (): string {
  * a fresh random clientID, so its bytes differ between two ingestions of the
  * same vault.
  */
-function pageFingerprint (page: ObsidianImportIR['pages'][number]): string {
+function pageFingerprint (page: ImportIR['pages'][number]): string {
 	// Folder path and title are DISTINCT fields: the server treats `folderPath`
 	// as hierarchy and `title` as the leaf title, and frontmatter titles may
 	// contain `/`. Flattening them into one `a/b/c` string would alias
@@ -119,10 +119,10 @@ function pageFingerprint (page: ObsidianImportIR['pages'][number]): string {
  * same vault. Depending on that would change the fingerprint on retry, mint a
  * new `clientImportId`, and re-create every already-landed page (#87 AC1).
  */
-export function vaultFingerprint (ir: ObsidianImportIR): string {
+export function vaultFingerprint (ir: ImportIR): string {
 	const records = ir.pages.map(pageFingerprint)
 	records.sort()
-	return `${ir.workspaceId}:${ir.pages.length}:${stableHash(records.join('\u0000'))}`
+	return `${ir.source}:${ir.workspaceId}:${ir.pages.length}:${stableHash(records.join('\u0000'))}`
 }
 
 
@@ -139,12 +139,12 @@ export interface VaultImportProgress {
  * instead of sending a request guaranteed to be rejected.
  */
 export function splitIntoBatches (
-	ir: ObsidianImportIR,
+	ir: ImportIR,
 	budgetBytes: number = BATCH_BYTE_BUDGET
-): { batches: ObsidianImportIR[]; oversized: ObsidianImportIR['pages'] } {
-	const batches: ObsidianImportIR['pages'][] = []
-	const oversized: ObsidianImportIR['pages'] = []
-	let current: ObsidianImportIR['pages'] = []
+): { batches: ImportIR[]; oversized: ImportIR['pages'] } {
+	const batches: ImportIR['pages'][] = []
+	const oversized: ImportIR['pages'] = []
+	let current: ImportIR['pages'] = []
 
 	// Sort deterministically before batching. `batchIndex` is a positional
 	// idempotency key, so the page set behind each index must be stable across
@@ -186,13 +186,13 @@ export function splitIntoBatches (
 	}
 
 	return {
-		batches: batches.map(batchPages => ({ workspaceId: ir.workspaceId, pages: batchPages })),
+		batches: batches.map(batchPages => ({ workspaceId: ir.workspaceId, source: ir.source, pages: batchPages })),
 		oversized,
 	}
 }
 
 export async function importVaultIR (
-	ir: ObsidianImportIR,
+	ir: ImportIR,
 	getToken: () => Promise<string>,
 	onProgress?: (progress: VaultImportProgress) => void,
 	options?: VaultImportOptions

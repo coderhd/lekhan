@@ -21,7 +21,7 @@ function makePage (title: string, base64Length: number) {
 }
 
 function makeIR (pages: ReturnType<typeof makePage>[]) {
-	return { workspaceId: 'ws-1', pages }
+	return { workspaceId: 'ws-1', source: 'obsidian' as const, pages }
 }
 
 describe('splitIntoBatches', () => {
