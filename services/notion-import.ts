@@ -550,13 +550,13 @@ function toObsidianCallout (icon: string, content: string): string {
 
 function unwrapCallouts (body: string): { body: string; converted: number } {
 	let converted = 0
-	const next = body.replace(CALLOUT_TABLE_RE, (whole, iconRaw: string, contentRaw: string) => {
+	const next = transformOutsideFences(body, (segment) => segment.replace(CALLOUT_TABLE_RE, (whole, iconRaw: string, contentRaw: string) => {
 		const icon = stripHtml(iconRaw)
 		// A real callout has a short icon cell; a content table must pass through.
 		if (icon.length > 8 || !stripHtml(contentRaw)) return whole
 		converted += 1
 		return toObsidianCallout(icon, contentRaw)
-	})
+	}))
 	return { body: next, converted }
 }
 
@@ -564,10 +564,10 @@ const SYNCED_BLOCK_RE = /<!--\s*(?:notion[-_ ]?)?synced[_-]?block[^>]*-->/gi
 
 function stripSyncedMarkers (body: string): { body: string; count: number } {
 	let count = 0
-	const next = body.replace(SYNCED_BLOCK_RE, () => {
+	const next = transformOutsideFences(body, (segment) => segment.replace(SYNCED_BLOCK_RE, () => {
 		count += 1
 		return ''
-	})
+	}))
 	return { body: next, count }
 }
 
@@ -584,29 +584,55 @@ function isExternalTarget (target: string): boolean {
 }
 
 /**
- * Apply a body transform only outside fenced code blocks and inline code
- * spans. A page that documents Markdown (or a synced block containing code)
- * must not have its literal `[link](target)` / `![alt](image)` examples
- * rewritten, and must not inflate the "dropped attachment" count.
+ * Apply a body transform only outside fenced code blocks, and skip matches that
+ * start inside an inline code span. Regions are transformed as whole blocks (not
+ * per line) so links whose label contains inline code, and multi-line HTML tags,
+ * stay intact. A page that documents Markdown must not have its literal
+ * `[link](target)` / `![alt](image)` examples rewritten or counted as dropped.
  */
-function mapOutsideCode (body: string, transform: (segment: string) => string): string {
+function transformOutsideFences (body: string, transform: (segment: string) => string): string {
 	const lines = body.split('\n')
 	const out: string[] = []
+	let block: string[] = []
 	let inFence = false
+	const flush = () => {
+		if (block.length === 0) return
+		out.push(transform(block.join('\n')))
+		block = []
+	}
 	for (const line of lines) {
 		if (/^\s*(```|~~~)/.test(line)) {
+			if (!inFence) flush()
+			out.push(line)
 			inFence = !inFence
-			out.push(line)
 			continue
 		}
-		if (inFence) {
-			out.push(line)
-			continue
-		}
-		const parts = line.split(/(`+[^`]*`+)/g)
-		out.push(parts.map((part, index) => (index % 2 === 1 ? part : transform(part))).join(''))
+		if (inFence) out.push(line)
+		else block.push(line)
 	}
+	flush()
 	return out.join('\n')
+}
+
+/** `String.replace` for a region, skipping matches inside inline code spans. */
+function replaceOutsideInlineCode (
+	segment: string,
+	regex: RegExp,
+	replacer: (...args: string[]) => string
+): string {
+	const ranges: Array<[number, number]> = []
+	const codeRe = /(`+)([^`\n]*?)\1/g
+	let codeMatch: RegExpExecArray | null
+	while ((codeMatch = codeRe.exec(segment)) !== null) {
+		ranges.push([codeMatch.index, codeMatch.index + codeMatch[0].length])
+	}
+	return segment.replace(regex, (...args: unknown[]) => {
+		const offset = args[args.length - 2] as number
+		if (ranges.some(([start, end]) => offset >= start && offset < end)) {
+			return args[0] as string
+		}
+		return replacer(...(args.slice(0, -2) as string[]))
+	})
 }
 
 function isNotionUrl (target: string): boolean {
@@ -689,8 +715,8 @@ const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 const HTML_IMAGE_RE = /<img\b([^>]*?)\/?>/gi
 
 function replaceImages (body: string, ctx: BodyContext): string {
-	return mapOutsideCode(body, (segment) => {
-		const withMarkdown = segment.replace(MARKDOWN_IMAGE_RE, (whole, altRaw: string, target: string) => {
+	return transformOutsideFences(body, (segment) => {
+		const withMarkdown = replaceOutsideInlineCode(segment, MARKDOWN_IMAGE_RE, (whole: string, altRaw: string, target: string) => {
 			if (isExternalTarget(target)) return whole
 			const alt = altRaw || 'Image'
 			const entry = resolveRelative(target, ctx.page.path, ctx.media)
@@ -699,7 +725,7 @@ function replaceImages (body: string, ctx: BodyContext): string {
 			return alt
 		})
 
-		return withMarkdown.replace(HTML_IMAGE_RE, (whole, attrs: string) => {
+		return replaceOutsideInlineCode(withMarkdown, HTML_IMAGE_RE, (whole: string, attrs: string) => {
 			const src = attrs.match(/src\s*=\s*(?:"([^"]*)"|'([^']*)')/i)
 			const altMatch = attrs.match(/alt\s*=\s*(?:"([^"]*)"|'([^']*)')/i)
 			const alt = altMatch?.[1] ?? altMatch?.[2] ?? 'Image'
@@ -716,14 +742,19 @@ function replaceImages (body: string, ctx: BodyContext): string {
 
 const MARKDOWN_LINK_RE = /(?<!!)\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 
-/** `[[Title]]`-style links cannot encode `|` or `]]` inside the target. */
+/** `[[Title]]`-style links cannot encode `|`, `[` or `]]` inside the target. */
 function toWikilink (title: string, text: string): string | null {
-	if (/[|\]]/.test(title)) return null
-	return normalizeTitle(title) === normalizeTitle(text) ? `[[${title}]]` : `[[${title}|${text}]]`
+	if (title.includes('|') || title.includes('[') || title.includes(']')) return null
+	// A label may contain inline code/brackets, which would split the wikilink
+	// into separate text nodes (and stop the decorator matching it). Keep the
+	// words, drop the formatting characters so the link still works.
+	const alias = text.split('`').join('').split('[').join('').split(']').join('')
+	if (normalizeTitle(alias) === normalizeTitle(title) || alias.trim() === '') return `[[${title}]]`
+	return `[[${title}|${alias}]]`
 }
 
 function replaceLinks (body: string, ctx: BodyContext): string {
-	return mapOutsideCode(body, (segment) => segment.replace(MARKDOWN_LINK_RE, (whole, textRaw: string, target: string) => {
+	return transformOutsideFences(body, (segment) => replaceOutsideInlineCode(segment, MARKDOWN_LINK_RE, (whole: string, textRaw: string, target: string) => {
 		if (target.startsWith('#')) {
 			// Same-page block reference: the page is intact, the block anchor is
 			// not representable. Keep the visible text and count the degradation.
@@ -774,7 +805,7 @@ function replaceLinks (body: string, ctx: BodyContext): string {
 const BARE_NOTION_URL_RE = /(^|[\s(])(https?:\/\/(?:www\.)?notion\.(?:so|site)\/[^\s)]+)/gi
 
 function replaceBareNotionUrls (body: string, ctx: BodyContext): string {
-	return mapOutsideCode(body, (segment) => segment.replace(BARE_NOTION_URL_RE, (whole, prefix: string, url: string) => {
+	return transformOutsideFences(body, (segment) => replaceOutsideInlineCode(segment, BARE_NOTION_URL_RE, (whole: string, prefix: string, url: string) => {
 		const title = resolvePageTarget(url, ctx.pagesById, ctx.pagesByTitle, ctx.databasesByFolder, ctx.existingTitles)
 		if (title) {
 			const link = toWikilink(title, title)
@@ -812,9 +843,14 @@ function processBody (page: RawNotionPage, ctx: BodyContext): string {
 	body = replaceBareNotionUrls(body, ctx)
 
 	// Anything block-level we could not map is named rather than silently
-	// dropped by the Markdown parser. `data-callout` divs are ours, not Notion's.
-	const leftovers = body.match(UNSUPPORTED_HTML_RE)
-	if (leftovers) ctx.stats.degradedBlocks += leftovers.length
+	// dropped by the Markdown parser. Count only outside fenced/inline code:
+	// a page documenting HTML must not inflate the degradation count.
+	transformOutsideFences(body, (segment) => {
+		const withoutInlineCode = segment.replace(/`+[^`\n]*`+/g, '')
+		const leftovers = withoutInlineCode.match(UNSUPPORTED_HTML_RE)
+		if (leftovers) ctx.stats.degradedBlocks += leftovers.length
+		return segment
+	})
 
 	return body
 }
@@ -940,10 +976,19 @@ export function importNotionExport (
 		// wrapper when the CSV is a sibling of its folder. Accept all of them so
 		// a row never becomes two pages (one with the body, one with properties).
 		const nestedRowFolder = db.folder === db.title ? db.title : `${db.folder}/${db.title}`
-		const rowFolders = new Set([db.folder, nestedRowFolder, db.title])
-		const synthesizeInto = rawPages.some(page => page.folderPath === nestedRowFolder)
-			? nestedRowFolder
-			: db.folder
+		const rowFolders = new Set([db.title, nestedRowFolder])
+		// `db.folder` is only a row location when it names the database folder
+		// itself. Adding it for a nested sibling CSV would let a normal page
+		// beside the CSV be consumed as a row (and have its frontmatter replaced
+		// by CSV columns).
+		if (db.folder === db.title) rowFolders.add(db.folder)
+		const nestedFolderExists =
+			rawPages.some(page => page.folderPath === nestedRowFolder) ||
+			content.directories.some(dir => cleanNotionPath(dir) === nestedRowFolder)
+		// When the CSV sits beside a differently-named folder, Notion's row pages
+		// belong in that nested database folder — even if this parse has no row
+		// file for it yet.
+		const synthesizeInto = nestedFolderExists || db.folder !== db.title ? nestedRowFolder : db.folder
 
 		for (const record of db.records) {
 			databaseRows += 1

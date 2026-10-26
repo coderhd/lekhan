@@ -221,6 +221,35 @@ describe('importNotionExport — database layout variants', () => {
 
 		expect(ir.pages.some(page => /Private & Shared/i.test(page.title))).toBe(false)
 	})
+
+	it('does not consume a normal page beside a nested database CSV as a row', () => {
+		const content = {
+			files: [
+				{
+					path: `Private & Shared/Product ${'9'.repeat(32)}/Overview ${'a'.repeat(32)}.md`,
+					data: new TextEncoder().encode('---\nauthor: me\n---\n# Overview\n\nA real page.\n'),
+				},
+				{
+					path: `Private & Shared/Product ${'9'.repeat(32)}/Tasks ${'b'.repeat(32)}.csv`,
+					data: new TextEncoder().encode('Name,Status\nOverview,Active\n'),
+				},
+			],
+			directories: [],
+			parts: 1,
+			duplicatePagesSkipped: 0,
+		} as Parameters<typeof importNotionExport>[0]
+		const { ir } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
+
+		const overviewPages = ir.pages.filter(page => !page.isFolder && page.title === 'Overview')
+		expect(overviewPages).toHaveLength(2)
+		// The real page keeps its frontmatter; the CSV row is a separate page
+		// under the database folder with the CSV columns.
+		expect(overviewPages.find(page => page.folderPath === 'Product')?.properties).toMatchObject({ author: 'me' })
+		expect(overviewPages.find(page => page.folderPath === 'Product/Tasks')?.properties).toMatchObject({
+			Name: 'Overview',
+			Status: 'Active',
+		})
+	})
 })
 
 describe('importNotionExport — code safety and unrepresentable titles', () => {
@@ -238,12 +267,14 @@ describe('importNotionExport — code safety and unrepresentable titles', () => 
 
 	it('never rewrites links or images inside fenced and inline code', async () => {
 		const content = contentOf({
+			[`Other ${'5'.repeat(32)}.md`]: '# Other\n\nTarget.\n',
 			[`Seed ${'1'.repeat(32)}.md`]: [
 				'# Seed',
 				'',
 				'```md',
 				'[Not a link](Other.md)',
 				'![Not an image](pic.png)',
+				'<table><tr><td>x</td><td>y</td></tr></table>',
 				'```',
 				'',
 				'Inline `[also not a link](Other.md)` and `![no](pic.png)` stay literal.',
@@ -255,22 +286,54 @@ describe('importNotionExport — code safety and unrepresentable titles', () => 
 		expect(page.plainText).toContain('[Not a link](Other.md)')
 		expect(page.plainText).toContain('![Not an image](pic.png)')
 		expect(page.plainText).toContain('[also not a link](Other.md)')
+		expect(page.plainText).toContain('<table><tr><td>x</td><td>y</td></tr></table>')
 		expect(page.plainText).not.toContain('[[Other]]')
+		expect(page.plainText).not.toContain('[!note]')
 		expect(report.attachmentsDropped).toBe(0)
 		expect(report.degradedBlocks).toBe(0)
 	})
 
-	it('keeps text (and reports the degradation) when a linked title contains "|"', () => {
+	it('keeps link labels with inline code and resolves multi-line HTML images', () => {
+		const content = contentOf({
+			[`Other ${'6'.repeat(32)}.md`]: '# Other\n\nTarget.\n',
+			[`Seed ${'7'.repeat(32)}.md`]: [
+				'# Seed',
+				'',
+				'See [`v2` docs](Other%2066666666666666666666666666666666.md) and more text.',
+				'',
+				'<img',
+				'  src="missing-illustration.png"',
+				'  alt="missing diagram"',
+				'/>',
+			].join('\n'),
+		}) as Parameters<typeof importNotionExport>[0]
+		const { ir, report } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
+		const page = ir.pages.find(candidate => candidate.title === 'Seed')!
+
+		expect(page.plainText).toContain('[[Other|v2 docs]] and more text.')
+		expect(page.plainText).toContain('missing diagram')
+		expect(report.attachmentsDropped).toBe(1)
+	})
+
+	it('keeps text (and reports the degradation) for any title wikilink syntax cannot encode', () => {
 		const content = contentOf({
 			[`B | C ${'2'.repeat(32)}.md`]: '# B | C\n\nBody.\n',
-			[`Source ${'3'.repeat(32)}.md`]: `# Source\n\nRead [the b page](B%20%7C%20C%20${'2'.repeat(32)}.md).\n`,
+			[`Roadmap [beta ${'8'.repeat(32)}.md`]: '# Roadmap [beta\n\nBody.\n',
+			[`Source ${'3'.repeat(32)}.md`]: [
+				'# Source',
+				'',
+				`Read [the b page](B%20%7C%20C%20${'2'.repeat(32)}.md).`,
+				`Read [the beta](Roadmap%20%5Bbeta%20${'8'.repeat(32)}.md).`,
+			].join('\n'),
 		}) as Parameters<typeof importNotionExport>[0]
 		const { ir, report } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
 		const source = ir.pages.find(page => page.title === 'Source')!
 
 		expect(source.plainText).toContain('the b page')
+		expect(source.plainText).toContain('the beta')
 		expect(source.plainText).not.toContain('[[B |')
-		expect(report.degradedBlocks).toBe(1)
+		expect(source.plainText).not.toContain('[[Roadmap [')
+		expect(report.degradedBlocks).toBe(2)
 	})
 
 	it('drops executable link schemes instead of importing them', () => {

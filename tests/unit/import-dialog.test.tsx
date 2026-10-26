@@ -470,4 +470,70 @@ describe('ImportDialog', () => {
 		expect(screen.getByText(/Markdown & CSV/i)).toBeTruthy()
 		expect(fetchMock).not.toHaveBeenCalled()
 	})
+
+	it('reuses the same clientImportId when retrying a failed Notion import (#87)', async () => {
+		readNotionZipsMock.mockResolvedValue({ files: [], directories: [], parts: 1, duplicatePagesSkipped: 0 })
+		importNotionExportMock.mockReturnValue({
+			ir: {
+				workspaceId: 'ws-1', source: 'notion',
+				pages: [{
+					title: 'Notion Note', folderPath: null, properties: {}, tags: [],
+					contentYjsBase64: Buffer.from('a').toString('base64'),
+					plainText: 'a', isFolder: false, contentHash: 'hash',
+				}],
+			},
+			report: {
+				source: 'notion', pages: 1, folderPages: 0, linksResolved: 0, linksUnresolved: 0,
+				degradedBlocks: 0, databaseViewsDeferred: 0, databaseRows: 0, syncedBlocksFlattened: 0,
+				commentsOmitted: true, formulasRollupsFlattened: true, attachmentsDropped: 0,
+				exportParts: 1, duplicatePagesSkipped: 0, degradations: [],
+			},
+		})
+
+		let call = 0
+		const fetchMock = vi.fn(async () => {
+			call += 1
+			if (call === 1) {
+				return new Response(JSON.stringify({ error: 'batch exploded' }), {
+					status: 500, headers: { 'Content-Type': 'application/json' },
+				})
+			}
+			return new Response(JSON.stringify({
+				success: true, resumed: true, importedCount: 1,
+				pages: [{ id: 'p-1', title: 'Notion Note' }], warnings: [],
+			}), { status: 200, headers: { 'Content-Type': 'application/json' } })
+		})
+		global.fetch = fetchMock as unknown as typeof global.fetch
+
+		render(
+			<ImportDialog
+				open
+				onOpenChange={() => {}}
+				getWorkspace={async () => ({ id: 'ws-1' })}
+				existingPageTitles={[]}
+				onMarkdownFile={() => {}}
+				onOpenPage={() => {}}
+			/>
+		)
+
+		const pickNotion = async () => {
+			fireEvent.click(screen.getByText('Notion export (.zip)'))
+			fireEvent.change(screen.getByTestId('notion-zip-input'), {
+				target: { files: [new File([new Uint8Array([1])], 'export.zip', { type: 'application/zip' })] },
+			})
+			await waitFor(() => expect(screen.queryByTestId('import-progress')).not.toBeTruthy())
+		}
+
+		await pickNotion()
+		expect(await screen.findByTestId('import-error')).toBeTruthy()
+
+		fireEvent.click(screen.getByText('Try again'))
+		await pickNotion()
+
+		expect(await screen.findByTestId('import-report')).toBeTruthy()
+		const calls = fetchMock.mock.calls as unknown as Array<[string, RequestInit]>
+		const first = JSON.parse(String(calls[0][1].body))
+		const second = JSON.parse(String(calls[1][1].body))
+		expect(second.clientImportId).toBe(first.clientImportId)
+	})
 })
