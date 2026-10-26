@@ -275,6 +275,31 @@ describe("billing webhook processor — core pipeline (T8)", () => {
 		expect(store.gateway_events[0].processed_at).not.toBeNull()
 	})
 
+	it("ignores a stale-generation terminal event that would clobber a live resubscribed binding", async () => {
+		// Cancel → resubscribe: the OLD subscription's deleted event arrives after
+		// the NEW generation is live. It must never downgrade the live binding.
+		const { store, base } = setup({
+			store: seedStore({
+				plan: { gateway: "stripe", gateway_subscription_id: "sub_live_new", tier: "pro", status: "active", billing_cycle: "monthly", is_founding: true },
+			}),
+			readSubscription: readBackReturning({ subscriptionRef: "sub_old", status: "canceled", tier: "plus" }),
+		})
+		const result = await process(store, base, {
+			eventId: "evt_stale_gen",
+			eventType: "customer.subscription.deleted",
+			pointerRef: "sub_old",
+			pointerKind: "deletion",
+		})
+
+		expect(result.code).toBe("processed") // handled (deliberately ignored)
+		const plan = store.workspace_plans[0]
+		expect(plan.status).toBe("active") // live generation untouched
+		expect(plan.tier).toBe("pro")
+		expect(plan.is_founding).toBe(true)
+		expect(plan.gateway_subscription_id).toBe("sub_live_new")
+		expect(store.profiles[0].plan).toBe("free") // mirror untouched by the stale event
+	})
+
 	it("terminal-cancels via the stored subscription binding when a deletion notice read-back is gone", async () => {
 		const { store, base } = setup({
 			store: seedStore({
@@ -297,6 +322,25 @@ describe("billing webhook processor — core pipeline (T8)", () => {
 		expect(plan.billing_cycle).toBe("none")
 		expect(plan.cancel_at_period_end).toBe(false)
 		expect(plan.past_due_since).toBeNull()
+	})
+
+	it("preserves the stored customer binding on the gone-deletion fallback (US-6 AC2)", async () => {
+		const { store, base } = setup({
+			store: seedStore({
+				plan: { gateway: "stripe", gateway_subscription_id: SUB, gateway_customer_id: "cus_stored", tier: "pro", status: "active", billing_cycle: "monthly" },
+			}),
+			readSubscription: readBackGone(),
+		})
+		const result = await process(store, base, {
+			eventId: "evt_7b",
+			eventType: "customer.subscription.deleted",
+			pointerRef: SUB,
+			pointerKind: "deletion",
+		})
+
+		expect(result.code).toBe("processed")
+		expect(store.workspace_plans[0].status).toBe("canceled")
+		expect(store.workspace_plans[0].gateway_customer_id).toBe("cus_stored")
 	})
 
 	it("represents cancel-at-period-end as active + cancel flag (canceling), still entitled", async () => {

@@ -186,6 +186,18 @@ describe("billing webhooks — razorpay rail (T8)", () => {
 		expect(store.gateway_events).toHaveLength(0)
 	})
 
+	it("rejects a wrong-length signature with 400 and records nothing", async () => {
+		const { store, db } = setup()
+		const raw = JSON.stringify(subscriptionActivated)
+		// Valid hex, wrong byte length — the timing-safe pre-check must reject it
+		// as 400, never an uncaught comparison error.
+		const result = await deliver(db, raw, "deadbeef")
+
+		expect(result.status).toBe(400)
+		expect(result.code).toBe("unverified")
+		expect(store.gateway_events).toHaveLength(0)
+	})
+
 	it("fails closed as webhook_config when RAZORPAY_WEBHOOK_SECRET is unset", async () => {
 		delete process.env.RAZORPAY_WEBHOOK_SECRET
 		const { store, db } = setup()

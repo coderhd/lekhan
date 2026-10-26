@@ -475,17 +475,19 @@ async function processVerifiedEvent(rail: WebhookRail, deps: ResolvedDeps, event
 			// we already store (DB truth, not payload truth).
 			const bound = await db
 				.from("workspace_plans")
-				.select("workspace_id")
+				.select("workspace_id, gateway_customer_id")
 				.eq("gateway_subscription_id", event.pointerRef)
 				.eq("gateway", rail)
 				.maybeSingle()
 			if (bound.error) return processingFailed(event.eventId, `binding lookup failed: ${bound.error.message}`)
-			const workspaceId = (bound.data as { workspace_id: string } | null)?.workspace_id ?? null
-			if (!workspaceId) return ignore("deleted subscription is gone and no bound workspace row exists")
+			const boundRow = (bound.data as { workspace_id: string; gateway_customer_id: string | null } | null) ?? null
+			if (!boundRow?.workspace_id) return ignore("deleted subscription is gone and no bound workspace row exists")
 			const gone: SubscriptionReadBack = {
 				subscriptionRef: event.pointerRef,
-				customerRef: null,
-				workspaceId,
+				// Preserve the stored customer binding so a resubscribe reuses the same
+				// provider customer (US-6 AC2) — the read-back is gone, the DB row isn't.
+				customerRef: boundRow.gateway_customer_id ?? null,
+				workspaceId: boundRow.workspace_id,
 				status: "canceled",
 				cancelAtPeriodEnd: false,
 				currentPeriodEnd: null,
@@ -526,11 +528,34 @@ async function applyAndFinish(
 
 	const existing = await db
 		.from("workspace_plans")
-		.select("status, past_due_since")
+		.select("status, past_due_since, gateway_subscription_id")
 		.eq("workspace_id", workspaceId)
 		.maybeSingle()
 	if (existing.error) return processingFailed(event.eventId, `plan read failed: ${existing.error.message}`)
-	const previous = (existing.data ?? null) as { status: string; past_due_since: string | null } | null
+	const previous = (existing.data ?? null) as { status: string; past_due_since: string | null; gateway_subscription_id: string | null } | null
+
+	// Stale-generation guard (clean-room N-1): a TERMINAL read-back for a
+	// subscription ref that differs from the stored LIVE binding belongs to a
+	// previous generation (cancel → resubscribe; the old subscription's deleted
+	// event can arrive after the new one activated). Never clobber the live
+	// generation with stale terminal state — the fail direction would be
+	// over-restricting a paying workspace; residual divergence is left to
+	// reconciliation (spec §15). Non-terminal applies and same-ref applies pass
+	// through; a live detaching row awaiting its replacement rail's activation
+	// is only ever terminal-applied by its OWN ref (equal ⇒ not stale).
+	if (
+		terminal &&
+		previous &&
+		(previous.status === "active" || previous.status === "past_due") &&
+		previous.gateway_subscription_id &&
+		previous.gateway_subscription_id !== state.subscriptionRef
+	) {
+		console.warn(`[billing/webhooks] ${rail} stale-generation terminal event ignored for a live binding`, {
+			eventId: event.eventId,
+			eventType: event.eventType,
+		})
+		return markProcessedFor(deps, event.eventId)
+	}
 
 	// past_due clock (spec §6 step 4): set on the transition, never reset while
 	// still past_due, cleared on recovery — the 7-day grace window (D9) reads it.
@@ -660,7 +685,10 @@ export async function processStripeWebhook(input: {
 			}
 		}
 	} catch (err) {
-		console.error("[billing/webhooks] stripe signature verification failed", err)
+		// PII-minimized (spec §14): StripeSignatureVerificationError carries the raw
+		// unverified payload + signature header — log the message only, never the
+		// error object (this file logs the payload never).
+		console.error("[billing/webhooks] stripe signature verification failed:", err instanceof Error ? err.message : "verify failed")
 		return { status: 400, code: "unverified" }
 	}
 
