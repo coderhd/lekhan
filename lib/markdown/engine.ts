@@ -8,6 +8,7 @@ import * as Y from 'yjs'
 import { prosemirrorJSONToYXmlFragment } from 'y-prosemirror'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 import { insertParsedHtml } from '@/lib/insert-parsed-html'
+import { canonicalJson, stableHash } from '@/lib/stable-content'
 
 export interface PageMeta {
 	title?: string
@@ -170,6 +171,16 @@ export class MarkdownEngine {
 		schema.nodeFromJSON(fitted).check()
 		const ydoc = new Y.Doc()
 		try {
+			// A Y.Doc normally gets a RANDOM clientID at construction, which is
+			// baked into every struct and so makes the encoded update differ (a
+			// few bytes) between two seeds of identical content. Batching for
+			// `/api/import` measures the REAL serialized byte length, so that
+			// nondeterminism could shift a page across a batch boundary between
+			// retries while the vault fingerprint stays the same — the server
+			// would then replay a completed batch whose page set no longer matches
+			// (#87). Deriving the clientID from the content makes seeding
+			// byte-stable while keeping distinct docs' origins distinct.
+			ydoc.clientID = parseInt(stableHash(canonicalJson(fitted)).slice(0, 8), 16) || 1
 			prosemirrorJSONToYXmlFragment(schema, fitted, ydoc.getXmlFragment('default'))
 			const bytes = Y.encodeStateAsUpdate(ydoc)
 			return uint8ArrayToBase64(bytes)

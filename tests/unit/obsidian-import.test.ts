@@ -6,6 +6,7 @@ import * as Y from 'yjs'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 import { readVaultZip } from '@/services/obsidian-import'
 import { importObsidianVault, type ObsidianImportPage } from '@/services/obsidian-import'
+import { splitIntoBatches, vaultFingerprint } from '@/services/vault-import'
 import { base64ToUint8Array } from '@/lib/markdown/engine'
 
 async function fixtureVault(): Promise<Parameters<typeof importObsidianVault>[0]> {
@@ -211,5 +212,88 @@ describe('importObsidianVault — image embed resolution', () => {
 		expect(html).not.toContain('data:image/png;base64')
 		expect(noteG.plainText).toContain('[[logo.png]]')
 		expect(report.degradedBlocks).toBe(1)
+	})
+})
+
+describe('importObsidianVault — retry fingerprint stability (#87)', () => {
+	it('is byte-stable across identical ingestions and shares a fingerprint', async () => {
+		// Seeding must be deterministic: the encoded Yjs update is what batching
+		// measures, so any byte drift could shift a page across a batch boundary
+		// between retries while the fingerprint stayed the same (#87). The seed
+		// clientID is derived from the content, so two ingestions are identical.
+		const vault = await fixtureVault()
+		const options = { workspaceId: 'ws-1', existingPageTitles: ['Old Page'] }
+		const first = importObsidianVault(vault, options).ir
+		const second = importObsidianVault(vault, options).ir
+		expect(first.pages.map((p) => p.contentYjsBase64)).toEqual(
+			second.pages.map((p) => p.contentYjsBase64)
+		)
+		expect(vaultFingerprint(first)).toBe(vaultFingerprint(second))
+	})
+
+	it('assigns the same pages to the same batchIndex across ingestions', async () => {
+		// Batching measures the real serialized size, which includes the Yjs
+		// bytes. If those bytes drifted, a page could move across a batch
+		// boundary on retry under the same clientImportId and the server would
+		// replay the wrong page set (#87). Deterministic seeding removes the drift.
+		const vault = await fixtureVault()
+		const options = { workspaceId: 'ws-1', existingPageTitles: [] }
+		const first = importObsidianVault(vault, options).ir
+		const second = importObsidianVault(vault, options).ir
+		// A budget that forces several batches while still fitting each page alone.
+		const onePageBytes = Math.max(...first.pages.map((p) =>
+			new TextEncoder().encode(JSON.stringify({ workspaceId: 'ws-1', pages: [p] })).length
+		))
+		const layout = (ir: typeof first) =>
+			splitIntoBatches(ir, onePageBytes + 128).batches.map((b) =>
+				b.pages.map((p) => `${p.folderPath ?? ''}/${p.title}`)
+			)
+		const batches = layout(first)
+		expect(batches.length).toBeGreaterThan(1)
+		expect(batches).toEqual(layout(second))
+	})
+
+	function contentOf (files: Record<string, string>): Parameters<typeof importObsidianVault>[0] {
+		return {
+			files: Object.entries(files).map(([path, body]) => ({
+				path,
+				data: new TextEncoder().encode(body),
+			})),
+			directories: [],
+		}
+	}
+
+	it('distinguishes a mark-only edit whose plain text is unchanged', () => {
+		// `plainText` drops marks: "word" and "*word*" both read as "word", yet
+		// they import different docs. The fingerprint must diverge (external
+		// review finding on PR #132), or a retry silently replays the stale batch.
+		const options = { workspaceId: 'ws-1', existingPageTitles: [] }
+		const plain = importObsidianVault(contentOf({ 'n.md': '# N\n\nword\n' }), options).ir
+		const styled = importObsidianVault(contentOf({ 'n.md': '# N\n\n*word*\n' }), options).ir
+		const page = (ir: typeof plain) => ir.pages.find((p) => !p.isFolder)!
+		expect(page(plain).plainText).toBe(page(styled).plainText)
+		expect(vaultFingerprint(plain)).not.toBe(vaultFingerprint(styled))
+	})
+
+	it('distinguishes a metadata-only edit whose body is unchanged', () => {
+		const options = { workspaceId: 'ws-1', existingPageTitles: [] }
+		const first = importObsidianVault(contentOf({ 'n.md': '---\nauthor: A\n---\nbody\n' }), options).ir
+		const second = importObsidianVault(contentOf({ 'n.md': '---\nauthor: B\n---\nbody\n' }), options).ir
+		const page = (ir: typeof first) => ir.pages.find((p) => !p.isFolder)!
+		expect(page(first).plainText).toBe(page(second).plainText)
+		expect(vaultFingerprint(first)).not.toBe(vaultFingerprint(second))
+	})
+
+	it('distinguishes Date-valued frontmatter (unquoted YAML timestamps)', () => {
+		// gray-matter parses `due: 2024-01-01` into a Date, which the request
+		// serializes to an ISO string. The fingerprint must track that value, not
+		// collapse both dates to `{}` (external review finding on PR #132).
+		const options = { workspaceId: 'ws-1', existingPageTitles: [] }
+		const jan = importObsidianVault(contentOf({ 'n.md': '---\ndue: 2024-01-01\n---\nbody\n' }), options).ir
+		const feb = importObsidianVault(contentOf({ 'n.md': '---\ndue: 2024-02-01\n---\nbody\n' }), options).ir
+		const page = (ir: typeof jan) => ir.pages.find((p) => !p.isFolder)!
+		expect(page(jan).properties.due).toBeInstanceOf(Date)
+		expect(page(jan).plainText).toBe(page(feb).plainText)
+		expect(vaultFingerprint(jan)).not.toBe(vaultFingerprint(feb))
 	})
 })
