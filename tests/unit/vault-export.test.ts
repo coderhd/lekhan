@@ -62,35 +62,35 @@ const INTRO: VaultPage = {
 }
 
 describe('buildVaultFiles — folder tree mirrors parent_id', () => {
-	it('nests child notes under slugged ancestor folders', () => {
+	it('nests child notes under title-named ancestor folders', () => {
 		const { files } = buildVaultFiles([HOME, GUIDES, INTRO])
-		expect(find(files, 'home.md')).toBeTruthy()
-		expect(find(files, 'home/guides.md')).toBeTruthy()
-		expect(find(files, 'home/guides/intro.md')).toBeTruthy()
+		expect(find(files, 'Home.md')).toBeTruthy()
+		expect(find(files, 'Home/Guides.md')).toBeTruthy()
+		expect(find(files, 'Home/Guides/Intro.md')).toBeTruthy()
 	})
 
 	it('does not emit a note for folder pages but still counts them', () => {
 		const folder: VaultPage = { id: 'f', parentId: null, title: 'Projects', isFolder: true }
 		const { files, report } = buildVaultFiles([folder, { ...INTRO, parentId: 'f' }])
-		expect(find(files, 'projects.md')).toBeUndefined()
-		expect(find(files, 'projects/intro.md')).toBeTruthy()
+		expect(find(files, 'Projects.md')).toBeUndefined()
+		expect(find(files, 'Projects/Intro.md')).toBeTruthy()
 		expect(report.folderPages).toBe(1)
 		expect(report.pages).toBe(1)
 	})
 
-	it('dedupes colliding note filenames within a folder', () => {
+	it('dedupes case-insensitively colliding note filenames within a folder', () => {
 		const a: VaultPage = { ...HOME, id: 'x', title: 'My Page' }
 		const b: VaultPage = { ...HOME, id: 'y', title: 'my page' }
 		const { files } = buildVaultFiles([a, b])
 		const paths = files.map((f) => f.path).sort()
-		expect(paths).toEqual(['my-page-2.md', 'my-page.md'])
+		expect(paths).toEqual(['My Page.md', 'my page-2.md'])
 	})
 })
 
 describe('buildVaultFiles — Obsidian dialect (seam 2)', () => {
 	it('writes frontmatter from title/tags/properties and preserves callouts + wikilinks', () => {
 		const { files } = buildVaultFiles([HOME, INTRO])
-		const content = text(files, 'intro.md')
+		const content = text(files, 'Intro.md')
 
 		expect(content).toMatch(/^---\n/)
 		expect(content).toContain('title: Intro')
@@ -139,7 +139,7 @@ describe('buildVaultFiles — attachment bundling', () => {
 		expect(attachment).toBeTruthy()
 		expect(attachment!.data).toBeInstanceOf(Uint8Array)
 
-		const body = text(files, 'diagram.md')
+		const body = text(files, 'Diagram.md')
 		expect(body).toContain(`![pixel](attachments/pixel-`)
 		expect(body).not.toContain('data:image/png;base64')
 	})
@@ -171,10 +171,10 @@ describe('buildVaultZip', () => {
 		const { zip, report } = buildVaultZip([HOME, GUIDES, INTRO])
 		const unzipped = unzipSync(zip)
 		const names = Object.keys(unzipped).sort()
-		expect(names).toContain('home.md')
-		expect(names).toContain('home/guides.md')
-		expect(names).toContain('home/guides/intro.md')
-		expect(strFromU8(unzipped['home/guides/intro.md'])).toContain('> [!note] Heads up')
+		expect(names).toContain('Home.md')
+		expect(names).toContain('Home/Guides.md')
+		expect(names).toContain('Home/Guides/Intro.md')
+		expect(strFromU8(unzipped['Home/Guides/Intro.md'])).toContain('> [!note] Heads up')
 		expect(report.pages).toBe(3)
 	})
 })

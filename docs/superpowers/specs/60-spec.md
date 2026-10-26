@@ -89,18 +89,24 @@ export function buildVaultZip(pages: VaultPage[]): { zip: Uint8Array; report: Fi
 ```
 
 Rules:
-- **Paths**: each Page's vault directory is the slugged title chain of its `parent_id` ancestors
-  (`slugifyTitle` from `lib/markdown-export.ts`); the file is `<slug(title)>.md`, deduped per folder
-  with a `-2`, `-3` suffix. Non-folder Pages always emit a note; folder Pages emit no note (their
-  title only names a directory).
-- **Content**: `markdownEngine.serializeObsidianPage(stripAutoHeading(doc), { title, tags, properties })`.
+- **Paths**: each Page's vault directory is the title chain of its `parent_id` ancestors
+  (`vaultSegment`); the file is `<title>.md`, deduped case-insensitively per folder with a
+  `-2`, `-3` suffix. Titles are **not** lowercased/hyphenated: Obsidian resolves
+  `[[Alpha Brief]]` against the note basename, so exporting `alpha-brief.md` would leave every
+  multi-word wikilink dead. Only characters Obsidian forbids (`\ / : * ? " < > |`) or that break
+  wikilink syntax (`# ^ [ ]`) become `-`; spaces and case are preserved. Folder Pages emit an
+  explicit `<dir>/` entry and no note, so empty imported folders (e.g. an attachment-only
+  `Assets/`) still exist in the vault.
+- **Content**: `markdownEngine.serializeObsidianBody(stripAutoHeading(doc), { title, tags, properties })`.
 - **Attachments**: `data:<mime>;base64,…` image sources are decoded to bytes, hashed for a stable
-  name `<base>.<ext>` (deduped), written under `attachments/`, and the image src is rewritten to the
+  name `<base>.<ext>` (deduped; attached files are plain markdown links, so their names stay
+  lowercase slugs), written under `attachments/`, and the image src is rewritten to the
   relative path before serialization.
 - **Report**: `pages` (notes emitted), `folderPages`, `linksResolved`/`linksUnresolved` (distinct
-  normalized `[[target]]`s vs the set of exported Page titles), `degradedBlocks` (image nodes whose
-  data URI failed to decode, non-image embeds left as text), `omissions` (database views when a Page
-  carries `properties.database`).
+  normalized `[[target]]`s vs the emitted note basenames **and** vault-relative paths, with
+  `#heading`/`^block` anchors stripped — the same forms Obsidian resolves), `degradedBlocks`
+  (image nodes whose data URI failed to decode, non-image embeds left as text), `omissions`
+  (database views when a Page carries `properties.database`).
 
 ### 5.3 `lib/fidelity-report.ts` (seam: shared report shape)
 
@@ -148,15 +154,21 @@ shape in this spec are the stable seam the loader feeds; they do not change.
 
 ## 6. Test plan (three seams)
 
-- **Seam 2** `tests/unit/vault-export.test.ts` (new): nested workspace fixture → unzip with
-  `fflate.unzipSync` → assert folder paths mirror nesting, frontmatter/tags/callout/wikilinks present
-  in the `.md`, attachments written and referenced relatively, unresolved links counted, folder pages
-  not emitted as notes. Client-side guarantee: spy `global.fetch` and assert zero calls.
+- **Seam 2** `tests/unit/vault-export.test.ts`: nested workspace fixture → unzip with
+  `fflate.unzipSync` → assert folder paths mirror nesting, frontmatter/tags/callout/wikilinks
+  present in the `.md`, attachments written and referenced relatively, unresolved links counted,
+  folder pages not emitted as notes. Client-side guarantee: spy `global.fetch` and assert zero calls.
+- **Acceptance round trip** `tests/unit/vault-export-fixture.test.ts`: the committed real vault
+  `tests/fixtures/vaults/research-vault/` (nested folders, frontmatter/tags/callouts/wikilinks,
+  attachment) is read by the real importer (`importObsidianVault`), converted to the Page graph,
+  exported, unzipped, and asserted **as an Obsidian vault**: every real wikilink resolves by
+  basename (including multi-word titles) or path, only the deliberately dead links are reported,
+  the attachment bytes survive, and every folder page has a directory.
 - **Seam 2** `tests/unit/markdown-engine.test.ts` (+): `serializeObsidianPage` frontmatter/body.
-- **Report** `tests/unit/fidelity-report.test.ts` (new): import→export direction mapping.
+- **Report** `tests/unit/fidelity-report.test.ts`: import→export direction mapping.
 - Existing `tests/unit/import-dialog.test.tsx` stays green through the component adapter.
 - Fixture: committed real vault under `tests/fixtures/vaults/<name>/` used as the unzip-and-assert
-  oracle.
+  oracle (never synthesized inline).
 
 ## 7. Definition of Done
 

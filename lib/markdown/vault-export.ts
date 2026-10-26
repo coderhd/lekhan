@@ -61,13 +61,52 @@ const IMAGE_EXT: Record<string, string> = {
 
 const WIKILINK_RE = /\[\[([^[\]|]+?)(?:\|[^[\]]+?)?\]\]/g
 
+/**
+ * Characters Obsidian forbids in a file name or that break `[[wikilink]]`
+ * syntax (`#` heading, `^` block, `|` alias, `[`/`]` brackets).
+ */
+const UNSAFE_SEGMENT_RE = /[\\/:*?"<>|#^[\]]/g
+
+/**
+ * A vault path segment for a Page title. Unlike `slugifyTitle`, this preserves
+ * spaces and case: Obsidian resolves `[[Alpha Brief]]` by the note's basename,
+ * so an exported `alpha-brief.md` would leave that link dead. Only characters
+ * the filesystem forbids or that break wikilink syntax are replaced; trailing
+ * dots/spaces are stripped because Windows cannot store them.
+ */
+function vaultSegment(name: string): string {
+	const cleaned = String(name ?? '')
+		.replace(UNSAFE_SEGMENT_RE, '-')
+		.replace(/\s+/g, ' ')
+		.replace(/^[.\s]+|[.\s]+$/g, '')
+	return cleaned || 'Untitled'
+}
+
+/** Attachment file names are plain markdown links, so a lowercase slug is safe. */
+function attachmentSlug(name: string): string {
+	return slugifyTitle(name) || 'untitled'
+}
+
+/**
+ * The key Obsidian link resolution compares against: case-insensitive, alias
+ * already stripped by the caller, heading/block anchors removed, `.md` removed,
+ * and path separators normalized.
+ */
+function normalizeLinkTarget(raw: string): string {
+	return raw
+		.split('#')[0]
+		.split('^')[0]
+		.replace(/\.md$/i, '')
+		.replace(/\\/g, '/')
+		.replace(/^\.\//, '')
+		.toLowerCase()
+		.replace(/\s+/g, ' ')
+		.trim()
+}
+
 /** Mirrors the importer's normalizeTitle so link resolution agrees across directions. */
 function normalizeTitle(title: string): string {
 	return String(title || '').toLowerCase().replace(/\s+/g, ' ').trim()
-}
-
-function slug(title: string): string {
-	return slugifyTitle(title) || 'untitled'
 }
 
 function decodeBase64(b64: string): Uint8Array | null {
@@ -136,7 +175,9 @@ function bundleImages(
 				return next
 			}
 			const alt = typeof next.attrs?.alt === 'string' ? (next.attrs.alt as string) : ''
-			const base = slug(alt) === 'untitled' ? 'image' : slug(alt)
+			// `alt` is usually the original file name ("architecture.png"); strip
+			// the extension so the bundled name stays `architecture-<hash>.png`.
+			const base = attachmentSlug(alt.replace(/\.[a-z0-9]{1,5}$/i, ''))
 			const filename = `${base}-${shortHash(parsed.bytes)}.${ext}`
 			const path = `${ATTACHMENTS_DIR}/${filename}`
 			if (!attachments.has(path)) attachments.set(path, { path, data: parsed.bytes })
@@ -156,7 +197,7 @@ function directorySegments(page: VaultPage, byId: Map<string, VaultPage>): strin
 		seen.add(current)
 		const parent = byId.get(current)
 		if (!parent) break
-		segments.unshift(slug(parent.title))
+		segments.unshift(vaultSegment(parent.title))
 		current = parent.parentId
 	}
 	return segments
@@ -164,14 +205,17 @@ function directorySegments(page: VaultPage, byId: Map<string, VaultPage>): strin
 
 /** Unique `.md` filename inside a directory, appending `-2`, `-3`, … on collision. */
 function uniqueBasename(used: Map<string, number>, dir: string, base: string, usedPaths: Set<string>): string {
+	const key = (name: string) => `${dir}/${name}.md`.toLowerCase()
 	let candidate = base
-	let n = used.get(`${dir}/${base}`) ?? 0
-	while (usedPaths.has(`${dir}/${candidate}.md`)) {
+	let n = used.get(key(base)) ?? 0
+	// Obsidian's vault index is case-insensitive on macOS/Windows, so two titles
+	// differing only by case must not overwrite each other.
+	while (usedPaths.has(key(candidate))) {
 		n += 1
 		candidate = `${base}-${n + 1}`
 	}
-	used.set(`${dir}/${base}`, n)
-	usedPaths.add(`${dir}/${candidate}.md`)
+	used.set(key(base), n)
+	usedPaths.add(key(candidate))
 	return candidate
 }
 
@@ -179,8 +223,8 @@ function collectLinkTargets(markdown: string, into: Set<string>): void {
 	WIKILINK_RE.lastIndex = 0
 	let match: RegExpExecArray | null
 	while ((match = WIKILINK_RE.exec(markdown)) !== null) {
-		const target = match[1].trim()
-		if (target) into.add(normalizeTitle(target))
+		const target = normalizeLinkTarget(match[1])
+		if (target) into.add(target)
 	}
 }
 
@@ -189,7 +233,6 @@ function collectLinkTargets(markdown: string, into: Set<string>): void {
  */
 export function buildVaultFiles(pages: VaultPage[]): VaultExportResult {
 	const byId = new Map(pages.map((p) => [p.id, p]))
-	const knownTitles = new Set(pages.map((p) => normalizeTitle(p.title)))
 
 	const files: VaultExportFile[] = []
 	const attachments = new Map<string, VaultExportFile>()
@@ -197,6 +240,8 @@ export function buildVaultFiles(pages: VaultPage[]): VaultExportResult {
 	const usedBasenames = new Map<string, number>()
 
 	const linkTargets = new Set<string>()
+	const noteTargets = new Set<string>()
+	const folderDirs = new Set<string>()
 	const degraded = { count: 0 }
 	let noteCount = 0
 	let folderCount = 0
@@ -205,13 +250,23 @@ export function buildVaultFiles(pages: VaultPage[]): VaultExportResult {
 	for (const page of pages) {
 		if (page.isFolder) {
 			folderCount += 1
+			// Emit an explicit directory entry so a folder page with no child
+			// Pages (e.g. an imported "Assets/" holding only attachments) still
+			// exists in the vault instead of silently disappearing from the zip.
+			const dirPath = [...directorySegments(page, byId), vaultSegment(page.title)].join('/')
+			folderDirs.add(dirPath)
 			continue
 		}
 
 		const dirSegments = directorySegments(page, byId)
 		const dir = dirSegments.join('/')
-		const basename = uniqueBasename(usedBasenames, dir, slug(page.title), usedPaths)
+		const basename = uniqueBasename(usedBasenames, dir, vaultSegment(page.title), usedPaths)
 		const path = [...dirSegments, `${basename}.md`].join('/')
+		// Obsidian resolves `[[Target]]` against note basenames and `[[dir/Note]]`
+		// against vault-relative paths, so record both forms of every emitted note.
+		const withoutExt = path.replace(/\.md$/, '').toLowerCase()
+		noteTargets.add(withoutExt)
+		noteTargets.add(withoutExt.slice(withoutExt.lastIndexOf('/') + 1))
 
 		const rawDoc: JSONContent = page.doc ?? { type: 'doc', content: [] }
 		const doc = bundleImages(rawDoc, attachments, degraded)
@@ -231,12 +286,13 @@ export function buildVaultFiles(pages: VaultPage[]): VaultExportResult {
 		noteCount += 1
 	}
 
+	for (const dir of folderDirs) files.push({ path: `${dir}/`, data: new Uint8Array(0) })
 	for (const attachment of attachments.values()) files.push(attachment)
 
 	let linksResolved = 0
 	let linksUnresolved = 0
 	for (const target of linkTargets) {
-		if (knownTitles.has(target)) linksResolved += 1
+		if (noteTargets.has(normalizeTitle(target))) linksResolved += 1
 		else linksUnresolved += 1
 	}
 
