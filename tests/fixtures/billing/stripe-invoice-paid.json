@@ -1,0 +1,20 @@
+{
+	"id": "evt_test_stripe_invoice_paid_001",
+	"object": "event",
+	"api_version": "2026-09-30.endive",
+	"created": 1770000300,
+	"livemode": false,
+	"type": "invoice.paid",
+	"data": {
+		"object": {
+			"id": "in_test_001",
+			"object": "invoice",
+			"customer": "cus_test_001",
+			"subscription": "sub_test_001",
+			"status": "paid",
+			"amount_paid": 600,
+			"currency": "usd",
+			"billing_reason": "subscription_cycle"
+		}
+	}
+}
