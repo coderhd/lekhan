@@ -109,3 +109,24 @@ fixture or test — add a non-callout HTML table fixture entry as part of the fi
   fenced code).
 - Real-export dogfood cannot be signed off without an actual Notion export zip —
   re-run it after the B1 fix (provider/export instructions live in the spec §D7).
+
+## Dev response — B1 fixed
+
+**Dev Engineer, same branch — patch after `b74558a`.**
+
+`CALLOUT_TABLE_RE` still describes the one-row/two-cell shape, but a match is now rejected
+when either capture contains a `<td>`/`<tr>`/`<table>` tag (`CALLOUT_CELL_STRUCTURE_RE`).
+Those tags only appear when the lazy captures backtrack across a cell/row boundary, so a
+3-cell row or a multi-row table can no longer masquerade as a callout with a "short icon";
+the whole table is returned untouched and counted in `degradedBlocks`.
+
+Regression coverage:
+- `tests/fixtures/notion/html-tables.zip` — a real callout beside a 3-cell row and a 2×2
+  table.
+- `notion-import.test.ts > converts only the genuine one-row/two-cell callout shape and
+  keeps real HTML tables` asserts the callout renders once, all seven table cells survive,
+  two `<table>` elements remain, and both tables are named as degraded blocks.
+
+Verification re-run on the fixed branch: typecheck, lint, full `npm test` (87 files / 735
+tests) and production build are green. The QA dogfood + real-export sign-off is
+outstanding and is the only remaining gate.

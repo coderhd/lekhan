@@ -242,6 +242,25 @@ describe('importNotionExport — media, callouts and degradations', () => {
 		expect(report.degradedBlocks).toBe(0)
 	})
 
+	it('converts only the genuine one-row/two-cell callout shape and keeps real HTML tables', async () => {
+		const content = await readNotionZips([fixtureFile('html-tables.zip')])
+		const { ir, report } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
+		const page = ir.pages.find(candidate => candidate.title === 'Tables')!
+		const { html, text } = renderHtml(page.contentYjsBase64)
+
+		// Notion's callout (short icon + text) still becomes a native callout.
+		expect(html).toContain('data-callout')
+		expect(text.match(/Callouts survive as callouts\./g)).toHaveLength(1)
+		// A 3-cell row and a 2×2 table are real tables: every cell survives and
+		// neither is collapsed into a callout body (QA B1).
+		for (const cell of ['Col A', 'Col B', 'Col C', 'r1a', 'r1b', 'r2a', 'r2b']) {
+			expect(text).toContain(cell)
+		}
+		expect(html.match(/<table/g)).toHaveLength(2)
+		// Both are named as unrepresentable HTML rather than silently flattened.
+		expect(report.degradedBlocks).toBe(2)
+	})
+
 	it('preserves code blocks, tables and task lists', async () => {
 		const { ir } = await importBasic()
 		const setup = ir.pages.find(page => page.title === 'Setup Guide')!

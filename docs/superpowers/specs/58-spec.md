@@ -142,7 +142,9 @@ ignores unknown page fields — but it is kept on the IR for the report, tests, 
   or non-image attachment → replace with the visible alt/text (never a dead link) and count
   `attachmentsDropped`.
 - **Callouts:** Notion exports callouts as a one-row/two-cell HTML table (icon + text). Convert to
-  the Obsidian callout dialect (`> [!note]`) so the existing parser keeps the callout node; other
+  the Obsidian callout dialect (`> [!note]`) so the existing parser keeps the callout node. Only
+  that exact shape converts: a match whose cells contain another `<td>`/`<tr>`/`<table>` is a real
+  table, is left intact, and is counted in `degradedBlocks` (never silently collapsed). Other
   raw HTML is left to the parser and, if it cannot be represented, counted in `degradedBlocks`.
 - **Synced blocks:** strip `<!-- synced_block … -->` markers, keep the content static, and report
   `syncedBlocksFlattened`. The report names the synced-block category even when none are detected

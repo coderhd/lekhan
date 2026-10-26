@@ -512,6 +512,8 @@ function resolveRelative (target: string, notePath: string, index: MediaIndex): 
 
 /** Notion callouts are exported as a one-row, two-cell HTML table. */
 const CALLOUT_TABLE_RE = /<table>\s*<tr>\s*<td>([\s\S]*?)<\/td>\s*<td>([\s\S]*?)<\/td>\s*<\/tr>\s*<\/table>/gi
+/** A capture containing another cell/row/table means the match spilled over a real table. */
+const CALLOUT_CELL_STRUCTURE_RE = /<\/?(?:td|tr|table)\b/i
 
 function stripHtml (value: string): string {
 	return value
@@ -550,6 +552,12 @@ function toObsidianCallout (icon: string, content: string): string {
 
 function unwrapCallouts (body: string): string {
 	return transformOutsideFences(body, (segment) => segment.replace(CALLOUT_TABLE_RE, (whole, iconRaw: string, contentRaw: string) => {
+		// The lazy captures backtrack across cell boundaries, so a 3-cell row or
+		// a multi-row table can masquerade as a callout with a "short icon" and
+		// lose its other cells. Only the genuine one-row/two-cell shape converts;
+		// anything else is a real table and stays one (the HTML guard below then
+		// counts it as an unrepresentable block).
+		if (CALLOUT_CELL_STRUCTURE_RE.test(iconRaw) || CALLOUT_CELL_STRUCTURE_RE.test(contentRaw)) return whole
 		const icon = stripHtml(iconRaw)
 		// A real callout has a short icon cell; a content table must pass through.
 		if (icon.length > 8 || !stripHtml(contentRaw)) return whole

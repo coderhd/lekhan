@@ -3,12 +3,13 @@
 **Branch:** `feat/58-notion-import-zip` (base `origin/main` @ 9954aaf)
 **Reviewer:** independent clean-room reviewer subagent (fresh context, read-only)
 **Cycles:** 4 (REQUEST CHANGES → REQUEST CHANGES → REQUEST CHANGES → APPROVE), plus one
-post-approval pass for the automated review on PR #151.
+post-approval pass for the automated review on PR #151 and one fix from the QA gate (SIL-100).
 
 ## Verdict
 
-**APPROVE** after four cycles. 51 targeted Notion/dialog tests, 729 full-suite tests, typecheck,
-lint and production build are green. No blocking or high findings remain.
+**APPROVE** after four cycles; the QA gate's single blocking finding (B1, callout over-conversion)
+was fixed and regression-covered afterwards. Targeted Notion/dialog tests, the full suite,
+typecheck, lint and production build are green. No blocking or high findings remain.
 
 ## Findings raised and resolved
 
@@ -54,16 +55,26 @@ correctness items were verified against the branch and addressed:
 | NIT | Unreachable `mailto:` guard; duplicated `_all` replace; dead `calloutsConverted` counter. | Removed. Callout conversion is lossless, so it is not a degradation and does not belong in the report. |
 | NIT | Two Markdown tables had an unescaped `\|`. | Escaped. |
 
+### Cycle 6 — QA gate B1 (callout over-conversion)
+
+The QA Engineer's fixture/dogfood gate (`docs/reviews/pr-58-qa.md`, SIL-100) found one blocking
+bug: `CALLOUT_TABLE_RE`'s lazy captures backtracked across cell/row boundaries, so a 3-cell row
+or a multi-row table could convert into a callout and lose the remaining cells.
+
+| Sev | Finding | Resolution |
+|---|---|---|
+| BLOCKING | A `<table>` with 3+ cells or 2+ rows collapsed into a callout body: cells silently dropped (`icon="x"`, `content="y</td><td>z"`). | A match is rejected when either capture contains a `<td>`/`<tr>`/`<table>` tag, so only Notion's genuine one-row/two-cell shape converts; every other table is returned whole and counted in `degradedBlocks`. New `html-tables.zip` fixture + test (callout converts once, all seven table cells survive, two `<table>` elements remain). |
+
 ## Verification evidence
 
 ```
 npm run typecheck   # clean
 npm run lint        # clean
-npm test            # 87 files / 734 tests passed
+npm test            # 87 files / 735 tests passed
 npm run build       # Next.js production build succeeded
 ```
 
-Targeted suites: `notion-import-read` (11), `notion-import` (29), `notion-import-identity` (4),
+Targeted suites: `notion-import-read` (11), `notion-import` (30), `notion-import-identity` (4),
 `import-dialog` (12).
 
 ## Accepted limitations / follow-ups
