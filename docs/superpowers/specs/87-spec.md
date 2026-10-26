@@ -55,11 +55,12 @@ sorts pages deterministically before splitting (see D3/edge table).
 
 ### D3 — Client id is stable across the *retry*, not regenerated per call
 `crypto.randomUUID()` generated once per import attempt-session. The Import dialog holds the id in
-a ref keyed by a **vault fingerprint** — `workspaceId + page count + hash(each page's path,
-folder/note role, canonical properties, canonical tags, rich-text content hash, and plain text)`,
-order-independent. Re-picking the *same* vault after a failure reuses the id → server skips landed
-batches (AC1). Picking a *different* vault yields a new id (no cross-vault false "resumed"). The
-ref clears on success, on dialog close, and when the fingerprint changes.
+a ref keyed by a **vault fingerprint** — `workspaceId + page count + hash(canonical JSON of each
+page's (folderPath, title) tuple, folder/note role, canonical properties, canonical tags, rich-text
+content hash, and plain text)`, order-independent. Re-picking the *same* vault after a failure
+reuses the id → server skips landed batches (AC1). Picking a *different* vault yields a new id (no
+cross-vault false "resumed"). The ref clears on success, on dialog close, and when the fingerprint
+changes.
 
 The fingerprint deliberately hashes deterministic content only, and must cover **all** deterministic
 page state that affects the import — not just paths and plain text. `plainText` drops marks and node
@@ -71,8 +72,10 @@ which captures marks, structure, and node attributes. It must **not** use the Yj
 `Y.Doc` embeds a fresh random `clientID`, so the encoded bytes (and their length) differ between two
 ingestions of the same vault. Depending on that would change the fingerprint on retry, mint a new id,
 and re-create every already-landed page — the exact failure this ticket exists to prevent.
-`splitIntoBatches` sorts on the same deterministic key (path, then content hash) so positional
-`batchIndex` maps to a stable page set across retries.
+`splitIntoBatches` sorts on that same complete per-page fingerprint, so positional `batchIndex` maps
+to a stable page set across retries. Folder path and title are separate tuple fields there: flattening
+them into one `a/b/c` key would alias `("a", "b/c")` with `("a/b", "c")`, tie the comparator, and let
+enumeration order shift a page across a batch boundary (Pullfrog re-review on #132).
 
 Canonicalizing `properties` must mirror what the request serializes. `gray-matter` turns unquoted YAML
 timestamps into `Date`, which has no enumerable own keys, so a naive object walk collapses every date to
