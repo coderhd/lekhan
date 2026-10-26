@@ -390,4 +390,84 @@ describe('ImportDialog', () => {
 		expect(screen.getByTestId('degradation-database-views').textContent).toContain('deferred to Lekhan databases (H2 #47)')
 		expect(screen.getByTestId('degradation-attachments').textContent).toContain('non-image attachment')
 	})
+
+	it('snapshots Notion files before clearing the input (browsers empty FileList on value reset)', async () => {
+		readNotionZipsMock.mockResolvedValue({ files: [], directories: [], parts: 1, duplicatePagesSkipped: 0 })
+		importNotionExportMock.mockReturnValue({
+			ir: {
+				workspaceId: 'ws-1', source: 'notion',
+				pages: [{
+					title: 'Note', folderPath: null, properties: {}, tags: [],
+					contentYjsBase64: Buffer.from('a').toString('base64'),
+					plainText: 'a', isFolder: false, contentHash: 'hash',
+				}],
+			},
+			report: {
+				source: 'notion', pages: 1, folderPages: 0, linksResolved: 0, linksUnresolved: 0,
+				degradedBlocks: 0, databaseViewsDeferred: 0, databaseRows: 0, syncedBlocksFlattened: 0,
+				commentsOmitted: true, formulasRollupsFlattened: true, attachmentsDropped: 0,
+				exportParts: 1, duplicatePagesSkipped: 0, degradations: [],
+			},
+		})
+		global.fetch = vi.fn(async () => new Response(JSON.stringify({
+			success: true, importedCount: 1, pages: [{ id: 'p-1', title: 'Note' }], warnings: [],
+		}), { status: 200, headers: { 'Content-Type': 'application/json' } })) as unknown as typeof global.fetch
+
+		render(
+			<ImportDialog
+				open
+				onOpenChange={() => {}}
+				getWorkspace={async () => ({ id: 'ws-1' })}
+				existingPageTitles={[]}
+				onMarkdownFile={() => {}}
+				onOpenPage={() => {}}
+			/>
+		)
+		fireEvent.click(screen.getByText('Notion export (.zip)'))
+		const input = screen.getByTestId('notion-zip-input') as HTMLInputElement
+		const partOne = new File([new Uint8Array([1])], 'part-1.zip', { type: 'application/zip' })
+		const partTwo = new File([new Uint8Array([2])], 'part-2.zip', { type: 'application/zip' })
+
+		// Emulate the browser: resetting `value` empties the SAME FileList object.
+		const liveFiles = [partOne, partTwo] as unknown as FileList & File[]
+		Object.defineProperty(input, 'files', { configurable: true, get: () => liveFiles })
+		Object.defineProperty(input, 'value', {
+			configurable: true,
+			get: () => '',
+			set: () => { liveFiles.length = 0 },
+		})
+
+		fireEvent.change(input)
+
+		await waitFor(() => expect(readNotionZipsMock).toHaveBeenCalled())
+		expect(readNotionZipsMock.mock.calls[0][0]).toEqual([partOne, partTwo])
+	})
+
+	it('surfaces a Notion parse failure with an actionable error', async () => {
+		readNotionZipsMock.mockRejectedValue(new Error(
+			'No Notion pages or database rows found in that export. If you exported HTML, re-export with Export → Markdown & CSV.'
+		))
+		const fetchMock = vi.fn()
+		global.fetch = fetchMock as unknown as typeof global.fetch
+
+		render(
+			<ImportDialog
+				open
+				onOpenChange={() => {}}
+				getWorkspace={async () => ({ id: 'ws-1' })}
+				existingPageTitles={[]}
+				onMarkdownFile={() => {}}
+				onOpenPage={() => {}}
+			/>
+		)
+		fireEvent.click(screen.getByText('Notion export (.zip)'))
+		const input = screen.getByTestId('notion-zip-input') as HTMLInputElement
+		fireEvent.change(input, {
+			target: { files: [new File([new Uint8Array([1])], 'export.zip', { type: 'application/zip' })] },
+		})
+
+		expect(await screen.findByTestId('import-error')).toBeTruthy()
+		expect(screen.getByText(/Markdown & CSV/i)).toBeTruthy()
+		expect(fetchMock).not.toHaveBeenCalled()
+	})
 })

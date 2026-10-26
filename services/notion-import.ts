@@ -221,13 +221,19 @@ interface RawArchiveEntry {
 	data: Uint8Array
 }
 
-async function readOneZip (zipFile: File): Promise<{ entries: RawArchiveEntry[]; directories: string[] }> {
+interface ReadBudget {
+	totalBytes: number
+	images: number
+}
+
+async function readOneZip (
+	zipFile: File,
+	budget: ReadBudget
+): Promise<{ entries: RawArchiveEntry[]; directories: string[] }> {
 	const zip = await JSZip.loadAsync(zipFile)
 	const entries: RawArchiveEntry[] = []
 	const directories = new Set<string>()
 	const rawKeys = Object.keys(zip.files)
-	let totalBytes = 0
-	let imageCount = 0
 
 	for (const rawPath of rawKeys) {
 		const path = normalizePath(rawPath)
@@ -238,33 +244,37 @@ async function readOneZip (zipFile: File): Promise<{ entries: RawArchiveEntry[];
 
 		const isImg = isImage(path)
 		// Validate the reported uncompressed size before decompressing: a zip
-		// bomb must not be able to allocate unbounded memory.
+		// bomb must not be able to allocate unbounded memory. Fail closed if the
+		// size is unavailable rather than decompressing first and checking after.
 		const maybeData: unknown = (entry as unknown as { _data?: { uncompressedSize?: number } })._data
 		const reportedSize =
 			maybeData && typeof (maybeData as { uncompressedSize?: unknown }).uncompressedSize === 'number'
 				? (maybeData as { uncompressedSize: number }).uncompressedSize
 				: undefined
-		if (reportedSize !== undefined) {
-			if (reportedSize > MAX_IMPORT_FILE_BYTES) {
-				throw new Error(`File "${path}" exceeds per-file limit of ${MAX_IMPORT_FILE_BYTES} bytes.`)
-			}
-			if (totalBytes + reportedSize > MAX_IMPORT_TOTAL_BYTES) {
-				throw new Error(`Export exceeds total unpacked size limit of ${MAX_IMPORT_TOTAL_BYTES} bytes.`)
-			}
+		if (reportedSize === undefined) {
+			throw new Error(`Could not verify the uncompressed size of "${path}"; refusing to decompress it.`)
 		}
-		if (isImg && imageCount + 1 > MAX_IMPORT_IMAGE_COUNT) {
-			throw new Error(`Export exceeds maximum number of image attachments (${MAX_IMPORT_IMAGE_COUNT}).`)
+		if (reportedSize > MAX_IMPORT_FILE_BYTES) {
+			throw new Error(`File "${path}" exceeds per-file limit of ${MAX_IMPORT_FILE_BYTES} bytes.`)
+		}
+		if (budget.totalBytes + reportedSize > MAX_IMPORT_TOTAL_BYTES) {
+			throw new Error(`Export exceeds total unpacked size limit of ${MAX_IMPORT_TOTAL_BYTES} bytes.`)
+		}
+		if (isImg && budget.images + 1 > MAX_IMPORT_IMAGE_COUNT) {
+			throw new Error(
+				`Export exceeds maximum number of image attachments (${MAX_IMPORT_IMAGE_COUNT}). Split the export and import it in parts.`
+			)
 		}
 
 		const data = await entry.async('uint8array')
 		if (data.length > MAX_IMPORT_FILE_BYTES) {
 			throw new Error(`File "${path}" exceeds per-file limit of ${MAX_IMPORT_FILE_BYTES} bytes.`)
 		}
-		if (totalBytes + data.length > MAX_IMPORT_TOTAL_BYTES) {
+		if (budget.totalBytes + data.length > MAX_IMPORT_TOTAL_BYTES) {
 			throw new Error(`Export exceeds total unpacked size limit of ${MAX_IMPORT_TOTAL_BYTES} bytes.`)
 		}
-		totalBytes += data.length
-		if (isImg) imageCount += 1
+		budget.totalBytes += data.length
+		if (isImg) budget.images += 1
 		entries.push({ path, data })
 		for (const dir of ancestorDirs(path)) directories.add(dir)
 	}
@@ -286,10 +296,13 @@ export async function readNotionZips (zipFiles: File[]): Promise<NotionExportCon
 	const directories = new Set<string>()
 	const seenPaths = new Set<string>()
 	const seenPageIds = new Set<string>()
+	// One budget across every selected part: per-part budgets would let a
+	// multi-part selection exceed the documented envelope (N × limits).
+	const budget: ReadBudget = { totalBytes: 0, images: 0 }
 	let duplicatePagesSkipped = 0
 
 	for (const zipFile of zipFiles) {
-		const part = await readOneZip(zipFile)
+		const part = await readOneZip(zipFile, budget)
 		for (const dir of part.directories) directories.add(dir)
 		for (const entry of part.entries) {
 			const key = entry.path.toLowerCase()
@@ -350,7 +363,11 @@ export function parseCsv (text: string): string[][] {
 			continue
 		}
 		if (char === '"') {
-			quoted = true
+			// RFC 4180 only opens a quoted field at the start of a cell. A stray
+			// quote mid-cell is literal data, not an unterminated field that would
+			// swallow the rest of the file.
+			if (cell === '') quoted = true
+			else cell += '"'
 		} else if (char === ',') {
 			row.push(cell)
 			cell = ''
@@ -381,6 +398,11 @@ interface CsvDatabase {
 	records: Array<{ title: string; properties: Record<string, unknown> }>
 }
 
+function isWrapperOnlyDir (rawDir: string): boolean {
+	const segments = normalizePath(rawDir).split('/').filter(Boolean)
+	return segments.length > 0 && segments.every(isWrapperSegment)
+}
+
 function parseDatabaseCsv (path: string, data: Uint8Array): CsvDatabase {
 	const text = new TextDecoder().decode(data)
 	const rows = parseCsv(text)
@@ -394,7 +416,13 @@ function parseDatabaseCsv (path: string, data: Uint8Array): CsvDatabase {
 		headers.push(count === 1 ? base : `${base} (${count})`)
 	}
 	const titleColumn = headers[0] || 'Name'
-	const folder = cleanNotionPath(dirname(path)) || csvDatabaseTitle(path)
+	const rawDir = dirname(path)
+	// A CSV can be a sibling of its database folder (`Tasks <id>.csv` next to
+	// `Tasks <id>/`), or sit at the export wrapper root. Both mean the row pages
+	// live in a folder named after the database, not in the CSV's own directory.
+	const folder = cleanNotionPath(rawDir) && !isWrapperOnlyDir(rawDir)
+		? cleanNotionPath(rawDir)
+		: csvDatabaseTitle(path)
 
 	const records: Array<{ title: string; properties: Record<string, unknown> }> = []
 	for (const row of rows) {
@@ -555,6 +583,32 @@ function isExternalTarget (target: string): boolean {
 	return /^[a-z][a-z0-9+.-]*:/i.test(target) && !/^[a-z]:[\\/]/i.test(target)
 }
 
+/**
+ * Apply a body transform only outside fenced code blocks and inline code
+ * spans. A page that documents Markdown (or a synced block containing code)
+ * must not have its literal `[link](target)` / `![alt](image)` examples
+ * rewritten, and must not inflate the "dropped attachment" count.
+ */
+function mapOutsideCode (body: string, transform: (segment: string) => string): string {
+	const lines = body.split('\n')
+	const out: string[] = []
+	let inFence = false
+	for (const line of lines) {
+		if (/^\s*(```|~~~)/.test(line)) {
+			inFence = !inFence
+			out.push(line)
+			continue
+		}
+		if (inFence) {
+			out.push(line)
+			continue
+		}
+		const parts = line.split(/(`+[^`]*`+)/g)
+		out.push(parts.map((part, index) => (index % 2 === 1 ? part : transform(part))).join(''))
+	}
+	return out.join('\n')
+}
+
 function isNotionUrl (target: string): boolean {
 	return /^https?:\/\/(?:www\.)?notion\.(?:so|site)\//i.test(target)
 }
@@ -635,36 +689,49 @@ const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 const HTML_IMAGE_RE = /<img\b([^>]*?)\/?>/gi
 
 function replaceImages (body: string, ctx: BodyContext): string {
-	const withMarkdown = body.replace(MARKDOWN_IMAGE_RE, (whole, altRaw: string, target: string) => {
-		if (isExternalTarget(target)) return whole
-		const alt = altRaw || 'Image'
-		const entry = resolveRelative(target, ctx.page.path, ctx.media)
-		if (entry && isImage(entry.path)) return `![${alt}](${imageDataUrl(entry, entry.path)})`
-		ctx.stats.attachmentsDropped += 1
-		return alt
-	})
+	return mapOutsideCode(body, (segment) => {
+		const withMarkdown = segment.replace(MARKDOWN_IMAGE_RE, (whole, altRaw: string, target: string) => {
+			if (isExternalTarget(target)) return whole
+			const alt = altRaw || 'Image'
+			const entry = resolveRelative(target, ctx.page.path, ctx.media)
+			if (entry && isImage(entry.path)) return `![${alt}](${imageDataUrl(entry, entry.path)})`
+			ctx.stats.attachmentsDropped += 1
+			return alt
+		})
 
-	return withMarkdown.replace(HTML_IMAGE_RE, (whole, attrs: string) => {
-		const src = attrs.match(/src\s*=\s*(?:"([^"]*)"|'([^']*)')/i)
-		const altMatch = attrs.match(/alt\s*=\s*(?:"([^"]*)"|'([^']*)')/i)
-		const alt = altMatch?.[1] ?? altMatch?.[2] ?? 'Image'
-		if (!src) return whole
-		const target = src[1] ?? src[2] ?? ''
-		if (isExternalTarget(target)) return whole
-		const entry = resolveRelative(target, ctx.page.path, ctx.media)
-		if (entry && isImage(entry.path)) return `![${alt}](${imageDataUrl(entry, entry.path)})`
-		ctx.stats.attachmentsDropped += 1
-		return alt
+		return withMarkdown.replace(HTML_IMAGE_RE, (whole, attrs: string) => {
+			const src = attrs.match(/src\s*=\s*(?:"([^"]*)"|'([^']*)')/i)
+			const altMatch = attrs.match(/alt\s*=\s*(?:"([^"]*)"|'([^']*)')/i)
+			const alt = altMatch?.[1] ?? altMatch?.[2] ?? 'Image'
+			if (!src) return whole
+			const target = src[1] ?? src[2] ?? ''
+			if (isExternalTarget(target)) return whole
+			const entry = resolveRelative(target, ctx.page.path, ctx.media)
+			if (entry && isImage(entry.path)) return `![${alt}](${imageDataUrl(entry, entry.path)})`
+			ctx.stats.attachmentsDropped += 1
+			return alt
+		})
 	})
 }
 
 const MARKDOWN_LINK_RE = /(?<!!)\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 
+/** `[[Title]]`-style links cannot encode `|` or `]]` inside the target. */
+function toWikilink (title: string, text: string): string | null {
+	if (/[|\]]/.test(title)) return null
+	return normalizeTitle(title) === normalizeTitle(text) ? `[[${title}]]` : `[[${title}|${text}]]`
+}
+
 function replaceLinks (body: string, ctx: BodyContext): string {
-	return body.replace(MARKDOWN_LINK_RE, (whole, textRaw: string, target: string) => {
+	return mapOutsideCode(body, (segment) => segment.replace(MARKDOWN_LINK_RE, (whole, textRaw: string, target: string) => {
 		if (target.startsWith('#')) {
 			// Same-page block reference: the page is intact, the block anchor is
 			// not representable. Keep the visible text and count the degradation.
+			ctx.stats.degradedBlocks += 1
+			return textRaw
+		}
+		// Never import executable schemes from a third-party archive.
+		if (/^(?:javascript|vbscript|data|file):/i.test(target)) {
 			ctx.stats.degradedBlocks += 1
 			return textRaw
 		}
@@ -673,8 +740,15 @@ function replaceLinks (body: string, ctx: BodyContext): string {
 
 		const resolved = resolvePageTarget(target, ctx.pagesById, ctx.pagesByTitle, ctx.databasesByFolder, ctx.existingTitles)
 		if (resolved) {
-			recordTarget(ctx.linkStats, resolved, true)
-			return normalizeTitle(resolved) === normalizeTitle(textRaw) ? `[[${resolved}]]` : `[[${resolved}|${textRaw}]]`
+			const link = toWikilink(resolved, textRaw)
+			if (link) {
+				recordTarget(ctx.linkStats, resolved, true)
+				return link
+			}
+			// A resolved title we cannot encode must not become a dangling
+			// `[[B|alias]]`; keep the text and name the degradation.
+			ctx.stats.degradedBlocks += 1
+			return textRaw
 		}
 
 		// Relative attachment (non-page, non-image): keep its label visible,
@@ -687,35 +761,40 @@ function replaceLinks (body: string, ctx: BodyContext): string {
 
 		const fallback = isNotionUrl(target) ? titleFromNotionUrl(target) : cleanLinkTitle(target)
 		if (!fallback) return whole
+		const link = toWikilink(fallback, textRaw)
+		if (!link) {
+			ctx.stats.degradedBlocks += 1
+			return textRaw
+		}
 		recordTarget(ctx.linkStats, fallback, false)
-		return normalizeTitle(fallback) === normalizeTitle(textRaw) ? `[[${fallback}]]` : `[[${fallback}|${textRaw}]]`
-	})
+		return link
+	}))
 }
 
 const BARE_NOTION_URL_RE = /(^|[\s(])(https?:\/\/(?:www\.)?notion\.(?:so|site)\/[^\s)]+)/gi
 
 function replaceBareNotionUrls (body: string, ctx: BodyContext): string {
-	const lines = body.split('\n')
-	let inFence = false
-	for (let i = 0; i < lines.length; i++) {
-		if (/^\s*(```|~~~)/.test(lines[i])) {
-			inFence = !inFence
-			continue
-		}
-		if (inFence) continue
-		lines[i] = lines[i].replace(BARE_NOTION_URL_RE, (whole, prefix: string, url: string) => {
-			const title = resolvePageTarget(url, ctx.pagesById, ctx.pagesByTitle, ctx.databasesByFolder, ctx.existingTitles)
-			if (title) {
+	return mapOutsideCode(body, (segment) => segment.replace(BARE_NOTION_URL_RE, (whole, prefix: string, url: string) => {
+		const title = resolvePageTarget(url, ctx.pagesById, ctx.pagesByTitle, ctx.databasesByFolder, ctx.existingTitles)
+		if (title) {
+			const link = toWikilink(title, title)
+			if (link) {
 				recordTarget(ctx.linkStats, title, true)
-				return `${prefix}[[${title}]]`
+				return `${prefix}${link}`
 			}
-			const fallback = titleFromNotionUrl(url)
-			if (!fallback) return whole
-			recordTarget(ctx.linkStats, fallback, false)
-			return `${prefix}[[${fallback}]]`
-		})
-	}
-	return lines.join('\n')
+			ctx.stats.degradedBlocks += 1
+			return whole
+		}
+		const fallback = titleFromNotionUrl(url)
+		if (!fallback) return whole
+		const link = toWikilink(fallback, fallback)
+		if (!link) {
+			ctx.stats.degradedBlocks += 1
+			return whole
+		}
+		recordTarget(ctx.linkStats, fallback, false)
+		return `${prefix}${link}`
+	}))
 }
 
 const UNSUPPORTED_HTML_RE = /<(table|iframe|video|audio|figure|details|summary|embed|object)\b/gi
@@ -771,6 +850,11 @@ export function importNotionExport (
 ): NotionImportResult {
 	const { workspaceId, existingPageTitles } = options
 
+	if (content.files.length === 0) {
+		throw new Error(
+			'No Notion pages or database rows found in that export. If you exported HTML, re-export with Export → Markdown & CSV and select that .zip.'
+		)
+	}
 	if (!looksLikeNotionExport(content)) {
 		throw new Error(
 			'This doesn\'t look like a Notion export. Use Export → Markdown & CSV in Notion, then select the downloaded .zip (not an HTML export or an Obsidian vault).'
@@ -850,10 +934,21 @@ export function importNotionExport (
 	const usedRows = new Set<RawNotionPage>()
 	let databaseRows = 0
 	for (const db of databasesByFolder.values()) {
+		// Notion layouts seen in the wild: rows live in the database folder
+		// (`Tasks/`), in a nested folder beside a sibling CSV
+		// (`Product/Tasks.csv` + `Product/Tasks/`), or directly under the export
+		// wrapper when the CSV is a sibling of its folder. Accept all of them so
+		// a row never becomes two pages (one with the body, one with properties).
+		const nestedRowFolder = db.folder === db.title ? db.title : `${db.folder}/${db.title}`
+		const rowFolders = new Set([db.folder, nestedRowFolder, db.title])
+		const synthesizeInto = rawPages.some(page => page.folderPath === nestedRowFolder)
+			? nestedRowFolder
+			: db.folder
+
 		for (const record of db.records) {
 			databaseRows += 1
 			const candidates = (pagesByTitle.get(normalizeTitle(record.title)) ?? []).filter(
-				page => page.folderPath === db.folder && !usedRows.has(page)
+				page => rowFolders.has(page.folderPath ?? '') && !usedRows.has(page)
 			)
 			let rowPage = candidates[0]
 			if (!rowPage) {
@@ -861,9 +956,9 @@ export function importNotionExport (
 				// Never drop the row: create the page from its CSV columns.
 				rowPage = {
 					path: `${db.path}#${databaseRows}`,
-					cleanPath: `${db.folder}/${record.title}`,
+					cleanPath: `${synthesizeInto}/${record.title}`,
 					title: record.title,
-					folderPath: db.folder,
+					folderPath: synthesizeInto,
 					blockId: null,
 					raw: '',
 					properties: {},

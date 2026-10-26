@@ -198,6 +198,103 @@ describe('importNotionExport — media, callouts and degradations', () => {
 	})
 })
 
+describe('importNotionExport — database layout variants', () => {
+	it('matches row pages when the CSV is a sibling or the nested folder, with no duplicates or wrapper pages', async () => {
+		const content = await readNotionZips([fixtureFile('database-layouts.zip')])
+		const { ir, report } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
+
+		const notes = ir.pages.filter(page => !page.isFolder)
+		expect(notes.map(page => page.title).sort()).toEqual(['Alpha', 'Beta', 'Gamma'])
+		expect(report.databaseRows).toBe(3)
+		expect(report.databaseViewsDeferred).toBe(2)
+		expect(report.folderPages).toBe(3) // Projects, Product, Product/Tasks
+
+		// Exactly one row page per row, with both the body and the CSV columns.
+		const alpha = notes.filter(page => page.title === 'Alpha')
+		expect(alpha).toHaveLength(1)
+		expect(alpha[0].properties).toMatchObject({ Name: 'Alpha', Status: 'Active' })
+		expect(alpha[0].plainText).toContain('Alpha body.')
+
+		const gamma = notes.find(page => page.title === 'Gamma')!
+		expect(gamma.properties).toMatchObject({ Name: 'Gamma', Status: 'Done' })
+		expect(gamma.plainText).toContain('Gamma body.')
+
+		expect(ir.pages.some(page => /Private & Shared/i.test(page.title))).toBe(false)
+	})
+})
+
+describe('importNotionExport — code safety and unrepresentable titles', () => {
+	function contentOf (files: Record<string, string>) {
+		return {
+			files: Object.entries(files).map(([filePath, body]) => ({
+				path: filePath,
+				data: new TextEncoder().encode(body),
+			})),
+			directories: [],
+			parts: 1,
+			duplicatePagesSkipped: 0,
+		}
+	}
+
+	it('never rewrites links or images inside fenced and inline code', async () => {
+		const content = contentOf({
+			[`Seed ${'1'.repeat(32)}.md`]: [
+				'# Seed',
+				'',
+				'```md',
+				'[Not a link](Other.md)',
+				'![Not an image](pic.png)',
+				'```',
+				'',
+				'Inline `[also not a link](Other.md)` and `![no](pic.png)` stay literal.',
+			].join('\n'),
+		}) as Parameters<typeof importNotionExport>[0]
+		const { ir, report } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
+		const page = ir.pages.find(candidate => candidate.title === 'Seed')!
+
+		expect(page.plainText).toContain('[Not a link](Other.md)')
+		expect(page.plainText).toContain('![Not an image](pic.png)')
+		expect(page.plainText).toContain('[also not a link](Other.md)')
+		expect(page.plainText).not.toContain('[[Other]]')
+		expect(report.attachmentsDropped).toBe(0)
+		expect(report.degradedBlocks).toBe(0)
+	})
+
+	it('keeps text (and reports the degradation) when a linked title contains "|"', () => {
+		const content = contentOf({
+			[`B | C ${'2'.repeat(32)}.md`]: '# B | C\n\nBody.\n',
+			[`Source ${'3'.repeat(32)}.md`]: `# Source\n\nRead [the b page](B%20%7C%20C%20${'2'.repeat(32)}.md).\n`,
+		}) as Parameters<typeof importNotionExport>[0]
+		const { ir, report } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
+		const source = ir.pages.find(page => page.title === 'Source')!
+
+		expect(source.plainText).toContain('the b page')
+		expect(source.plainText).not.toContain('[[B |')
+		expect(report.degradedBlocks).toBe(1)
+	})
+
+	it('drops executable link schemes instead of importing them', () => {
+		const content = contentOf({
+			[`Seed ${'4'.repeat(32)}.md`]: '# Seed\n\n[click me](javascript:alert(1))\n',
+		}) as Parameters<typeof importNotionExport>[0]
+		const { ir, report } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
+		const page = ir.pages.find(candidate => candidate.title === 'Seed')!
+
+		expect(page.plainText).toContain('click me')
+		expect(page.plainText).not.toContain('javascript:')
+		expect(report.degradedBlocks).toBe(1)
+	})
+
+	it('reports an empty export as empty rather than "not a Notion export"', () => {
+		expect(() =>
+			importNotionExport(
+				{ files: [], directories: [], parts: 1, duplicatePagesSkipped: 0 },
+				{ workspaceId: 'ws-1', existingPageTitles: [] }
+			)
+		).toThrow(/No Notion pages or database rows/i)
+	})
+})
+
 describe('importNotionExport — multi-part exports', () => {
 	it('merges parts, skips duplicate pages, and reports the part count', async () => {
 		const content = await readNotionZips([

@@ -59,7 +59,7 @@ export function ImportReportCard ({ report, serverWarnings, createdPages, resume
 				)}
 				{report.degradedBlocks > 0 && (
 					<li data-testid="report-degraded">
-						{report.degradedBlocks} block{report.degradedBlocks === 1 ? '' : 's'} couldn't be converted exactly (e.g. non-image embeds) and were kept as links instead
+						{report.degradedBlocks} block{report.degradedBlocks === 1 ? '' : 's'} couldn't be converted exactly (e.g. non-image embeds) and were kept as readable text instead
 					</li>
 				)}
 				{resumedCount > 0 && (

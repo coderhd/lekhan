@@ -187,12 +187,12 @@ export function ImportDialog ({
 		}
 	}
 
-	const handleNotionFiles = async (files: FileList | null) => {
-		if (!files || files.length === 0) return
+	const handleNotionFiles = async (files: File[]) => {
+		if (files.length === 0) return
 		setPhase('picking')
 		try {
 			const workspace = await getWorkspace()
-			await runNotionIngestionAndWrite(Array.from(files), workspace.id)
+			await runNotionIngestionAndWrite(files, workspace.id)
 		} catch (err) {
 			fail(err instanceof Error ? `Could not read that Notion export ZIP: ${err.message}` : String(err))
 		}
@@ -229,13 +229,13 @@ export function ImportDialog ({
 			})
 	}
 
-	const handleFolderFiles = async (files: FileList | null) => {
-		if (!files || files.length === 0) return
+	const handleFolderFiles = async (files: File[]) => {
+		if (files.length === 0) return
 		setPhase('picking')
 		try {
 			const workspace = await getWorkspace()
 			setPhase('ingesting')
-			const content = await readVaultFiles(Array.from(files))
+			const content = await readVaultFiles(files)
 			await runIngestionAndWrite(content, workspace.id)
 		} catch (err) {
 			fail(err instanceof Error ? `Could not read that vault: ${err.message}` : String(err))
@@ -373,7 +373,11 @@ export function ImportDialog ({
 					multiple
 					className="hidden"
 					onChange={(e) => {
-						const files = e.target.files
+						// Snapshot BEFORE clearing the input: assigning `value = ''`
+						// empties the live FileList in real browsers, and a Notion
+						// multi-part selection would otherwise silently import zero
+						// files. Same hazard for the webkitdirectory fallback.
+						const files = Array.from(e.target.files ?? [])
 						e.target.value = ''
 						void handleNotionFiles(files)
 					}}
@@ -401,7 +405,7 @@ export function ImportDialog ({
 					webkitdirectory=""
 					className="hidden"
 					onChange={(e) => {
-						const files = e.target.files
+						const files = Array.from(e.target.files ?? [])
 						e.target.value = ''
 						void handleFolderFiles(files)
 					}}

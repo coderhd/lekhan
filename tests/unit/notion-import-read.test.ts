@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
+import JSZip from 'jszip'
 import {
 	cleanNotionPath,
 	importNotionExport,
@@ -44,6 +45,13 @@ describe('parseCsv (RFC 4180)', () => {
 			['Ship, it', 'Done "yes"', 'line one\nline two'],
 		])
 	})
+
+	it('treats a stray mid-cell quote as literal data instead of swallowing the file', () => {
+		expect(parseCsv('a"b,c\nnext,row\n')).toEqual([
+			['a"b', 'c'],
+			['next', 'row'],
+		])
+	})
 })
 
 describe('readNotionZips', () => {
@@ -84,5 +92,28 @@ describe('readNotionZips', () => {
 
 	it('rejects an empty selection', async () => {
 		await expect(readNotionZips([])).rejects.toThrow(/Select a Notion export/i)
+	})
+
+	it('rejects a file that exceeds the per-file unpacked size limit before decompressing', async () => {
+		const zip = new JSZip()
+		zip.file(`Big ${'1'.repeat(32)}.md`, 'x'.repeat(10 * 1024 * 1024 + 1))
+		const blob = await zip.generateAsync({ type: 'nodebuffer' })
+		const file = new File([new Uint8Array(blob)], 'big.zip', { type: 'application/zip' })
+		await expect(readNotionZips([file])).rejects.toThrow(/per-file limit/i)
+	})
+
+	it('enforces one image budget across every selected export part', async () => {
+		async function imagesZip (prefix: string, count: number): Promise<File> {
+			const zip = new JSZip()
+			for (let i = 0; i < count; i++) {
+				zip.file(`${prefix}/image ${i} ${String(i).padStart(32, '0')}.png`, new Uint8Array([1, 2, 3]))
+			}
+			const blob = await zip.generateAsync({ type: 'nodebuffer' })
+			return new File([new Uint8Array(blob)], `${prefix}.zip`, { type: 'application/zip' })
+		}
+		await expect(readNotionZips([
+			await imagesZip('part-1', 600),
+			await imagesZip('part-2', 401),
+		])).rejects.toThrow(/maximum number of image attachments/i)
 	})
 })

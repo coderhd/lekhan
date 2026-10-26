@@ -158,19 +158,27 @@ describe('Notion IR identity — import → serialize → reimport', () => {
 		]))
 	})
 
-	it('is idempotent across repeated parse → serialize → parse (generated matrix)', () => {
-		const cases = Array.from({ length: 12 }, (_, index) => ({
-			title: `Generated ${index}`,
-			body: [
-				`## Generated ${index}`,
-				'',
-				`- [${index % 2 === 0 ? 'x' : ' '}] task ${index}`,
-				'',
-				`| k | v |\n| --- | --- |\n| ${index} | ${index * index} |`,
-				'',
-				`\`\`\`\nvalue = ${index}\n\nnext = ${index + 1}\n\`\`\``,
-			].join('\n'),
-		}))
+	it('is idempotent across a generated matrix of constructs', () => {
+		// Deterministic pseudo-random generation (no fast-check dependency): 24
+		// construct combinations that vary headings, tasks, quotes, tables, code
+		// with blank lines, and marks.
+		const rng = (seed: number) => {
+			let state = seed >>> 0
+			return () => {
+				state = (state * 1664525 + 1013904223) >>> 0
+				return state / 0x100000000
+			}
+		}
+		const cases = Array.from({ length: 24 }, (_, index) => {
+			const random = rng(index + 1)
+			const blocks = [`## Generated ${index}`]
+			if (random() > 0.3) blocks.push('', `- [${random() > 0.5 ? 'x' : ' '}] task ${index}`)
+			if (random() > 0.4) blocks.push('', `> quote ${index}`)
+			if (random() > 0.3) blocks.push('', `| k | v |\n| --- | --- |\n| ${index} | ${index * index} |`)
+			if (random() > 0.2) blocks.push('', `\`\`\`ts\nconst n = ${index}\n\nconsole.log(n)\n\`\`\``)
+			if (random() > 0.5) blocks.push('', `**bold ${index}** and *italic*`)
+			return { title: `Generated ${index}`, body: blocks.join('\n') }
+		})
 		const imported = importNotionExport(notionContent(cases), {
 			workspaceId: 'ws-1',
 			existingPageTitles: [],
@@ -180,6 +188,12 @@ describe('Notion IR identity — import → serialize → reimport', () => {
 			const once = markdownEngine.serializeExport(docFromPage(page))
 			const twice = markdownEngine.serializeExport(markdownEngine.parse(once))
 			expect(twice, `serialization drifted for "${page.title}"`).toBe(once)
+		}
+
+		const roundTripped = reimportSerialized(imported.ir.pages)
+		const originalByTitle = new Map(imported.ir.pages.filter(page => !page.isFolder).map(page => [page.title, page]))
+		for (const page of roundTripped.ir.pages.filter(page => !page.isFolder)) {
+			expect(page.plainText, `content drifted for "${page.title}"`).toBe(originalByTitle.get(page.title)?.plainText)
 		}
 	})
 

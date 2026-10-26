@@ -179,6 +179,10 @@ Markdown). HTML export dropped into this path gets an actionable error naming Ma
 | Empty zip / no pages | Reject: nothing to import |
 | Page title contains `/`, `#`, `?`, `*`, `|` | Kept in the Page title/properties; path segments are cleaned independently |
 | Duplicate page UUID across multi-part zips | Keep first; report duplicate count |
+| CSV is a sibling of its database folder (`Tasks.csv` + `Tasks/`) or nested (`Product/Tasks.csv` + `Product/Tasks/`) | Row pages matched across all three layouts; no duplicate row pages, no `Private & Shared` wrapper page |
+| Markdown examples inside fenced/inline code | Never rewritten; no phantom dropped attachments |
+| Linked page title contains `\|` or `]]` | Link text kept visible; counted as a degraded block (wikilink syntax cannot encode it) |
+| Link uses `javascript:`/`data:`/`vbscript:`/`file:` | Dropped to text; counted as degraded |
 | Database row without a Markdown page | Page created from CSV columns, empty body |
 | Database row title blank | `Untitled`, columns still imported |
 | CSV with quoted commas/newlines/BOM | Parsed by the RFC-4180 reader |
