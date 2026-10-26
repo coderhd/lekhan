@@ -109,3 +109,23 @@ Two findings were raised after the Pullfrog round; both are fixed:
 2. **MINOR — plan doc described the fingerprint as paths + source text only.** The note now lists the
    complete inputs (role, canonical properties/tags, fitted-content hash, plain text) and records that
    Yjs bytes stay excluded (`docs/superpowers/plans/2026-10-07-h0-idempotent-bulk-imports.md`).
+
+## Addendum — external review round 3 (Pullfrog, PR #132, `c63224b`)
+
+One finding was raised against the deterministic-Yjs-seed commit; it was valid and is fixed:
+
+- **MAJOR — folder/title flattening aliased distinct page locations.** `pageFingerprint` built its
+  path as `` `${folderPath ?? ''}/${title}` ``, so `("a", "b/c")` and `("a/b", "c")` produced the
+  same `a/b/c` key when the rest of the page matched. The comparator then returned `0` for two
+  genuinely different pages, leaving their order dependent on directory enumeration; a reorder
+  across the 48 MB boundary could move a page to a different `batchIndex` under the same
+  `clientImportId` and replay the wrong page set. Fixed by fingerprinting the page as canonical JSON
+  of a tuple with `folderPath` and `title` as **separate** fields (role, canonical
+  properties/tags, fitted-content hash, and plain text follow). Regression tests: the two
+  colliding locations now fingerprint differently, and two batches forced to one page each keep
+  identical membership/ordinals when the input order is reversed
+  (`tests/unit/vault-import.test.ts`).
+
+The CodeRabbit MAJOR thread (line 117) is also covered by round 2's fix: `contentYjsBase64` is now
+deterministic because the seed `clientID` derives from content, so `batchByteLength` no longer
+drifts while `vaultFingerprint` correctly excludes Yjs bytes.

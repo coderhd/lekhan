@@ -26,12 +26,14 @@ blockers/majors were fixed and re-verified (`docs/reviews/pr-87-review.md`):
   NOTHING`, so a reclaimed batch (partial chunk, checkpoint failure, or crash-after-landing)
   re-runs without duplicating pages.
 - **Stable batch identity + retry id:** `splitIntoBatches` sorts pages by their full deterministic
-  identity (path, folder/note role, canonical properties/tags, fitted-content hash, plain text) so
-  positional `batchIndex` maps to the same page set across retries; `vaultFingerprint` hashes that
-  same identity and **never** the Yjs bytes, so a retry keeps the same `clientImportId` and the
-  ledger actually resumes. `seedToYjsBase64` derives the seed clientID from the content, making the
-  encoded bytes (which batching measures) deterministic across ingestions and so keeping batch
-  boundaries stable; `canonicalJson` honours `toJSON` so `Date` frontmatter is not collapsed.
+  identity (folder path and title as distinct fields, folder/note role, canonical properties/tags,
+  fitted-content hash, plain text) so positional `batchIndex` maps to the same page set across
+  retries; `vaultFingerprint` hashes that same identity and **never** the Yjs bytes, so a retry
+  keeps the same `clientImportId` and the ledger actually resumes. Folder path and title stay
+  separate so `("a", "b/c")` can never alias `("a/b", "c")`. `seedToYjsBase64` derives the seed
+  clientID from the content, making the encoded bytes (which batching measures) deterministic
+  across ingestions and so keeping batch boundaries stable; `canonicalJson` honours `toJSON` so
+  `Date` frontmatter is not collapsed.
 - **Client:** bounded 409 `batch_in_progress` backoff per spec D2.
 - **A11y/UX:** progress block `role="status" aria-live="polite"`; warning keys stabilized;
   resumed line no longer double-counts the headline.

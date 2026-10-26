@@ -87,15 +87,21 @@ export function generateImportId (): string {
  * same vault.
  */
 function pageFingerprint (page: ObsidianImportIR['pages'][number]): string {
-	const path = `${page.folderPath ?? ''}/${page.title}`
-	return [
-		path,
+	// Folder path and title are DISTINCT fields: the server treats `folderPath`
+	// as hierarchy and `title` as the leaf title, and frontmatter titles may
+	// contain `/`. Flattening them into one `a/b/c` string would alias
+	// `("a", "b/c")` with `("a/b", "c")`, letting a reorder across a batch
+	// boundary replay the wrong page set (PR #132 review). Canonical JSON keeps
+	// the tuple unambiguous and escapes any separators inside the values.
+	return canonicalJson([
+		page.folderPath ?? '',
+		page.title,
 		page.isFolder ? 'folder' : 'note',
-		canonicalJson(page.properties ?? {}),
-		canonicalJson(page.tags ?? []),
+		page.properties ?? {},
+		page.tags ?? [],
 		page.contentHash ?? stableHash(page.plainText),
 		page.plainText,
-	].join('\u0000')
+	])
 }
 
 /**
@@ -104,8 +110,10 @@ function pageFingerprint (page: ObsidianImportIR['pages'][number]): string {
  * the same vault after a failure resumes the same `clientImportId`; a
  * different vault gets a fresh one (no cross-vault false "resumed").
  *
- * It hashes only *deterministic* content: each page's path, folder/note role,
- * canonical properties/tags, rich-text content hash, and plain text. It must
+ * It hashes only *deterministic* content: each page's folder path and title
+ * (kept as separate fields so `("a", "b/c")` never aliases `("a/b", "c")`),
+ * folder/note role, canonical properties/tags, rich-text content hash, and
+ * plain text. It must
  * not use the Yjs encoding: seeding a Y.Doc embeds a fresh random clientID, so
  * the encoded bytes — and their length — differ between two ingestions of the
  * same vault. Depending on that would change the fingerprint on retry, mint a
@@ -147,8 +155,9 @@ export function splitIntoBatches (
 	const orderedPages = [...ir.pages].sort((a, b) => {
 		// The page's full deterministic identity is the sort key: two pages that
 		// fingerprint identically are interchangeable, and any difference (role,
-		// properties, tags, content) yields a total, retry-stable order so
-		// `batchIndex` maps to the same page set on every attempt (#87).
+		// properties, tags, content, or folder/title split) yields a total,
+		// retry-stable order so `batchIndex` maps to the same page set on every
+		// attempt (#87).
 		const keyA = pageFingerprint(a)
 		const keyB = pageFingerprint(b)
 		if (keyA === keyB) return 0

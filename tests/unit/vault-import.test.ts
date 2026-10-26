@@ -71,6 +71,27 @@ describe('splitIntoBatches', () => {
 		]))
 		expect(batches.flatMap(b => b.pages.map(p => p.title))).toEqual(['a', 'b', 'c'])
 	})
+
+	it('keeps batch membership stable for folder/title pairs that flatten alike', () => {
+		// `("a", "b/c")` and `("a/b", "c")` flatten to the same string, so a
+		// separator-based sort key ties them and leaves their order dependent on
+		// directory enumeration. With a budget that forces one page per batch, a
+		// reorder would move a page across a positional batchIndex and the ledger
+		// would replay the wrong page set (PR #132 review).
+		const base = makePage('c', 400)
+		const nestedTitle = { ...base, title: 'b/c', folderPath: 'a' }
+		const nestedFolder = { ...base, folderPath: 'a/b' }
+		const budget = 900
+
+		const identity = (layout: ReturnType<typeof splitIntoBatches>) =>
+			layout.batches.map(batch => batch.pages.map(page => `${page.folderPath}|${page.title}`))
+
+		const forward = splitIntoBatches(makeIR([nestedTitle, nestedFolder]), budget)
+		const reversed = splitIntoBatches(makeIR([nestedFolder, nestedTitle]), budget)
+
+		expect(forward.batches).toHaveLength(2)
+		expect(identity(forward)).toEqual(identity(reversed))
+	})
 })
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -127,6 +148,17 @@ describe('vaultFingerprint', () => {
 		const base = makeIR([makePage('a', 10)])
 		const asFolder = makeIR([{ ...makePage('a', 10), isFolder: true }])
 		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(asFolder))
+	})
+
+	it('does not alias distinct folder/title locations that flatten alike', () => {
+		// `("a", "b/c")` and `("a/b", "c")` flatten to the same `a/b/c` string, but
+		// the server treats folderPath as hierarchy and title as the leaf title,
+		// so they are different pages. If the fingerprint aliased them, a reorder
+		// across a batch boundary could replay the wrong page set (PR #132 review).
+		const base = makePage('c', 10)
+		const nestedTitle = makeIR([{ ...base, title: 'b/c', folderPath: 'a' }])
+		const nestedFolder = makeIR([{ ...base, folderPath: 'a/b' }])
+		expect(vaultFingerprint(nestedTitle)).not.toBe(vaultFingerprint(nestedFolder))
 	})
 
 	it('diverges when a Date-valued property changes but serializes the same shape', () => {
