@@ -63,6 +63,7 @@ Separation of duties only works if the agent that approves a thing is not the sa
 - [ ] Acceptance criteria written as Given/When/Then
 - [ ] Linked epic (`Part of #<epic>`)
 - [ ] ADR reference if the change touches existing architecture
+- [ ] Sprint-committed issues carry `sprint:<YYYY-Www>` + `est:*` labels, **verified on the tracker** (not recorded only in a comment); a label write blocked by a live-run checkout lock is re-applied until it lands — see `docs/decisions/process/02-sprint-planning-label-checklist.md`
 
 ---
 
