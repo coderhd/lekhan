@@ -726,7 +726,13 @@ export default function EditorWorkspace({	pageId,
 	// this at paste time so it can never be redirected into a different document
 	// if the component switches pages while the properties RPC is in flight.
 	const pageIdRef = useRef(pageId)
-	pageIdRef.current = pageId
+
+	// Sync after commit, like editorRef below: mutating a ref during render is
+	// unsound under concurrent renders (an interrupted render for a new pageId
+	// could poison the guard before commit).
+	useLayoutEffect(() => {
+		pageIdRef.current = pageId
+	}, [pageId])
 
 	// Keep the ref in sync after commit instead of mutating it during render.
 	// handlePaste reads editorRef.current inside a user event (post-commit), so
