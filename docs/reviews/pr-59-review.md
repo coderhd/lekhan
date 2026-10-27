@@ -376,3 +376,195 @@ through.
    case).
 3. #3 decision + #4 evidence (product/spec call, not purely code).
 4. #5, #7-#10 as follow-ups in the same PR if cheap; #11-#15 cleanup.
+
+---
+
+## Round 2 verification — 2026-10-27
+
+**Reviewer:** same independent Clean-Room Reviewer, second pass (did not write this code)
+**Head verified:** `6e57d01` (`fix(59): clean-room review — Notion placeholder heading, table-safe wikilinks, URL + clipboard hardening`), branch `feat/59-clipboard-copy` on `origin/main` (`2ea8018`)
+**Method:** read the remediation diff in full; reproduced each claimed fix with throw-away vitest files (deleted afterwards — `git status` shows only this review file as modified); read the component/server paths for the races that cannot be unit-driven; ran the full gate on the clean tree.
+
+### Gate evidence (Stage 4 re-run by reviewer on `6e57d01`)
+
+```
+npm run typecheck        -> tsc --noEmit, exit 0
+npm run lint             -> eslint ., exit 0
+npm test                 -> 85 files / 728 tests passed (re-run on a clean tree after probe removal; no sync-snapshot flake)
+npm run build            -> next build succeeded (23/23 static pages, compiled + TypeScript finished)
+```
+
+The test count grew 716 → 728: the 12 new tests are the review-regression block plus the
+paste-in routing block (`tests/unit/clipboard.test.ts` now has 43 tests; `npx vitest run
+tests/unit/clipboard.test.ts` → 43 passed).
+
+### Per-finding status
+
+| # | Round-1 severity | Status | Evidence |
+|---|---|---|---|
+| 1 | BLOCKER | **FIXED** | live-shaped `[empty h1, "Body"]`, `target:'notion'` → `html: "<p>Body</p>"`, `text` frontmatter + `Body`; no `<h1></h1>`. Selection (`wholePage:false`) → `<p>Body</p>`; `obsidian` target → `html === ""`. `buildClipboardPayload` strips once (`clipboard.ts:109`) and `serializeObsidianBody`'s internal strip is idempotent. |
+| 2 | MAJOR | **FIXED** (top-level tables) | Two-column `Page`/`Note` table whose cell is `[[Beta\|the beta]]` → body keeps `[[Beta\|the beta]]`; `engine.parse(body)` deep-equals the doc; idempotence holds. Residual blockquoted tables → N3. |
+| 3 | MAJOR | **ACCEPTED-BY-SPEC** | Spec §6.2.1 now records the intentional ⌘C = Obsidian-only trade-off and §4.1 words AC1 around the explicit "Copy for Notion (rich)" action. Consequence (Docs/Word/email ⌘C becomes plain markdown) is stated. Legitimate amendment. |
+| 4 | MAJOR | **ACCEPTED-BY-SPEC** (nit) | Spec §7 now says the `.html`/`.clipboard.json` files are serializer-generated golden anchors and points the real-app dogfood at SIL-68/SIL-70. Residual: the in-repo test names still call them "committed … capture" (`clipboard.test.ts:303,311`), the fixture files still carry no `source`/`recordedAt`, and the external dogfood cannot be verified here (GitHub #68/#70 are unrelated tickets; "SIL-*" are not GitHub issues). |
+| 5 | MINOR | **ACCEPTED-BY-SPEC** (nit) | §5 table now promises `<mark>…</mark>` on the plain side, with a test asserting both sides emit `<mark>`. I independently confirmed `<mark>` and `<u>` are IR-identity when parsed from their own form. N6: neither is in `CORPUS` despite §5. |
+| 6 | MINOR | **FIXED** | `` `arr[[i]]` `` untouched; `` `\[\[Page\]\]` `` inside a code span untouched; fenced code with `arr[[i]]` / `[[Page]]` untouched and re-parses to identity; a tilde fence is handled (serializer normalizes it and content survives); unterminated fence returns input unchanged, no throw. |
+| 7 | MINOR | **PARTIAL** | Properties half works: shallow client merge matches the server's jsonb `||` RPC (`merge_page_properties`), so the next ⌘C emits post-paste properties. Tags half is self-defeating → N2. |
+| 8 | MINOR | **FIXED** | rich `write` rejects → `writeText(payload.text)` called once, returns `true`; `ClipboardItem === undefined` → `writeText` only, `write` never called; both reject → `false`; no `navigator.clipboard` → `false`; plain-only payload → `writeText` only. |
+| 9 | MINOR | **PARTIAL** | `javascript:`, `JavaScript:`, ` javascript:`, `data:text/html,…`, `vbscript:` → `''`; `https:`, `mailto:`, `obsidian:`, `/page/abc`, `#anchor`, `data:image/png` kept. Attribute breakout is impossible (`" onmouseover="` is escaped to `&quot;`). Residual: control-character scheme obfuscation passes → N1. |
+| 10 | MINOR | **NOT FIXED** (not claimed) | Still no copy-event smoke test (`grep tests` finds no dispatched `copy` event; the three `ClipboardEvent` hits are `writeClipboardPayload` casts). Non-blocking, spec §9 says "where feasible". |
+| 11 | NIT | **PARTIAL** | `role="separator"` added (`:1116`); both `!editor` paths now `setIsExportOpen(false)` (`:259`, `:301`); copy items get `disabled={isExporting}`. But `handleCopyFor` never sets `isExporting`, so the guard is inert during a copy → N5. |
+| 12 | NIT | **FIXED** | `title: '   '` / `''` → no `title:` key and no frontmatter fence; non-empty titles still emitted (`engine.ts:35`). |
+| 13 | NIT | **FIXED** | One import: `import { markdownEngine, stripAutoHeading, type PageMeta } from '@/lib/markdown/engine'` (`markdown-export.ts:5`). |
+| 14 | NIT | **NOT FIXED** (not claimed) | The unreachable "leaked inline nodes" test remains; no partial-table / partial-list selection cases added. |
+| 15 | NIT | **ACCEPTED-BY-SPEC** | §7/§9 now say "table-driven property test" and call out combinations; the two historically-broken combinations are in `CORPUS` and the idempotence/round-trip loops. Acceptable (not a generated fast-check property). |
+
+### AC2 ("paste-out → paste-in is IR-identity") is now exercised through S1's real routing
+
+`tests/unit/clipboard.test.ts:336-406` runs every `CORPUS` entry through
+`buildClipboardPayload → classifyClipboardPaste(payload.text, undefined) === 'obsidian-markdown' →
+splitObsidianFrontmatter → parser` (i.e. the same three seams the paste handler uses) and asserts IR
+identity for whole-page, notion-target, and selection copies. `CORPUS` now contains both combinations
+that previously slipped through (`:29` table + alias wikilink, `:30`/`:31` bracketed inline and fenced
+code). I reproduced all four critical rows independently: each routes as `obsidian-markdown` and is
+identity-true. This acceptance criterion is now backed by the right test.
+
+### New / residual findings from the remediation
+
+#### N1. MINOR (security, defense-in-depth) — `sanitizeUrl` can be bypassed with a tab/newline in the scheme
+
+**Where:** `lib/markdown/notion-html.ts:46-52`.
+
+`HAS_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i` sees `java\tscript:` as "no scheme" and returns it verbatim;
+the URL standard strips ASCII tab/CR/LF before scheme parsing, so a receiving app resolves it as
+`javascript:`.
+
+Repro (verified):
+
+```
+sanitizeUrl('java\tscript:alert(1)', 'link')  -> 'java\tscript:alert(1)'
+serializeNotionHtml(doc with that link)       -> '<a href="java\tscript:alert(1)">click</a>'
+sanitizeUrl('java\nscript:alert(1)', 'link')  -> 'java\nscript:alert(1)'
+```
+
+Reachability: the markdown import/paste route is safe — markdown-it percent-encodes the tab
+(`[x](<java\tscript:…>)` yields href `java%09script:…`, which is not a scheme). The exposure is the
+same one #9 described: a mark attribute hydrated from collab/doc JSON (no re-validation). Severity is
+MINOR because the receiving app must preserve the href.
+
+**Minimal fix:** normalize before the scheme test (and return the normalized value):
+
+```ts
+const raw = String(value).replace(/[\t\n\r]/g, '').trim()
+```
+
+Then `java\tscript:` normalizes to `javascript:` and is dropped.
+
+#### N2. MINOR — the post-paste tag refresh overwrites the correct optimistic tags with pre-paste rows
+
+**Where:** `components/editor-workspace.tsx:736-748` (`fetchPageTags(pageId)` inside the
+`updatePageProperties(...).then`), against `server/index.js:174` and `server/persister.js:58`.
+
+Ordering on a paste that carries frontmatter tags:
+
+1. `updatePageProperties` resolves; the ref's `properties` (and `tags`, derived from
+   `properties.tags`) are set to the merged post-paste values — correct.
+2. `fetchPageTags(pageId)` is fired **immediately, before `applyBody()`**.
+3. `page_tags` is only rewritten by `graphIndex.indexPage` inside the persister, which runs after the
+   **2 s idle debounce** (`server/index.js:174`, `scheduleDebouncedSave`). The RPC
+   `merge_page_properties` does not touch `page_tags`.
+4. The fetch therefore returns the pre-paste rows and the `.then` assigns them, clobbering the
+   correct value; nothing ever re-refreshes the ref, so the session stays stale for the *next* ⌘C too.
+
+Net user-visible result: properties are fresh, `tags:` in frontmatter is stale — the same outcome as
+before the fix, but the fix now actively reverts a correct value. Secondary race: the mount effect
+(`:192-197`) has no generation guard, so a slow `fetchPageDetails` that resolves after a fast paste
+would also overwrite the merged properties.
+
+**Minimal fix:** drop the immediate `fetchPageTags` (the optimistic `tags` already come from the same
+merged property set), or move it after the debounced save/`onSynced` with a request-generation guard.
+Do not keep both an optimistic write and an unguarded stale fetch.
+
+#### N3. MINOR (residual #2) — an aliased wikilink in a **blockquoted** table still splits the cell
+
+**Where:** `lib/markdown/engine.ts:108` (`TABLE_ROW_RE = /^\s*\|/`) with `:148`.
+
+Repro (verified):
+
+```
+parse('> | Page | Note |\n> | --- | --- |\n> | [[Beta\\|the beta]] | x |\n')
+serializeObsidianBody -> '> | Page | Note |\n> | --- | --- |\n> | [[Beta|the beta]] | x |\n'
+parse(body)           -> row has 3 cells  (IR identity false)
+```
+
+A table inside a blockquote is schema-legal and round-trips through the parser, so this is reachable.
+Same failure as the round-1 #2, now confined to prefixed rows (top-level, list-item and plain
+paragraph cases are correct — list-item tables keep the escape and are identity-true).
+
+**Minimal fix:** strip blockquote/list prefixes before the table probe, e.g.
+`const row = line.replace(/^(?:\s*>\s*)+/, '')` then `TABLE_ROW_RE.test(row)`.
+
+#### N4. NIT — fence tracking compares only the marker character, not the fence length
+
+**Where:** `lib/markdown/engine.ts:104, 133-144` (`const marker = fenceMatch[1][0]`).
+
+Repro (verified): `restoreWikilinks('````md\n```\n\\[\\[W\\]\\]\n```\n````')` restores the escaped
+wikilink **inside** the fence (the inner 3-backtick line is treated as the closer), mutating code.
+Not reachable from the shipping path today (the serializer never emits 4+ backtick fences; a code
+block containing ``` produces already-broken output), but `restoreWikilinks` is exported and its
+docstring promises "copied verbatim".
+
+**Minimal fix:** keep the full opener run and close only on the same character with
+`run.length >= opener.length`.
+
+#### N5. NIT — copy menu items are disabled by a flag the copy path never sets
+
+**Where:** `components/editor-workspace.tsx:1129` (`disabled={isExporting}`) vs `:297-321`
+(`handleCopyFor` never calls `setIsExporting`).
+
+The round-1 nit ("a double click can run two clipboard writes") is therefore not actually closed;
+the items only disable while an *export* runs. This nit was reworded as fixed in the commit message.
+**Minimal fix:** `setIsExporting(true)` at the top of `handleCopyFor` (the `finally` already resets
+it and closes the menu).
+
+#### N6. NIT — `CORPUS` still omits highlight and underline
+
+**Where:** `tests/unit/clipboard.test.ts:19-37` vs spec §5 ("Paragraph + marks" row).
+
+Both are IR-identity when parsed from their own form (verified: `<mark>` and `<u>` both return
+identity true), so this is only corpus completeness for AC2's "every construct in the suite" claim.
+Add `{ name: 'highlight', markdown: 'plain <mark>marked</mark> text\n' }` and the `<u>` equivalent.
+
+### Verified as correct (no new finding)
+
+- The double strip in `buildClipboardPayload` + `serializeObsidianBody` is genuinely idempotent and
+  does not change selection/obsidian payloads (byte-compared against round-1 expectations).
+- Prose/heading/list/callout aliases still restore to the unescaped `[[Beta|the beta]]`; the table
+  escape is scoped to `|`-leading rows only.
+- `CODE_SPAN_RE`'s module-level `/g` state is reset per line and `String.replace` with a `/g` regex
+  resets `lastIndex`, so the shared-regex approach is safe for the synchronous call path.
+- `stripAutoHeading` still keeps non-empty authored headings and an empty trailing heading rule is
+  unchanged; the Notion walker receives the same doc as the markdown writer.
+- `copyClipboardPayloadToSystem` never throws, keeps `writeText` as the single fallback, and keeps
+  plain-only payloads on `writeText` (the SIL-68 behaviour is intact).
+- Client-side properties merge semantics match the server RPC exactly (`coalesce(properties,'{}') ||
+  patch`, top-level), so no phantom-key divergence.
+- Scope is still clean: no `lib/markdown-io.ts`, no sync wording, no unrelated files; the review file
+  added by this commit is the round-1 document itself.
+
+### Remaining open items (unchanged, non-blocking)
+
+- #10 (no copy-event jsdom test) and #14 (unreachable leaked-inline test / no partial-table or
+  partial-list selection case) were explicitly not addressed. Both are MINOR/NIT and can ship as
+  follow-ups; #14's fabricated doc is still dead code in the test suite.
+- #4's in-repo naming still overstates the fixtures as captures; #5/#15's corpus gap is N6.
+
+### Final verdict rationale
+
+The round-1 BLOCKER (#1) and MAJOR behaviour defect (#2) are fixed and verified with independent
+reproductions; the product/spec conflicts (#3, #4, #5, #15) are resolved by recorded spec amendments
+rather than silent drift. The remaining problems are three MINORs and three NITs — incomplete
+defense-in-depth (#9/N1), an ineffective half of the metadata refresh (#7/N2), a prefixed-row table
+residual (#2/N3), plus cosmetic/test-hygiene items. None of them blocks the primary copy-out /
+paste-in path or the acceptance criteria as amended.
+
+VERDICT: APPROVE

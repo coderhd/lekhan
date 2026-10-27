@@ -47,8 +47,11 @@ export function sanitizeUrl(value: unknown, kind: 'link' | 'image'): string {
 	if (value === null || value === undefined) return ''
 	const raw = String(value).trim()
 	if (raw === '') return ''
-	if (!HAS_SCHEME_RE.test(raw)) return raw
-	return (kind === 'link' ? SAFE_LINK_URL_RE : SAFE_IMAGE_URL_RE).test(raw) ? raw : ''
+	// Browsers ignore ASCII tab/newline/CR inside a scheme (`java\tscript:` is
+	// still javascript:), so test the scheme on a control-stripped probe.
+	const probe = raw.replace(/[\t\n\r]/g, '')
+	if (!HAS_SCHEME_RE.test(probe)) return raw
+	return (kind === 'link' ? SAFE_LINK_URL_RE : SAFE_IMAGE_URL_RE).test(probe) ? raw : ''
 }
 
 interface MarkLike {

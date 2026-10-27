@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
-import { MarkdownEngine } from '@/lib/markdown/engine'
+import { MarkdownEngine, restoreWikilinks } from '@/lib/markdown/engine'
 import { serializeNotionHtml, sanitizeUrl } from '@/lib/markdown/notion-html'
 import {
 	buildClipboardPayload,
@@ -19,6 +19,7 @@ import { splitObsidianFrontmatter } from '@/lib/obsidian-clipboard'
 const CORPUS: Array<{ name: string; markdown: string }> = [
 	{ name: 'heading', markdown: '# Title\n\n## Section\n' },
 	{ name: 'inline marks', markdown: 'Some **bold**, *italic*, ~~strike~~, and `code` text.\n' },
+	{ name: 'underline', markdown: 'Some <u>underlined</u> text.\n' },
 	{ name: 'external link', markdown: 'See the [docs](https://example.com) for details.\n' },
 	{ name: 'bullet list', markdown: '- item one\n- item two\n- item three\n' },
 	{ name: 'ordered list', markdown: '1. first\n2. second\n3. third\n' },
@@ -567,5 +568,38 @@ describe('review #8 — plain-text fallback when the rich clipboard write fails'
 		expect(ok).toBe(true)
 		expect(write).not.toHaveBeenCalled()
 		expect(writeText).toHaveBeenCalledWith('plain md')
+	})
+})
+
+describe('round 2 review nits — URL scheme bypass, blockquoted tables, long fences', () => {
+	let engine: MarkdownEngine
+	beforeEach(() => { engine = new MarkdownEngine() })
+	afterEach(() => engine.destroy())
+
+	it('rejects a scheme split by tab/newline control characters', () => {
+		expect(sanitizeUrl('java\tscript:alert(1)', 'link')).toBe('')
+		expect(sanitizeUrl('java\nscript:alert(1)', 'link')).toBe('')
+		expect(sanitizeUrl('vbscript:msgbox(1)', 'link')).toBe('')
+		// A genuine URL is still passed through untouched.
+		expect(sanitizeUrl('https://example.com/a?b=1', 'link')).toBe('https://example.com/a?b=1')
+	})
+
+	it('keeps the alias pipe escaped in a blockquoted table row', () => {
+		const md = '> | Page | Note |\n> | --- | --- |\n> | [[Beta\\|the beta]] | x |\n'
+		const doc = engine.parse(md)
+		const body = engine.serializeObsidianBody(doc)
+		expect(body).toContain('[[Beta\\|the beta]]')
+		expect(engine.parse(body)).toEqual(doc)
+	})
+
+	it('does not treat a shorter fence inside a longer fence as the close', () => {
+		// Unit-level: the serializer has a pre-existing limitation emitting a
+		// fence run that contains backticks, so assert the restore pass itself —
+		// code between a 4-backtick open and its close is never rewritten, and a
+		// 3-backtick line inside does not end the block.
+		const md = '````md\n\\[\\[Inside\\]\\]\n```\n\\[\\[StillInside\\]\\]\n````\n\\[\\[Outside\\]\\]\n'
+		expect(restoreWikilinks(md)).toBe(
+			'````md\n\\[\\[Inside\\]\\]\n```\n\\[\\[StillInside\\]\\]\n````\n[[Outside]]\n',
+		)
 	})
 })

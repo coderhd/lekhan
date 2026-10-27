@@ -301,6 +301,7 @@ export default function EditorWorkspace({	pageId,
 			setIsExportOpen(false)
 			return
 		}
+		setIsExporting(true)
 		try {
 			const payload = buildClipboardPayload(editor.getJSON(), clipboardMetaRef.current, {
 				wholePage: true,
@@ -317,6 +318,7 @@ export default function EditorWorkspace({	pageId,
 			console.warn('Copy-out failed:', err)
 			toast.error('Copy failed')
 		} finally {
+			setIsExporting(false)
 			setIsExportOpen(false)
 		}
 	}
@@ -731,8 +733,10 @@ export default function EditorWorkspace({	pageId,
 									// Keep the copy-out metadata ref in step with what
 									// the paste just merged, so an immediate ⌘C emits
 									// the new properties/tags rather than the pre-paste
-									// values. Best-effort background tag refresh covers
-									// the rows the server derives from properties.
+									// values. The optimistic merge is authoritative here:
+									// the server derives tag rows from properties only
+									// after the debounced save, so refetching now would
+									// overwrite the correct tags with stale rows.
 									clipboardMetaRef.current.properties = {
 										...clipboardMetaRef.current.properties,
 										...properties,
@@ -743,9 +747,6 @@ export default function EditorWorkspace({	pageId,
 											(t): t is string => typeof t === 'string',
 										)
 									}
-									fetchPageTags(pageId)
-										.then((tags) => { clipboardMetaRef.current.tags = tags.map((t) => t.tag) })
-										.catch(() => {})
 									applyBody()
 								})
 								.catch((err) => {

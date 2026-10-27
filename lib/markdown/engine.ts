@@ -104,8 +104,8 @@ const ESCAPED_WIKILINK_RE = /\\\[\\\[([^[\]\\]+?)(?:\\?\|([^[\]\\]+?))?\\\]\\\]/
 const FENCE_RE = /^\s*(`{3,}|~{3,})/
 // An inline code span delimited by a run of backticks.
 const CODE_SPAN_RE = /(`+)[\s\S]*?\1/g
-// A GFM table row always opens with a pipe (tiptap-markdown emits the outer pipes).
-const TABLE_ROW_RE = /^\s*\|/
+// A GFM table row opens with a pipe, optionally behind blockquote markers.
+const TABLE_ROW_RE = /^\s*(?:>\s*)*\|/
 
 /**
  * Restore escaped wikilink syntax in one run of ordinary inline text. Inside a
@@ -132,12 +132,13 @@ export function restoreWikilinks(markdown: string): string {
 		.map((line) => {
 			const fenceMatch = line.match(FENCE_RE)
 			if (fenceMatch) {
-				const marker = fenceMatch[1][0]
+				const marker = fenceMatch[1]
 				if (fence === null) {
 					fence = marker
 					return line
 				}
-				if (fence === marker) {
+				// A closing fence uses the same character and is at least as long.
+				if (marker[0] === fence[0] && marker.length >= fence.length) {
 					fence = null
 					return line
 				}
