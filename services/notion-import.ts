@@ -567,12 +567,12 @@ function splitAsideCallout (inner: string): { icon: string; content: string } | 
 
 function unwrapCallouts (body: string): string {
 	return transformOutsideFences(body, (segment) => {
-		const withAsides = segment.replace(ASIDE_CALLOUT_RE, (whole, inner: string) => {
+		const withAsides = replaceOutsideInlineCode(segment, ASIDE_CALLOUT_RE, (whole: string, inner: string) => {
 			const parsed = splitAsideCallout(inner)
 			if (!parsed) return whole
 			return toObsidianCallout(parsed.icon, parsed.content)
 		})
-		return withAsides.replace(CALLOUT_TABLE_RE, (whole, iconRaw: string, contentRaw: string) => {
+		return replaceOutsideInlineCode(withAsides, CALLOUT_TABLE_RE, (whole: string, iconRaw: string, contentRaw: string) => {
 			// The lazy captures backtrack across cell boundaries, so a 3-cell row or
 			// a multi-row table can masquerade as a callout with a "short icon" and
 			// lose its other cells. Only the genuine one-row/two-cell shape converts;
@@ -1057,7 +1057,7 @@ function replaceBareNotionUrls (body: string, ctx: BodyContext): string {
 	}))
 }
 
-const WIKILINK_PIPE_RE = /\[\[([^\]|]+)\|([^\]]+)\]\]/g
+const WIKILINK_PIPE_RE = /\[\[([^\]|]+)(?<!\\)\|([^\]]+)\]\]/g
 
 /**
  * GFM splits table cells on every unescaped `|`, including pipes inside inline

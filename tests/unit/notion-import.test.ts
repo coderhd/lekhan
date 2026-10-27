@@ -541,6 +541,41 @@ describe('importNotionExport — code safety and unrepresentable titles', () => 
 		expect(report.attachmentsDropped).toBe(1)
 	})
 
+	it('does not convert callout HTML inside inline code', () => {
+		const content = contentOf({
+			[`Seed ${'9'.repeat(32)}.md`]: [
+				'# Seed',
+				'',
+				'Inline `<aside>💡 example</aside>` and `<table><tr><td>x</td><td>y</td></tr></table>` stay literal.',
+			].join('\n'),
+		}) as Parameters<typeof importNotionExport>[0]
+		const { ir, report } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
+		const page = ir.pages.find(candidate => candidate.title === 'Seed')!
+		const { html, text } = renderHtml(page.contentYjsBase64)
+
+		expect(text).toContain('<aside>💡 example</aside>')
+		expect(text).toContain('<table><tr><td>x</td><td>y</td></tr></table>')
+		expect(html).not.toContain('data-callout')
+		expect(report.degradedBlocks).toBe(0)
+	})
+
+	it('does not double-escape a wikilink pipe that is already escaped in a table row', () => {
+		const content = contentOf({
+			[`Seed ${'a'.repeat(32)}.md`]: [
+				'# Seed',
+				'',
+				'| Page |',
+				'| --- |',
+				'| [[Other\\|the other]] |',
+			].join('\n'),
+		}) as Parameters<typeof importNotionExport>[0]
+		const { ir } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
+		const page = ir.pages.find(candidate => candidate.title === 'Seed')!
+
+		expect(page.plainText).toContain('[[Other|the other]]')
+		expect(page.plainText).not.toContain('\\')
+	})
+
 	it('reports an empty export as empty rather than "not a Notion export"', () => {
 		expect(() =>
 			importNotionExport(

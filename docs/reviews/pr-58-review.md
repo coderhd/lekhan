@@ -74,16 +74,24 @@ or a multi-row table could convert into a callout and lose the remaining cells.
 | MINOR | A `[[Title\|alias]]` emitted inside a pipe-table row was split across cells by GFM. | After link rewriting, wikilink pipes in table rows are escaped as `\|` outside code; a regression test asserts two cells and the intact `[[Other\|the other]]` text. |
 | NIT | Duplicate phrase in the QA record; unescaped `\|` in a review table; JSDoc glued to `toWikilink`. | Fixed. |
 
+
+### Cycle 8 — CodeRabbit follow-up on the callout/table fixes
+
+| Sev | Finding | Resolution |
+|---|---|---|
+| MINOR | Callout HTML inside inline code (`\`<aside>…</aside>\``) was converted, destroying the example. | Both callout passes now use the inline-code-aware replacer; test asserts the literal example survives with no callout/degradation. |
+| MINOR | An already-escaped wikilink pipe in a table row (`[[Other\|alias]]`) was escaped again. | The table-row escaper ignores a pipe already preceded by `\\` (negative lookbehind); test asserts the parsed text is `[[Other|alias]]` with no backslash. |
+
 ## Verification evidence
 
 ```
 npm run typecheck   # clean
 npm run lint        # clean
-npm test            # 87 files / 735 tests passed
+npm test            # 87 files / 737 tests passed (one pre-existing flake)
 npm run build       # Next.js production build succeeded
 ```
 
-Targeted suites: `notion-import-read` (11), `notion-import` (30), `notion-import-identity` (4),
+Targeted suites: `notion-import-read` (11), `notion-import` (33), `notion-import-identity` (4),
 `import-dialog` (12).
 
 ## Accepted limitations / follow-ups
