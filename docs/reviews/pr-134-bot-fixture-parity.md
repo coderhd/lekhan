@@ -1,8 +1,8 @@
 # PR #134 bot-review findings → regression fixture parity map
 
-Retro action from [SIL-105](/SIL/issues/SIL-105) (2026-10-27 weekly retro), rule 3 of
+Retro action from SIL-105 (2026-10-27 weekly retro, Paperclip tracker), rule 3 of
 `docs/decisions/process/01-weekly-retro-hygiene-rules.md`. Each review-bot finding on
-PR #134 (clipboard paste-in, [SIL-80](/SIL/issues/SIL-80)) is mapped to a **named,
+PR #134 (clipboard paste-in, SIL-80 on the Paperclip tracker) is mapped to a **named,
 green fixture** in the unit suite. Every one of the 8 retro-counted findings
 (6 CodeRabbit + 2 pullfrog) plus the 2 pullfrog incremental deltas is locked by a
 test that fails if the fix regresses.
