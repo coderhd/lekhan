@@ -269,7 +269,7 @@ function isResourceMissing(err: unknown): boolean {
 	return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "resource_missing"
 }
 
-function defaultStripeReadBack(): ReadSubscription {
+export function defaultStripeReadBack(): ReadSubscription {
 	return async (subscriptionRef) => {
 		const client = getStripeClient()
 		try {
@@ -320,7 +320,7 @@ const RAZORPAY_READBACK_STATUS: Record<string, GatewaySubscriptionStatus> = {
 	created: "incomplete",
 }
 
-function defaultRazorpayReadBack(http: RazorpayHttpClient): ReadSubscription {
+export function defaultRazorpayReadBack(http: RazorpayHttpClient): ReadSubscription {
 	return async (subscriptionRef) => {
 		let sub: RazorpaySubscription
 		try {
@@ -518,35 +518,102 @@ async function processVerifiedEvent(rail: WebhookRail, deps: ResolvedDeps, event
 	return applyAndFinish(rail, deps, event, state)
 }
 
-async function applyAndFinish(
+/**
+ * Columns read before an apply so the write can be a true convergence:
+ * `past_due_since` needs the previous clock, the Razorpay cancel ruling needs the
+ * stored generation, and idempotent applies compare the whole patch.
+ */
+const PLAN_STATE_COLUMNS =
+	"tier, billing_cycle, status, gateway, gateway_customer_id, gateway_subscription_id, currency, is_founding, seats, current_period_end, cancel_at_period_end, past_due_since"
+
+/**
+ * Field-level equality for the idempotency check. `timestamptz` round-trips as
+ * `...T00:00:00+00:00` from Postgres while providers hand us `...T00:00:00.000Z`,
+ * so date-shaped columns compare by instant, not by string — otherwise every
+ * converged row would look changed on every run.
+ */
+function samePlanValue(key: string, previous: unknown, next: unknown): boolean {
+	if (previous == null && next == null) return true
+	if (previous == null || next == null) return false
+	if (previous === next) return true
+	if (key === "current_period_end") {
+		const a = Date.parse(String(previous))
+		const b = Date.parse(String(next))
+		if (Number.isFinite(a) && Number.isFinite(b)) return a === b
+	}
+	return false
+}
+
+export interface EntitlementApplyDeps {
+	db: SupabaseClient
+	now: () => Date
+}
+
+export interface EntitlementApplyOutcome {
+	workspaceId: string
+	/** Provider read-back reports a terminal cancellation (tier converged to free). */
+	terminal: boolean
+	/**
+	 * A terminal read-back for a subscription ref that differs from the stored
+	 * LIVE binding (cancel → resubscribe). Nothing was written; the caller must
+	 * treat the event as handled-but-ignored.
+	 */
+	staleGeneration: boolean
+	/** True when the `workspace_plans` row actually changed (or was created). */
+	planChanged: boolean
+	/** Normalized value mirrored to `profiles.plan`; null when nothing was applied. */
+	mirrorPlan: string | null
+}
+
+/** Loud, PII-minimal apply failure (webhooks map it to 502, the cron to a failure row). */
+export class EntitlementApplyError extends Error {
+	constructor(
+		readonly stage: string,
+		message: string,
+	) {
+		super(message)
+		this.name = "EntitlementApplyError"
+	}
+}
+
+/**
+ * The single convergence primitive shared by the webhook processor (T8) and the
+ * reconciliation cron (T10). Entitlement state is written from a provider
+ * read-back object only — never from an event payload — and `profiles.plan`
+ * stays a normalized mirror.
+ *
+ * Reconciliation reuses this verbatim so the two writers can never disagree on
+ * past_due clocks, Razorpay's stored cancel flag, terminal downgrades, or the
+ * mirror (spec §8 precedence: everyone converges TOWARD provider truth).
+ */
+export async function applyEntitlementFromReadBack(
 	rail: WebhookRail,
-	deps: ResolvedDeps,
-	event: VerifiedWebhookEvent,
+	deps: EntitlementApplyDeps,
 	state: SubscriptionReadBack,
-): Promise<WebhookResult> {
-	const { db, now, grantConversion, applyRenewalCredits } = deps
-	const workspaceId = state.workspaceId as string
+): Promise<EntitlementApplyOutcome> {
+	const { db, now } = deps
+	const workspaceId = state.workspaceId
+	if (!workspaceId) {
+		throw new EntitlementApplyError("workspace-binding", "provider read-back carries no workspace binding")
+	}
 	const terminal = state.status === "canceled"
 
 	// Non-terminal applications need a mapped tier/cycle (T2 reverse-map). An
 	// unmapped price/plan id is a config fault — fail loud, write nothing.
 	if (!terminal && (state.tier == null || state.cycle == null)) {
-		return processingFailed(event.eventId, "provider read-back price/plan id is not bound to a tier/cycle in env")
+		throw new EntitlementApplyError(
+			"price-mapping",
+			"provider read-back price/plan id is not bound to a tier/cycle in env",
+		)
 	}
 
 	const existing = await db
 		.from("workspace_plans")
-		.select("status, past_due_since, gateway, gateway_subscription_id, cancel_at_period_end")
+		.select(PLAN_STATE_COLUMNS)
 		.eq("workspace_id", workspaceId)
 		.maybeSingle()
-	if (existing.error) return processingFailed(event.eventId, `plan read failed: ${existing.error.message}`)
-	const previous = (existing.data ?? null) as {
-		status: string
-		past_due_since: string | null
-		gateway: string | null
-		gateway_subscription_id: string | null
-		cancel_at_period_end: boolean | null
-	} | null
+	if (existing.error) throw new EntitlementApplyError("plan-read", existing.error.message ?? "plan read failed")
+	const previous = (existing.data ?? null) as Record<string, unknown> | null
 
 	// Stale-generation guard (clean-room N-1): a TERMINAL read-back for a
 	// subscription ref that differs from the stored LIVE binding belongs to a
@@ -564,18 +631,14 @@ async function applyAndFinish(
 		previous.gateway_subscription_id &&
 		previous.gateway_subscription_id !== state.subscriptionRef
 	) {
-		console.warn(`[billing/webhooks] ${rail} stale-generation terminal event ignored for a live binding`, {
-			eventId: event.eventId,
-			eventType: event.eventType,
-		})
-		return markProcessedFor(deps, event.eventId)
+		return { workspaceId, terminal: true, staleGeneration: true, planChanged: false, mirrorPlan: null }
 	}
 
 	// past_due clock (spec §6 step 4): set on the transition, never reset while
 	// still past_due, cleared on recovery — the 7-day grace window (D9) reads it.
 	const wasPastDue = previous?.status === "past_due"
 	const pastDueSince =
-		state.status === "past_due" ? (wasPastDue ? (previous?.past_due_since ?? now().toISOString()) : now().toISOString()) : null
+		state.status === "past_due" ? (wasPastDue ? ((previous?.past_due_since as string | null) ?? now().toISOString()) : now().toISOString()) : null
 
 	// Razorpay never echoes cancel-at-cycle-end on the subscription object (T7/SIL-56
 	// binding ruling): the provider read-back cannot clear a cancellation the user
@@ -587,10 +650,9 @@ async function applyAndFinish(
 		!state.cancelAtPeriodEnd && sameRazorpayGeneration ? previous?.cancel_at_period_end === true : state.cancelAtPeriodEnd
 
 	// (4) APPLY — upsert from the read-back object only.
-	const patch = (
+	const fields = (
 		terminal
 			? {
-					workspace_id: workspaceId,
 					tier: "free",
 					billing_cycle: "none",
 					status: state.status,
@@ -602,10 +664,8 @@ async function applyAndFinish(
 					cancel_at_period_end: false,
 					past_due_since: null,
 					seats: state.seats,
-					updated_at: now().toISOString(),
 				}
 			: {
-					workspace_id: workspaceId,
 					tier: state.tier as BillingTier,
 					billing_cycle: state.cycle as BillingCycle,
 					status: state.status,
@@ -618,24 +678,62 @@ async function applyAndFinish(
 					current_period_end: state.currentPeriodEnd,
 					cancel_at_period_end: cancelAtPeriodEnd,
 					past_due_since: pastDueSince,
-					updated_at: now().toISOString(),
 				}
-		) as Record<string, unknown>
+	) as Record<string, unknown>
 
-	const upserted = await db.from("workspace_plans").upsert(patch, { onConflict: "workspace_id" })
-	if (upserted.error) return processingFailed(event.eventId, `plan upsert failed: ${upserted.error.message}`)
+	// A cron re-checks healthy workspaces daily: skip the write when the row
+	// already matches provider truth so "no-op on converged state" is literal.
+	const planChanged =
+		previous == null || Object.entries(fields).some(([key, value]) => !samePlanValue(key, previous[key], value))
+
+	if (planChanged) {
+		const upserted = await db
+			.from("workspace_plans")
+			.upsert({ ...fields, workspace_id: workspaceId, updated_at: now().toISOString() }, { onConflict: "workspace_id" })
+		if (upserted.error) throw new EntitlementApplyError("plan-upsert", upserted.error.message ?? "plan upsert failed")
+	}
 
 	// (4b) Deprecated `profiles.plan` mirror — the owner's profile, normalized
 	// values only (never go/enterprise); entitled statuses mirror the tier,
 	// terminal/incomplete states mirror free. Parity is pinned by T11's tests.
 	const owner = await db.from("workspaces").select("owner_id").eq("id", workspaceId).maybeSingle()
-	if (owner.error) return processingFailed(event.eventId, `workspace read failed: ${owner.error.message}`)
+	if (owner.error) throw new EntitlementApplyError("workspace-read", owner.error.message ?? "workspace read failed")
 	const ownerId = (owner.data as { owner_id: string } | null)?.owner_id ?? null
-	if (!ownerId) return processingFailed(event.eventId, "workspace row missing for mirror update")
+	if (!ownerId) throw new EntitlementApplyError("workspace-read", "workspace row missing for mirror update")
 	const mirrorPlan =
 		state.status === "active" || state.status === "past_due" ? normalizeLegacyPlan(state.tier ?? undefined) : "free"
 	const mirrored = await db.from("profiles").update({ plan: mirrorPlan }).eq("id", ownerId)
-	if (mirrored.error) return processingFailed(event.eventId, `mirror update failed: ${mirrored.error.message}`)
+	if (mirrored.error) throw new EntitlementApplyError("mirror-update", mirrored.error.message ?? "mirror update failed")
+
+	return { workspaceId, terminal, staleGeneration: false, planChanged, mirrorPlan }
+}
+
+async function applyAndFinish(
+	rail: WebhookRail,
+	deps: ResolvedDeps,
+	event: VerifiedWebhookEvent,
+	state: SubscriptionReadBack,
+): Promise<WebhookResult> {
+	const { db, now, grantConversion, applyRenewalCredits } = deps
+
+	let outcome: EntitlementApplyOutcome
+	try {
+		outcome = await applyEntitlementFromReadBack(rail, { db, now }, state)
+	} catch (err) {
+		if (err instanceof EntitlementApplyError) {
+			return processingFailed(event.eventId, `${err.stage}: ${err.message}`)
+		}
+		return processingFailed(event.eventId, "entitlement apply failed")
+	}
+
+	if (outcome.staleGeneration) {
+		console.warn(`[billing/webhooks] ${rail} stale-generation terminal event ignored for a live binding`, {
+			eventId: event.eventId,
+			eventType: event.eventType,
+		})
+		return markProcessedFor(deps, event.eventId)
+	}
+	const workspaceId = outcome.workspaceId
 
 	// (5) Referral hooks AFTER the entitlement apply (TL A4). Failures propagate:
 	// the event stays recorded/unprocessed so redelivery retries the hook.

@@ -1,0 +1,6 @@
+{
+	"crons": [
+		{ "path": "/api/cron/retention-prune", "schedule": "0 3 * * *" },
+		{ "path": "/api/cron/billing-reconcile", "schedule": "30 4 * * *" }
+	]
+}
