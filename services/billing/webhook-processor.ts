@@ -217,7 +217,10 @@ function identifyPriceObject(rail: WebhookRail, id: string): IdentifiedPrice | n
 						rail === "stripe"
 							? (resolution as StripePriceResolution).priceId
 							: process.env[(resolution as RazorpayPriceResolution).planEnvKey]
-					if (bound === id) matches.push({ tier, cycle, cohort })
+					// Provider ids are exact; env values may carry operator-pasted
+					// whitespace (T7 LOW-3). Compare trimmed so a padded plan id still
+					// reverse-maps instead of 502-ing every webhook for the rail.
+					if (typeof bound === "string" && bound.trim() === id.trim()) matches.push({ tier, cycle, cohort })
 				} catch {
 					// Unbound combo (PriceConfigError) or non-sellable Team+INR
 					// (TierUnavailableError): that combo simply is not a candidate.
@@ -464,7 +467,12 @@ async function processVerifiedEvent(rail: WebhookRail, deps: ResolvedDeps, event
 	try {
 		state = await readSubscription(event.pointerRef)
 	} catch (err) {
-		console.error(`[billing/webhooks] ${rail} provider read-back failed`, { eventId: event.eventId, type: event.eventType, err })
+		// PII-minimized: provider error objects may embed response bodies.
+		console.error(`[billing/webhooks] ${rail} provider read-back failed`, {
+			eventId: event.eventId,
+			type: event.eventType,
+			err: err instanceof Error ? err.message : "read-back failed",
+		})
 		return processingFailed(event.eventId, "provider read-back failed")
 	}
 
@@ -528,11 +536,17 @@ async function applyAndFinish(
 
 	const existing = await db
 		.from("workspace_plans")
-		.select("status, past_due_since, gateway_subscription_id")
+		.select("status, past_due_since, gateway, gateway_subscription_id, cancel_at_period_end")
 		.eq("workspace_id", workspaceId)
 		.maybeSingle()
 	if (existing.error) return processingFailed(event.eventId, `plan read failed: ${existing.error.message}`)
-	const previous = (existing.data ?? null) as { status: string; past_due_since: string | null; gateway_subscription_id: string | null } | null
+	const previous = (existing.data ?? null) as {
+		status: string
+		past_due_since: string | null
+		gateway: string | null
+		gateway_subscription_id: string | null
+		cancel_at_period_end: boolean | null
+	} | null
 
 	// Stale-generation guard (clean-room N-1): a TERMINAL read-back for a
 	// subscription ref that differs from the stored LIVE binding belongs to a
@@ -563,6 +577,15 @@ async function applyAndFinish(
 	const pastDueSince =
 		state.status === "past_due" ? (wasPastDue ? (previous?.past_due_since ?? now().toISOString()) : now().toISOString()) : null
 
+	// Razorpay never echoes cancel-at-cycle-end on the subscription object (T7/SIL-56
+	// binding ruling): the provider read-back cannot clear a cancellation the user
+	// already accepted. Preserve the stored flag for the SAME live subscription;
+	// Stripe keeps mirroring the provider and a new generation starts clean.
+	const sameRazorpayGeneration =
+		rail === "razorpay" && previous?.gateway === "razorpay" && previous.gateway_subscription_id === state.subscriptionRef
+	const cancelAtPeriodEnd =
+		!state.cancelAtPeriodEnd && sameRazorpayGeneration ? previous?.cancel_at_period_end === true : state.cancelAtPeriodEnd
+
 	// (4) APPLY — upsert from the read-back object only.
 	const patch = (
 		terminal
@@ -579,6 +602,7 @@ async function applyAndFinish(
 					cancel_at_period_end: false,
 					past_due_since: null,
 					seats: state.seats,
+					updated_at: now().toISOString(),
 				}
 			: {
 					workspace_id: workspaceId,
@@ -592,8 +616,9 @@ async function applyAndFinish(
 					is_founding: state.isFounding,
 					seats: state.seats,
 					current_period_end: state.currentPeriodEnd,
-					cancel_at_period_end: state.cancelAtPeriodEnd,
+					cancel_at_period_end: cancelAtPeriodEnd,
 					past_due_since: pastDueSince,
+					updated_at: now().toISOString(),
 				}
 		) as Record<string, unknown>
 
@@ -614,14 +639,26 @@ async function applyAndFinish(
 
 	// (5) Referral hooks AFTER the entitlement apply (TL A4). Failures propagate:
 	// the event stays recorded/unprocessed so redelivery retries the hook.
+	//
+	// Conversion requires actual entitlement (read-back active/past_due): Stripe
+	// emits `checkout.session.completed` for async/3DS flows whose subscription is
+	// still `incomplete`/unpaid — granting then would let an unpaid checkout bank
+	// a referral month. Razorpay's `subscription.authenticated` is likewise an
+	// authorization, not proof of a captured charge.
+	const conversionEntitled = state.status === "active" || state.status === "past_due"
 	try {
 		if (CONVERSION_EVENTS.has(event.eventType)) {
-			await grantConversion(workspaceId)
+			if (conversionEntitled) await grantConversion(workspaceId)
 		} else if (RENEWAL_EVENTS.has(event.eventType)) {
 			await applyRenewalCredits(workspaceId)
 		}
 	} catch (err) {
-		console.error(`[billing/webhooks] ${rail} referral hook failed`, { eventId: event.eventId, type: event.eventType, err })
+		// PII-minimized: provider/hook error objects may embed response bodies.
+		console.error(`[billing/webhooks] ${rail} referral hook failed`, {
+			eventId: event.eventId,
+			type: event.eventType,
+			err: err instanceof Error ? err.message : "hook failed",
+		})
 		return processingFailed(event.eventId, "referral hook failed")
 	}
 
@@ -632,14 +669,35 @@ async function applyAndFinish(
 // Rail entries (step 1 lives here for each rail; routes stay thin)
 // ---------------------------------------------------------------------------
 
+/**
+ * Subscription pointer of a Stripe invoice. The pinned API version
+ * (`2026-09-30.endive`, post-Basil) moved the field from the invoice root to
+ * `parent.subscription_details.subscription`; the legacy top-level field is
+ * still accepted so an endpoint deliberately pinned to a pre-Basil version
+ * keeps working. Never trust any other payload field.
+ */
+function stripeInvoiceSubscriptionRef(obj: Record<string, unknown>): string | null {
+	const parent = obj.parent as
+		| { subscription_details?: { subscription?: unknown } | null }
+		| null
+		| undefined
+	const nested = parent?.subscription_details?.subscription
+	if (typeof nested === "string" && nested) return nested
+	return typeof obj.subscription === "string" && obj.subscription ? obj.subscription : null
+}
+
 function stripePointerOf(event: Stripe.Event): { pointerRef: string | null; pointerKind: "subscription" | "deletion" } {
 	const obj = (event.data?.object ?? {}) as unknown as Record<string, unknown>
 	switch (event.type) {
 		case "checkout.session.completed":
+			return {
+				pointerRef: typeof obj.subscription === "string" && obj.subscription ? obj.subscription : null,
+				pointerKind: "subscription",
+			}
 		case "invoice.paid":
 		case "invoice.payment_failed":
 			return {
-				pointerRef: typeof obj.subscription === "string" && obj.subscription ? obj.subscription : null,
+				pointerRef: stripeInvoiceSubscriptionRef(obj),
 				pointerKind: "subscription",
 			}
 		case "customer.subscription.updated":

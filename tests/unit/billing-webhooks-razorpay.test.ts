@@ -261,6 +261,61 @@ describe("billing webhooks — razorpay rail (T8)", () => {
 		expect(store.profiles[0].plan).toBe("free")
 	})
 
+	it("reverse-maps a padded Razorpay plan env binding (operator whitespace)", async () => {
+		process.env.RAZORPAY_PLAN_PLUS_MONTHLY_GA_INR = `  ${PLAN_PLUS_MONTHLY_GA}  `
+		const { store, db } = setup()
+		const http = httpReturning(makeRazorpaySubscription())
+		const raw = JSON.stringify(subscriptionActivated)
+
+		const result = await deliver(db, raw, razorpaySignature(raw), { http: http as never })
+
+		expect(result.code).toBe("processed")
+		expect(store.workspace_plans[0].tier).toBe("plus")
+		expect(store.workspace_plans[0].billing_cycle).toBe("monthly")
+	})
+
+	it("preserves an accepted cancel-at-cycle-end across non-terminal Razorpay webhooks (provider never echoes it)", async () => {
+		const { store, db } = setup({
+			plan: {
+				workspace_id: WS,
+				tier: "plus",
+				billing_cycle: "monthly",
+				status: "active",
+				gateway: "razorpay",
+				gateway_subscription_id: RAZ_SUB,
+				cancel_at_period_end: true,
+			},
+		})
+		const http = httpReturning(makeRazorpaySubscription({ status: "active", cancel_at_cycle_end: false }))
+		const raw = JSON.stringify(subscriptionActivated)
+
+		await deliver(db, raw, razorpaySignature(raw), { http: http as never })
+
+		expect(store.workspace_plans[0].status).toBe("active")
+		expect(store.workspace_plans[0].cancel_at_period_end).toBe(true)
+	})
+
+	it("does not inherit a previous generation's cancel flag on resubscribe", async () => {
+		const { store, db } = setup({
+			plan: {
+				workspace_id: WS,
+				tier: "plus",
+				billing_cycle: "monthly",
+				status: "active",
+				gateway: "razorpay",
+				gateway_subscription_id: "sub_test_raz_old",
+				cancel_at_period_end: true,
+			},
+		})
+		const http = httpReturning(makeRazorpaySubscription({ status: "active", cancel_at_cycle_end: false }))
+		const raw = JSON.stringify(subscriptionActivated)
+
+		await deliver(db, raw, razorpaySignature(raw), { http: http as never })
+
+		expect(store.workspace_plans[0].gateway_subscription_id).toBe(RAZ_SUB)
+		expect(store.workspace_plans[0].cancel_at_period_end).toBe(false)
+	})
+
 	it("uses the X-Razorpay-Event-Id header as the dedup key when present", async () => {
 		const { store, db } = setup()
 		const http = httpReturning(makeRazorpaySubscription())

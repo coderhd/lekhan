@@ -156,6 +156,42 @@ describe("billing webhooks — stripe rail (T8)", () => {
 		expect(applyRenewalCredits).not.toHaveBeenCalled()
 	})
 
+	it("does not grant conversion credit when the checkout subscription is still unpaid (incomplete)", async () => {
+		const { store, db, grantConversion } = setup()
+		stripeClientHolder.client = {
+			subscriptions: { retrieve: vi.fn(async () => makeStripeSubscription({ status: "incomplete" })) },
+		}
+		const raw = JSON.stringify(checkoutCompleted)
+
+		const result = await deliver(db, raw, stripeSignatureHeader(raw), { grantConversion })
+
+		expect(result.code).toBe("processed")
+		expect(store.workspace_plans[0].status).toBe("incomplete")
+		expect(store.profiles[0].plan).toBe("free") // not entitled
+		expect(grantConversion).not.toHaveBeenCalled()
+	})
+
+	it("falls back to the legacy invoice root subscription field (pre-Basil endpoint pin)", async () => {
+		const { db, applyRenewalCredits } = setup()
+		const legacy: Json = {
+			...invoicePaid,
+			id: "evt_test_stripe_invoice_paid_legacy",
+			data: {
+				object: {
+					...(invoicePaid.data.object as Json),
+					parent: null,
+					subscription: SUB,
+				},
+			},
+		}
+		const raw = JSON.stringify(legacy)
+
+		const result = await deliver(db, raw, stripeSignatureHeader(raw), { applyRenewalCredits })
+
+		expect(result.code).toBe("processed")
+		expect(applyRenewalCredits).toHaveBeenCalledWith(WS)
+	})
+
 	it("writes entitlement state from the provider read-back, never the payload (forged delta)", async () => {
 		const { store, db } = setup()
 		stripeClientHolder.client = {

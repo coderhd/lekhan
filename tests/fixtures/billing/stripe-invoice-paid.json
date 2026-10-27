@@ -10,7 +10,12 @@
 			"id": "in_test_001",
 			"object": "invoice",
 			"customer": "cus_test_001",
-			"subscription": "sub_test_001",
+			"parent": {
+				"type": "subscription_details",
+				"subscription_details": {
+					"subscription": "sub_test_001"
+				}
+			},
 			"status": "paid",
 			"amount_paid": 600,
 			"currency": "usd",
