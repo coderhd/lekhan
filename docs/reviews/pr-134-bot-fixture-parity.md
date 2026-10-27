@@ -48,6 +48,18 @@ from being bot-exclusive.
 The two content-loss bugs the retro called out map to CR-6/PF-2 (dropped direct text)
 and PF-4a (dropped deferred body).
 
+## PR #153 round-5 follow-ups
+
+Two review-bot findings landed after the parity map was first written; neither is a new
+defect class, so the fixtures above still cover the behaviour:
+
+- `pageIdRef` was synced by mutating the ref during render (pullfrog). Now synced in
+  `useLayoutEffect([pageId])`, like `editorRef`; the page-scoped deferred-paste fixture
+  still passes.
+- `EditorWorkspace` is keyed by `params.id` at the route call site (CodeRabbit), so a
+  page change remounts the editor instead of reusing the previous instance. The
+  deferred-paste page guard remains as defence for any unkeyed caller.
+
 ## Pointers
 
 - Source findings: PR #134 review threads (CodeRabbit 6 inline comments, pullfrog 1 initial + 2 incremental cyclic reviews).
