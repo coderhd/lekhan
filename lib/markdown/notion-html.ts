@@ -34,6 +34,23 @@ function escapeAttr(value: unknown): string {
 	return escapeHtml(String(value))
 }
 
+// Copy-out hands markup to another app, so a mark attribute hydrated from
+// collab/doc JSON (which does not re-validate) must not smuggle a scriptable
+// scheme. Allow only what a document can legitimately link to; relative URLs
+// (no scheme) pass through.
+const SAFE_LINK_URL_RE = /^(https?:|mailto:|obsidian:)/i
+const SAFE_IMAGE_URL_RE = /^(https?:|data:image\/)/i
+const HAS_SCHEME_RE = /^[a-z][a-z0-9+.-]*:/i
+
+/** Return the URL when its scheme is safe for the target attribute, else ''. */
+export function sanitizeUrl(value: unknown, kind: 'link' | 'image'): string {
+	if (value === null || value === undefined) return ''
+	const raw = String(value).trim()
+	if (raw === '') return ''
+	if (!HAS_SCHEME_RE.test(raw)) return raw
+	return (kind === 'link' ? SAFE_LINK_URL_RE : SAFE_IMAGE_URL_RE).test(raw) ? raw : ''
+}
+
 interface MarkLike {
 	type: string
 	attrs?: Record<string, unknown> | null
@@ -63,7 +80,7 @@ function renderTextNode(node: JSONContent): string {
 				html = `<mark>${html}</mark>`
 				break
 			case 'link': {
-				const href = escapeAttr(mark.attrs?.href)
+				const href = escapeAttr(sanitizeUrl(mark.attrs?.href, 'link'))
 				const title = mark.attrs?.title ? ` title="${escapeAttr(mark.attrs.title)}"` : ''
 				if (href) html = `<a href="${href}"${title}>${html}</a>`
 				break
@@ -150,7 +167,7 @@ function renderNode(node: JSONContent): string {
 		case 'hardBreak':
 			return '<br>'
 		case 'image': {
-			const src = escapeAttr(node.attrs?.src)
+			const src = escapeAttr(sanitizeUrl(node.attrs?.src, 'image'))
 			if (!src) return ''
 			const alt = node.attrs?.alt ? ` alt="${escapeAttr(node.attrs.alt)}"` : ''
 			const title = node.attrs?.title ? ` title="${escapeAttr(node.attrs.title)}"` : ''

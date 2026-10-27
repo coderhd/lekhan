@@ -32,7 +32,7 @@ function pageMetaToData(meta: PageMeta): Record<string, unknown> {
 	for (const [key, value] of Object.entries(meta.properties)) {
 		if (!RESERVED_KEYS.has(key)) data[key] = value
 	}
-	if (meta.title !== undefined) data.title = meta.title
+	if (typeof meta.title === 'string' && meta.title.trim() !== '') data.title = meta.title
 	if (meta.tags && meta.tags.length > 0) data.tags = meta.tags
 	return data
 }
@@ -100,10 +100,64 @@ export function stripAutoHeading(doc: JSONContent): JSONContent {
  */
 const ESCAPED_WIKILINK_RE = /\\\[\\\[([^[\]\\]+?)(?:\\?\|([^[\]\\]+?))?\\\]\\\]/g
 
+// A fenced code block opener/closer (``` or ~~~, optionally indented).
+const FENCE_RE = /^\s*(`{3,}|~{3,})/
+// An inline code span delimited by a run of backticks.
+const CODE_SPAN_RE = /(`+)[\s\S]*?\1/g
+// A GFM table row always opens with a pipe (tiptap-markdown emits the outer pipes).
+const TABLE_ROW_RE = /^\s*\|/
+
+/**
+ * Restore escaped wikilink syntax in one run of ordinary inline text. Inside a
+ * table row the alias pipe is the column delimiter, so it must stay escaped —
+ * otherwise the cell splits in two when the payload is parsed again.
+ */
+function restoreWikilinksInText(text: string, inTable: boolean): string {
+	return text.replace(ESCAPED_WIKILINK_RE, (_match, target: string, alias?: string) => {
+		if (!alias) return `[[${target}]]`
+		return inTable ? `[[${target}\\|${alias}]]` : `[[${target}|${alias}]]`
+	})
+}
+
+/**
+ * Reverse the serializer's wikilink escaping on serialized markdown while
+ * leaving user code alone: fenced blocks and inline code spans are copied
+ * verbatim (a copy must never rewrite source code), and table rows keep the
+ * alias delimiter escaped so the table still round-trips.
+ */
 export function restoreWikilinks(markdown: string): string {
-	return markdown.replace(ESCAPED_WIKILINK_RE, (_match, target: string, alias?: string) =>
-		alias ? `[[${target}|${alias}]]` : `[[${target}]]`,
-	)
+	let fence: string | null = null
+	return markdown
+		.split('\n')
+		.map((line) => {
+			const fenceMatch = line.match(FENCE_RE)
+			if (fenceMatch) {
+				const marker = fenceMatch[1][0]
+				if (fence === null) {
+					fence = marker
+					return line
+				}
+				if (fence === marker) {
+					fence = null
+					return line
+				}
+				return line
+			}
+			if (fence !== null) return line
+
+			const inTable = TABLE_ROW_RE.test(line)
+			let restored = ''
+			let cursor = 0
+			CODE_SPAN_RE.lastIndex = 0
+			let codeMatch: RegExpExecArray | null
+			while ((codeMatch = CODE_SPAN_RE.exec(line)) !== null) {
+				restored += restoreWikilinksInText(line.slice(cursor, codeMatch.index), inTable)
+				restored += codeMatch[0]
+				cursor = codeMatch.index + codeMatch[0].length
+			}
+			return restored + restoreWikilinksInText(line.slice(cursor), inTable)
+		})
+		.join('\n')
 }
 
 export function uint8ArrayToBase64(bytes: Uint8Array): string {

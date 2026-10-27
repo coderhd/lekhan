@@ -1,5 +1,5 @@
 import type { JSONContent } from '@tiptap/core'
-import { markdownEngine, type PageMeta } from '@/lib/markdown/engine'
+import { markdownEngine, stripAutoHeading, type PageMeta } from '@/lib/markdown/engine'
 import { serializeNotionHtml } from '@/lib/markdown/notion-html'
 
 /**
@@ -102,7 +102,11 @@ export function buildClipboardPayload(
 	meta: ClipboardPageMeta,
 	options: BuildClipboardPayloadOptions,
 ): ClipboardPayload {
-	const normalized = normalizeClipboardDoc(doc)
+	// Strip the live editor's auto-filled placeholder heading ONCE, before both
+	// representations are built. `serializeObsidianBody` also strips internally
+	// (idempotent), but the Notion HTML walker does not — without this, every
+	// real Page's rich copy prepends an empty `<h1></h1>` heading block.
+	const normalized = stripAutoHeading(normalizeClipboardDoc(doc))
 	const text = options.wholePage
 		? markdownEngine.serializeObsidianPage(normalized, toPageMeta(meta))
 		: markdownEngine.serializeObsidianBody(normalized)
@@ -132,17 +136,29 @@ export function writeClipboardPayload(event: ClipboardEvent, payload: ClipboardP
  */
 export async function copyClipboardPayloadToSystem(payload: ClipboardPayload): Promise<boolean> {
 	if (typeof navigator === 'undefined' || !navigator.clipboard) return false
-	try {
-		if (payload.html) {
-			await navigator.clipboard.write([
+	const { clipboard } = navigator
+	if (
+		payload.html &&
+		typeof ClipboardItem !== 'undefined' &&
+		typeof clipboard.write === 'function'
+	) {
+		try {
+			await clipboard.write([
 				new ClipboardItem({
 					'text/plain': new Blob([payload.text], { type: 'text/plain' }),
 					'text/html': new Blob([payload.html], { type: 'text/html' }),
 				}),
 			])
-		} else {
-			await navigator.clipboard.writeText(payload.text)
+			return true
+		} catch {
+			// Rich write denied/unavailable (older Firefox, insecure context,
+			// Safari quirks): fall through to the plain-text write rather than
+			// failing the copy outright — the markdown half is still serviceable.
 		}
+	}
+	if (typeof clipboard.writeText !== 'function') return false
+	try {
+		await clipboard.writeText(payload.text)
 		return true
 	} catch {
 		return false

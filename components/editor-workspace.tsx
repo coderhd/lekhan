@@ -255,7 +255,10 @@ export default function EditorWorkspace({	pageId,
 	handleCreateWikilinkPageRef.current = handleCreateWikilinkPage
 
 	const handleExport = async (type: ExportType) => {
-		if (!editor) return
+		if (!editor) {
+			setIsExportOpen(false)
+			return
+		}
 		setIsExporting(true)
 		track('export_triggered', { format: type })
 		try {
@@ -294,7 +297,10 @@ export default function EditorWorkspace({	pageId,
 	// markdown payload, or as the Notion-facing rich (dual-MIME) payload. Used
 	// by the Export menu's "Copy for …" items, outside any copy event.
 	const handleCopyFor = async (target: ClipboardTarget) => {
-		if (!editor) return
+		if (!editor) {
+			setIsExportOpen(false)
+			return
+		}
 		try {
 			const payload = buildClipboardPayload(editor.getJSON(), clipboardMetaRef.current, {
 				wholePage: true,
@@ -721,7 +727,27 @@ export default function EditorWorkspace({	pageId,
 							// apply above re-validates the document so edits typed
 							// during the RPC are never clobbered.
 							updatePageProperties(pageId, properties)
-								.then(applyBody)
+								.then(() => {
+									// Keep the copy-out metadata ref in step with what
+									// the paste just merged, so an immediate ⌘C emits
+									// the new properties/tags rather than the pre-paste
+									// values. Best-effort background tag refresh covers
+									// the rows the server derives from properties.
+									clipboardMetaRef.current.properties = {
+										...clipboardMetaRef.current.properties,
+										...properties,
+									}
+									const mergedTags = clipboardMetaRef.current.properties.tags
+									if (Array.isArray(mergedTags)) {
+										clipboardMetaRef.current.tags = mergedTags.filter(
+											(t): t is string => typeof t === 'string',
+										)
+									}
+									fetchPageTags(pageId)
+										.then((tags) => { clipboardMetaRef.current.tags = tags.map((t) => t.tag) })
+										.catch(() => {})
+									applyBody()
+								})
 								.catch((err) => {
 									console.error('Error applying pasted Page properties:', err)
 									applyBody()
@@ -1093,15 +1119,16 @@ export default function EditorWorkspace({	pageId,
 														</button>
 													)
 												})}
-												<div className="my-0.5 h-px bg-black/10 dark:bg-white/10" />
+												<div role="separator" className="my-0.5 h-px bg-black/10 dark:bg-white/10" />
 												{COPY_MENU_ITEMS.map((item) => {
 													const Icon = item.icon
 													return (
 														<button
 															key={item.target}
 															type="button"
+															disabled={isExporting}
 															onClick={() => handleCopyFor(item.target)}
-															className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full"
+															className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full disabled:opacity-50 disabled:pointer-events-none"
 															role="menuitem"
 														>
 															<Icon className={`w-4 h-4 ${item.iconClass}`} />

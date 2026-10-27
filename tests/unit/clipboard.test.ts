@@ -1,9 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { MarkdownEngine } from '@/lib/markdown/engine'
-import { serializeNotionHtml } from '@/lib/markdown/notion-html'
-import { buildClipboardPayload, writeClipboardPayload } from '@/lib/markdown/clipboard'
+import { serializeNotionHtml, sanitizeUrl } from '@/lib/markdown/notion-html'
+import {
+	buildClipboardPayload,
+	copyClipboardPayloadToSystem,
+	writeClipboardPayload,
+} from '@/lib/markdown/clipboard'
 import { classifyClipboardPaste } from '@/lib/markdown-paste'
 import { splitObsidianFrontmatter } from '@/lib/obsidian-clipboard'
 
@@ -22,6 +26,9 @@ const CORPUS: Array<{ name: string; markdown: string }> = [
 	{ name: 'blockquote', markdown: '> A blockquote line\n>\n> Second paragraph\n' },
 	{ name: 'code block', markdown: '```ts\nconst x: number = 1\nconsole.log(x)\n```\n' },
 	{ name: 'table', markdown: '| Name | Role |\n| --- | --- |\n| Alice | Writer |\n| Bob | Editor |\n' },
+	{ name: 'table with alias wikilink', markdown: '| Page | Note |\n| --- | --- |\n| [[Beta\\|the beta]] | x |\n' },
+	{ name: 'inline code with brackets', markdown: 'Use `arr[[i]]` syntax.\n' },
+	{ name: 'fenced code with bracket runs', markdown: '```js\nconst re = /\\[\\[([^\\]]+)\\]\\]/g\nx = arr[[i]]\n```\n' },
 	{ name: 'callout', markdown: '> [!note] A title\n> Body line one\n>\n> Body line two\n' },
 	{ name: 'wikilink', markdown: 'See [[Alpha]] and [[Beta|the beta]].\n' },
 	{ name: 'inline tags', markdown: 'Tagged #work and #ai here.\n' },
@@ -395,5 +402,170 @@ describe('round-trip guarantee through S1 paste-in routing', () => {
 		expect(body).toContain('[[Alpha]]')
 		expect(body).toContain('[[Beta|the beta]]')
 		expect(body).toMatch(/> \[!warning\](?:^|\s)/m)
+	})
+})
+
+// ---------------------------------------------------------------------------
+// Clean-room review regressions (docs/reviews/pr-59-review.md)
+// ---------------------------------------------------------------------------
+
+describe('review #1 — live-shaped Page doc strips the placeholder heading once', () => {
+	let engine: MarkdownEngine
+	beforeEach(() => { engine = new MarkdownEngine() })
+	afterEach(() => engine.destroy())
+
+	const liveShaped = {
+		type: 'doc',
+		content: [
+			{ type: 'heading', attrs: { level: 1 }, content: [] },
+			{ type: 'paragraph', content: [{ type: 'text', text: 'Body' }] },
+		],
+	} as never
+
+	it('does not prepend an empty heading block to the Notion HTML', () => {
+		const payload = buildClipboardPayload(liveShaped, { title: 'My Page', tags: ['x'] }, {
+			wholePage: true,
+			target: 'notion',
+		})
+		expect(payload.html).not.toContain('<h1></h1>')
+		expect(payload.html).toBe('<p>Body</p>')
+		expect(payload.text).not.toMatch(/^#\s/m)
+		expect(payload.text).toContain('title: My Page')
+	})
+
+	it('does not prepend an empty heading to the Obsidian markdown', () => {
+		const payload = buildClipboardPayload(liveShaped, { title: 'My Page' }, {
+			wholePage: true,
+			target: 'obsidian',
+		})
+		expect(payload.text.endsWith('Body\n')).toBe(true)
+	})
+})
+
+describe('review #2/#6 — restoreWikilinks is table- and code-aware', () => {
+	let engine: MarkdownEngine
+	beforeEach(() => { engine = new MarkdownEngine() })
+	afterEach(() => engine.destroy())
+
+	it('keeps the alias pipe escaped inside a table row', () => {
+		const doc = engine.parse('| Page | Note |\n| --- | --- |\n| [[Beta\\|the beta]] | x |\n')
+		const body = engine.serializeObsidianBody(doc)
+		expect(body).toContain('[[Beta\\|the beta]]')
+		expect(engine.parse(body)).toEqual(doc)
+	})
+
+	it('never rewrites bracketed source code', () => {
+		const inline = engine.parse('Use `arr[[i]]` syntax.\n')
+		expect(engine.serializeObsidianBody(inline)).toContain('`arr[[i]]`')
+
+		const fenced = engine.parse('```js\nconst re = /\\[\\[([^\\]]+)\\]\\]/g\nx = arr[[i]]\n```\n')
+		const body = engine.serializeObsidianBody(fenced)
+		expect(body).toContain('arr[[i]]')
+		expect(engine.parse(body)).toEqual(fenced)
+	})
+
+	it('still restores a plain wikilink and its alias in prose', () => {
+		const doc = engine.parse('See [[Alpha]] and [[Beta|the beta]].\n')
+		const body = engine.serializeObsidianBody(doc)
+		expect(body).toContain('[[Alpha]]')
+		expect(body).toContain('[[Beta|the beta]]')
+		expect(engine.parse(body)).toEqual(doc)
+	})
+})
+
+describe('review #9 — Notion HTML only emits safe URL schemes', () => {
+	let engine: MarkdownEngine
+	beforeEach(() => { engine = new MarkdownEngine() })
+	afterEach(() => engine.destroy())
+
+	it('allows http(s), mailto, obsidian and relative URLs', () => {
+		expect(sanitizeUrl('https://example.com', 'link')).toBe('https://example.com')
+		expect(sanitizeUrl('mailto:a@b.test', 'link')).toBe('mailto:a@b.test')
+		expect(sanitizeUrl('obsidian://open?vault=x', 'link')).toBe('obsidian://open?vault=x')
+		expect(sanitizeUrl('/page/abc', 'link')).toBe('/page/abc')
+		expect(sanitizeUrl('#anchor', 'link')).toBe('#anchor')
+	})
+
+	it('drops scriptable link and image URLs but keeps the text', () => {
+		expect(sanitizeUrl('javascript:alert(1)', 'link')).toBe('')
+		expect(sanitizeUrl('data:text/html,<script>', 'link')).toBe('')
+		expect(sanitizeUrl('javascript:alert(1)', 'image')).toBe('')
+		expect(sanitizeUrl('data:image/png;base64,AAA', 'image')).toBe('data:image/png;base64,AAA')
+
+		const doc = {
+			type: 'doc',
+			content: [{
+				type: 'paragraph',
+				content: [{ type: 'text', text: 'click', marks: [{ type: 'link', attrs: { href: 'javascript:alert(1)' } }] }],
+			}],
+		} as never
+		const html = serializeNotionHtml(doc)
+		expect(html).not.toContain('javascript:')
+		expect(html).toContain('click')
+	})
+})
+
+describe('review #12 — empty title is omitted from frontmatter', () => {
+	let engine: MarkdownEngine
+	beforeEach(() => { engine = new MarkdownEngine() })
+	afterEach(() => engine.destroy())
+
+	it('does not emit an empty title key', () => {
+		const doc = engine.parse('Body\n')
+		const text = engine.serializeObsidianPage(doc, { title: '   ', properties: {} })
+		expect(text).not.toContain('title:')
+		expect(text.startsWith('---')).toBe(false)
+	})
+})
+
+describe('review #5 — highlight contract (HTML-in-markdown on the plain-text side)', () => {
+	let engine: MarkdownEngine
+	beforeEach(() => { engine = new MarkdownEngine() })
+	afterEach(() => engine.destroy())
+
+	const highlighted = {
+		type: 'doc',
+		content: [{
+			type: 'paragraph',
+			content: [{ type: 'text', text: 'plain ', marks: [{ type: 'highlight' }] }, { type: 'text', text: 'marked', marks: [{ type: 'highlight' }] }],
+		}],
+	} as never
+
+	it('renders <mark> in the Notion HTML', () => {
+		expect(serializeNotionHtml(highlighted)).toContain('<mark>')
+	})
+
+	it('emits <mark> HTML in the Obsidian markdown (valid in Obsidian)', () => {
+		// Spec §5 wording: highlight has no Obsidian `==…==` equivalent on the
+		// serializer path, so the plain-text side carries HTML — which Obsidian
+		// renders — and is documented as such rather than promised as `==`.
+		expect(engine.serializeObsidianBody(highlighted)).toContain('<mark>')
+	})
+})
+
+describe('review #8 — plain-text fallback when the rich clipboard write fails', () => {
+	afterEach(() => { vi.unstubAllGlobals() })
+
+	it('falls back to writeText when the rich write is rejected', async () => {
+		const writeText = vi.fn().mockResolvedValue(undefined)
+		const write = vi.fn().mockRejectedValue(new Error('denied'))
+		vi.stubGlobal('navigator', { clipboard: { write, writeText } })
+		vi.stubGlobal('ClipboardItem', class { constructor(public items: unknown) {} })
+
+		const ok = await copyClipboardPayloadToSystem({ text: 'plain md', html: '<p>rich</p>' })
+		expect(ok).toBe(true)
+		expect(write).toHaveBeenCalledTimes(1)
+		expect(writeText).toHaveBeenCalledWith('plain md')
+	})
+
+	it('uses writeText directly for a plain-only payload', async () => {
+		const writeText = vi.fn().mockResolvedValue(undefined)
+		const write = vi.fn()
+		vi.stubGlobal('navigator', { clipboard: { write, writeText } })
+
+		const ok = await copyClipboardPayloadToSystem({ text: 'plain md', html: '' })
+		expect(ok).toBe(true)
+		expect(write).not.toHaveBeenCalled()
+		expect(writeText).toHaveBeenCalledWith('plain md')
 	})
 })

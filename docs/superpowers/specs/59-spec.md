@@ -46,10 +46,15 @@ copy with a handler that writes **dual clipboard payloads**:
 ## 4. Acceptance criteria (restated from the issue)
 
 1. Copy-out of a Page carrying wikilinks, callouts, frontmatter, and tags pastes into a real Obsidian
-   vault and renders natively; pastes into a real Notion page and converts cleanly. Proven by
-   committed clipboard fixtures (both MIME types) captured from the real apps, plus QA dogfood.
-2. **Round-trip guarantee:** `serialize(Obsidian) → parse` is IR-identity for every construct in the
-   suite; property tests over the construct corpus.
+   vault and renders natively (default ⌘C / "Copy as Obsidian markdown"); pastes into a real Notion
+   page and converts cleanly via the explicit **"Copy for Notion (rich)"** action. Proven by
+   committed clipboard fixtures, QA real-app dogfood (SIL-68 / SIL-70), and golden regression anchors.
+   *Amended at the clean-room review (§6.2.1):* the implicit ⌘C copy is deliberately Obsidian-only, so
+   Notion's clean path is the explicit affordance — a single implicit copy cannot satisfy both paste
+   targets because Obsidian prefers `text/html` whenever it is present.
+2. **Round-trip guarantee:** copy-out → S1 paste-in (`classifyClipboardPaste` →
+   `splitObsidianFrontmatter` → parser) is IR-identity for every construct in the suite; table-driven
+   property tests over the construct corpus and its combinations.
 3. First artifact is this spec (`docs/superpowers/specs/59-spec.md`).
 
 ## 5. Construct corpus (the contract)
@@ -57,11 +62,11 @@ copy with a handler that writes **dual clipboard payloads**:
 | Construct | `text/plain` (Obsidian) | `text/html` (Notion) |
 |---|---|---|
 | Heading 1-3 | `# …` / `## …` / `### …` | `<h1>`–`<h3>` |
-| Paragraph + marks | `**bold**`, `*italic*`, `~~strike~~`, `` `code` ``, `<u>`, `==highlight==` | `<strong>`, `<em>`, `<s>`, `<code>`, `<u>`, `<mark>` |
+| Paragraph + marks | `**bold**`, `*italic*`, `~~strike~~`, `` `code` ``, `<u>`, `<mark>…</mark>` (highlight has no `==…==` serializer path; HTML is valid in Obsidian) | `<strong>`, `<em>`, `<s>`, `<code>`, `<u>`, `<mark>` |
 | Bullet / ordered list | `- ` / `1. ` | `<ul><li>` / `<ol><li>` |
 | Task list | `- [ ]` / `- [x]` | `<ul><li>` + disabled checkbox input |
 | Link (real URL) | `[text](url)` | `<a href="url">text</a>` |
-| Wikilink resolved/unresolved | `[[Page]]` / `[[Page\|Alias]]` | literal `[[Page]]` text (see §3) |
+| Wikilink resolved/unresolved | `[[Page]]` / `[[Page\|Alias]]` (alias pipe stays escaped inside a table row) | literal `[[Page]]` text (see §3) |
 | Inline tag | `#tag` | `#tag` text |
 | Callout | `> [!type] title` + `> ` body | `<blockquote><p><strong>title</strong></p>…</blockquote>` |
 | Blockquote | `> …` | `<blockquote>` |
@@ -112,7 +117,11 @@ export function buildClipboardPayload(
 
 `buildClipboardPayload` calls `markdownEngine.serializeObsidianPage` (whole page) or
 `serializeObsidianBody` (selection) for `text`, and `serializeNotionHtml(doc)` for `html` **only when the
-target is not `obsidian`**.
+target is not `obsidian`**. The live editor's placeholder heading is stripped **once** in
+`buildClipboardPayload` before both representations are built (the HTML walker would otherwise prepend
+an empty `<h1></h1>` to every real Page — clean-room finding #1). The Notion walker only emits URLs
+whose scheme is safe (`http(s)`, `mailto`, `obsidian`, relative, and `data:image` for images); a
+scriptable `href`/`src` is dropped and the text still renders.
 
 ### 6.2.1 Paste-target decision (SIL-68 finding)
 
@@ -131,6 +140,13 @@ Resolution: make the payload **target-aware**.
 The default editor copy (⌘C) writes the **Obsidian** target, and the Export menu gains explicit
 **"Copy as Obsidian markdown"** and **"Copy for Notion (rich)"** actions.
 
+**Accepted trade-off (clean-room review #3).** Because the implicit ⌘C copy is plain-only, a whole-page
+⌘C pasted directly into Notion lands raw markdown/frontmatter; Notion's clean path is the explicit
+"Copy for Notion (rich)" menu item (dual payload, which also serves Google Docs/Word/email). The reverse
+choice — dual payload on ⌘C — would re-break Obsidian (the SIL-68 defect). One implicit copy cannot
+satisfy both targets, so the target-aware affordances are the contract; AC1 is worded accordingly
+(§4.1).
+
 New pure module `lib/markdown/notion-html.ts` — `serializeNotionHtml(doc): string`, a
 schema-driven JSON walker (no DOM, no Tiptap editor instantiation) so the Notion mapping is
 unit-testable and independent of the live schema. It mirrors the already-shipped callout HTML class
@@ -146,7 +162,9 @@ In `components/editor-workspace.tsx` `editorProps.handleDOMEvents.copy`:
    in a paragraph (keeps the doc valid for the `block+` schema).
 3. Build the payload for the **`obsidian`** target from the live Page meta held in a ref (`title`
    always; `tags`/`properties` loaded once on mount via `fetchPageTags` / `fetchPageDetails`,
-   best-effort).
+   best-effort). After a paste merges Page properties, the ref is refreshed (merged patch immediately,
+   tag rows re-fetched best-effort) so the next ⌘C emits the post-paste values
+   (clean-room finding #7).
 4. On success: `event.preventDefault()`, `setData('text/plain', …)` (no `text/html` for this target),
    return `true`. On any serializer error: `console.warn` + return `false` (native copy still works).
 
@@ -166,16 +184,28 @@ const roundTripped = engine.parse(engine.serializeObsidianBody(doc))
 expect(roundTripped).toEqual(doc)          // IR identity
 ```
 
-Property test: for each corpus fixture, `parse(serialize(parse(md))) === parse(md)` (idempotence),
-and `serialize` output re-parses to the same IR. Fixtures are committed as real clipboard captures
-under `tests/fixtures/clipboard/` (markdown, HTML, and a combined `text/html`+`text/plain` capture).
+Table-driven property test: for each corpus construct (and the combinations that have historically
+broken — e.g. an aliased wikilink inside a table row, bracketed source code), assert
+`parse(serialize(parse(md))) === parse(md)` (idempotence) and that the copy payload re-parses to the
+same IR through S1's real paste-in routing (`classifyClipboardPaste` → `splitObsidianFrontmatter` →
+parser). Wikilink restoration is context-aware: fenced code blocks and inline code spans are copied
+verbatim, and a table row keeps the alias pipe escaped (`[[Page\|Alias]]`) so the cell does not split.
+
+Fixtures live under `tests/fixtures/clipboard/` (markdown, HTML, and a combined
+`text/html`+`text/plain` capture). The `.html` and `.clipboard.json` files are **golden regression
+anchors generated by this serializer**, not raw captures from Notion: real-app paste behaviour was
+verified by QA dogfood in SIL-68 (rejected → fixed) and SIL-70 (approved, CEO closing gate), recorded
+in those issue threads rather than the repo (clean-room finding #4).
 
 ## 8. Edge cases
 
 - Empty selection → native copy (no empty payload).
 - Selection inside a single paragraph (inline slice) → wrap into a paragraph; never throw.
-- Whole page with no properties/tags → no frontmatter block (engine returns body unchanged).
+- Whole page with no properties/tags → no frontmatter block (engine returns body unchanged); an empty
+  or whitespace-only title is omitted rather than emitted as `title: ''`.
 - Reserved keys in properties (`title`, `tags`) never duplicated — engine enforces.
+- Bracketed source code (`arr[[i]]`, regex bracket runs) → copied verbatim; the Obsidian wikilink
+  restore pass is fenced-block and inline-code aware.
 - Unknown/unsupported nodes → serialize best-effort, never drop silently in markdown (engine);
   HTML walker renders children as a fallback.
 - Very large selection → single synchronous pass; no async fetch on the copy path.

@@ -2,9 +2,7 @@ import type { JSONContent } from '@tiptap/core'
 import { generateHTML } from '@tiptap/core'
 import { Document } from '@tiptap/extension-document'
 import { Mention } from '@tiptap/extension-mention'
-import { markdownEngine } from '@/lib/markdown/engine'
-import { stripAutoHeading } from '@/lib/markdown/engine'
-import type { PageMeta } from '@/lib/markdown/engine'
+import { markdownEngine, stripAutoHeading, type PageMeta } from '@/lib/markdown/engine'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 
 /**
