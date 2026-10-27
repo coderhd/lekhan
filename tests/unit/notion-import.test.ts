@@ -248,9 +248,12 @@ describe('importNotionExport — media, callouts and degradations', () => {
 		const page = ir.pages.find(candidate => candidate.title === 'Tables')!
 		const { html, text } = renderHtml(page.contentYjsBase64)
 
-		// Notion's callout (short icon + text) still becomes a native callout.
-		expect(html).toContain('data-callout')
+		// Notion's table callout and both aside callouts become native callouts.
+		expect(html.match(/data-callout-type=/g)).toHaveLength(3)
 		expect(text.match(/Callouts survive as callouts\./g)).toHaveLength(1)
+		expect(text).toContain('Aside callout survives.')
+		expect(text).toContain('Warning aside')
+		expect(text).toContain('second line')
 		// A 3-cell row and a 2×2 table are real tables: every cell survives and
 		// neither is collapsed into a callout body (QA B1).
 		for (const cell of ['Col A', 'Col B', 'Col C', 'r1a', 'r1b', 'r2a', 'r2b']) {
@@ -259,6 +262,39 @@ describe('importNotionExport — media, callouts and degradations', () => {
 		expect(html.match(/<table/g)).toHaveLength(2)
 		// Both are named as unrepresentable HTML rather than silently flattened.
 		expect(report.degradedBlocks).toBe(2)
+	})
+
+	it('escapes the wikilink alias separator inside pipe-table rows', () => {
+		const otherId = '1'.repeat(32)
+		const seedId = '2'.repeat(32)
+		const content = {
+			files: [
+				{ path: `Other ${otherId}.md`, data: new TextEncoder().encode('# Other\n\nTarget.\n') },
+				{
+					path: `Seed ${seedId}.md`,
+					data: new TextEncoder().encode([
+						'# Seed',
+						'',
+						'| Page | Note |',
+						'| --- | --- |',
+						`| [the other](Other%20${otherId}.md) | x |`,
+					].join('\n')),
+				},
+			],
+			directories: [],
+			parts: 1,
+			duplicatePagesSkipped: 0,
+		} as Parameters<typeof importNotionExport>[0]
+		const { ir, report } = importNotionExport(content, { workspaceId: 'ws-1', existingPageTitles: [] })
+		const page = ir.pages.find(candidate => candidate.title === 'Seed')!
+		const { html, text } = renderHtml(page.contentYjsBase64)
+
+		// GFM must not split the alias into an extra cell; the parser unescapes
+		// the separator back to `|` in the text node.
+		expect(text).toContain('[[Other|the other]]')
+		expect(html).not.toContain('\\|')
+		expect(html.match(/<td/g)).toHaveLength(2)
+		expect(report.linksResolved).toBe(1)
 	})
 
 	it('preserves code blocks, tables and task lists', async () => {

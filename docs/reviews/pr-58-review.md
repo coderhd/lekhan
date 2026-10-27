@@ -20,7 +20,7 @@ typecheck, lint and production build are green. No blocking or high findings rem
 | BLOCKING | Notion import never starts in a real browser: `e.target.value = ''` empties the live `FileList` before `handleNotionFiles` reads it. Tests used a plain array so they could not catch it. | Snapshot `Array.from(e.target.files)` **before** resetting the input (Notion + webkitdirectory fallback). Regression test emulates the browser mutating the same list object. |
 | HIGH | Row↔page matching only handled one exact folder layout; sibling/nested CSV layouts duplicated rows (one with body, one with properties) and leaked a `Private & Shared` folder page. | Wrapper-only CSV dirs resolve to the database title; row matching accepts database-title / nested-database folders; committed `database-layouts.zip` fixture covers sibling + nested sibling. |
 | HIGH | Link/image rewriting ran inside fenced code, corrupting code samples and inflating `attachmentsDropped`. | Fence- and inline-code-aware transforms (see cycle 3 for the fence-run refinement). |
-| MEDIUM | Titles containing `\|` produced dangling `[[B|alias]]` links but reported them resolved. | Unrepresentable titles keep visible text and count a degraded block. |
+| MEDIUM | Titles containing `\|` produced dangling `[[B\|alias]]` links but reported them resolved. | Unrepresentable titles keep visible text and count a degraded block. |
 | MEDIUM | Safety envelope reset per multi-part zip; bomb guard depended on a private JSZip field without failing closed. | One byte/image budget shared across parts; fail closed when the uncompressed size is unavailable. |
 | MEDIUM | `parseCsv` treated a stray mid-cell quote as an unterminated field and swallowed the rest of the file. | A quote opens a field only at cell start; test added. |
 | NIT | Report wording contradicted Notion behaviour; empty export misreported as non-Notion; executable schemes passed through. | Wording neutralised; empty export has its own message; `javascript:`/`vbscript:`/`data:`/`file:` links drop to text; tests added. |
@@ -64,6 +64,15 @@ or a multi-row table could convert into a callout and lose the remaining cells.
 | Sev | Finding | Resolution |
 |---|---|---|
 | BLOCKING | A `<table>` with 3+ cells or 2+ rows collapsed into a callout body: cells silently dropped (`icon="x"`, `content="y</td><td>z"`). | A match is rejected when either capture contains a `<td>`/`<tr>`/`<table>` tag, so only Notion's genuine one-row/two-cell shape converts; every other table is returned whole and counted in `degradedBlocks`. New `html-tables.zip` fixture + test (callout converts once, all seven table cells survive, two `<table>` elements remain). |
+
+
+### Cycle 7 — external review after the QA fix
+
+| Sev | Finding | Resolution |
+|---|---|---|
+| MAJOR | Notion's Markdown & CSV export can render callouts as `<aside>💡 text</aside>`; only the table form converted. | `unwrapCallouts` now converts `<aside>` callouts too (leading pictograph → callout type, body preserved). `<aside>` joins the leftover-HTML counter when it cannot convert. `html-tables.zip` covers both forms. |
+| MINOR | A `[[Title\|alias]]` emitted inside a pipe-table row was split across cells by GFM. | After link rewriting, wikilink pipes in table rows are escaped as `\|` outside code; a regression test asserts two cells and the intact `[[Other\|the other]]` text. |
+| NIT | Duplicate phrase in the QA record; unescaped `\|` in a review table; JSDoc glued to `toWikilink`. | Fixed. |
 
 ## Verification evidence
 

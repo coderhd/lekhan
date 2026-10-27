@@ -514,6 +514,9 @@ function resolveRelative (target: string, notePath: string, index: MediaIndex): 
 const CALLOUT_TABLE_RE = /<table>\s*<tr>\s*<td>([\s\S]*?)<\/td>\s*<td>([\s\S]*?)<\/td>\s*<\/tr>\s*<\/table>/gi
 /** A capture containing another cell/row/table means the match spilled over a real table. */
 const CALLOUT_CELL_STRUCTURE_RE = /<\/?(?:td|tr|table)\b/i
+/** Some Notion Markdown & CSV exports render callouts as `<aside>` blocks. */
+const ASIDE_CALLOUT_RE = /<aside\b[^>]*>([\s\S]*?)<\/aside>/gi
+const ASIDE_ICON_RE = /^([\p{Extended_Pictographic}\uFE0F\u200D]+)\s*([\s\S]*)$/u
 
 function stripHtml (value: string): string {
 	return value
@@ -550,19 +553,38 @@ function toObsidianCallout (icon: string, content: string): string {
 	return [`> [!${type}]`, ...lines].join('\n')
 }
 
+/**
+ * Notion's aside form is `<aside>💡 text</aside>` (icon inside the text, not a
+ * separate cell). Split the leading pictograph from the body when present.
+ */
+function splitAsideCallout (inner: string): { icon: string; content: string } | null {
+	const text = stripHtml(inner).trim()
+	if (!text) return null
+	const match = text.match(ASIDE_ICON_RE)
+	if (match && match[2].trim()) return { icon: match[1], content: match[2] }
+	return { icon: '', content: text }
+}
+
 function unwrapCallouts (body: string): string {
-	return transformOutsideFences(body, (segment) => segment.replace(CALLOUT_TABLE_RE, (whole, iconRaw: string, contentRaw: string) => {
-		// The lazy captures backtrack across cell boundaries, so a 3-cell row or
-		// a multi-row table can masquerade as a callout with a "short icon" and
-		// lose its other cells. Only the genuine one-row/two-cell shape converts;
-		// anything else is a real table and stays one (the HTML guard below then
-		// counts it as an unrepresentable block).
-		if (CALLOUT_CELL_STRUCTURE_RE.test(iconRaw) || CALLOUT_CELL_STRUCTURE_RE.test(contentRaw)) return whole
-		const icon = stripHtml(iconRaw)
-		// A real callout has a short icon cell; a content table must pass through.
-		if (icon.length > 8 || !stripHtml(contentRaw)) return whole
-		return toObsidianCallout(icon, contentRaw)
-	}))
+	return transformOutsideFences(body, (segment) => {
+		const withAsides = segment.replace(ASIDE_CALLOUT_RE, (whole, inner: string) => {
+			const parsed = splitAsideCallout(inner)
+			if (!parsed) return whole
+			return toObsidianCallout(parsed.icon, parsed.content)
+		})
+		return withAsides.replace(CALLOUT_TABLE_RE, (whole, iconRaw: string, contentRaw: string) => {
+			// The lazy captures backtrack across cell boundaries, so a 3-cell row or
+			// a multi-row table can masquerade as a callout with a "short icon" and
+			// lose its other cells. Only the genuine one-row/two-cell shape converts;
+			// anything else is a real table and stays one (the HTML guard below then
+			// counts it as an unrepresentable block).
+			if (CALLOUT_CELL_STRUCTURE_RE.test(iconRaw) || CALLOUT_CELL_STRUCTURE_RE.test(contentRaw)) return whole
+			const icon = stripHtml(iconRaw)
+			// A real callout has a short icon cell; a content table must pass through.
+			if (icon.length > 8 || !stripHtml(contentRaw)) return whole
+			return toObsidianCallout(icon, contentRaw)
+		})
+	})
 }
 
 const SYNCED_BLOCK_RE = /<!--\s*(?:notion[-_ ]?)?synced[_-]?block[^>]*-->/gi
@@ -928,7 +950,8 @@ function replaceImages (body: string, ctx: BodyContext): string {
 	})
 }
 
-/** `[[Title]]`-style links cannot encode `|`, `[` or `]]` inside the target. */function toWikilink (title: string, text: string): string | null {
+/** `[[Title]]`-style links cannot encode `|`, `[` or `]]` inside the target. */
+function toWikilink (title: string, text: string): string | null {
 	if (title.includes('|') || title.includes('[') || title.includes(']')) return null
 	// A label may contain inline code/brackets, which would split the wikilink
 	// into separate text nodes (and stop the decorator matching it). Keep the
@@ -1034,7 +1057,24 @@ function replaceBareNotionUrls (body: string, ctx: BodyContext): string {
 	}))
 }
 
-const UNSUPPORTED_HTML_RE = /<(table|iframe|video|audio|figure|details|summary|embed|object)\b/gi
+const WIKILINK_PIPE_RE = /\[\[([^\]|]+)\|([^\]]+)\]\]/g
+
+/**
+ * GFM splits table cells on every unescaped `|`, including pipes inside inline
+ * spans. A `[[Title|alias]]` emitted into a table row would be torn across
+ * cells (and the graph index would never see the link). Escape the separator
+ * outside code; the Markdown parser unescapes it back to `|` in the text node.
+ */
+function escapeWikilinkPipesInTableRows (body: string): string {
+	return transformOutsideFences(body, (segment) => segment.split('\n').map(line => {
+		if (!line.includes('|') || !line.includes('[[')) return line
+		return replaceOutsideInlineCode(line, WIKILINK_PIPE_RE, (whole: string, target: string, alias: string) =>
+			`[[${target}\\|${alias}]]`
+		)
+	}).join('\n'))
+}
+
+const UNSUPPORTED_HTML_RE = /<(table|aside|iframe|video|audio|figure|details|summary|embed|object)\b/gi
 
 function processBody (page: RawNotionPage, ctx: BodyContext): string {
 	let body = stripDuplicateTitleHeading(page.raw, page.title)
@@ -1045,6 +1085,7 @@ function processBody (page: RawNotionPage, ctx: BodyContext): string {
 	body = synced.body
 	body = replaceLinks(body, ctx)
 	body = replaceBareNotionUrls(body, ctx)
+	body = escapeWikilinkPipesInTableRows(body)
 
 	// Anything block-level we could not map is named rather than silently
 	// dropped by the Markdown parser. Count only outside fenced/inline code:

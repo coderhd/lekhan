@@ -128,7 +128,9 @@ ignores unknown page fields — but it is kept on the IR for the report, tests, 
 
 ### D5 — Link, image, callout, and degradation handling
 
-- **Links:** rewrite Markdown links whose target is a relative path or a `notion.so` URL.
+- **Links:** rewrite Markdown links whose target is a relative path or a `notion.so` URL. Aliases
+  emitted inside pipe-table rows escape the `|` separator (`[[Title|alias]]`) so GFM does not
+  split the wikilink across cells; the parser unescapes it back to `|`.
   Destinations are parsed with balanced parentheses (a raw `Notes (Q3) <id>.md` stays one target;
   `%28`/`%29` are ordinary characters). The 32-hex id is read from the decoded **final** path
   segment and resolved against the page/row registry (UUID → cleaned title), so a folder id never
@@ -141,11 +143,12 @@ ignores unknown page fields — but it is kept on the IR for the report, tests, 
   root, then a unique basename. Resolved → base64 data URL (same MIME table as #27). Missing image
   or non-image attachment → replace with the visible alt/text (never a dead link) and count
   `attachmentsDropped`.
-- **Callouts:** Notion exports callouts as a one-row/two-cell HTML table (icon + text). Convert to
-  the Obsidian callout dialect (`> [!note]`) so the existing parser keeps the callout node. Only
-  that exact shape converts: a match whose cells contain another `<td>`/`<tr>`/`<table>` is a real
-  table, is left intact, and is counted in `degradedBlocks` (never silently collapsed). Other
-  raw HTML is left to the parser and, if it cannot be represented, counted in `degradedBlocks`.
+- **Callouts:** Notion exports callouts as a one-row/two-cell HTML table (icon + text) in some
+  builds and as `<aside>💡 text</aside>` in others. Both convert to the Obsidian callout dialect
+  (`> [!note]`) so the existing parser keeps the callout node. Only that exact table shape
+  converts: a match whose cells contain another `<td>`/`<tr>`/`<table>` is a real table, is left
+  intact, and is counted in `degradedBlocks` (never silently collapsed). Other raw HTML is left to
+  the parser and, if it cannot be represented, counted in `degradedBlocks`.
 - **Synced blocks:** strip `<!-- synced_block … -->` markers, keep the content static, and report
   `syncedBlocksFlattened`. The report names the synced-block category even when none are detected
   (Notion's Markdown export cannot preserve the live link). Comments and formulas/rollups are

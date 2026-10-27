@@ -22,10 +22,11 @@ split into multiple downloads, including a page that appears in both parts.
 database exported as `_all.csv` + a view. It exists to prove each database is
 parsed from its own CSV instead of one folder collapsing to a single database.
 
-`html-tables.zip` holds a genuine callout (one row, two cells: short icon +
-text) beside a three-cell row and a 2×2 table. It pins the shape test that
-separates Notion callouts from real HTML tables (QA B1): only the one-row/
-two-cell shape may convert; every other table survives with all of its cells.
+`html-tables.zip` holds a genuine table callout (one row, two cells: short icon
++ text), two `<aside>` callouts (the other Markdown & CSV export shape), a
+three-cell row and a 2×2 table. It pins the shape test that separates Notion
+callouts from real HTML tables (QA B1): only the one-row/two-cell table and the
+`<aside>` form may convert; every other table survives with all of its cells.
 
 ## Provenance and scope
 

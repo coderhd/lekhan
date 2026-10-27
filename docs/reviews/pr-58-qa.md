@@ -57,7 +57,7 @@ paths, root-level database CSV, `Export-<name>` wrapper, title-suffix-stripping 
 titles, 3-view CSV, BOM/CRLF/quoted commas, deeper nested row body, image + PDF) was
 run through `readNotionZips → importNotionExport`. Results:
 
-- 8 clean titles, no 32-hex suffixes; two folder pages; two folder pages ✅
+- 8 clean titles, no 32-hex suffixes; two folder pages ✅
 - 3 links resolved (relative, `notion.so`, dashed-UUID), 0 unresolved ✅
 - 2 DB rows with full CSV column properties; CSV-only row kept ✅
 - image resolved to data URL; PDF attachment counted with label kept ✅
