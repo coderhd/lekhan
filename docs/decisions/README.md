@@ -29,5 +29,8 @@ A running log of product/architecture decisions and open questions for Lekhan �
 ## Architecture facts / clarifications
 - [[permission-substrate-vs-team-workspace]]
 
+## Process / engineering lifecycle
+- [[01-weekly-retro-hygiene-rules]] — blocked-column SLA, sprint-label integrity, bot-fixture parity in DoD (2026-10-27 retro)
+
 ## External input
 - [[chatgpt-strategy-summary-2026-08-29]] — analysis received from a separate ChatGPT conversation, not a decision made here
