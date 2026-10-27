@@ -1,0 +1,53 @@
+---
+title: BYOK Setup
+description: Bring your own cloud provider key and keep it encrypted on your device.
+---
+
+**BYOK** (bring your own key) connects a cloud AI provider with a key you control. Lekhan calls the
+provider directly from your browser; your key and prompts never pass through Lekhan's servers.
+
+## Supported providers
+
+- Anthropic
+- OpenAI
+- Google Gemini
+- Sarvam
+- Any OpenAI-compatible endpoint (custom base URL)
+
+You can configure more than one provider and switch between them per request.
+
+## Steps
+
+1. Create an API key in your provider's dashboard. Give it the narrowest scope that works for you.
+2. Open **Settings → AI** and choose the provider.
+3. Paste the key. Lekhan encrypts it with AES-256-GCM before storing it in your browser.
+4. Pick a model and send a test prompt.
+
+## What Lekhan stores
+
+- The **encrypted** key, in your browser's local storage.
+- Your provider and model selection.
+- Nothing else: prompts and responses are not persisted as AI logs.
+
+<Callout type="info" title="Encrypted locally">
+The decryption material stays on your device. If you clear site data or use another browser, you
+will need to paste the key again. Lekhan cannot recover a key for you.
+</Callout>
+
+## Security checklist
+
+- Use a dedicated key for Lekhan rather than a personal master key.
+- Set a spend limit at the provider if it offers one.
+- Rotate the key in the provider dashboard, then replace it in **Settings → AI**.
+- Remove a key in Lekhan when you stop using a provider; removal does not affect your pages.
+
+## Custom endpoints
+
+For a provider that speaks the OpenAI API, choose **Custom** and enter the base URL (for example an
+internal gateway). The same encryption and direct-call rules apply.
+
+## Related
+
+- [Free-key on-ramp](/docs/ai/free-key-on-ramp) if you do not have a key yet
+- [BYOL](/docs/ai/byol) for fully local inference
+- [AI troubleshooting](/docs/troubleshooting)

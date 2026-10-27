@@ -1,0 +1,35 @@
+---
+title: Tags
+description: Lightweight labels that work across folders and show up in the graph.
+---
+
+A **tag** is a `#label` on a page, indexed for filtering and for the [graph](/docs/concepts/graph)
+view. Tags are cheap to add and stay out of the way of your page hierarchy.
+
+## Adding tags
+
+Type `#` followed by the tag name in the editor:
+
+```md
+Notes from the launch retro #retro #launch
+```
+
+Tags are normalized (for example, casing is normalized) so `#Launch` and `#launch` are the same tag.
+
+## What tags are good for
+
+- Marking a page's status or theme without creating a folder.
+- Filtering related pages across different areas of a workspace.
+- Surfacing clusters in the graph.
+- Giving search a fast, exact filter.
+
+## Tags vs. properties
+
+Use **tags** for loose, cross-cutting labels. Use **page properties** for structured metadata that
+belongs to one page (status, owner, dates). Imported frontmatter becomes properties, not tags.
+
+## Related
+
+- [Pages](/docs/concepts/pages)
+- [Graph](/docs/concepts/graph)
+- [Markdown import and export](/docs/getting-started/markdown-import-export)

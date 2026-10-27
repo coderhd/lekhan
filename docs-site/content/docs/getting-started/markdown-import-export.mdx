@@ -1,0 +1,54 @@
+---
+title: Markdown Import and Export
+description: Paste, import, and export markdown without losing structure.
+---
+
+Lekhan treats markdown as a first-class format, not an afterthought. Pages convert between the editor
+and markdown with a **round-trip** guarantee: structure survives the trip out and back in.
+
+## Import
+
+### Paste markdown
+
+Copy markdown from anywhere and paste it into a page. The paste path understands:
+
+- headings, lists, tables, and fenced code blocks,
+- `[[wikilinks]]` and `#tags`,
+- frontmatter at the top of the pasted text (converted into page properties),
+- Notion-style clipboard HTML when it is available.
+
+If a paste contains frontmatter and an empty body, the properties are still applied — a note that is
+only metadata does not become a metadata-free page.
+
+### Import files
+
+Use **Import** in the workspace to bring in `.md` files. Each file becomes a page; its file name is
+the title and its frontmatter becomes page properties.
+
+<Callout type="info" title="What lossless means here">
+The round trip preserves page structure: headings, block types, links, tags, and properties. It does
+not promise pixel-identical formatting for exotic HTML from another editor — those pieces are
+reported as degraded, never silently dropped.
+</Callout>
+
+## Export
+
+You can always get your content out:
+
+- **Markdown** for a page or a set of pages — the canonical, portable form.
+- **PDF**, **DOCX**, and **HTML** for sharing a polished copy of a page.
+
+Exports never modify the page they came from, and they do not delete anything from the workspace.
+
+## Tips
+
+- Keep frontmatter at the very top of a file, before the first heading.
+- Use `[[Page title]]` (the title as it appears in Lekhan) when you want the link to resolve.
+- Imported images and embeds may degrade to links when the source asset cannot be read; the import
+  report tells you what happened.
+
+## Related
+
+- [Obsidian import](/docs/getting-started/obsidian-import)
+- [Pages](/docs/concepts/pages)
+- [Troubleshooting imports](/docs/troubleshooting)

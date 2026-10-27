@@ -5,7 +5,7 @@ export default [
   js.configs.recommended,
   ...tsEslint.configs.recommended,
   {
-    ignores: [".next/**", "node_modules/**", "dist/**", ".agents/**"]
+    ignores: [".next/**", "node_modules/**", "dist/**", ".agents/**", "docs-site/**"]
   },
   {
     languageOptions: {

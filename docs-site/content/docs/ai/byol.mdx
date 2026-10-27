@@ -1,0 +1,63 @@
+---
+title: BYOL with Ollama and LM Studio
+description: Run AI on your own machine so prompts never leave your device.
+---
+
+**BYOL** (bring your own model) points Lekhan at a local inference server. Your prompts go from the
+browser to `localhost` — nothing leaves your machine, and there is no API key or per-token bill.
+
+## What you need
+
+- A computer that can run the model you want (more RAM helps; small models run on modest laptops).
+- A local server that exposes an OpenAI-compatible API.
+- The docs site and the app open in the same browser.
+
+## Option A — Ollama
+
+1. Install [Ollama](https://ollama.com) and start it.
+2. Pull a model, for example:
+
+   ```bash
+   ollama pull llama3.2
+   ```
+
+3. Confirm the OpenAI-compatible endpoint responds:
+
+   ```bash
+   curl http://localhost:11434/v1/models
+   ```
+
+4. In Lekhan, open **Settings → AI**, choose **Ollama** (or **Custom**), and use
+   `http://localhost:11434/v1` as the base URL. Leave the API key empty if your server does not
+   require one.
+5. Pick the model and send a test prompt.
+
+## Option B — LM Studio
+
+1. Install [LM Studio](https://lmstudio.ai) and download a model.
+2. Start the local server (Developer tab) — it listens on `http://localhost:1234` by default.
+3. In Lekhan, choose **LM Studio** (or **Custom**) with base URL `http://localhost:1234/v1`.
+4. Select the loaded model and test the connection.
+
+## Option C — llama.cpp or any OpenAI-compatible server
+
+Point Lekhan's **Custom** provider at the server's `/v1` base URL. If the server requires a token,
+paste it as the key; it is encrypted locally like any other key.
+
+<Callout type="info" title="Browser to localhost">
+The request is made by your browser, not by Lekhan's servers. That is what keeps local inference
+local. If your browser blocks the request, see [AI troubleshooting](/docs/troubleshooting).
+</Callout>
+
+## Picking a model
+
+- Start small: a 7–8B instruction model is a good first local assistant.
+- Larger models need more memory and are slower; quality varies by task.
+- Local models are excellent for privacy-sensitive notes and offline work. For the strongest
+  reasoning, a cloud BYOK provider may still be better.
+
+## Related
+
+- [BYOK](/docs/ai/byok)
+- [Free-key on-ramp](/docs/ai/free-key-on-ramp)
+- [AI troubleshooting](/docs/troubleshooting)

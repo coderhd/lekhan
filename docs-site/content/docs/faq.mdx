@@ -1,0 +1,78 @@
+---
+title: FAQ
+description: Answers about data ownership, AI, imports, and plans.
+---
+
+## Is my data really local-first?
+
+Yes. Lekhan writes your pages to a local replica and syncs through the hub. You can open, edit, and
+close pages offline; changes merge when you reconnect. Markdown is the portable form of your content,
+so you are never locked in.
+
+## Does AI cost extra?
+
+No. There are no bundled AI credits on any plan. Every tier runs AI on your own provider key or your
+own machine, so AI usage is billed by the provider you choose — or free, if you use a free tier or a
+local model. Lekhan never proxies inference.
+
+## What is the difference between BYOK and BYOL?
+
+- **BYOK**: cloud provider (Anthropic, OpenAI, Gemini, Sarvam, custom) with your API key.
+- **BYOL**: a model running on your own machine via Ollama, LM Studio, or llama.cpp. Prompts never
+  leave your device.
+
+See [AI on your terms](/docs/ai).
+
+## What happens to my notes if I stop paying?
+
+Your content stays yours and remains exportable in markdown. Paid plans change what is *unlocked*
+(sync, collaborators, history, seats) — they never hold your pages hostage.
+
+## Can I import from Obsidian and Notion?
+
+- **Obsidian**: import a vault ZIP or folder. Links, tags, callouts, and frontmatter are preserved,
+  and an import report tells you what degraded. See [Obsidian import](/docs/getting-started/obsidian-import).
+- **Notion**: export to markdown and import the files; rich clipboard HTML from Notion is also
+  understood when you paste.
+
+## How does version history work?
+
+Pages keep point-in-time versions according to your plan: 7 days on Free, 90 days on Plus, one year
+on Pro, and a year on Team. Retention is enforced per workspace.
+
+## What are the plans and prices?
+
+Prices are per workspace. Founding-cohort prices are locked for as long as you stay subscribed;
+standard prices apply to later joiners. Annual billing charges for ten months — two months free.
+
+| Plan | Monthly (USD) | Monthly (INR) | Unlocks |
+| --- | --- | --- | --- |
+| Free | $0 | ₹0 | Unlimited local pages, PKM core (links, backlinks, graph, tags, search), markdown, AI on your own key, 2 editors per page, 7-day history |
+| Plus | $6 standard / $4 founding | ₹499 standard / ₹249 founding | Cloud sync, 10 collaborators, 90-day history, templates |
+| Pro | $12 standard / $8 founding | ₹999 standard / ₹499 founding | 25 collaborators, 1-year history, priority sync and processing, public sites |
+| Team | $10 standard / $8 founding per seat | USD only at launch | Per-seat billing, admin, shared templates, guest access, 2–150 seats |
+
+Team seat pricing steps down at higher volumes ($7/seat for 11–25, $6/seat for 26+). Team is
+USD-only at launch; INR individuals use Plus or Pro.
+
+## Do referrals really give free months?
+
+Yes. When someone you invite activates, one month is banked on your workspace; when they upgrade to a
+paid plan, a second month is banked. Banked months apply at renewal, stack with annual savings, and
+are not cash or transferable. The bank is capped per workspace.
+
+## Can I transfer a workspace to someone else?
+
+The owner can transfer ownership to another member. The subscription follows the workspace, and the
+previous owner's auto-billing is stopped before the transfer completes.
+
+## Is my content encrypted?
+
+Content is encrypted at rest on hub storage with server-held keys. An opt-in end-to-end mode with
+client-held keys is a separate, stronger level and trades away some hub-side indexing features. AI
+keys are always encrypted locally (AES-256-GCM), separate from page storage.
+
+## Does Lekhan work offline?
+
+Yes for pages: editing, navigation, and local search work offline. Cloud sync, collaboration, and
+cloud AI require a connection; local AI (BYOL) works offline once the model is running.
