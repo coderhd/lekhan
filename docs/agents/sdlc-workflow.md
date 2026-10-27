@@ -69,6 +69,8 @@ Separation of duties only works if the agent that approves a thing is not the sa
 ## 5. Definition of Done (Checked by `qa` before moving to Done)
 
 - [ ] Every acceptance criterion has a passing automated test, committed alongside the feature
+- [ ] PR test suites cover the review bots' fixture classes (risk- and boundary-focused prose and ops, e.g. content loss at paste/import/export boundaries) **before** review is requested — a defect the bots can catch must already have a named fixture that would catch it first
+- [ ] A bot finding class that escapes the internal gates **twice** becomes a permanent fixture in the suite and a named entry in the parity map (`docs/reviews/`) — rule 3 of `docs/decisions/process/01-weekly-retro-hygiene-rules.md`
 - [ ] Adversarial clean-room code review completed (no open blocking issues)
 - [ ] No open `defect` issues linked to this story
 - [ ] `CONTEXT.md` updated if the change introduces or modifies domain vocabulary

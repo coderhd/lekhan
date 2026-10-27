@@ -115,6 +115,7 @@ export default function PageRoute({
 
 	return (
 		<EditorWorkspace
+			key={params.id}
 			pageId={params.id}
 			initialTitle={pageTitle}
 			initialContent={initialContent}
