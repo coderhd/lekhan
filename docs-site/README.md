@@ -78,3 +78,18 @@ Do not add this app to the root workspace or root scripts.
 
 DevOps deploys this directory as its own Vercel project (root directory `docs-site`) and points
 `docs.lekhan.app` at it. Search is served by `/api/search` inside this app.
+
+## Verification
+
+Run from `docs-site/`:
+
+```bash
+npm ci
+npm run build        # 21 routes, exit 0
+npm run check:links  # 0 broken internal links
+npm run lint
+npm run start        # smoke: / -> 307 /docs/getting-started; every page 200
+```
+
+Root isolation was verified with `docs-site/` present: root `npm run typecheck`, `npm run lint`,
+`npm test` (83 files / 665 tests) and `npm run build` all pass unchanged.
