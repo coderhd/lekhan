@@ -6,9 +6,10 @@
  * price, or cohort flag. Rails (Stripe = USD, Razorpay = INR) implement
  * `PaymentGateway` and register through `lib/billing/gateway-factory.ts`.
  *
- * Amended by PDEC-12: `schedulePlanChange` is part of the contract; there is no
- * Stripe-style portal *session* on the Razorpay seam — `portalUrl` returns the
- * hosted card-update link there (PDEC-1).
+ * Amended by PDEC-12: `schedulePlanChange` is part of the contract. There is no
+ * Stripe-style portal *session* on the Razorpay seam — there, `portalUrl` resolves the
+ * hosted card-update link from a live subscription read-back (PDEC-1; SIL-56 ruling:
+ * never persisted, never fabricated; see `PaymentGateway.portalUrl`).
  *
  * The `gatewayForCurrency` / `gatewayForRail` resolver lives in the factory
  * module and is re-exported here so spec §5's import site stays true.
@@ -101,22 +102,28 @@ export function isLiveNonDetaching(state: GatewaySubscriptionState): boolean {
 }
 
 /**
- * PDEC-11 transfer-window overlay (SIL-56 ruling). Provider read-back stays the
- * ONLY source of status/liveness; the stored `workspace_plans.cancel_at_period_end`
- * is consumed as a provenanced supplement for the detaching classification only:
- *  - Stripe/USD — the provider echoes the flag on subscription read-back/webhooks,
- *    so the column itself is a read-back mirror.
+ * PDEC-11 transfer-window overlay (SIL-56 ruling, hardened per integration review).
+ * Provider read-back is the ONLY source of status/liveness. The stored
+ * `workspace_plans.cancel_at_period_end` is consumed as a provenanced supplement for
+ * the detaching classification ONLY on the RAZORPAY rail:
  *  - Razorpay/INR — `cancel_at_cycle_end` is a request param and is NEVER echoed on
  *    GET, so the column records the ACCEPTED CANCEL ACTION: our own
  *    `POST /v1/subscriptions/:id/cancel {cancel_at_cycle_end:true}` returned 2xx.
  *    Provider-acknowledged — never inferred from timing or webhook absence.
+ *  - Stripe/USD — inert: the read-back already carries the provider's own
+ *    `cancel_at_period_end`, and a STORED mirror can only disagree with fresh provider
+ *    state by being stale (e.g. a portal-side resume not yet reconciled). Trusting a
+ *    stale mirror there would soften a genuinely-live subscription to `detaching` and
+ *    open a double-charge window — read-back wins, always.
  * The overlay may only soften `live` into `detaching`; it can never mark a non-live
  * subscription billable and can never unset a read-back `true`.
  */
 export function withStoredCancelFlag(
 	state: GatewaySubscriptionState,
+	rail: Rail,
 	storedCancelAtPeriodEnd: boolean | null | undefined,
 ): GatewaySubscriptionState {
+	if (rail !== "razorpay") return state
 	if (storedCancelAtPeriodEnd !== true || state.cancelAtPeriodEnd) return state
 	return { ...state, cancelAtPeriodEnd: true }
 }

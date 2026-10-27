@@ -217,7 +217,10 @@ interface IdentifiedPlan {
 function identifyPlan(planId: string, env: NodeJS.ProcessEnv): IdentifiedPlan | null {
 	const matches: IdentifiedPlan[] = []
 	for (const [key, value] of Object.entries(env)) {
-		if (value !== planId) continue
+		// Compare against the TRIMMED binding (LOW-3): `resolvePlanId` sends the
+		// trimmed value via `requireEnv`, so read-back cohort mapping must use the
+		// same normalization — a pasted trailing space cannot strand identification.
+		if (typeof value !== "string" || value.trim() !== planId) continue
 		const match = PLAN_KEY_PATTERN.exec(key)
 		if (!match) continue
 		matches.push({
@@ -265,25 +268,40 @@ function resolvePlanId(
 const SUBSCRIPTION_REF_PATTERN = /^sub_[A-Za-z0-9_]+$/
 
 /**
- * REVIEW M-1 (SIL-56): validate a redirectable link with the URL parser, never
- * `^https://\S+` without an end anchor. WHATWG `new URL()` SILENTLY DROPS tabs and
- * newlines, so a shaped value like `https://ok.example\t.evil.example` normalizes to
- * a HOST-MUTATED redirect. Reject any control/space/line-separator code point first,
- * then require an https URL without embedded credentials.
+ * Razorpay-hosted payment-page hosts. Subscription `short_url`s live on `rzp.io`;
+ * Razorpay page links on `pages.razorpay.com`. The card-update link is navigated by
+ * the browser (T12), so a provider-allowlisted host closes the shaped-URL class at
+ * the seam (integration review LOW-2), not just the URL-parser shape check.
  */
-function isSafeHostedUrl(value: string | null | undefined): value is string {
-	if (typeof value !== "string" || value.length === 0) return false
+const RAZORPAY_HOSTED_PAGE_HOSTS = ["rzp.io", "pages.razorpay.com"] as const
+
+/**
+ * REVIEW M-1 (SIL-56): validate a redirectable link with the URL parser, never
+ * `^https://\S+` without an end anchor. WHATWG `new URL()` SILENTLY DROPS tabs,
+ * newlines and default-ignorable code points, so a shaped value like
+ * `https://ok.example\t.evil.example` normalizes to a HOST-MUTATED redirect.
+ * Reject control/space/line-separator code points first, require https without
+ * embedded credentials, allow-list Razorpay's own hosted-page hosts (suffix-safe:
+ * `rzp.io.evil.example` must fail), and return the NORMALIZED `href` so downstream
+ * consumers see exactly the URL the parser vetted. Returns null when unsafe.
+ */
+function normalizeHostedUrl(value: string | null | undefined): string | null {
+	if (typeof value !== "string" || value.length === 0) return null
 	for (const ch of value) {
 		const code = ch.codePointAt(0) ?? 0
-		if (code <= 0x20 || code === 0x7f || code === 0x2028 || code === 0x2029 || code === 0xfeff) return false
+		if (code <= 0x20 || code === 0x7f || code === 0x2028 || code === 0x2029 || code === 0xfeff) return null
 	}
 	let parsed: URL
 	try {
 		parsed = new URL(value)
 	} catch {
-		return false
+		return null
 	}
-	return parsed.protocol === "https:" && !parsed.username && !parsed.password
+	if (parsed.protocol !== "https:" || parsed.username !== "" || parsed.password !== "") return null
+	const host = parsed.hostname
+	const hosted = RAZORPAY_HOSTED_PAGE_HOSTS.some((allowed) => host === allowed || host.endsWith(`.${allowed}`))
+	if (!hosted) return null
+	return parsed.href
 }
 
 function effectiveAtFor(subscription: RazorpaySubscription): string {
@@ -305,7 +323,9 @@ function effectiveAtFor(subscription: RazorpaySubscription): string {
 
 /** Razorpay returns no change identifier, so a stable provider-derived ref is composed. */
 function scheduledChangeRef(subscriptionRef: string, subscription: RazorpaySubscription): string {
-	return `${subscriptionRef}:${subscription.change_scheduled_at ?? subscription.current_end}`
+	// Same fallback chain as `effectiveAtFor` (REVIEW M-2/LOW-1): without `charge_at`
+	// the ref would degrade to `sub_x:null` and collide across successive schedules.
+	return `${subscriptionRef}:${subscription.change_scheduled_at ?? subscription.current_end ?? subscription.charge_at}`
 }
 
 export function createRazorpayGateway(options: RazorpayGatewayOptions = {}): RazorpayGateway {
@@ -370,8 +390,8 @@ export function createRazorpayGateway(options: RazorpayGatewayOptions = {}): Raz
 				method: "GET",
 				path: `/subscriptions/${encodeURIComponent(subscriptionRef)}`,
 			})
-			const hosted = subscription.short_url
-			if (!isSafeHostedUrl(hosted)) {
+			const hosted = normalizeHostedUrl(subscription.short_url)
+			if (hosted === null) {
 				throw new RazorpayApiError(
 					200,
 					undefined,

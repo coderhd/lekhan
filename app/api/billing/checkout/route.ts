@@ -78,10 +78,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 			const state = await gatewayForRail(context.plan.gateway as Rail).getSubscriptionState(existingRef)
 			// PDEC-11 transfer window (SIL-56 ruling): provider read-back is the SOLE source
 			// of status; the stored `cancel_at_period_end` only softens `live` to `detaching`
-			// as a provenanced supplement — Stripe-populated it is a read-back mirror;
-			// Razorpay-populated it is an ACCEPTED CANCEL ACTION (their GET never echoes
-			// the flag). Never inferred, never a link fabrication.
-			if (isLiveNonDetaching(withStoredCancelFlag(state, context.plan.cancel_at_period_end))) {
+			// on the RAZORPAY rail, where the provider never echoes the flag and the column
+			// records our accepted cancel action. Stripe read-back is already authoritative —
+			// a stale stored mirror can never open a double-charge window there.
+			if (
+				isLiveNonDetaching(
+					withStoredCancelFlag(state, context.plan.gateway as Rail, context.plan.cancel_at_period_end),
+				)
+			) {
 				return NextResponse.json(
 					{
 						error: "This workspace already has an active subscription. Change or cancel it before checking out again.",

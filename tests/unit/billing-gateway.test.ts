@@ -170,16 +170,24 @@ describe('PDEC-11 transfer-window overlay (SIL-56 ruling)', () => {
 		currentPeriodEnd: '2026-02-01T00:00:00.000Z',
 	})
 
-	it('softens live to detaching when the stored cancel flag is set', () => {
+	it('softens live to detaching for INR when the stored cancel flag is set', () => {
 		// Razorpay never echoes cancel_at_cycle_end on GET: the stored column is the
 		// provenanced accepted-cancel-action supplement, applied at classification time.
-		expect(classifySubscription(withStoredCancelFlag(state(false), true))).toBe('detaching')
+		expect(classifySubscription(withStoredCancelFlag(state(false), 'razorpay', true))).toBe('detaching')
+	})
+
+	it('is inert on the stripe rail: a stale stored mirror cannot open a double-charge window', () => {
+		// Stripe read-back already carries the provider flag. If the stored mirror says
+		// true while the live subscription says false (e.g. portal-side resume, webhook
+		// not yet applied), provider state wins — the overlay must not soften `live`.
+		expect(withStoredCancelFlag(state(false), 'stripe', true).cancelAtPeriodEnd).toBe(false)
+		expect(classifySubscription(withStoredCancelFlag(state(false), 'stripe', true))).toBe('live')
 	})
 
 	it('never rewrites provider read-back: stored false/null cannot unset a read-back true', () => {
-		expect(withStoredCancelFlag(state(true), false).cancelAtPeriodEnd).toBe(true)
-		expect(withStoredCancelFlag(state(true), null).cancelAtPeriodEnd).toBe(true)
-		expect(withStoredCancelFlag(state(true), undefined).cancelAtPeriodEnd).toBe(true)
+		expect(withStoredCancelFlag(state(true), 'razorpay', false).cancelAtPeriodEnd).toBe(true)
+		expect(withStoredCancelFlag(state(true), 'razorpay', null).cancelAtPeriodEnd).toBe(true)
+		expect(withStoredCancelFlag(state(true), 'razorpay', undefined).cancelAtPeriodEnd).toBe(true)
 	})
 
 	it('cannot make a terminal (non-live) subscription appear billable', () => {
@@ -189,7 +197,7 @@ describe('PDEC-11 transfer-window overlay (SIL-56 ruling)', () => {
 			cancelAtPeriodEnd: false,
 			currentPeriodEnd: null,
 		}
-		expect(classifySubscription(withStoredCancelFlag(canceled, true))).toBe('inactive')
+		expect(classifySubscription(withStoredCancelFlag(canceled, 'razorpay', true))).toBe('inactive')
 	})
 })
 
@@ -352,6 +360,39 @@ describe('/api/billing/checkout — single-live-subscription invariant', () => {
 		const res = await checkoutPOST(request('/api/billing/checkout', { tier: 'plus', cycle: 'monthly', currency: 'INR' }))
 		expect(res.status).toBe(200)
 		expect((await res.json()).checkoutUrl).toBe('#fake-checkout')
+	})
+
+	it('rejects checkout when a stale stripe stored flag contradicts a live read-back (SIL-56 review MEDIUM-1)', async () => {
+		// Stripe's provider read-back carries cancel_at_period_end directly, so a
+		// stored `true` that the live subscription says `false` is STALE (e.g. a
+		// portal-side resume awaiting reconciliation). Provider state wins — the
+		// overlay is inert on this rail and the single-live invariant holds.
+		h.state.plan = {
+			workspace_id: 'ws-1',
+			gateway: 'stripe',
+			gateway_subscription_id: 'sub-resumed',
+			gateway_customer_id: 'cus-existing',
+			currency: 'USD',
+			is_founding: false,
+			tier: 'pro',
+			cancel_at_period_end: true,
+		}
+		getFakeBillingStore().seed({
+			subscriptionRef: 'sub-resumed',
+			workspaceId: 'ws-1',
+			rail: 'stripe',
+			status: 'active',
+			cancelAtPeriodEnd: false,
+			currentPeriodEnd: '2026-02-01T00:00:00.000Z',
+			tier: 'pro',
+			cycle: 'monthly',
+			currency: 'USD',
+			isFounding: false,
+		})
+
+		const res = await checkoutPOST(request('/api/billing/checkout', { tier: 'pro', cycle: 'monthly', currency: 'USD' }))
+		expect(res.status).toBe(409)
+		expect((await res.json()).code).toBe('subscription_exists')
 	})
 
 	it('resolves isFounding from server state, never from the request body', async () => {

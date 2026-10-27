@@ -246,9 +246,10 @@ describe("razorpay portal seam", () => {
 	})
 
 	it("fails closed when the read-back link is missing or unsafe (REVIEW M-1)", async () => {
-		// The guard is a URL parse, not `^https://\S+`: WHATWG normalization SILENTLY
-		// drops tabs/newlines (host mutation), and credentials must never ride a
-		// redirect we hand to the browser.
+		// The guard is a URL parse + a Razorpay hosted-page allow-list, never
+		// `^https://\S+`: WHATWG normalization SILENTLY drops tabs/newlines
+		// (host mutation), credentials must never ride a redirect, and a non-Razorpay
+		// host — including a `rzp.io`-suffix forgery — is rejected (review LOW-2).
 		for (const shortUrl of [
 			undefined,
 			null,
@@ -258,11 +259,31 @@ describe("razorpay portal seam", () => {
 			"https://user@rzp.io/i/abc",
 			"https://ok.example.com\t.evil.example",
 			"https://rzp.io\n/i/abc",
+			"https://evil.example/i",
+			"https://rzp.io.evil.example/x",
 		]) {
 			const { client } = recordingClient([{ id: "sub_1", short_url: shortUrl }])
 			const gateway = createRazorpayGateway({ http: client })
 			await expect(gateway.portalUrl("sub_1")).rejects.toBeInstanceOf(RazorpayApiError)
 		}
+	})
+
+	it("accepts Razorpay's documented hosted-page hosts and returns the normalized URL", async () => {
+		const { client } = recordingClient([
+			{ id: "sub_1", short_url: "https://rzp.io/i/abc?param=1" },
+		])
+		const gateway = createRazorpayGateway({ http: client })
+		await expect(gateway.portalUrl("sub_1")).resolves.toEqual({
+			url: "https://rzp.io/i/abc?param=1",
+			kind: "card_update",
+		})
+
+		const pages = recordingClient([{ id: "sub_1", short_url: "https://pages.razorpay.com/pl_abc" }])
+		const pagesGateway = createRazorpayGateway({ http: pages.client })
+		await expect(pagesGateway.portalUrl("sub_1")).resolves.toEqual({
+			url: "https://pages.razorpay.com/pl_abc",
+			kind: "card_update",
+		})
 	})
 })
 
