@@ -107,6 +107,29 @@ describe('analytics module', () => {
 			expect(sanitized).toEqual({})
 		})
 
+		it('keeps the vault-export funnel properties (allowlisted)', () => {
+			expect(sanitizeProps('export_vault_started', { pages: 12 })).toEqual({ pages: 12 })
+			expect(
+				sanitizeProps('export_vault_completed', {
+					pages: 12,
+					links_unresolved: 3,
+					warnings: 1,
+				}),
+			).toEqual({ pages: 12, links_unresolved: 3, warnings: 1 })
+			expect(sanitizeProps('export_vault_failed', { reason: 'session expired' })).toEqual({
+				reason: 'session expired',
+			})
+		})
+
+		it('still strips non-allowlisted keys from vault-export events', () => {
+			expect(
+				sanitizeProps('export_vault_completed', {
+					pages: 12,
+					page_title: 'Private note',
+				} as any),
+			).toEqual({ pages: 12 })
+		})
+
 		it('is safe when gtag or posthog fail or are not available', () => {
 			expect(() => track('signup_completed')).not.toThrow()
 		})

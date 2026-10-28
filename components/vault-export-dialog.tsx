@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
 	AlertDialog,
 	AlertDialogContent,
@@ -53,6 +53,17 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 	const abortRef = useRef<AbortController | null>(null)
 	// Folders occupy no content read; the progress bar counts notes only.
 	const exportableCount = pages.filter((page) => page.properties?.importFolder !== true).length
+	// Radix restores focus to an `AlertDialogTrigger` ref, and this dialog has no
+	// trigger (the dashboard opens it from a plain button). Remember the opener so
+	// focus returns there instead of stranding on <body> behind the overlay.
+	const returnFocusRef = useRef<HTMLElement | null>(null)
+
+	useEffect(() => {
+		if (open) {
+			returnFocusRef.current =
+				document.activeElement instanceof HTMLElement ? document.activeElement : null
+		}
+	}, [open])
 
 	const reset = () => {
 		setPhase('confirm')
@@ -142,6 +153,13 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 				// phase offers an explicit Cancel instead.
 				onEscapeKeyDown={(event) => {
 					if (phase === 'exporting') event.preventDefault()
+				}}
+				onCloseAutoFocus={(event) => {
+					const target = returnFocusRef.current
+					if (target && document.contains(target)) {
+						event.preventDefault()
+						target.focus()
+					}
 				}}
 			>
 				{phase === 'confirm' && (

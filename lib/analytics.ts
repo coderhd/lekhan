@@ -58,6 +58,13 @@ export interface EventPayloadMap {
 		omissions?: number
 		warnings_count?: number
 	}
+	export_vault_started: { pages?: number }
+	export_vault_completed: {
+		pages?: number
+		links_unresolved?: number
+		warnings?: number
+	}
+	export_vault_failed: { reason?: string }
 	paste_in_resolved: { kind: 'markdown' | 'codeBlock' | string }
 	copy_out_used: Record<string, never> | void
 	export_triggered: { format: 'markdown' | 'mdx' | 'html' | 'docx' | 'pdf' | string }
@@ -103,6 +110,9 @@ const EVENT_ALLOWED_KEYS: Record<EventName, Set<string>> = {
 		'omissions',
 		'warnings_count',
 	]),
+	export_vault_started: new Set(['pages']),
+	export_vault_completed: new Set(['pages', 'links_unresolved', 'warnings']),
+	export_vault_failed: new Set(['reason']),
 	paste_in_resolved: new Set(['kind']),
 	copy_out_used: new Set([]),
 	export_triggered: new Set(['format']),

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { fromImportReport } from '@/lib/fidelity-report'
 import { FidelityReportCard } from '@/components/fidelity-report-card'
 import type { ImportReport } from '@/services/import-ir'
@@ -27,7 +28,10 @@ export function ImportReportCard ({
 	resumedCount = 0,
 	onOpenPage,
 }: ImportReportCardProps) {
-	const fidelity = fromImportReport(report, serverWarnings)
+	// Stable identity: `FidelityReportCard` fires `import_report_viewed` from an
+	// effect keyed on `report`, so a fresh object per render would re-fire the
+	// event on every parent re-render.
+	const fidelity = useMemo(() => fromImportReport(report, serverWarnings), [report, serverWarnings])
 	return (
 		<FidelityReportCard
 			report={fidelity}

@@ -270,33 +270,62 @@ export function buildVaultFiles(pages: VaultPage[]): VaultExportResult {
 		if (key && !pathByTitle.has(key)) pathByTitle.set(key, path.replace(/\.md$/, ''))
 	}
 
-	// Pass 2 — serialize bodies, rewrite resolvable wikilinks to the emitted path.
+	// Pass 2 — serialize bodies. Link rewriting is deferred to pass 3, because a
+	// note that fails to serialize must not stay a valid link target for notes
+	// serialized before it.
 	const linkTargets = new Set<string>()
 	const degraded = { count: 0, remote: 0 }
 	let databasePages = 0
+	interface SerializedNote {
+		page: VaultPage
+		path: string
+		body: string
+		properties: Record<string, unknown>
+		tags: string[]
+	}
+	const notes: SerializedNote[] = []
 
 	for (const { page, path } of emittedPages) {
 		try {
 			const rawDoc: JSONContent = page.doc ?? { type: 'doc', content: [] }
 			const doc = bundleImages(rawDoc, attachments, degraded)
-			const body = rewriteWikilinks(
-				markdownEngine.serializeObsidianBody(doc),
-				pathByTitle,
-				linkTargets,
-			)
-
+			const body = markdownEngine.serializeObsidianBody(doc)
 			const properties = page.properties ?? {}
-			if (properties.database) databasePages += 1
-
-			const tags = resolveTags(page.tags ?? [], properties)
-			const file = markdownEngine.assembleMarkdownFile(
-				{ title: page.title, properties, ...(tags.length > 0 ? { tags } : {}) },
+			notes.push({
+				page,
+				path,
 				body,
-			)
-			files.push({ path, data: file })
+				properties,
+				tags: resolveTags(page.tags ?? [], properties),
+			})
 		} catch (err) {
 			// One unserializable doc must not destroy the whole vault. Skip the note
 			// and name it in the report instead of failing silently or aborting.
+			// Drop the note's own title→path entry so wikilinks to it are reported
+			// unresolved rather than rewritten at a file that was never written.
+			const key = normalizeTitle(page.title)
+			if (key && pathByTitle.get(key) === path.replace(/\.md$/, '')) pathByTitle.delete(key)
+			warnings.push({
+				title: page.title,
+				stage: 'serialize',
+				error: err instanceof Error ? err.message : String(err),
+			})
+		}
+	}
+
+	// Pass 3 — rewrite wikilinks against the final set of written notes.
+	for (const { page, path, body, properties, tags } of notes) {
+		if (properties.database) databasePages += 1
+		try {
+			const rewritten = rewriteWikilinks(body, pathByTitle, linkTargets)
+			const file = markdownEngine.assembleMarkdownFile(
+				{ title: page.title, properties, ...(tags.length > 0 ? { tags } : {}) },
+				rewritten,
+			)
+			files.push({ path, data: file })
+		} catch (err) {
+			const key = normalizeTitle(page.title)
+			if (key && pathByTitle.get(key) === path.replace(/\.md$/, '')) pathByTitle.delete(key)
 			warnings.push({
 				title: page.title,
 				stage: 'serialize',

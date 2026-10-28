@@ -13,9 +13,15 @@ interface FidelityReportCardProps {
 	onOpenPage?: (pageId: string) => void
 }
 
-/** Warning copy differs by direction: import warns about writes/indexing, export about reads. */
+/** Warning copy differs by direction: import warns about writes/indexing, export about reads or serialization. */
 function warningReason(warning: FidelityWarning, isExport: boolean): string {
-	if (isExport) return 'content could not be read'
+	if (isExport) {
+		// The export has two degraded stages: the content read (IndexedDB/doc fetch)
+		// and serializing a doc that was read. Naming the wrong one is not honest.
+		return warning.stage === 'serialize'
+			? 'note could not be serialized'
+			: 'content could not be read'
+	}
 	return warning.stage === 'snapshot' ? 'content could not be saved' : 'search/links could not be indexed'
 }
 
