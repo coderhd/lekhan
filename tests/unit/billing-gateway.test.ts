@@ -28,12 +28,17 @@ const h = vi.hoisted(() => {
 			chain.select = () => chain
 			chain.eq = () => chain
 			chain.order = () => chain
+			chain.update = (values: Record<string, unknown>) => {
+				updates.push({ table, values })
+				return chain
+			}
 			chain.maybeSingle = async () => result()
 			chain.single = async () => result()
 			return chain
 		},
 	}
-	return { state, client }
+	const updates: Array<{ table: string; values: Record<string, unknown> }> = []
+	return { state, client, updates }
 })
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => h.client }))
@@ -472,6 +477,7 @@ describe('/api/billing/portal — rail routing', () => {
 describe('/api/billing/cancel — rail routing', () => {
 	beforeEach(() => {
 		process.env.LEKHAN_FAKE_PAYMENTS = '1'
+		h.updates.length = 0
 	})
 
 	it('cancels at period end on the stored rail', async () => {
@@ -484,6 +490,12 @@ describe('/api/billing/cancel — rail routing', () => {
 		const res = await cancelPOST(request('/api/billing/cancel'))
 		expect(res.status).toBe(200)
 		expect(getFakeBillingStore().get('sub-1')?.cancelAtPeriodEnd).toBe(true)
+		// SIL-56 R-CANCEL-FLAG: the accepted instruction is mirrored so the checkout
+		// gate can treat an INR subscription as detaching before the webhook lands.
+		expect(h.updates).toContainEqual({
+			table: 'workspace_plans',
+			values: { cancel_at_period_end: true },
+		})
 	})
 
 	it('rejects a cancel request with no stored subscription', async () => {

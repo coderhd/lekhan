@@ -1,17 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Users, CreditCard, Sparkles, AlertTriangle, Zap, Bot } from 'lucide-react'
+import { User, Users, CreditCard, Sparkles, Bot } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
-import {
-	getUserAICredits,
-	type UserAICredits,
-} from '@/services/db'
 import { removePageMember, updatePageMemberRole, fetchOwnedPagesWithMembers } from '@/services/graph'
 import BYOKSettings from '@/components/byok-settings'
-import PricingMatrix from '@/components/pricing-plans'
+import BillingSettings from '@/components/billing/billing-settings'
+import type { WorkspaceEntitlement } from '@/lib/billing/entitlements'
+import type { ReferralSummary } from '@/services/billing/referral-credits'
+import { track } from '@/lib/analytics'
 import { CustomSelect } from './ui/custom-select'
 import { AIProviderSettings } from './settings/ai-provider-settings'
 import { AIRegistryState } from '@/lib/ai/types'
@@ -74,27 +73,128 @@ export default function SettingsClient({
 		setPagesState(initialPages)
 	}, [initialPages])
 
-	// Real DB AI Credits
-	const [aiCredits, setAiCredits] = useState<UserAICredits>({
-		plan: 'free',
-		totalAllocated: 50,
-		usedCredits: 0,
-		remainingCredits: 50,
-	})
+	// Workspace billing entitlement (T12) — the source of the plan badge. There is
+	// no AI credit state anywhere in settings; AI is never metered.
+	const [entitlement, setEntitlement] = useState<WorkspaceEntitlement | null>(null)
+	const [referral, setReferral] = useState<ReferralSummary | null>(null)
+	const [billingLoading, setBillingLoading] = useState(true)
+	const [billingError, setBillingError] = useState<string | null>(null)
+	const [billingAction, setBillingAction] = useState<'portal' | 'cancel' | 'resubscribe' | 'refresh' | null>(null)
+	const [defaultCurrency, setDefaultCurrency] = useState<'USD' | 'INR' | undefined>(undefined)
+	const referralTracked = useRef<number | null>(null)
+
+	// D3: the edge geo header seeds the explicit picker; the browser never guesses.
+	useEffect(() => {
+		let cancelled = false
+		fetch('/api/billing/currency')
+			.then((res) => (res.ok ? res.json() : null))
+			.then((data) => {
+				if (!cancelled && (data?.currency === 'INR' || data?.currency === 'USD')) {
+					setDefaultCurrency(data.currency)
+				}
+			})
+			.catch(() => {
+				// Fall back to the client heuristic in the pricing matrix.
+			})
+		return () => {
+			cancelled = true
+		}
+	}, [])
+
+	const authHeaders = async (): Promise<Record<string, string>> => {
+		const { data } = await supabase.auth.getSession()
+		const token = data.session?.access_token
+		return {
+			'Content-Type': 'application/json',
+			...(token ? { Authorization: `Bearer ${token}` } : {}),
+		}
+	}
+
+	const loadBilling = async (action: 'refresh' | null = null) => {
+		if (!user?.id) {
+			setBillingLoading(false)
+			return
+		}
+		if (action) setBillingAction(action)
+		setBillingLoading(true)
+		setBillingError(null)
+		try {
+			const res = await fetch('/api/billing/summary', { headers: await authHeaders() })
+			const data = await res.json().catch(() => ({}))
+			if (!res.ok) throw new Error(data.error || 'Could not read your billing state.')
+			setEntitlement((data.entitlement as WorkspaceEntitlement | null) ?? null)
+			setReferral((data.referral as ReferralSummary | null) ?? null)
+			const appliedMonths = Number(data.referral?.appliedMonths ?? 0)
+			if (appliedMonths > 0 && referralTracked.current !== appliedMonths) {
+				referralTracked.current = appliedMonths
+				track('billing_referral_credit_applied', { months: appliedMonths })
+			}
+		} catch (err) {
+			setBillingError(err instanceof Error ? err.message : 'Could not read your billing state.')
+		} finally {
+			setBillingLoading(false)
+			setBillingAction(null)
+		}
+	}
 
 	useEffect(() => {
-		const loadCredits = async () => {
-			if (user?.id) {
-				const creds = await getUserAICredits(user.id)
-				setAiCredits(creds)
-			}
-		}
-		loadCredits()
+		void loadBilling()
 	}, [user?.id])
 
-	const percentageRemaining = (aiCredits.remainingCredits / aiCredits.totalAllocated) * 100
-	const isLowCredits = percentageRemaining <= 10 && aiCredits.remainingCredits > 0
-	const isDepleted = aiCredits.remainingCredits === 0
+	const handleManageBilling = async () => {
+		setBillingAction('portal')
+		try {
+			const res = await fetch('/api/billing/portal', { method: 'POST', headers: await authHeaders() })
+			const data = await res.json().catch(() => ({}))
+			if (!res.ok || !data.url) throw new Error(data.error || 'Could not open the billing portal.')
+			window.location.assign(data.url)
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Could not open the billing portal.')
+		} finally {
+			setBillingAction(null)
+		}
+	}
+
+	const handleCancel = async () => {
+		setBillingAction('cancel')
+		try {
+			const res = await fetch('/api/billing/cancel', { method: 'POST', headers: await authHeaders() })
+			const data = await res.json().catch(() => ({}))
+			if (!res.ok) throw new Error(data.error || 'Could not cancel the subscription.')
+			toast.success('Cancellation scheduled for the end of your current period.')
+			await loadBilling()
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Could not cancel the subscription.')
+		} finally {
+			setBillingAction(null)
+		}
+	}
+
+	const handleResubscribe = async () => {
+		if (!entitlement || entitlement.tier === 'free') return
+		setBillingAction('resubscribe')
+		try {
+			const cycle = entitlement.billingCycle === 'annual' ? 'annual' : 'monthly'
+			const currency = entitlement.gateway === 'razorpay' ? 'INR' : 'USD'
+			const res = await fetch('/api/billing/checkout', {
+				method: 'POST',
+				headers: await authHeaders(),
+				body: JSON.stringify({
+					tier: entitlement.tier,
+					cycle,
+					currency,
+					...(entitlement.tier === 'team' ? { seats: entitlement.seats ?? 2 } : {}),
+				}),
+			})
+			const data = await res.json().catch(() => ({}))
+			if (!res.ok || !data.checkoutUrl) throw new Error(data.error || 'Could not restart your subscription.')
+			window.location.assign(data.checkoutUrl)
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Could not restart your subscription.')
+		} finally {
+			setBillingAction(null)
+		}
+	}
 
 	useEffect(() => {
 		if (typeof window !== 'undefined') {
@@ -256,7 +356,7 @@ export default function SettingsClient({
 								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
 								}`}
 						>
-							<Sparkles className="w-4 h-4" /> Usage & Credits
+							<Sparkles className="w-4 h-4" /> AI Usage
 						</button>
 						<button
 							id="settings-tab-billing"
@@ -462,107 +562,25 @@ export default function SettingsClient({
 							</div>
 						)}
 
-						{/* Dedicated Usage & Credits Tab */}
+						{/* AI access & usage — no credit meter exists any more (T12). */}
 						{activeTab === 'usage' && (
 							<div id="settings-panel-usage" role="tabpanel" aria-labelledby="settings-tab-usage" className="space-y-8 max-w-3xl">
-								{/* Credit Progress Card */}
-								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm space-y-6">
-									<div className="flex justify-between items-start">
+								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm space-y-4">
+									<div className="flex justify-between items-start gap-3">
 										<div>
-											<h2 className="text-2xl font-display-lg text-on-surface mb-1">AI Credit Consumption</h2>
-											<p className="text-xs text-on-surface-variant">Monthly AI credit quota included with your {aiCredits.plan.toUpperCase()} plan.</p>
+											<h2 className="text-2xl font-display-lg text-on-surface mb-1">AI access</h2>
+											<p className="text-xs text-on-surface-variant leading-relaxed">
+												Lekhan never meters AI. Bring your own key (BYOK), run local models (BYOL), or use the free-key on-ramp — free models may change or be slower.
+											</p>
 										</div>
-										<span className="px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold capitalize">
-											{aiCredits.plan} Plan
+										<span className="px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold capitalize shrink-0">
+											{entitlement?.tier ?? 'free'} plan
 										</span>
 									</div>
-
-									{/* Low Credit Warning Banner (Remaining ≤ 10%) */}
-									{isLowCredits && (
-										<div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs leading-relaxed flex items-start gap-3">
-											<AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-											<div>
-												<span className="font-bold block mb-0.5">⚠️ Low AI Credits Warning ({aiCredits.remainingCredits} credits left)</span>
-												You have used 90%+ of your monthly credits. Connect your own Sarvam API key below or upgrade your plan to continue using AI tools uninterrupted.
-											</div>
-										</div>
-									)}
-
-									{/* Depleted Credit Notice (0 credits left) */}
-									{isDepleted && (
-										<div className="p-4 rounded-xl bg-error/10 border border-error/30 text-error text-xs leading-relaxed flex items-start gap-3">
-											<AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-											<div>
-												<span className="font-bold block mb-0.5">🛑 Monthly AI Credits Depleted</span>
-												You have used 100% of your plan credits. Please connect your BYOK Sarvam API Key below or upgrade your plan to continue using Lekhan Bot.
-											</div>
-										</div>
-									)}
-
-									{/* Meter / Progress Bar */}
-									<div className="space-y-2">
-										<div className="flex justify-between text-xs font-medium">
-											<span className="text-on-surface-variant">{aiCredits.usedCredits} / {aiCredits.totalAllocated} Credits Used</span>
-											<span className="text-primary font-bold">{aiCredits.remainingCredits} Credits Remaining</span>
-										</div>
-										<div className="w-full h-3 rounded-full bg-black/10 dark:bg-white/10 overflow-hidden">
-											<div
-												className={`h-full transition-all duration-500 rounded-full ${isDepleted ? 'bg-error' : isLowCredits ? 'bg-amber-500' : 'bg-primary'
-													}`}
-												style={{ width: `${Math.min(100, (aiCredits.usedCredits / aiCredits.totalAllocated) * 100)}%` }}
-											/>
-										</div>
-									</div>
-								</section>
-
-								{/* Sarvam AI Credit Cost Reference Table */}
-								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm space-y-4">
-									<div className="flex items-center gap-2">
-										<Zap className="w-5 h-5 text-primary" />
-										<h3 className="text-lg font-display-md text-on-surface font-bold">Sarvam AI Credit Consumption Rates</h3>
-									</div>
-									<p className="text-xs text-on-surface-variant">
-										Credit consumption rates for Lekhan Bot operations. Additional usage when using your own API key is charged directly based on official Sarvam API rates. Lekhan plays no role in BYOK billing or pricing.
-									</p>
-
-									<div className="overflow-x-auto">
-										<table className="w-full text-left text-xs text-on-surface border-collapse">
-											<thead>
-												<tr className="border-b border-black/10 dark:border-white/10 text-on-surface-variant uppercase text-[10px] tracking-wider">
-													<th className="py-2.5 px-3">API Service</th>
-													<th className="py-2.5 px-3">Description</th>
-													<th className="py-2.5 px-3 text-right">Credit Cost</th>
-												</tr>
-											</thead>
-											<tbody className="divide-y divide-black/5 dark:divide-white/5">
-												<tr>
-													<td className="py-3 px-3 font-bold">Sarvam Chat (105B / 30B)</td>
-													<td className="py-3 px-3 text-on-surface-variant">Contextual edit, summary, rewrite</td>
-													<td className="py-3 px-3 text-right font-bold text-primary">1 Credit / req</td>
-												</tr>
-												<tr>
-													<td className="py-3 px-3 font-bold">Text to Speech (Bulbul v2/v3)</td>
-													<td className="py-3 px-3 text-on-surface-variant">Read Aloud voice generation</td>
-													<td className="py-3 px-3 text-right font-bold text-primary">1 Credit / 1K chars</td>
-												</tr>
-												<tr>
-													<td className="py-3 px-3 font-bold">Translate & Transliterate</td>
-													<td className="py-3 px-3 text-on-surface-variant">Indic language conversion</td>
-													<td className="py-3 px-3 text-right font-bold text-primary">1 Credit / 10K chars</td>
-												</tr>
-												<tr>
-													<td className="py-3 px-3 font-bold">Speech to Text (ASR)</td>
-													<td className="py-3 px-3 text-on-surface-variant">Audio transcription</td>
-													<td className="py-3 px-3 text-right font-bold text-primary">5 Credits / min</td>
-												</tr>
-												<tr>
-													<td className="py-3 px-3 font-bold">Sarvam Vision</td>
-													<td className="py-3 px-3 text-on-surface-variant">OCR & Document digitization</td>
-													<td className="py-3 px-3 text-right font-bold text-primary">2 Credits / page</td>
-												</tr>
-											</tbody>
-										</table>
-									</div>
+									<ul className="text-xs text-on-surface-variant space-y-2">
+										<li className="flex items-start gap-2"><Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />Your provider key is used directly; provider usage is billed by that provider, not by Lekhan.</li>
+										<li className="flex items-start gap-2"><Bot className="w-4 h-4 text-primary shrink-0 mt-0.5" />No plan bundles an AI allowance, and no AI action is blocked by a Lekhan quota.</li>
+									</ul>
 								</section>
 
 								{/* BYOK Settings Card inside Usage Tab */}
@@ -570,14 +588,22 @@ export default function SettingsClient({
 							</div>
 						)}
 
-						{/* Full Pricing & Subscription Matrix inside Billing Tab */}
+						{/* Real billing states + plan matrix (T12). */}
 						{activeTab === 'billing' && (
 							<div id="settings-panel-billing" role="tabpanel" aria-labelledby="settings-tab-billing" className="space-y-8 max-w-5xl">
-								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
-									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Subscription & Plan</h2>
-									<p className="text-sm text-on-surface-variant mb-6">Manage your plan billing and compare plan tiers.</p>
-									<PricingMatrix currentPlan={aiCredits.plan} />
-								</section>
+								<BillingSettings
+									entitlement={entitlement}
+									referral={referral}
+									loading={billingLoading}
+									error={billingError}
+									isFounding={entitlement?.isFounding ?? false}
+									defaultCurrency={defaultCurrency}
+									busyAction={billingAction}
+									onManageBilling={() => void handleManageBilling()}
+									onCancel={() => void handleCancel()}
+									onResubscribe={() => void handleResubscribe()}
+									onRefresh={() => void loadBilling('refresh')}
+								/>
 							</div>
 						)}
 					</div>

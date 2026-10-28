@@ -93,14 +93,8 @@ export async function fetchSharedDocuments (userId: string): Promise<MemberDocum
 }
 
 export async function createDocument (ownerId: string): Promise<DocumentItem> {
-	const userCredits = await getUserAICredits(ownerId)
-	const ownedDocs = await fetchOwnedDocuments(ownerId)
-	const maxDocs = getPlanMaxDocuments(userCredits.plan)
-
-	if (ownedDocs.length >= maxDocs) {
-		throw new Error(`Maximum document limit (${maxDocs}) reached for your ${userCredits.plan.toUpperCase()} plan. Please upgrade to Go or Pro for unlimited documents.`)
-	}
-
+	// T12 (US-4 AC1): the 5-document cap is retired. Creation never consults a
+	// plan or a credit balance — free workspaces keep unlimited local pages.
 	const { data, error } = await supabase
 		.from('documents')
 		.insert({
@@ -448,72 +442,12 @@ export async function fetchMentionableCollaborators (documentId: string): Promis
 	return Array.from(collaboratorsMap.values())
 }
 
-export interface UserAICredits {
-	plan: 'free' | 'go' | 'pro' | 'team' | 'enterprise'
-	totalAllocated: number
-	usedCredits: number
-	remainingCredits: number
-}
-
-export function getPlanMaxDocuments(plan: string): number {
-	switch (plan.toLowerCase()) {
-		case 'free': return 5
-		case 'go':
-		case 'pro':
-		case 'team':
-		case 'enterprise':
-		default: return Infinity
-	}
-}
-
 export function checkCanAddCollaborator(currentCount: number, plan: string, seats?: number | null): { canAdd: boolean; limit: number } {
 	// T11 leak guard (Review Focus 5): legacy tokens (`go`, `enterprise`, ...)
 	// are normalized before they can reach the single limit map. Without this a
 	// `go` owner would silently get FREE_LIMITS instead of Plus.
 	const limit = getPlanLimits(normalizeLegacyPlan(plan), seats).maxDistinctCollaborators
 	return { canAdd: currentCount < limit, limit }
-}
-
-export async function getUserAICredits(userId: string): Promise<UserAICredits> {
-	try {
-		const { data, error } = await supabase
-			.from('profiles')
-			.select('plan, used_credits')
-			.eq('id', userId)
-			.single()
-
-		if (error || !data) {
-			return { plan: 'free', totalAllocated: 50, usedCredits: 0, remainingCredits: 50 }
-		}
-
-		const plan = (data?.plan || 'free') as UserAICredits['plan']
-		const usedCredits = typeof data?.used_credits === 'number' ? data.used_credits : 0
-		const totalAllocated = plan === 'go' ? 500 : plan === 'pro' ? 2500 : plan === 'team' ? 3500 : 50
-		const remainingCredits = Math.max(0, totalAllocated - usedCredits)
-
-		return { plan, totalAllocated, usedCredits, remainingCredits }
-	} catch {
-		return { plan: 'free', totalAllocated: 50, usedCredits: 0, remainingCredits: 50 }
-	}
-}
-
-export async function deductUserAICredits(userId: string, amount: number): Promise<UserAICredits> {
-	const current = await getUserAICredits(userId)
-	const newUsed = current.usedCredits + amount
-	try {
-		await supabase
-			.from('profiles')
-			.update({ used_credits: newUsed })
-			.eq('id', userId)
-	} catch {
-		// ignore update error
-	}
-
-	return {
-		...current,
-		usedCredits: newUsed,
-		remainingCredits: Math.max(0, current.totalAllocated - newUsed),
-	}
 }
 
 

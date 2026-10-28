@@ -33,7 +33,7 @@ describe('SettingsClient Tabbed Navigation', () => {
 		)
 		expect(screen.getByRole('tab', { name: /Profile & Security/i })).toBeInTheDocument()
 		expect(screen.getByRole('tab', { name: /Collaborators & Access/i })).toBeInTheDocument()
-		expect(screen.getByRole('tab', { name: /Usage & Credits/i })).toBeInTheDocument()
+		expect(screen.getByRole('tab', { name: /AI Usage/i })).toBeInTheDocument()
 		expect(screen.getByRole('tab', { name: /Billing & Subscription/i })).toBeInTheDocument()
 
 		fireEvent.click(screen.getByRole('tab', { name: /Billing & Subscription/i }))

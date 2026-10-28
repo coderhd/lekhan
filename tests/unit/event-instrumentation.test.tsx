@@ -38,14 +38,27 @@ vi.mock('next/navigation', () => ({
 	useRouter: () => ({ push: vi.fn() }),
 }))
 
+vi.mock('@/lib/supabase', () => ({
+	supabase: {
+		auth: {
+			getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'test-token' } } }),
+		},
+	},
+}))
+
+global.fetch = vi.fn().mockResolvedValue({
+	ok: true,
+	json: async () => ({ checkoutUrl: '#fake-checkout' }),
+}) as unknown as typeof fetch
+
 describe('Event Instrumentation', () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 	})
 
 	describe('PricingMatrix', () => {
-		it('emits upgrade_clicked when an upgrade button is clicked', () => {
-			render(<PricingMatrix isLandingPage={true} />)
+		it('emits upgrade_clicked and billing_checkout_started on a paid CTA', () => {
+			render(<PricingMatrix isLandingPage={true} defaultCurrency="USD" />)
 			const getProButton = screen.getByRole('button', { name: /Get Pro plan/i })
 			fireEvent.click(getProButton)
 
@@ -53,10 +66,15 @@ describe('Event Instrumentation', () => {
 				plan: 'pro',
 				billing_cycle: 'yearly',
 			})
+			expect(analytics.track).toHaveBeenCalledWith('billing_checkout_started', {
+				tier: 'pro',
+				cycle: 'annual',
+				currency: 'USD',
+			})
 		})
 
 		it('omits billing_cycle for enterprise plan in upgrade_clicked event', () => {
-			render(<PricingMatrix isLandingPage={true} />)
+			render(<PricingMatrix isLandingPage={true} defaultCurrency="USD" />)
 			const teamTab = screen.getByRole('button', { name: /^Team and Enterprise$/i })
 			fireEvent.click(teamTab)
 

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { usePlanTier } from '@/components/billing/use-plan-tier'
 
 interface ProfileMenuProps {
 	user: {
@@ -9,7 +10,6 @@ interface ProfileMenuProps {
 		full_name?: string
 	}
 	size?: 'sm' | 'md'
-	creditsRemaining?: number
 }
 
 function getInitials(nameOrEmail: string) {
@@ -24,32 +24,15 @@ function getInitials(nameOrEmail: string) {
 	return nameOrEmail.charAt(0).toUpperCase()
 }
 
-import { getUserAICredits } from '@/services/db'
-
-export default function ProfileMenu({ user, size = 'md', creditsRemaining }: ProfileMenuProps) {
+export default function ProfileMenu({ user, size = 'md' }: ProfileMenuProps) {
 	const router = useRouter()
 	const [isOpen, setIsOpen] = useState(false)
-	const [fetchedCredits, setFetchedCredits] = useState<number | null>(null)
 	const menuRef = useRef<HTMLDivElement>(null)
 
 	const displayName = user.full_name || user.email.split('@')[0]
 	const initials = getInitials(user.full_name || user.email)
 
-	useEffect(() => {
-		const loadCredits = async () => {
-			if (user.id) {
-				try {
-					const creds = await getUserAICredits(user.id)
-					setFetchedCredits(creds.remainingCredits)
-				} catch {
-					// Fallback
-				}
-			}
-		}
-		loadCredits()
-	}, [user.id])
-
-	const displayCredits = creditsRemaining ?? fetchedCredits ?? 50
+	const { tier: planTier } = usePlanTier(user.id)
 
 	const handleSignOut = async () => {
 		await supabase.auth.signOut()
@@ -89,9 +72,9 @@ export default function ProfileMenu({ user, size = 'md', creditsRemaining }: Pro
 							<p className="text-xs text-on-surface-variant truncate">{user.email}</p>
 						</div>
 						<div className="flex items-center justify-between text-xs pt-2 border-t border-black/5 dark:border-white/5">
-							<span className="text-on-surface-variant font-medium">AI Credits</span>
-							<span className="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
-								{displayCredits} Left
+							<span className="text-on-surface-variant font-medium">Plan</span>
+							<span className="font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20 capitalize">
+								{planTier}
 							</span>
 						</div>
 					</div>

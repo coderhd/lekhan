@@ -17,10 +17,10 @@
  * **per seat** — callers multiply by the purchased seat count.
  */
 
-export type PaidTier = "plus" | "pro" | "team"
-export type BillingCycle = "monthly" | "annual"
-export type BillingCurrency = "USD" | "INR"
-export type PriceCohort = "founding" | "ga"
+import { priceAmountMinor } from "./price-catalog"
+import type { BillingCurrency, BillingCycle, PaidTier, PriceCohort } from "./price-catalog"
+
+export type { PaidTier, BillingCycle, BillingCurrency, PriceCohort }
 
 export interface StripePriceResolution {
 	amount: number
@@ -69,34 +69,6 @@ export class FoundingIneligibleError extends Error {
 const PAID_TIERS = new Set<PaidTier>(["plus", "pro", "team"])
 const BILLING_CYCLES = new Set<BillingCycle>(["monthly", "annual"])
 const BILLING_CURRENCIES = new Set<BillingCurrency>(["USD", "INR"])
-
-// PRD §5.1 amounts in minor units. Annual = pay-for-ten convention on every paid tier.
-// `team` is USD-only (spec §16 D11) and per seat.
-const USD_AMOUNTS: Record<PaidTier, Record<PriceCohort, Record<BillingCycle, number>>> = {
-	plus: {
-		founding: { monthly: 400, annual: 4000 },
-		ga: { monthly: 600, annual: 6000 }
-	},
-	pro: {
-		founding: { monthly: 800, annual: 8000 },
-		ga: { monthly: 1200, annual: 12000 }
-	},
-	team: {
-		founding: { monthly: 800, annual: 8000 },
-		ga: { monthly: 1000, annual: 10000 }
-	}
-}
-
-const INR_AMOUNTS: Record<"plus" | "pro", Record<PriceCohort, Record<BillingCycle, number>>> = {
-	plus: {
-		founding: { monthly: 24900, annual: 249900 },
-		ga: { monthly: 49900, annual: 499000 }
-	},
-	pro: {
-		founding: { monthly: 49900, annual: 499900 },
-		ga: { monthly: 99900, annual: 999000 }
-	}
-}
 
 function stripeEnvKey(tier: PaidTier, cycle: BillingCycle, cohort: PriceCohort): string {
 	return `STRIPE_PRICE_${tier.toUpperCase()}_${cycle.toUpperCase()}_${cohort.toUpperCase()}_USD`
@@ -180,7 +152,7 @@ export function resolvePriceRequest(
 
 	if (currency === "USD") {
 		return {
-			amount: USD_AMOUNTS[tier][cohort][cycle],
+			amount: priceAmountMinor(tier, cycle, currency, cohort),
 			currency: "USD",
 			priceId: readRequiredEnv(stripeEnvKey(tier, cycle, cohort))
 		}
@@ -190,7 +162,7 @@ export function resolvePriceRequest(
 	const planEnvKey = razorpayEnvKey(tier, cycle, cohort)
 	readRequiredEnv(planEnvKey)
 	return {
-		amount: INR_AMOUNTS[tier as "plus" | "pro"][cohort][cycle],
+		amount: priceAmountMinor(tier, cycle, currency, cohort),
 		currency: "INR",
 		planEnvKey
 	}

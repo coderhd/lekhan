@@ -9,6 +9,9 @@ vi.mock('@/lib/supabase', () => ({
 		auth: {
 			signOut: vi.fn().mockResolvedValue({ error: null }),
 		},
+		from: vi.fn(() => {
+			throw new Error('no entitlement in this test')
+		}),
 	},
 }))
 
@@ -16,13 +19,14 @@ vi.mock('next/navigation', () => ({
 	useRouter: () => ({ push: vi.fn() }),
 }))
 
-describe('ProfileMenu Credit Badge', () => {
-	it('displays AI Credits status pill when dropdown is opened', () => {
+describe('ProfileMenu plan badge (T12)', () => {
+	it('shows the plan badge, not a credit counter', () => {
 		render(<ProfileMenu user={{ email: 'user@example.com', full_name: 'Test User' }} />)
 		const avatarBtn = screen.getByRole('button', { name: /TU/i })
 		fireEvent.click(avatarBtn)
 
-		expect(screen.getByText(/AI Credits/i)).toBeInTheDocument()
-		expect(screen.getByText(/50 Left/i)).toBeInTheDocument()
+		expect(screen.getByText('Plan')).toBeInTheDocument()
+		expect(screen.getByText('free')).toBeInTheDocument()
+		expect(screen.queryByText(/credits/i)).not.toBeInTheDocument()
 	})
 })
