@@ -28,33 +28,48 @@ summary,currency,plan-change}`, `/api/billing/webhooks/{stripe,razorpay}`,
 ## 2. Founding backfill migration — semantics proven locally
 
 Migration: `supabase/migrations/20261008000000_founding_roster_backfill.sql`
-Harness: `scripts/verify-founding-backfill.sh` (disposable `postgres:16-alpine`, stub
-`workspaces` / `workspace_plans` / `waitlist` / `referral_attribution` tables — never a real DB).
+Harness: `scripts/verify-founding-backfill.sh` (disposable `postgres:16.15-alpine`, stub
+`workspaces` / `workspace_plans` / `waitlist` (real **citext**) / `referral_attribution` tables —
+no host port, no volume, never a real DB).
 
 ```
 $ ./scripts/verify-founding-backfill.sh
 == run 1 ==
-NOTICE:  founding_roster_backfill: marked 3 workspace_plans row(s) founding.
+NOTICE:  founding_roster_backfill: marked 3 workspace_plans row(s) founding; 2 matched row(s) left locked (already subscribed); 1 founder account(s) have no workspace_plans row.
 == run 2 (idempotency) ==
-NOTICE:  founding_roster_backfill: marked 0 workspace_plans row(s) founding.
+NOTICE:  founding_roster_backfill: marked 0 workspace_plans row(s) founding; 2 matched row(s) left locked (already subscribed); 1 founder account(s) have no workspace_plans row.
 == run 3 (waitlist DDL absent — PDEC-6) ==
 NOTICE:  founding_roster_backfill: public.waitlist is absent on this environment; skipping (PDEC-6 out-of-band DDL).
-PASS: predicate pinned, false->true only, idempotent on re-run, safe when waitlist is absent.
+== run 4 (waitlist present, referral_attribution absent — T3 not applied) ==
+NOTICE:  founding_roster_backfill: public.referral_attribution is absent (T3 migration not applied); skipping.
+PASS: on a citext stub schema — predicate matches spot<=500 + email-hash only; false->true only; already-subscribed (active/canceled) founders left locked and reported; founder without a plan row reported, not created; second run updates 0 rows with no drift; skip-notices when waitlist or referral_attribution is absent.
 ```
 
 Fixtures exercise the boundary cases that matter:
 
 | Fixture | Expectation | Result |
 |---|---|---|
-| spot 5, attributed, has plan | `is_founding` false → true | ✅ flipped |
+| spot 5, attributed, never subscribed | `is_founding` false → true | ✅ flipped |
 | spot 500 (roster edge), attributed | false → true | ✅ flipped |
-| spot 77, attributed, waitlist email `F@Example.COM` | matched via `md5(lower(email))` | ✅ flipped |
+| spot 77, attributed, waitlist email `F@Example.COM` | matched via `md5(lower(email))` on a citext column | ✅ flipped |
 | spot 501, attributed | untouched | ✅ still false |
 | spot 250, **no** `referral_attribution` row (`?ref`-less founder) | untouched (known boundary) | ✅ still false |
-| attributed founder whose workspace has **no** plan row | no error, nothing written | ✅ skipped |
+| spot 9, attributed, **active** GA subscription (`status='active'`, `sub_live_ga`) | **not** retro-priced (spec §15 lock) | ✅ still false, counted in the notice |
+| spot 8, attributed, **canceled** ex-subscription (`status='canceled'`) | **not** re-priced | ✅ still false, counted in the notice |
+| attributed founder whose workspace has **no** plan row | no error, nothing created, counted in the notice | ✅ skipped |
 | row already `is_founding = true` | not re-written; `updated_at` unchanged | ✅ untouched |
 | second run | 0 rows updated, byte-identical dump | ✅ idempotent |
 | `waitlist` absent | NOTICE, no error, no writes | ✅ skips |
+| `referral_attribution` absent (T3 unapplied) | NOTICE, no error, no writes | ✅ skips |
+
+### Review history
+
+The first revision of this migration flipped any matched `is_founding = false` row, including
+workspaces with a **live subscription** — a clean-room review caught that as a spec §15 violation
+(`is_founding` is persisted once, at subscription creation). The migration now requires
+`status = 'none' AND gateway_subscription_id IS NULL`, reports the locked count, and reports
+matched founders with no `workspace_plans` row instead of inventing one. The harness above pins
+all three behaviours.
 
 ## 3. Target environment — not applied (blocked)
 
@@ -101,13 +116,23 @@ unilaterally. Tracked as a named blocker (see §5).
 Per spec §9/§14 this provider-side pass **gates BUILD-complete**. It is not replaced by the green
 suite above.
 
-## 5. Open decision — founding-roster predicate (TL/PO ruling required)
+The script itself was corrected by the same clean-room review that caught the migration bug: the
+fake rail is now scoped to **rendering only** (it never writes `workspace_plans` and has no webhook
+mirror, so checkout/cancel/resubscribe cannot be exercised there), `stripe trigger` was replaced by
+test-clock-driven real invoices (synthetic events carry no workspace binding), the transfer fixture
+now states the `successor_owns_workspace` constraint honestly, the Razorpay replay has a concrete
+HMAC command, the reconciler watermark (`last_checked_at`) is called out, and the missing spec §14
+criteria (annual pricing, founding-ID isolation, referral cap/application, PII, doc cap, tenant
+isolation) have checkboxes. A redaction rule forbids capturing `whsec_…`/`sk_test_…`/Razorpay keys.
+
+## 5. Open decisions — founding-roster predicate (TL/PO ruling required)
 
 Pinned predicate (unchanged by this ticket):
 `waitlist.position <= 500` ∩ `referral_attribution.email_hash = md5(lower(waitlist.email))`,
-`is_founding` flipped `false → true` only.
+`is_founding` flipped `false → true` only, and **only** on rows that never subscribed
+(`status = 'none' AND gateway_subscription_id IS NULL`) so spec §15's lock holds.
 
-Two boundary questions need a ruling before this is applied anywhere with real rows:
+Three boundary questions need a ruling before this is applied anywhere with real rows:
 
 1. **`?ref`-less founders are never matched.** A founder who joined the waitlist but signed up
    without a referral link has no `referral_attribution` row, so the join misses them and they
@@ -121,8 +146,14 @@ Two boundary questions need a ruling before this is applied anywhere with real r
    "first/personal workspace only" restriction. Recommendation: confirm with the founding-cohort
    launch owner whether multi-workspace founding pricing is acceptable; if not, the fix is one
    `DISTINCT ON (ws.owner_id)` clause, not a predicate widening.
+3. **Unconfirmed waitlist entries.** The waitlist snapshot defines cohort membership as
+   `position` **plus `confirmed_at`** (double opt-in), while PDEC-6 / spec §4.4 pin the billing
+   roster as `position <= 500` ∩ attribution only. The migration follows the spec (confirmation is
+   not in the predicate) and says so in its header; the ruling should either confirm that
+   unconfirmed spot ≤ 500 signups are intentionally included, or add `AND w.confirmed_at IS NOT
+   NULL` plus a harness fixture.
 
-Both are recorded on the dispatch issue as a blocked decision for the Tech Lead.
+All three are recorded on the dispatch issue as blocked decisions for the Tech Lead.
 
 ## 6. Reproduce
 
