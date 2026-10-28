@@ -65,7 +65,7 @@ export function fromImportReport(
 	// don't print the same message twice.
 	const producerOmissions: FidelityOmission[] = (report.degradations ?? [])
 		.filter((line) => line.kind !== 'unsupported-blocks')
-		.map((line) => ({ kind: line.kind, count: line.count, detail: line.message }))
+		.map((line) => ({ kind: line.kind, count: 0, detail: line.message }))
 
 	return {
 		direction: 'import',

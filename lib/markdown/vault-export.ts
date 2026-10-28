@@ -6,6 +6,7 @@ import {
 	DATABASE_VIEWS_OMISSION,
 	type FidelityOmission,
 	type FidelityReport,
+	type FidelityWarning,
 } from '@/lib/fidelity-report'
 
 /**
@@ -59,7 +60,7 @@ const IMAGE_EXT: Record<string, string> = {
 	'image/x-icon': 'ico',
 }
 
-const WIKILINK_RE = /\[\[([^[\]|]+?)(?:\|[^[\]]+?)?\]\]/g
+const WIKILINK_RE = /\[\[([^[\]|]+?)(?:\|([^[\]]+?))?\]\]/g
 
 /** Mirrors the importer's normalizeTitle so link resolution agrees across directions. */
 function normalizeTitle(title: string): string {
@@ -114,7 +115,7 @@ function parseDataUri(src: string): ParsedDataUri | null {
 function bundleImages(
 	doc: JSONContent,
 	attachments: Map<string, VaultExportFile>,
-	degraded: { count: number },
+	degraded: { count: number; remote: number },
 ): JSONContent {
 	const visit = (node: JSONContent): JSONContent => {
 		const next: JSONContent = { ...node }
@@ -122,6 +123,12 @@ function bundleImages(
 
 		if (next.type === 'image') {
 			const src = typeof next.attrs?.src === 'string' ? (next.attrs.src as string) : ''
+			if (/^https?:\/\//i.test(src)) {
+				// Remote images (e.g. expiring Notion S3 links) cannot be bundled
+				// client-side; keep the link and name it in the report.
+				degraded.remote += 1
+				return next
+			}
 			if (!src.startsWith('data:')) return next
 
 			const parsed = parseDataUri(src)
@@ -175,13 +182,47 @@ function uniqueBasename(used: Map<string, number>, dir: string, base: string, us
 	return candidate
 }
 
-function collectLinkTargets(markdown: string, into: Set<string>): void {
-	WIKILINK_RE.lastIndex = 0
-	let match: RegExpExecArray | null
-	while ((match = WIKILINK_RE.exec(markdown)) !== null) {
-		const target = match[1].trim()
-		if (target) into.add(normalizeTitle(target))
-	}
+/** True for a fenced-code opener/closer line (\`\`\` or ~~~, optionally indented). */
+const FENCE_RE = /^\s*(`{3,}|~{3,})/
+
+/**
+ * Rewrite wikilinks to the path the target was actually emitted at (Obsidian
+ * resolves by path), and collect the distinct targets that have no emitted
+ * note. Fenced code is left untouched — a code sample must never be rewritten.
+ */
+function rewriteWikilinks(
+	markdown: string,
+	pathByTitle: Map<string, string>,
+	targets: Set<string>,
+): string {
+	let fence: string | null = null
+	const rewritten = markdown.split('\n').map((line) => {
+		const fenceMatch = line.match(FENCE_RE)
+		if (fenceMatch) {
+			const marker = fenceMatch[1]
+			if (fence === null) {
+				fence = marker
+			} else if (marker[0] === fence[0] && marker.length >= fence.length) {
+				fence = null
+			}
+			return line
+		}
+		if (fence !== null) return line
+
+		WIKILINK_RE.lastIndex = 0
+		return line.replace(WIKILINK_RE, (whole, target: string, alias?: string) => {
+			const key = normalizeTitle(target)
+			if (!key) return whole
+			targets.add(key)
+			const path = pathByTitle.get(key)
+			if (!path) return whole
+			// Preserve what the author wrote as the display text; the path makes the
+			// link resolvable even when slugging changed the title (e.g. `Q3 / 2026`).
+			const display = alias ?? target.trim()
+			return `[[${path}|${display}]]`
+		})
+	})
+	return rewritten.join('\n')
 }
 
 /**
@@ -189,69 +230,112 @@ function collectLinkTargets(markdown: string, into: Set<string>): void {
  */
 export function buildVaultFiles(pages: VaultPage[]): VaultExportResult {
 	const byId = new Map(pages.map((p) => [p.id, p]))
-	const knownTitles = new Set(pages.map((p) => normalizeTitle(p.title)))
 
 	const files: VaultExportFile[] = []
 	const attachments = new Map<string, VaultExportFile>()
 	const usedPaths = new Set<string>()
 	const usedBasenames = new Map<string, number>()
+	const dirs = new Set<string>()
+	const warnings: FidelityWarning[] = []
 
-	const linkTargets = new Set<string>()
-	const degraded = { count: 0 }
-	let noteCount = 0
-	let folderCount = 0
-	let databasePages = 0
+	interface EmittedPage {
+		page: VaultPage
+		path: string
+	}
 
+	const emittedPages: EmittedPage[] = []
+	// Title → the path this page was ACTUALLY written to (no extension), so a
+	// wikilink is counted resolved only when Obsidian can resolve it. Duplicate
+	// titles map to the first emitted note; folders emit no note and are never
+	// counted as resolvable link targets.
+	const pathByTitle = new Map<string, string>()
+
+	// Pass 1 — deterministic paths and the folder tree (including empty folders).
 	for (const page of pages) {
+		const dirSegments = directorySegments(page, byId)
+		for (let depth = 1; depth <= dirSegments.length; depth += 1) {
+			dirs.add(`${dirSegments.slice(0, depth).join('/')}/`)
+		}
 		if (page.isFolder) {
-			folderCount += 1
+			dirs.add([...dirSegments, slug(page.title)].join('/') + '/')
 			continue
 		}
 
-		const dirSegments = directorySegments(page, byId)
 		const dir = dirSegments.join('/')
 		const basename = uniqueBasename(usedBasenames, dir, slug(page.title), usedPaths)
 		const path = [...dirSegments, `${basename}.md`].join('/')
+		emittedPages.push({ page, path })
 
-		const rawDoc: JSONContent = page.doc ?? { type: 'doc', content: [] }
-		const doc = bundleImages(rawDoc, attachments, degraded)
-
-		const body = markdownEngine.serializeObsidianBody(doc)
-		collectLinkTargets(body, linkTargets)
-
-		const properties = page.properties ?? {}
-		if (properties.database) databasePages += 1
-
-		const tags = resolveTags(page.tags ?? [], properties)
-		const file = markdownEngine.assembleMarkdownFile(
-			{ title: page.title, properties, ...(tags.length > 0 ? { tags } : {}) },
-			body,
-		)
-		files.push({ path, data: file })
-		noteCount += 1
+		const key = normalizeTitle(page.title)
+		if (key && !pathByTitle.has(key)) pathByTitle.set(key, path.replace(/\.md$/, ''))
 	}
 
+	// Pass 2 — serialize bodies, rewrite resolvable wikilinks to the emitted path.
+	const linkTargets = new Set<string>()
+	const degraded = { count: 0, remote: 0 }
+	let databasePages = 0
+
+	for (const { page, path } of emittedPages) {
+		try {
+			const rawDoc: JSONContent = page.doc ?? { type: 'doc', content: [] }
+			const doc = bundleImages(rawDoc, attachments, degraded)
+			const body = rewriteWikilinks(
+				markdownEngine.serializeObsidianBody(doc),
+				pathByTitle,
+				linkTargets,
+			)
+
+			const properties = page.properties ?? {}
+			if (properties.database) databasePages += 1
+
+			const tags = resolveTags(page.tags ?? [], properties)
+			const file = markdownEngine.assembleMarkdownFile(
+				{ title: page.title, properties, ...(tags.length > 0 ? { tags } : {}) },
+				body,
+			)
+			files.push({ path, data: file })
+		} catch (err) {
+			// One unserializable doc must not destroy the whole vault. Skip the note
+			// and name it in the report instead of failing silently or aborting.
+			warnings.push({
+				title: page.title,
+				stage: 'serialize',
+				error: err instanceof Error ? err.message : String(err),
+			})
+		}
+	}
+
+	// Empty folders (e.g. imported folder pages with no descendants) are real
+	// structure; emit explicit directory entries so Obsidian materializes them.
+	for (const dir of dirs) files.push({ path: dir, data: new Uint8Array(0) })
 	for (const attachment of attachments.values()) files.push(attachment)
 
 	let linksResolved = 0
 	let linksUnresolved = 0
 	for (const target of linkTargets) {
-		if (knownTitles.has(target)) linksResolved += 1
+		if (pathByTitle.has(target)) linksResolved += 1
 		else linksUnresolved += 1
 	}
 
 	const omissions: FidelityOmission[] = []
 	if (databasePages > 0) omissions.push({ ...DATABASE_VIEWS_OMISSION, count: databasePages })
+	if (degraded.remote > 0) {
+		omissions.push({
+			kind: 'remote-images',
+			count: degraded.remote,
+			detail: 'image(s) point at external URLs (for example expiring Notion links) and were left linked rather than bundled.',
+		})
+	}
 
 	const report: FidelityExportReport = {
 		direction: 'export',
-		pages: noteCount,
-		folderPages: folderCount,
+		pages: files.filter((file) => file.path.endsWith('.md')).length,
+		folderPages: dirs.size,
 		linksResolved,
 		linksUnresolved,
 		degradedBlocks: degraded.count,
 		omissions,
-		warnings: [],
+		warnings,
 	}
 
 	return { files, report }

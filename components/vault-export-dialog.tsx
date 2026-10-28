@@ -199,7 +199,7 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 								The zip has been downloaded. Drop it into Obsidian (File → Open vault) to open it.
 							</AlertDialogDescription>
 						</AlertDialogHeader>
-						<FidelityReportCard report={report} serverWarnings={warnings} />
+						<FidelityReportCard report={report} serverWarnings={[...warnings, ...report.warnings]} />
 						<AlertDialogFooter>
 							<button
 								onClick={() => handleOpenChange(false)}

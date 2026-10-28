@@ -27,7 +27,7 @@ function toBytes(data: Uint8Array | string): Uint8Array {
  * would silently overwrite a note — so it throws instead.
  */
 export function buildZipBytes(entries: ZipEntry[]): Uint8Array {
-	const table: Record<string, Uint8Array> = {}
+	const table: Record<string, Uint8Array> = Object.create(null)
 	for (const entry of entries) {
 		const path = entry.path.replace(/^\/+/, '')
 		if (path === '') {

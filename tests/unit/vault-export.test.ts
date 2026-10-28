@@ -98,7 +98,7 @@ describe('buildVaultFiles — Obsidian dialect (seam 2)', () => {
 		expect(content).toMatch(/tags:/)
 		expect(content).toContain('- pkm')
 		expect(content).toContain('> [!note] Heads up')
-		expect(content).toContain('[[Home]]')
+		expect(content).toContain('[[home|Home]]')
 		expect(content).toContain('[[Nowhere]]')
 	})
 
@@ -182,5 +182,94 @@ describe('buildVaultZip', () => {
 describe('buildZipBytes', () => {
 	it('rejects duplicate paths instead of overwriting a note', () => {
 		expect(() => buildZipBytes([{ path: 'a.md', data: 'x' }, { path: 'a.md', data: 'y' }])).toThrow(/Duplicate/)
+	})
+})
+
+describe('clean-room fixes — link honesty and empty folders', () => {
+	const page = (id: string, title: string, extra: Partial<VaultPage> = {}): VaultPage => ({
+		id,
+		title,
+		parentId: null,
+		properties: {},
+		doc: md({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: `body ${id}` }] }] }),
+		...extra,
+	})
+
+	it('rewrites a link to the emitted slug path when the title has unsafe characters', () => {
+		const target = page('t', 'Q3 / 2026')
+		const source = page('s', 'Source', {
+			doc: md({
+				type: 'doc',
+				content: [{ type: 'paragraph', content: [{ type: 'text', text: 'See [[Q3 / 2026]]' }] }],
+			}),
+		})
+		const { files, report } = buildVaultFiles([target, source])
+		expect(files.map((f) => f.path)).toContain('q3-2026.md')
+		// The link must point at the emitted filename, not the raw title.
+		expect(text(files, 'source.md')).toContain('[[q3-2026|Q3 / 2026]]')
+		expect(report.linksResolved).toBe(1)
+		expect(report.linksUnresolved).toBe(0)
+	})
+
+	it('does not count folder pages as resolvable link targets (they emit no note)', () => {
+		const folder = page('f', 'Projects', { isFolder: true, doc: undefined })
+		const source = page('s', 'Source', {
+			doc: md({
+				type: 'doc',
+				content: [{ type: 'paragraph', content: [{ type: 'text', text: 'See [[Projects]]' }] }],
+			}),
+		})
+		const { files, report } = buildVaultFiles([folder, source])
+		expect(files.some((f) => f.path === 'projects/')).toBe(true)
+		expect(report.linksResolved).toBe(0)
+		expect(report.linksUnresolved).toBe(1)
+	})
+
+	it('materializes an otherwise empty folder-only workspace instead of an empty zip', () => {
+		const folder = page('f', 'Empty Folder', { isFolder: true, doc: undefined })
+		const { files, report } = buildVaultFiles([folder])
+		expect(files).toEqual([{ path: 'empty-folder/', data: new Uint8Array(0) }])
+		expect(report.folderPages).toBe(1)
+		expect(report.pages).toBe(0)
+	})
+
+	it('maps duplicate titles to the first emitted note and reports only that target', () => {
+		const first = page('1', 'Intro')
+		const second = page('2', 'Intro')
+		const source = page('s', 'Source', {
+			doc: md({
+				type: 'doc',
+				content: [{ type: 'paragraph', content: [{ type: 'text', text: 'See [[Intro]]' }] }],
+			}),
+		})
+		const { files, report } = buildVaultFiles([first, second, source])
+		expect(files.map((f) => f.path)).toEqual(expect.arrayContaining(['intro.md', 'intro-2.md']))
+		expect(text(files, 'source.md')).toContain('[[intro|Intro]]')
+		expect(report.linksResolved).toBe(1)
+	})
+})
+
+describe('clean-room M1 — remote images are named, not silently left', () => {
+	it('reports remote image links as an omission', () => {
+		const page: VaultPage = {
+			id: 'r',
+			title: 'Remote',
+			parentId: null,
+			properties: {},
+			doc: md({
+				type: 'doc',
+				content: [
+					{
+						type: 'image',
+						attrs: { src: 'https://s3.example.com/notion/expiring.png', alt: 'diagram' },
+					},
+				],
+			}),
+		}
+		const { report, files } = buildVaultFiles([page])
+		expect(report.omissions).toContainEqual(
+			expect.objectContaining({ kind: 'remote-images', count: 1 }),
+		)
+		expect(text(files, 'remote.md')).toContain('https://s3.example.com/notion/expiring.png')
 	})
 })
