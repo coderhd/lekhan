@@ -1,28 +1,33 @@
 ---
 title: Workspaces
-description: The root container for your pages, members, and billing.
+description: The root container for your pages, sharing, and billing.
 ---
 
-A **workspace** is the root container of your knowledge graph. It is the unit of ownership,
-collaboration, and billing.
+A **workspace** is the root container of your knowledge graph. It is the unit of ownership and billing,
+and it is where your pages live.
 
 ## One workspace, one graph
 
 Everything inside a workspace shares one graph: pages, links, tags, search, and the graph view.
-Members of a workspace can navigate the same pages according to their role.
 
-## Members and roles
+## Sharing is per page
 
-Invite people by email from the workspace members area. Roles control what someone can do:
+Collaboration today is scoped to individual pages, not to the workspace. Open a page and use **Share**
+to invite someone by email; the invite applies to that page only.
 
-| Role | Can read | Can edit pages | Manage workspace and billing |
+| Role | Can read the page | Can edit the page | Can manage access |
 | --- | --- | --- | --- |
 | Owner | Yes | Yes | Yes |
 | Editor | Yes | Yes | No |
 | Viewer | Yes | No | No |
 
-The owner holds the subscription. Ownership can be transferred to another member when you leave a
-team — the subscription follows the workspace, not the person.
+The page owner controls access. **Settings → Collaborators & Access** lists the pages you own so you can
+review and revoke access without opening each one.
+
+<Callout type="info" title="Workspace-level roles are planned">
+Workspace-wide members, roles, and ownership transfer ship with workspace billing. Until then every
+invitation is page-scoped, and the only way to hand over a workspace is to contact support.
+</Callout>
 
 ## Billing is per workspace
 
@@ -31,7 +36,8 @@ team — the subscription follows the workspace, not the person.
   history, and (on Pro) public sites.
 - **Team** adds per-seat billing, admin, shared templates, and guest access.
 
-See [Plans and billing](/docs/faq) for the full tier matrix.
+See [Plans and billing](/docs/faq) for the full tier matrix, and **Settings → Billing** in the app to
+manage the plan.
 
 ## Workspaces and vaults
 
@@ -42,5 +48,5 @@ Lekhan copies it into a workspace and never writes back to the original folder. 
 ## Related
 
 - [Pages](/docs/concepts/pages)
-- [Sharing and collaboration](/docs/concepts/workspaces)
+- [Links and backlinks](/docs/concepts/links-and-backlinks)
 - [Troubleshooting sync](/docs/troubleshooting)

@@ -11,8 +11,8 @@ frontmatter. The import copies the vault into your workspace — your original f
 - Import into the workspace where you want the notes to live.
 - Pick the folder that contains your notes (the vault root), not a parent or an export wrapper.
 - The vault must be readable as a `.zip` or as a folder your browser can read.
-- Large vaults are supported within the import limits; very large attachments may be skipped and
-  reported.
+- Large vaults are supported within the import limits. Per-file size, total unpacked size, and image
+  count are capped — exceeding a cap stops the import with an error instead of silently dropping files.
 
 ## Import a vault
 
@@ -44,7 +44,8 @@ vault.
 - Attachments outside the vault or too large to read.
 - Links to notes that were not included in the ZIP.
 
-These appear in the import report. Nothing is silently discarded without a line in that report.
+Degraded content appears in the import report. An attachment that exceeds the size limits is a hard
+stop: the import tells you which file broke the limit and creates nothing until you remove it.
 
 ## After importing
 

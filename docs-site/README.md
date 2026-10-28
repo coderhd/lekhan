@@ -50,7 +50,7 @@ content/docs/
 │   ├── markdown-import-export.mdx
 │   └── obsidian-import.mdx
 ├── concepts/                 # pages, workspaces, links, graph, tags
-├── ai/                       # free-key on-ramp, BYOK, BYOL
+├── ai/                       # free-key providers, BYOK, BYOL
 ├── troubleshooting.mdx
 └── faq.mdx
 ```
@@ -92,4 +92,4 @@ npm run start        # smoke: / -> 307 /docs/getting-started; every page 200
 ```
 
 Root isolation was verified with `docs-site/` present: root `npm run typecheck`, `npm run lint`,
-`npm test` (83 files / 665 tests) and `npm run build` all pass unchanged.
+`npm test` and `npm run build` all pass unchanged.

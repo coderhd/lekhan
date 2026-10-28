@@ -24,11 +24,14 @@ version history if you need to compare with an earlier snapshot.
 - Re-check the key: copy it again from the provider dashboard and paste it without trailing spaces.
 - Confirm the model is available to that key (free models are often the first to be withdrawn).
 - For BYOK, confirm your network allows requests to the provider's API domain.
-- For BYOL, confirm the local server is running and the base URL ends in `/v1`.
+- For BYOL, confirm the local server is running. For the **Ollama** and **LM Studio** provider types
+  the base URL must **not** end in `/v1` (Ollama: `http://localhost:11434`, LM Studio:
+  `http://localhost:1234`); `/v1` only belongs on the **Custom** provider.
 
 **AI works on one device but not another.**
-Keys are encrypted locally per browser. Paste the key again on the new device — Lekhan cannot sync or
-recover it.
+Keys are stored as ciphertext you can only decrypt on the device that created them. Your key list may
+appear on the new device, but it cannot be decrypted there — paste the key again to use it. Lekhan
+cannot recover or decrypt a key for you.
 
 **Free models are slow or unavailable.**
 Free tiers are rate-limited and change without notice. Try another free preset or add your own key.
@@ -48,8 +51,9 @@ Links resolve by page title. If the target note was not in the import, the link 
 until you create that page. The import report lists link resolution counts.
 
 **An image or embed is missing.**
-Attachments that could not be read are reported as degraded and may appear as links instead. Large
-attachments may exceed the import limits.
+Attachments that could not be read are reported as degraded and may appear as links instead. If a vault
+exceeds the import limits (per-file size, total size, or image count) the import stops with an error
+rather than skipping files — split the vault or remove oversized attachments and try again.
 
 **Can I import the same vault twice?**
 You can, but you will get duplicate pages. Import into a fresh workspace if you want a clean copy.
@@ -63,12 +67,12 @@ appear as edges even when the target page does not exist.
 ## Billing
 
 **I upgraded but do not see the new limits.**
-Refresh after checkout completes and confirm the plan on the workspace billing page. Plan changes
-attach to the workspace, so make sure you are looking at the right one.
+Refresh after checkout completes and confirm the plan in **Settings → Billing**. Plan changes attach to
+the workspace, so make sure you are looking at the right one.
 
 **How do I cancel?**
-Open the workspace billing page and cancel. You keep access through the end of the paid period, and
-your pages remain exportable.
+Open **Settings → Billing** and cancel. You keep access through the end of the paid period, and your
+pages remain exportable.
 
 **I was charged in a different currency than expected.**
 USD is handled by Stripe and INR by Razorpay based on your billing country. Team is USD-only at

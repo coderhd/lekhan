@@ -1,11 +1,12 @@
 ---
-title: Free-Key On-Ramp
+title: Free-Key Providers
 description: Connect a free-tier AI provider without a credit card.
 ---
 
-The **free-key on-ramp** is a guided version of BYOK for people who have never created an API key.
-Lekhan helps you pick a provider with a free tier, issue a key, and paste it into the encrypted key
-store — then you are running AI on your own quota.
+There is no separate signup flow for free AI: you connect a provider in **Settings → AI**, exactly like
+any other BYOK setup. What makes it an *on-ramp* is that several providers offer a usable free tier, so
+you can start without a card. You issue the key at the provider and paste it into Lekhan's encrypted key
+store.
 
 <Callout type="warning" title="Free models may change or be slower">
 Free tiers are controlled by the provider. Models can be renamed, rate-limited, or withdrawn, and
@@ -16,37 +17,39 @@ free model.
 ## What you need
 
 - An account with a provider that offers a free tier.
-- A few minutes; no card should be required for the presets below.
+- A few minutes; no card should be required for the providers below.
 
-## Presets
+## Providers with a free tier
 
-The wizard offers curated presets, including:
+These are the presets the app points at today:
 
 | Provider | Free tier | Notes |
 | --- | --- | --- |
-| OpenRouter | Free models | One key, many models; free models are labelled |
 | Google Gemini API | Free tier | Per-project quota |
 | Groq | Free tier | Fast inference on selected models |
-| Mistral | Free tier | Selected models |
+| DeepSeek | Free tier | Selected models |
+| Z.AI | Free tier | Selected models |
+| OpenRouter | Free models | One key, many models; free models are labelled |
 
-Presets change as providers change their free offerings. If a preset is unavailable, use
-[BYOK](/docs/ai/byok) with any OpenAI-compatible provider.
+Any other OpenAI-compatible provider works through [BYOK](/docs/ai/byok) with a custom base URL.
+Presets change as providers change their free offerings.
 
 ## Steps
 
-1. Open the AI connection wizard (it appears on first AI use, or from **Settings → AI**).
-2. Pick a provider preset and follow the deep link to its key page.
-3. Create a key, copy it, and paste it into Lekhan. The key is encrypted locally before storage.
+1. Open **Settings → AI** and pick the provider row (for example Gemini or Groq).
+2. Follow the provider's key page, create a key, and copy it.
+3. Paste the key into Lekhan and choose a free model from that provider.
 4. Send a test prompt to confirm the connection. If it fails, check
    [AI troubleshooting](/docs/troubleshooting).
 
 ## Good to know
 
 - Your rate limits are **the provider's**, not Lekhan's.
-- Requests go directly from your browser to the provider. Lekhan does not see your prompts.
+- Cloud requests are relayed through Lekhan's API using your key; prompts are not stored as AI logs
+  and usage is never metered.
 - You can add a paid key later without redoing your setup — the key store supports multiple
   providers.
-- The free tier of Lekhan includes the on-ramp. There is no Lekhan-hosted "trial AI".
+- There is no Lekhan-hosted "trial AI" and no bundled credit allowance.
 
 ## Related
 

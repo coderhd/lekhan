@@ -13,7 +13,8 @@ so you are never locked in.
 
 No. There are no bundled AI credits on any plan. Every tier runs AI on your own provider key or your
 own machine, so AI usage is billed by the provider you choose — or free, if you use a free tier or a
-local model. Lekhan never proxies inference.
+local model. Cloud requests are relayed through Lekhan's API using your key, but usage is never metered
+and prompts are not stored as AI logs.
 
 ## What is the difference between BYOK and BYOL?
 
@@ -32,13 +33,14 @@ Your content stays yours and remains exportable in markdown. Paid plans change w
 
 - **Obsidian**: import a vault ZIP or folder. Links, tags, callouts, and frontmatter are preserved,
   and an import report tells you what degraded. See [Obsidian import](/docs/getting-started/obsidian-import).
-- **Notion**: export to markdown and import the files; rich clipboard HTML from Notion is also
+- **Notion**: export **Markdown & CSV** from Notion and import the resulting ZIP (or every part of it).
+  The export is parsed on your device — no Notion API — and rich clipboard HTML from Notion is also
   understood when you paste.
 
 ## How does version history work?
 
-Pages keep point-in-time versions according to your plan: 1 day on Free, 90 days on Plus, one year
-on Pro, and a year on Team. Retention is enforced per workspace.
+Pages keep point-in-time versions according to your plan: 1 day on Free, 90 days on Plus, and one year
+on Pro. Team rides the Pro retention envelope. Retention is enforced per workspace.
 
 ## What are the plans and prices?
 
@@ -47,7 +49,7 @@ standard prices apply to later joiners. Annual billing charges for ten months �
 
 | Plan | Monthly (USD) | Monthly (INR) | Unlocks |
 | --- | --- | --- | --- |
-| Free | $0 | ₹0 | Unlimited local pages, PKM core (links, backlinks, graph, tags, search), markdown, AI on your own key, 2 editors per page, 1-day history |
+| Free | $0 | ₹0 | Unlimited local pages, PKM core (links, backlinks, graph, tags, search), markdown, AI on your own key, 2 collaborators per page, 1-day history |
 | Plus | $6 standard / $4 founding | ₹499 standard / ₹249 founding | Cloud sync, 10 collaborators, 90-day history, templates |
 | Pro | $12 standard / $8 founding | ₹999 standard / ₹499 founding | 25 collaborators, 1-year history, priority sync and processing, public sites |
 | Team | $10 standard / $8 founding per seat | USD only at launch | Per-seat billing, admin, shared templates, guest access, 2–150 seats |
@@ -64,14 +66,16 @@ are not cash or transferable. The bank is capped per workspace.
 
 ## Can I transfer a workspace to someone else?
 
-The owner can transfer ownership to another member. The subscription follows the workspace, and the
-previous owner's auto-billing is stopped before the transfer completes.
+Ownership transfer is part of the workspace-billing rollout and is not available in the app yet. When
+it ships, the owner will be able to hand the workspace to another member; the subscription follows the
+workspace and the previous owner's auto-billing stops before the transfer completes. Until then,
+contact support if you need to move a workspace between accounts.
 
 ## Is my content encrypted?
 
 Content is encrypted at rest on hub storage with server-held keys. An opt-in end-to-end mode with
 client-held keys is a separate, stronger level and trades away some hub-side indexing features. AI
-keys are always encrypted locally (AES-256-GCM), separate from page storage.
+keys are always encrypted in your browser (AES-256-GCM) before storage, separate from page storage.
 
 ## Does Lekhan work offline?
 
