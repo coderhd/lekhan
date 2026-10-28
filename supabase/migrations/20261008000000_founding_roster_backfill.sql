@@ -10,14 +10,25 @@
 -- trigger writes as `md5(lower(email))`. This is the mapping named in spec §4.4
 -- ("matched to accounts at signup via the referral_attribution mapping").
 --
--- Known, deliberate boundary: a founder who signed up WITHOUT a `?ref` has no
--- `referral_attribution` row and is therefore not matched by this backfill. That is a
--- product decision for the founding-roster owner (TL/PO/SIL-141), not silently widened
--- here: matching on `profiles.email` would mark accounts that never joined the waitlist.
--- A second boundary is deliberately NOT decided here: `confirmed_at` (the waitlist
--- double opt-in) is not part of the predicate because PDEC-6/spec §4.4 pin the roster as
--- `position <= 500` ∩ attribution; whether unconfirmed signups belong in the founding
--- roster is raised in SIL-141 rather than guessed at in SQL.
+-- Known, deliberate boundary (RESOLVED by ADR 0005 / SIL-141): a founder who signed up
+-- WITHOUT a `?ref` has no `referral_attribution` row and is therefore not matched by this
+-- backfill. The narrow predicate is CONFIRMED — no email-fallback widening (waitlist emails
+-- are unverified; a wrong grant is irreversible once the workspace subscribes). The gap is
+-- owned by a MANDATORY manual reconciliation step in the SIL-140 apply runbook: review the
+-- unmatched list (header query 3 below), grant only on exact lower(email) match to a single
+-- auth user owning an unlocked plan row, and record the evidence in a QA doc.
+--
+-- Second boundary (RESOLVED by ADR 0005 / SIL-141): `confirmed_at` (the waitlist double
+-- opt-in) is deliberately NOT part of the predicate. The spot is allocated and counted at
+-- join time (join_waitlist allocates unconditionally; services/waitlist.ts counts all rows
+-- toward the 500 cap), so unconfirmed spots <= 500 are cohort members; confirmation is a
+-- deliverability gate, not a cohort gate.
+--
+-- Third boundary (RESOLVED by ADR 0005 / SIL-141): founding pricing FOLLOWS THE FOUNDER,
+-- per workspace — this backfill marks every workspace owned by a matched founding account
+-- (not one-per-founder). New workspaces created after this backfill inherit is_founding at
+-- plan creation via the companion inheritance migration (ADR 0005 Q2); ownership transfer
+-- re-evaluates founding from the new owner (US-8 guardrail, ADR 0005).
 --
 -- Locking (spec §15): `is_founding` is persisted once, at subscription creation.
 -- This backfill therefore only ever touches rows that have NEVER been subscribed:

@@ -83,6 +83,12 @@ fidelity. _Avoid_: export/import used loosely for this guarantee
 A subscription level attached to a Workspace (Free, Plus, Pro, Team), unlocking seats, history,
 sync, and privacy features. _Avoid_: plan (code legacy), subscription level
 
+**Founding member**:
+A person holding one of the first 500 waitlist spots who signed up through a referral link. A
+person-level status: founding pricing follows the founder into every Workspace they own, locked at
+each subscription's creation (ADR 0005). _Avoid_: founding user, founding workspace (the perk
+follows the person, not one Workspace)
+
 **Encrypt at rest**:
 Default protection level: content encrypted on hub storage with server-held keys.
 _Avoid_: E2E (reserved for the stronger level)

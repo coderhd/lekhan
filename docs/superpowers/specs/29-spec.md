@@ -115,7 +115,10 @@ existing `2026MMDDHHMMSS_*` convention):
 - `is_founding` determination: roster = the `join_waitlist` founding cohort with `spot ≤ 500`;
   matched to accounts at signup via the `referral_attribution` mapping. **Schema dependency:** the
   waitlist RPC/table DDL is not in `supabase/migrations/` (created out-of-band) — PLAN must locate
-  that DDL before writing the backfill migration.
+  that DDL before writing the backfill migration. **Boundary ruling (SIL-141, ADR 0005):** the
+  predicate stays narrow; `?ref`-less founders go through mandatory manual reconciliation (never a
+  widening join), and founding pricing follows the founder across all their workspaces (new
+  workspaces inherit at plan creation).
 - `profiles.plan` becomes a **deprecated read-only mirror** (updated by the webhook processor, never
   read for enforcement after the cutover flag flips); full removal at the P2 client cutover.
 - `used_credits` reads/writes everywhere (`services/db.ts` credit paths, `api/ai` checks, UI badges)

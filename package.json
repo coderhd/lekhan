@@ -13,6 +13,7 @@
 		"lint:fix": "eslint . --fix",
 		"typecheck": "tsc --noEmit",
 		"verify:founding-backfill": "bash scripts/verify-founding-backfill.sh",
+		"verify:founding-follows-owner": "bash scripts/verify-founding-follows-owner.sh",
 		"check:billing-env": "node scripts/check-billing-env.mjs"
 	},
 	"dependencies": {
