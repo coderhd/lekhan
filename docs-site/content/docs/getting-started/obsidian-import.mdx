@@ -1,0 +1,60 @@
+---
+title: Obsidian Import
+description: Bring a vault into Lekhan with links, tags, callouts, and properties intact.
+---
+
+Lekhan imports an Obsidian **vault** as-is: markdown files, `[[wikilinks]]`, tags, callouts, and
+frontmatter. The import copies the vault into your workspace — your original folder is never modified.
+
+## Before you import
+
+- Import into the workspace where you want the notes to live.
+- Pick the folder that contains your notes (the vault root), not a parent or an export wrapper.
+- The vault must be readable as a `.zip` or as a folder your browser can read.
+- Large vaults are supported within the import limits. Per-file size, total unpacked size, and image
+  count are capped — exceeding a cap stops the import with an error instead of silently dropping files.
+
+## Import a vault
+
+1. Open **Import** in your workspace.
+2. Choose **Obsidian vault (.zip)** or **Obsidian vault (folder)**.
+3. Select the vault root and start the import.
+
+<Callout type="info" title="You get an import report">
+After the import, Lekhan shows an honest **import report**: how many pages were created, how many
+links resolved, and which blocks or attachments degraded. Review it before you archive the original
+vault.
+</Callout>
+
+## What is preserved
+
+| Obsidian | In Lekhan |
+| --- | --- |
+| Markdown notes | Pages, with the file name as the title |
+| Folders | Page nesting |
+| `[[wikilinks]]` | Page links (unresolved links stay unresolved until the target exists) |
+| `#tags` | Tags |
+| Frontmatter | Page properties |
+| Callouts | Callouts |
+| Attachments | Images where they can be read; otherwise reported as degraded |
+
+## What can degrade
+
+- Exotic community-plugin syntax that has no markdown equivalent.
+- Attachments outside the vault or too large to read.
+- Links to notes that were not included in the ZIP.
+
+Degraded content appears in the import report. An attachment that exceeds the size limits is a hard
+stop: the import tells you which file broke the limit and creates nothing until you remove it.
+
+## After importing
+
+- Open a few notes and check their backlinks — the graph is rebuilt from the imported content.
+- Keep the original vault until you have reviewed the import report.
+- If something looks wrong, see [Troubleshooting imports](/docs/troubleshooting).
+
+## Related
+
+- [Markdown import and export](/docs/getting-started/markdown-import-export)
+- [Pages](/docs/concepts/pages)
+- [Links and backlinks](/docs/concepts/links-and-backlinks)

@@ -1,0 +1,58 @@
+---
+title: Free-Key Providers
+description: Connect a free-tier AI provider without a credit card.
+---
+
+There is no separate signup flow for free AI: you connect a provider in **Settings → AI**, exactly like
+any other BYOK setup. What makes it an *on-ramp* is that several providers offer a usable free tier, so
+you can start without a card. You issue the key at the provider and paste it into Lekhan's encrypted key
+store.
+
+<Callout type="warning" title="Free models may change or be slower">
+Free tiers are controlled by the provider. Models can be renamed, rate-limited, or withdrawn, and
+free requests are often slower than paid ones. Lekhan cannot guarantee availability or speed of a
+free model.
+</Callout>
+
+## What you need
+
+- An account with a provider that offers a free tier.
+- A few minutes; no card should be required for the providers below.
+
+## Providers with a free tier
+
+These are the presets the app points at today:
+
+| Provider | Free tier | Notes |
+| --- | --- | --- |
+| Google Gemini API | Free tier | Per-project quota |
+| Groq | Free tier | Fast inference on selected models |
+| DeepSeek | Free tier | Selected models |
+| Z.AI | Free tier | Selected models |
+| OpenRouter | Free models | One key, many models; free models are labelled |
+
+Any other OpenAI-compatible provider works through [BYOK](/docs/ai/byok) with a custom base URL.
+Presets change as providers change their free offerings.
+
+## Steps
+
+1. Open **Settings → AI** and pick the provider row (for example Gemini or Groq).
+2. Follow the provider's key page, create a key, and copy it.
+3. Paste the key into Lekhan and choose a free model from that provider.
+4. Send a test prompt to confirm the connection. If it fails, check
+   [AI troubleshooting](/docs/troubleshooting).
+
+## Good to know
+
+- Your rate limits are **the provider's**, not Lekhan's.
+- Cloud requests are relayed through Lekhan's API using your key; prompts are not stored as AI logs
+  and usage is never metered.
+- You can add a paid key later without redoing your setup — the key store supports multiple
+  providers.
+- There is no Lekhan-hosted "trial AI" and no bundled credit allowance.
+
+## Related
+
+- [BYOK](/docs/ai/byok)
+- [BYOL](/docs/ai/byol)
+- [AI troubleshooting](/docs/troubleshooting)

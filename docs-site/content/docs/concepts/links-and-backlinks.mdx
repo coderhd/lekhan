@@ -1,0 +1,39 @@
+---
+title: Links and Backlinks
+description: How [[wikilinks]] connect pages, and how to read the reverse view.
+---
+
+Lekhan's graph is built from **page links**. Type `[[` in the editor to link another page by title.
+Each link is a directed edge from the page you are editing to the page you name.
+
+## Page links
+
+- A link uses the target page's **title**.
+- If no page with that title exists yet, the link stays **unresolved**. It still belongs to the graph
+  and will connect once you create the page.
+- Renaming a page updates how links resolve; the graph index keeps the edges consistent.
+
+```md
+Read [[Project plan]] before the kickoff, then add notes to [[Weekly review]].
+```
+
+## Backlinks
+
+A **backlink** is the reverse view: the pages that link *to* the page you are reading. Backlinks are
+how you discover context you did not know was connected.
+
+- Open a page to see its backlinks alongside the content.
+- Backlinks are computed from the graph index, not stored in the page body.
+- An unresolved link becomes a real backlink as soon as the target page exists.
+
+<Callout type="info" title="Links vs. folders">
+Folders (nesting) keep things tidy. Links are what make the graph useful across folders — a page can
+live in one place and be referenced from many.
+</Callout>
+
+## Related
+
+- [Graph](/docs/concepts/graph)
+- [Tags](/docs/concepts/tags)
+- [Obsidian import](/docs/getting-started/obsidian-import) — `[[wikilinks]]` from your vault are
+  preserved.
