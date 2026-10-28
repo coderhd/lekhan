@@ -3,14 +3,20 @@ import { markdownEngine, uint8ArrayToBase64 } from '@/lib/markdown/engine'
 import { fitLiveSchema } from '@/lib/import-hydration'
 import { titleFromFilename } from '@/lib/title-from-filename'
 import { canonicalJson, stableHash } from '@/lib/stable-content'
+import type { ImportIR, ImportPage, ImportReport } from '@/services/import-ir'
+import {
+	MAX_IMPORT_FILE_BYTES,
+	MAX_IMPORT_IMAGE_COUNT,
+	MAX_IMPORT_PAGES,
+	MAX_IMPORT_TOTAL_BYTES,
+} from '@/services/import-limits'
 
-export const MAX_IMPORT_PAGES = 2000
-/** Per-file unpacked byte limit for vault entries (shared across all vault readers). */
-export const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024
-/** Aggregate unpacked byte limit across all accepted vault entries. */
-export const MAX_IMPORT_TOTAL_BYTES = 100 * 1024 * 1024
-/** Maximum number of accepted image attachments (counted separately from Markdown pages). */
-export const MAX_IMPORT_IMAGE_COUNT = 1000
+export {
+	MAX_IMPORT_FILE_BYTES,
+	MAX_IMPORT_IMAGE_COUNT,
+	MAX_IMPORT_PAGES,
+	MAX_IMPORT_TOTAL_BYTES,
+} from '@/services/import-limits'
 
 export interface VaultEntry {
 	/** Vault-relative path with forward slashes, e.g. `guides/foo.md`. */
@@ -268,36 +274,21 @@ export async function readVaultDirectory (handle: VaultDirectoryHandle): Promise
 	return { files, directories: [...directories] }
 }
 
-export interface ObsidianImportPage {
-	title: string
-	folderPath: string | null
-	properties: Record<string, unknown>
-	tags: string[]
-	contentYjsBase64: string
-	plainText: string
-	isFolder: boolean
-	/**
-	 * Deterministic hash of the fitted ProseMirror doc this page imports (#87).
-	 * Unlike `contentYjsBase64` (fresh random Yjs clientID each seeding) and
-	 * `plainText` (drops marks/structure), this captures ALL deterministic page
-	 * content — marks, node structure, and attributes — so the retry fingerprint
-	 * distinguishes a materially edited page.
-	 */
-	contentHash: string
-}
+/**
+ * @deprecated Use the source-agnostic `ImportPage` from `services/import-ir`.
+ * Kept as an alias so #27 callers and tests keep working while the pipeline
+ * gains more producers.
+ */
+export type ObsidianImportPage = ImportPage
 
-export interface ObsidianImportIR {
-	workspaceId: string
-	pages: ObsidianImportPage[]
-}
+/**
+ * @deprecated Use the source-agnostic `ImportIR` from `services/import-ir`.
+ * Obsidian remains the producer named by `source`.
+ */
+export type ObsidianImportIR = ImportIR & { source: 'obsidian' }
 
-export interface ObsidianImportReport {
-	pages: number
-	folderPages: number
-	linksResolved: number
-	linksUnresolved: number
-	degradedBlocks: number
-}
+/** @deprecated Use `ImportReport`; the shape is shared by every producer. */
+export type ObsidianImportReport = ImportReport
 
 export interface ObsidianImportResult {
 	ir: ObsidianImportIR
@@ -451,6 +442,7 @@ export function importObsidianVault (content: VaultContent, options: ObsidianImp
 			plainText: '',
 			isFolder: true,
 			contentHash: EMPTY_PAGE_CONTENT_HASH,
+			provenance: { source: 'obsidian', sourcePath: dir },
 		})
 	}
 
@@ -481,6 +473,7 @@ export function importObsidianVault (content: VaultContent, options: ObsidianImp
 			// `seedToYjsBase64` applies `fitLiveSchema` again, which is idempotent,
 			// so hashing `fitted` hashes exactly the doc that gets seeded.
 			contentHash: stableHash(canonicalJson(fitted)),
+			provenance: { source: 'obsidian', sourcePath: file.path },
 		})
 	}
 
@@ -516,7 +509,7 @@ export function importObsidianVault (content: VaultContent, options: ObsidianImp
 
 	const pages = [...folderPages, ...notePages]
 	return {
-		ir: { workspaceId, pages },
+		ir: { workspaceId, source: 'obsidian', pages },
 		report: {
 			pages: notePages.length,
 			folderPages: folderPages.length,
