@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { User, Users, CreditCard, Sparkles, Bot } from 'lucide-react'
 import { toast } from 'sonner'
@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { removePageMember, updatePageMemberRole, fetchOwnedPagesWithMembers } from '@/services/graph'
 import BYOKSettings from '@/components/byok-settings'
 import BillingSettings from '@/components/billing/billing-settings'
+import OwnershipTransferCard from '@/components/billing/ownership-transfer-card'
 import type { WorkspaceEntitlement } from '@/lib/billing/entitlements'
 import type { ReferralSummary } from '@/services/billing/referral-credits'
 import { track } from '@/lib/analytics'
@@ -69,6 +70,23 @@ export default function SettingsClient({
 	// Pages State for Collaborators tab
 	const [pagesState, setPagesState] = useState<any[]>(initialPages)
 
+	// T13 — ownership can only move to an existing collaborator (unique candidates).
+	const ownershipCandidates = useMemo(() => {
+		const byId = new Map<string, { id: string; email: string; name?: string }>()
+		for (const doc of pagesState) {
+			for (const member of (doc.page_members || []) as Array<{
+				user_id?: string
+				profiles?: { email?: string; full_name?: string }
+			}>) {
+				const id = member.user_id
+				const email = member.profiles?.email
+				if (!id || !email || id === user?.id) continue
+				byId.set(id, { id, email, name: member.profiles?.full_name })
+			}
+		}
+		return Array.from(byId.values())
+	}, [pagesState, user?.id])
+
 	useEffect(() => {
 		setPagesState(initialPages)
 	}, [initialPages])
@@ -109,6 +127,14 @@ export default function SettingsClient({
 			...(token ? { Authorization: `Bearer ${token}` } : {}),
 		}
 	}
+
+	// T13 — an emailed/pasted accept link must land on the card that consumes it.
+	useEffect(() => {
+		if (typeof window === 'undefined') return
+		if (new URLSearchParams(window.location.search).get('transfer')) {
+			setActiveTab('collaborators')
+		}
+	}, [])
 
 	const loadBilling = async (action: 'refresh' | null = null) => {
 		if (!user?.id) {
@@ -460,6 +486,7 @@ export default function SettingsClient({
 
 						{activeTab === 'collaborators' && (
 							<div id="settings-panel-collaborators" role="tabpanel" aria-labelledby="settings-tab-collaborators" className="space-y-8 max-w-3xl">
+								<OwnershipTransferCard candidates={ownershipCandidates} />
 								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
 									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Manage Collaborators</h2>
 									<p className="text-sm text-on-surface-variant mb-6">View and manage access to pages you own.</p>
