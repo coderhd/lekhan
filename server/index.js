@@ -3,7 +3,7 @@ const WebSocket = require('ws')
 const Y = require('yjs')
 const { setupWSConnection, docs } = require('y-websocket/bin/utils')
 const { createClient } = require('@supabase/supabase-js')
-const { getSupabaseClient, verifyUserRole, getDocumentOwnerPlan } = require('./auth')
+const { getSupabaseClient, verifyUserRole, getDocumentOwnerPlan, getDocumentOwnerEntitlement } = require('./auth')
 const { getPlanLimits } = require('../lib/tier-limits.ts')
 const { pruneExpiredDocumentVersions } = require('./retention.js')
 const { admitCollaborator } = require('./ledger.js')
@@ -83,6 +83,17 @@ function triggerSerializedSave (documentId, ydoc) {
 
 // Track pending asynchronous WebSocket upgrade reservations
 let pendingUpgrades = 0
+
+/**
+ * Relay write gate (T11 / D9). Viewers never write; a workspace whose past-due
+ * grace window has expired is read-only on the relay while its content stays
+ * intact. Everything else (active, in-grace, free after a voluntary cancel)
+ * keeps write access.
+ */
+function resolveRelayReadOnly (role, entitlement) {
+	if (role === 'viewer') return true
+	return entitlement ? entitlement.relayReadOnly === true : false
+}
 
 // Health and metrics helper
 function getServerMetrics () {
@@ -262,9 +273,14 @@ server.on('upgrade', async (request, socket, head) => {
 			return
 		}
 
-		// Enforce distinct collaborator limit atomically via Postgres ledger
-		const ownerPlan = await getDocumentOwnerPlan(supabaseAdmin, documentId)
-		const limits = getPlanLimits(ownerPlan)
+		// Enforce distinct collaborator limit atomically via Postgres ledger.
+		// Entitlement source is the owner's workspace row (T11); the relay gate
+		// keeps `getPlanLimits` unchanged. D9: a past_due workspace stays fully
+		// entitled through grace; after expiry the relay is read-only.
+		const ownerEntitlement = await getDocumentOwnerEntitlement(supabaseAdmin, documentId)
+		const ownerPlan = ownerEntitlement ? ownerEntitlement.tier : 'free'
+		const relayReadOnly = ownerEntitlement ? ownerEntitlement.relayReadOnly === true : false
+		const limits = getPlanLimits(ownerPlan, ownerEntitlement ? ownerEntitlement.seats : undefined)
 
 		const { allowed } = await admitCollaborator(
 			supabaseAdmin,
@@ -281,11 +297,15 @@ server.on('upgrade', async (request, socket, head) => {
 			return
 		}
 
+		if (relayReadOnly) {
+			console.log(`[Connection] Read-only relay: past-due grace expired for document ${documentId} (owner plan ${ownerPlan})`)
+		}
+
 		console.log(`[Connection] User role: ${role} on doc ${documentId} (${userId})`)
 
 		wss.handleUpgrade(request, socket, head, (ws) => {
 			releaseUpgradeReservation()
-			ws.isViewer = role === 'viewer'
+			ws.isViewer = resolveRelayReadOnly(role, ownerEntitlement)
 			wss.emit('connection', ws, request)
 		})
 	} catch (err) {
@@ -429,6 +449,7 @@ module.exports = {
 	saveMaxThrottleTimers,
 	clearSaveTimers,
 	getServerMetrics,
+	resolveRelayReadOnly,
 	MAX_CONNECTIONS,
 	MAX_PAYLOAD_BYTES,
 }

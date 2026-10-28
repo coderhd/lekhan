@@ -1,11 +1,71 @@
 import { supabase } from '@/lib/supabase'
 import { getPlanLimits } from '@/lib/tier-limits'
+import { normalizeLegacyPlan, type NormalizedPlan } from '@/lib/billing/legacy-plan-normalization'
+import {
+	resolveOwnerWorkspaceEntitlement,
+	type WorkspaceEntitlement,
+} from '@/lib/billing/entitlements'
 import {
 	DocumentItem,
 	MemberDocumentItem,
 	DocumentInvitation,
 	DocumentVersion,
 } from '@/types'
+
+/**
+ * T11 — enforcement source for a document/page owner.
+ *
+ * Primary source: the owner's `workspace_plans` row (billing root). The
+ * deprecated `profiles.plan` mirror is only consulted when the workspace row is
+ * not readable through RLS — invitee accept paths resolve the OWNER's plan and
+ * cannot see the owner's workspace row. The fallback still passes through
+ * `normalizeLegacyPlan` (T2), so a legacy `go` token can never silently reach
+ * `getPlanLimits` as FREE_LIMITS (Review Focus 5).
+ */
+export type OwnerEntitlementSource = 'workspace' | 'legacy-mirror' | 'default'
+
+export interface OwnerEntitlement {
+	tier: NormalizedPlan
+	seats: number | null
+	source: OwnerEntitlementSource
+	entitlement: WorkspaceEntitlement | null
+}
+
+export async function getOwnerEntitlement (ownerId: string): Promise<OwnerEntitlement> {
+	try {
+		const entitlement = await resolveOwnerWorkspaceEntitlement(ownerId, supabase)
+		if (entitlement) {
+			return { tier: entitlement.tier, seats: entitlement.seats, source: 'workspace', entitlement }
+		}
+	} catch (err) {
+		// Never silently grant a paid tier on a failed workspace read; fall through
+		// to the normalized mirror so enforcement stays at least pre-cutover-equal.
+		console.warn('[entitlements] workspace resolution failed; using normalized mirror:', err)
+	}
+
+	try {
+		const { data, error } = await supabase
+			.from('profiles')
+			.select('plan')
+			.eq('id', ownerId)
+			.maybeSingle()
+
+		if (error) {
+			console.warn('[entitlements] legacy mirror read failed; falling back to free:', error.message)
+		} else if (data) {
+			return {
+				tier: normalizeLegacyPlan((data as { plan?: string | null }).plan),
+				seats: null,
+				source: 'legacy-mirror',
+				entitlement: null,
+			}
+		}
+	} catch (err) {
+		console.warn('[entitlements] legacy mirror read failed; falling back to free:', err)
+	}
+
+	return { tier: 'free', seats: null, source: 'default', entitlement: null }
+}
 
 export async function fetchOwnedDocuments (userId: string): Promise<DocumentItem[]> {
 	const { data, error } = await supabase
@@ -126,8 +186,8 @@ export async function fetchPendingInvitations (email: string): Promise<DocumentI
 export async function acceptInvitation (invite: DocumentInvitation, userId: string): Promise<void> {
 	try {
 		const docDetails = await fetchDocumentDetails(invite.document_id)
-		const ownerCredits = await getUserAICredits(docDetails.owner_id)
-		const allowedLimit = getPlanLimits(ownerCredits.plan).maxDistinctCollaborators
+		const ownerEntitlement = await getOwnerEntitlement(docDetails.owner_id)
+		const allowedLimit = getPlanLimits(ownerEntitlement.tier, ownerEntitlement.seats).maxDistinctCollaborators
 
 		const { count: memberCount } = await supabase
 			.from('document_members')
@@ -135,7 +195,7 @@ export async function acceptInvitation (invite: DocumentInvitation, userId: stri
 			.eq('document_id', invite.document_id)
 
 		if ((memberCount || 0) >= allowedLimit) {
-			throw new Error(`Collaborator limit reached for this document's owner (${ownerCredits.plan.toUpperCase()} plan, max ${allowedLimit}).`)
+			throw new Error(`Collaborator limit reached for this document's owner (${ownerEntitlement.tier.toUpperCase()} plan, max ${allowedLimit}).`)
 		}
 	} catch (e: any) {
 		if (e.message && e.message.includes('Collaborator limit reached')) {
@@ -185,8 +245,8 @@ export async function createInvitation (
 ): Promise<void> {
 	try {
 		const docDetails = await fetchDocumentDetails(documentId)
-		const ownerCredits = await getUserAICredits(docDetails.owner_id)
-		const allowedLimit = getPlanLimits(ownerCredits.plan).maxDistinctCollaborators
+		const ownerEntitlement = await getOwnerEntitlement(docDetails.owner_id)
+		const allowedLimit = getPlanLimits(ownerEntitlement.tier, ownerEntitlement.seats).maxDistinctCollaborators
 
 		const { count: memberCount } = await supabase
 			.from('document_members')
@@ -202,7 +262,7 @@ export async function createInvitation (
 		const totalCount = (memberCount || 0) + (inviteCount || 0)
 
 		if (totalCount >= allowedLimit) {
-			throw new Error(`Collaborator limit reached for document owner's ${ownerCredits.plan.toUpperCase()} plan (max ${allowedLimit}). Upgrade plan to add more collaborators.`)
+			throw new Error(`Collaborator limit reached for document owner's ${ownerEntitlement.tier.toUpperCase()} plan (max ${allowedLimit}). Upgrade plan to add more collaborators.`)
 		}
 	} catch (e: any) {
 		if (e.message && e.message.includes('Collaborator limit reached')) {
@@ -406,8 +466,11 @@ export function getPlanMaxDocuments(plan: string): number {
 	}
 }
 
-export function checkCanAddCollaborator(currentCount: number, plan: string): { canAdd: boolean; limit: number } {
-	const limit = getPlanLimits(plan).maxDistinctCollaborators
+export function checkCanAddCollaborator(currentCount: number, plan: string, seats?: number | null): { canAdd: boolean; limit: number } {
+	// T11 leak guard (Review Focus 5): legacy tokens (`go`, `enterprise`, ...)
+	// are normalized before they can reach the single limit map. Without this a
+	// `go` owner would silently get FREE_LIMITS instead of Plus.
+	const limit = getPlanLimits(normalizeLegacyPlan(plan), seats).maxDistinctCollaborators
 	return { canAdd: currentCount < limit, limit }
 }
 
