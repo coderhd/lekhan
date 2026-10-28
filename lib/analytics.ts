@@ -46,6 +46,16 @@ export interface EventPayloadMap {
 		links_resolved?: number
 		links_unresolved?: number
 		degraded_blocks?: number
+		omissions?: number
+		warnings_count?: number
+	}
+	export_report_viewed: {
+		pages?: number
+		folder_pages?: number
+		links_resolved?: number
+		links_unresolved?: number
+		degraded_blocks?: number
+		omissions?: number
 		warnings_count?: number
 	}
 	paste_in_resolved: { kind: 'markdown' | 'codeBlock' | string }
@@ -81,6 +91,16 @@ const EVENT_ALLOWED_KEYS: Record<EventName, Set<string>> = {
 		'links_resolved',
 		'links_unresolved',
 		'degraded_blocks',
+		'omissions',
+		'warnings_count',
+	]),
+	export_report_viewed: new Set([
+		'pages',
+		'folder_pages',
+		'links_resolved',
+		'links_unresolved',
+		'degraded_blocks',
+		'omissions',
 		'warnings_count',
 	]),
 	paste_in_resolved: new Set(['kind']),
