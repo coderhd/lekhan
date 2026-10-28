@@ -71,10 +71,51 @@ workspaces with a **live subscription** — a clean-room review caught that as a
 matched founders with no `workspace_plans` row instead of inventing one. The harness above pins
 all three behaviours.
 
-## 3. Target environment — not applied (blocked)
+## 3. Target environment — applied and verified idempotent (2026-10-28)
 
-Read-only probes against the connected Supabase project
-(`https://hftipkzqbltdkrcjynad.supabase.co`, service key) on 2026-10-28:
+This section originally recorded a blocked state (§3.1). Since the SIL-142 ordering ruling
+("pre-merge now (A)", commit `0bc413d`) and DevOps's apply, the hosted project carries the full
+billing chain and the backfill has been re-run from this ticket to prove idempotency on the real
+schema.
+
+**Migration ledger** on `hftipkzqbltdkrcjynad` (`supabase_migrations.schema_migrations`):
+
+| version | name |
+|---|---|
+| `20261007000000` | billing_workspace_plans |
+| `20261007120000` | referral_credit_claim_semantics |
+| `20261008000000` | founding_roster_backfill |
+| `20261008000001` | founding_follows_owner |
+
+Objects present: `plan_tiers`, `workspace_plans` (10 rows), `referral_attribution`,
+`gateway_events`, `referral_credit_ledger`, the inheritance trigger
+`on_workspace_plan_created_founding_inherit`, and both billing functions.
+
+**Idempotency re-run (hardened migration executed against the live database):**
+
+```
+before: rows=10  founding=0  fp=c1bdb842a1ca7c8eaa6f06cc776c54b1  max_updated=2026-10-28 11:21:17.014234+00
+after : rows=10  founding=0  fp=c1bdb842a1ca7c8eaa6f06cc776c54b1  max_updated=2026-10-28 11:21:17.014234+00
+```
+
+`fp` is `md5(string_agg(workspace_id || ':' || is_founding))` over every plan row — byte-identical
+before and after, and `max(updated_at)` did not move, so the second run updated **0 rows**.
+
+**Verification queries (the ones in the migration header):**
+
+| Check | Result |
+|---|---|
+| matched founding accounts (`position <= 500` ∩ attribution) | **0** |
+| `position <= 500` rows with **no** attribution (the `?ref`-less boundary) | **0** |
+| `workspace_plans.is_founding = true` rows | **0** |
+| inheritance-pending rows (unlocked workspace of a founding owner) | **0** |
+
+The waitlist on this project is empty, so the apply is a **verifiable no-op** here; the meaningful
+cohort run still belongs to the environment that carries the real waitlist.
+
+### 3.1 Historical record — the pre-apply blocked state
+
+Read-only probes on 2026-10-28, before the apply:
 
 | Probe | Result |
 |---|---|
@@ -84,21 +125,18 @@ Read-only probes against the connected Supabase project
 | `GET /rest/v1/gateway_events` | **404** `PGRST205` — table absent |
 | `GET /rest/v1/workspaces` | **200** |
 
-Two consequences:
+At that point the T3 base migration had never been applied there, the billing migrations existed
+only on `plan/29-real-billing` (not `origin/main`), and the backfill could not run. The
+ordering question (pre-merge vs at-SHIP) was filed as SIL-142 and ruled **A — pre-merge now**.
 
-1. **The T3 base migration is not applied to this environment.** The backfill cannot run: it
-   updates `public.workspace_plans` and joins `public.referral_attribution`, both of which are
-   created by `20261007000000_billing_workspace_plans.sql` (still only on the epic branch — the
-   billing migrations are not on `origin/main`; `main` carries only
-   `20261007000000_resolve_unresolved_page_links.sql` and `20261007000001_import_batches_ledger.sql`).
-2. **There is nothing to backfill here yet.** The waitlist on the connected project is empty, so
-   even after the schema lands this environment's apply is a 0-row no-op. The meaningful apply
-   belongs to whichever environment carries real waitlist rows.
+### 3.2 The inheritance migration is dormant under today's schema
 
-Applying the epic-branch DDL to the hosted project ahead of the SHIP merge — including the
-`workspaces` INSERT trigger that grants referral credits and the `handle_new_user` companion
-trigger — is a deploy/ordering decision for DevOps + TL, not something this ticket should do
-unilaterally. Tracked as a named blocker (see §5).
+`workspaces.owner_id` still carries `UNIQUE (owner_id)` (verified live), so one user owns at most
+one workspace. Neither the new-plan trigger nor the catch-up in `20261008000001` can fire today —
+it is correct future-proofing for the ADR 0005 Q2 rule ("founding follows the founder"), and it
+becomes live the moment workspaces-per-owner exceeds one. Both paths carry the same lock guards as
+the backfill (`is_founding = false` ∧ `status = 'none'` ∧ `gateway_subscription_id IS NULL`), so
+they can never retro-price a subscribed workspace.
 
 ## 4. Manual QA — not executed (no provider access, no staging)
 
@@ -109,9 +147,9 @@ unilaterally. Tracked as a named blocker (see §5).
   dashboard checklist ([SIL-37](/SIL/issues/SIL-37)) is still unchecked for price objects, webhook
   endpoints, and Billing Portal subscription updates.
 - There is no deployed staging origin to point the providers at; `NEXT_PUBLIC_APP_URL` is a local
-  value, and the hosted backend lacks the billing schema (§3), so even the `LEKHAN_FAKE_PAYMENTS=1`
-  walkthrough (§1 of the script) would fail on the first `/api/billing/summary` call against this
-  backend.
+  value. The hosted backend **now has** the billing schema (§3), so the `LEKHAN_FAKE_PAYMENTS=1`
+  rendering walkthrough (§1 of the script) is no longer schema-blocked — it is credential- and
+  fixture-blocked, and it only proves rendering (the fake rail never writes `workspace_plans`).
 
 Per spec §9/§14 this provider-side pass **gates BUILD-complete**. It is not replaced by the green
 suite above.
