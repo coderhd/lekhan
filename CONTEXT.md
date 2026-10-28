@@ -103,3 +103,14 @@ Bring your own model — local inference endpoints (Ollama, LM Studio) on the us
 **On-ramp**:
 Guided first-AI-use flow connecting non-technical users to free-tier provider presets.
 _Avoid_: free trial, credits
+
+**Referral credit**:
+A banked billing month on a Workspace, earned when a referred account activates (one month) or
+converts to paid (one more); applied provider-side at the next renewal. Never cash, never
+transferable.
+_Avoid_: AI credits, points, discount
+
+**AI credit**:
+A retired term from the pre-billing AI ledger (#29). AI use is never metered by Lekhan: users run on
+the free-key on-ramp, BYOK, or BYOL.
+_Avoid_: using for referral credits or quotas
