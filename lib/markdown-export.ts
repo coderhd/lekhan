@@ -2,8 +2,7 @@ import type { JSONContent } from '@tiptap/core'
 import { generateHTML } from '@tiptap/core'
 import { Document } from '@tiptap/extension-document'
 import { Mention } from '@tiptap/extension-mention'
-import { assembleMarkdownFile, type PageMeta } from '@/lib/markdown-io'
-import { markdownEngine } from '@/lib/markdown/engine'
+import { markdownEngine, stripAutoHeading, type PageMeta } from '@/lib/markdown/engine'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 
 /**
@@ -58,26 +57,6 @@ export function resolveTags(pageTags: string[], properties: Record<string, unkno
 }
 
 /**
- * Strip the live editor's auto-filled empty headings (the `heading block*`
- * placeholder that shows "Untitled Document") from a doc. They are not page
- * content: without stripping, an empty page would export a stray `# ` as its
- * first element and any replacement of a doc that doesn't end in a heading
- * (e.g. markdown import hydration) would export a trailing `# ` line. Non-empty
- * headings are the user's real blocks and are kept.
- */
-export function stripAutoHeading(doc: JSONContent): JSONContent {
-	const content = [...(doc.content ?? [])]
-	if (content[0]?.type === 'heading' && !(content[0].content ?? []).length) {
-		content.shift()
-	}
-	const last = content[content.length - 1]
-	if (content.length > 1 && last?.type === 'heading' && !(last.content ?? []).length) {
-		content.pop()
-	}
-	return { ...doc, content }
-}
-
-/**
  * Serialize a page doc for export to markdown, dropping the placeholder
  * leading heading. HTML the editor represents as marks/nodes (color spans,
  * links, code, …) round-trips into the output; saved as `.md`.
@@ -93,7 +72,66 @@ export function serializeExportBodyMarkdown(doc: JSONContent): string {
  * "Unknown node type" and no file downloads.
  */
 export function serializeExportBodyHtml(doc: JSONContent): string {
-	return generateHTML(stripAutoHeading(doc), exportExtensions())
+	return prepareExportMarkup(staticizeTaskCheckboxes(generateHTML(stripAutoHeading(doc), exportExtensions())))
+}
+
+/**
+ * Post-process the serialized body for presentation:
+ *
+ * - Wide tables must scroll sideways without breaking their column grid.
+ *   `display: block` on the `<table>` itself turns each of its `thead`/`tbody`/
+ *   `tfoot` sections into an independent table, so headers and body rows can
+ *   compute different column widths. Wrapping the whole table in a scroll
+ *   container keeps one table model; only the wrapper scrolls.
+ * - Task lists hide their markers (`list-style: none`), which makes WebKit drop
+ *   the implicit list role; an explicit `role="list"` keeps it announced.
+ *
+ * Parse before mutating: attribute values serialized by ProseMirror may contain
+ * literal `<table>` text (an image `alt`, a callout title). A string scan would
+ * treat that text as an element and inject a wrapper — whose quotes close the
+ * user's attribute — turning inert text into live markup (stored XSS in a file
+ * meant for publishing). Building the wrapper through the DOM keeps the token
+ * inside the attribute. Nested tables stay inside their outer wrapper, and an
+ * unbalanced token cannot disable wrapping for the rest of the document.
+ */
+function prepareExportMarkup(html: string): string {
+	const hasTable = html.includes('<table')
+	const hasTaskList = html.includes('data-type="taskList"')
+	if (!hasTable && !hasTaskList) return html
+	// Called from the client export path (and jsdom in tests); server rendering
+	// must not crash, it just skips the presentation pass.
+	if (typeof document === 'undefined') return html
+	const template = document.createElement('template')
+	template.innerHTML = html
+	for (const list of Array.from(template.content.querySelectorAll('ul[data-type="taskList"]'))) {
+		list.setAttribute('role', 'list')
+	}
+	for (const table of Array.from(template.content.querySelectorAll('table'))) {
+		if (table.parentElement?.closest('table')) continue
+		const wrapper = document.createElement('div')
+		wrapper.className = 'table-scroll'
+		// Keyboard users must be able to pan a clipped table (WCAG 2.1.1).
+		wrapper.setAttribute('tabindex', '0')
+		wrapper.setAttribute('role', 'region')
+		wrapper.setAttribute('aria-label', 'Table')
+		table.replaceWith(wrapper)
+		wrapper.appendChild(table)
+	}
+	return template.innerHTML
+}
+
+/**
+ * Task items serialize as live checkbox inputs. In a static export a click or
+ * Space press would toggle the DOM without persisting, and the bare input has
+ * no accessible name. Disable it and label its state so the visual checkmark
+ * remains but the control cannot mislead.
+ */
+function staticizeTaskCheckboxes(html: string): string {
+	return html.replace(/<input type="checkbox"([^>]*)>/g, (_match, attrs: string) => {
+		const checked = /\bchecked(?:="[^"]*")?/.test(attrs)
+		const label = checked ? 'Completed' : 'Not completed'
+		return `<input type="checkbox"${attrs} disabled aria-label="${label}">`
+	})
 }
 
 function escapeHtml(value: string): string {
@@ -104,34 +142,211 @@ function escapeHtml(value: string): string {
 		.replace(/"/g, '&quot;')
 }
 
-/** Self-contained styles for the callout node in standalone HTML export. */
-const CALLOUT_EXPORT_CSS = `
+/**
+ * Self-contained editorial styles for the standalone HTML export. Covers the
+ * block nodes the editor emits (headings, paragraphs, lists, task lists, code,
+ * blockquotes, tables, images, rules) plus the callout node's per-type accents
+ * and collapsed state. Uses only system fonts and inline rules — the exported
+ * file makes no external requests and works offline.
+ */
+const STANDALONE_EXPORT_CSS = `
+:root {
+  color-scheme: light;
+  --export-text: #1f2328;
+  --export-muted: #59636e;
+  --export-bg: #ffffff;
+  --export-surface: #f6f8fa;
+  --export-border: #d1d9e0;
+  --export-link: #0969da;
+}
+
+* { box-sizing: border-box; }
+
+html { background: var(--export-bg); }
+
+body {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 3rem 1.25rem 4rem;
+  background: var(--export-bg);
+  color: var(--export-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  font-size: 16px;
+  line-height: 1.65;
+  overflow-wrap: break-word;
+  -webkit-text-size-adjust: 100%;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 1.8em 0 0.6em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+h1 { font-size: 2rem; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.25rem; }
+h4 { font-size: 1rem; }
+h5 { font-size: 0.9375rem; }
+h6 { font-size: 0.875rem; color: var(--export-muted); }
+
+body > :first-child { margin-top: 0; }
+
+p { margin: 0 0 1em; }
+
+ul, ol { margin: 0 0 1em; padding-left: 1.5rem; }
+li { margin: 0.25em 0; }
+li > p { margin-bottom: 0.35em; }
+
+a { color: var(--export-link); text-decoration: underline; text-underline-offset: 2px; }
+strong { font-weight: 600; }
+mark { background: #fff8c5; color: inherit; padding: 0 0.1em; }
+img { max-width: 100%; height: auto; border-radius: 4px; }
+
+hr { border: 0; border-top: 1px solid var(--export-border); margin: 2rem 0; }
+
+blockquote {
+  margin: 0 0 1em;
+  padding: 0.25rem 0 0.25rem 1rem;
+  border-left: 4px solid var(--export-border);
+  color: var(--export-muted);
+  font-style: italic;
+}
+blockquote > :last-child { margin-bottom: 0; }
+
+code, kbd, samp {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875em;
+}
+:not(pre) > code {
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  background: var(--export-surface);
+}
+pre {
+  margin: 0 0 1.2em;
+  padding: 1rem;
+  overflow-x: auto;
+  border: 1px solid var(--export-border);
+  border-radius: 8px;
+  background: var(--export-surface);
+  line-height: 1.5;
+}
+pre code {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 0.875rem;
+  white-space: pre;
+}
+
+.table-scroll {
+  margin: 0 0 1.2em;
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+th, td { padding: 0.5rem 0.75rem; border: 1px solid var(--export-border); text-align: left; vertical-align: top; }
+th { background: var(--export-surface); font-weight: 600; }
+th > p, td > p { margin: 0; }
+
+ul[data-type="taskList"] { padding-left: 0; list-style: none; }
+/* Direct children only: an ordinary list nested inside a task item must keep
+   normal list-item layout (markers, spacing) instead of inheriting the flex row. */
+ul[data-type="taskList"] > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin: 0.35rem 0;
+}
+ul[data-type="taskList"] > li > label {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin-top: 0.25em;
+}
+ul[data-type="taskList"] > li > div { flex: 1 1 auto; min-width: 0; }
+ul[data-type="taskList"] > li > div > p { margin: 0; }
+ul[data-type="taskList"] input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--export-link);
+  /* Static export: clicking would toggle the DOM without persisting. */
+  pointer-events: none;
+  cursor: default;
+}
+ul[data-type="taskList"] input[type="checkbox"]:disabled { opacity: 1; }
+ul[data-type="taskList"] ul[data-type="taskList"] { margin-top: 0.25rem; padding-left: 1.25rem; }
+
+.mention {
+  padding: 0.1em 0.35em;
+  border: 1px solid rgba(255, 154, 0, 0.3);
+  border-radius: 0.375rem;
+  background: rgba(255, 154, 0, 0.15);
+  color: #92400e;
+  font-size: 0.875em;
+  font-weight: 500;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
 .callout {
-  border: 1px solid #d0d7de;
-  border-left: 4px solid #57606a;
+  --callout-accent: #57606a;
+  --callout-surface: #f6f8fa;
+  margin: 1.25rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--export-border);
+  border-left: 4px solid var(--callout-accent);
   border-radius: 6px;
-  padding: 12px 16px;
-  margin: 16px 0;
+  background: var(--callout-surface);
 }
 .callout-title {
+  margin-bottom: 0.35rem;
+  color: var(--callout-accent);
   font-weight: 600;
-  margin-bottom: 8px;
 }
+.callout-title:empty { display: none; }
 .callout-content > :first-child { margin-top: 0; }
 .callout-content > :last-child { margin-bottom: 0; }
-.callout-note   { border-left-color: #0969da; }
-.callout-warning{ border-left-color: #bf8700; }
-.callout-info   { border-left-color: #0969da; }
-.callout-tip    { border-left-color: #1a7f37; }
-.callout-success{ border-left-color: #1a7f37; }
-.callout-danger { border-left-color: #cf222e; }
-.callout-question{ border-left-color: #8250df; }
+.callout-content p { margin-bottom: 0.5em; }
+
+.callout-note, .callout-info { --callout-accent: #0969da; --callout-surface: #eef6ff; }
+/* Darker amber than the editor accent so the title clears AA contrast on its tint. */
+.callout-warning { --callout-accent: #9a6700; --callout-surface: #fff8e5; }
+.callout-tip, .callout-success { --callout-accent: #1a7f37; --callout-surface: #edf9f0; }
+.callout-danger { --callout-accent: #cf222e; --callout-surface: #fff0ef; }
+.callout-question { --callout-accent: #8250df; --callout-surface: #f7f2ff; }
 .callout[data-callout-collapsed="true"] .callout-content { display: none; }
+
+@media (max-width: 600px) {
+  body { padding: 1.5rem 1rem 3rem; }
+  h1 { font-size: 1.75rem; }
+  h2 { font-size: 1.35rem; }
+}
+
+@media print {
+  body { max-width: none; padding: 0; }
+  h1, h2, h3 { break-after: avoid; }
+  .callout, pre, table, blockquote { break-inside: avoid; }
+  /* Paper cannot scroll: let wide tables and long code lines reflow instead of
+     clipping at the page edge, and allow long tables to paginate. */
+  .table-scroll, pre { overflow: visible; }
+  table { width: auto; max-width: 100%; break-inside: auto; }
+  pre code { white-space: pre-wrap; }
+  /* Paper cannot expand a collapsed callout — show its body in print. */
+  .callout[data-callout-collapsed="true"] .callout-content { display: block; }
+  a { color: inherit; text-decoration: underline; }
+}
 `
 
 /**
- * Wrap the editor's rendered HTML in a minimal standalone HTML document so
- * the `.html` export opens directly in a browser or email client.
+ * Wrap the editor's rendered HTML in a self-contained standalone HTML
+ * document so the `.html` export opens directly in a browser or email client
+ * with the editor's block nodes styled.
  */
 export function buildStandaloneHtml(editorHtml: string, title: string): string {
 	return `<!doctype html>
@@ -140,7 +355,7 @@ export function buildStandaloneHtml(editorHtml: string, title: string): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(title)}</title>
-  <style>${CALLOUT_EXPORT_CSS}</style>
+  <style>${STANDALONE_EXPORT_CSS}</style>
 </head>
 <body>
 ${editorHtml}
@@ -165,5 +380,5 @@ export function buildMarkdownExport(options: {
 	if (tags.length > 0) {
 		meta.tags = tags
 	}
-	return assembleMarkdownFile(meta, body)
+	return markdownEngine.assembleMarkdownFile(meta, body)
 }

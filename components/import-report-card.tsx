@@ -1,12 +1,14 @@
 import { useEffect } from 'react'
-import type { ObsidianImportReport } from '@/services/obsidian-import'
+import type { ImportReport } from '@/services/import-ir'
 import { track } from '@/lib/analytics'
 
 interface ImportReportCardProps {
-	report: ObsidianImportReport
+	report: ImportReport
 	/** Server-side warnings (snapshot/index failures) keyed by page title. */
 	serverWarnings: Array<{ title: string; stage: string; error: string }>
 	createdPages: Array<{ id: string; title: string }>
+	/** Pages recovered from an already-landed batch when resuming (#87). */
+	resumedCount?: number
 	onOpenPage: (pageId: string) => void
 }
 
@@ -14,11 +16,19 @@ interface ImportReportCardProps {
  * The honest import report: what landed, what resolved, what degraded.
  * Per #27's spec — no silent data loss, ever. Interop moments are first
  * impressions; this card is where skeptical switchers decide to trust us.
+ *
+ * Producer-specific degradations (Notion database views, synced blocks,
+ * comments, formulas/rollups, dropped attachments) arrive as
+ * `report.degradations[]` and are rendered verbatim so nothing disappears
+ * silently.
  */
-export function ImportReportCard ({ report, serverWarnings, createdPages, onOpenPage }: ImportReportCardProps) {
+export function ImportReportCard ({ report, serverWarnings, createdPages, resumedCount = 0, onOpenPage }: ImportReportCardProps) {
 	const unresolved = Math.max(0, report.linksUnresolved)
 	const previewPages = createdPages.slice(0, 8)
 	const hiddenPages = createdPages.length - previewPages.length
+	// The core degraded-blocks line below already names unsupported blocks;
+	// don't repeat the same message twice.
+	const degradations = (report.degradations ?? []).filter(line => line.kind !== 'unsupported-blocks')
 
 	useEffect(() => {
 		track('import_report_viewed', {
@@ -49,17 +59,33 @@ export function ImportReportCard ({ report, serverWarnings, createdPages, onOpen
 				)}
 				{report.degradedBlocks > 0 && (
 					<li data-testid="report-degraded">
-						{report.degradedBlocks} block{report.degradedBlocks === 1 ? '' : 's'} couldn't be converted exactly (e.g. non-image embeds) and were kept as links instead
+						{report.degradedBlocks} block{report.degradedBlocks === 1 ? '' : 's'} couldn't be converted exactly (e.g. non-image embeds) and were kept as readable text or links instead
+					</li>
+				)}
+				{resumedCount > 0 && (
+					<li data-testid="report-resumed">
+						{resumedCount} of these page{resumedCount === 1 ? '' : 's'} {resumedCount === 1 ? 'was' : 'were'} already imported in an earlier interrupted attempt and {resumedCount === 1 ? 'was' : 'were'} resumed instead of duplicated
 					</li>
 				)}
 			</ul>
+
+			{degradations.length > 0 && (
+				<div className="rounded border border-amber-500/40 bg-amber-500/10 p-sm mb-md" data-testid="report-degradations">
+					<p className="font-semibold mb-1">What came across differently</p>
+					<ul className="list-disc list-inside text-on-surface-variant space-y-1">
+						{degradations.map(line => (
+							<li key={line.kind} data-testid={`degradation-${line.kind}`}>{line.message}</li>
+						))}
+					</ul>
+				</div>
+			)}
 
 			{serverWarnings.length > 0 && (
 				<div className="rounded border border-amber-500/40 bg-amber-500/10 p-sm mb-md" data-testid="report-warnings">
 					<p className="font-semibold mb-1">{serverWarnings.length} page{serverWarnings.length === 1 ? '' : 's'} need attention:</p>
 					<ul className="list-disc list-inside text-on-surface-variant">
 						{serverWarnings.map((warning, i) => (
-							<li key={i}>
+							<li key={`${warning.title}:${warning.stage}:${i}`}>
 								<span className="font-medium">{warning.title}</span> — {warning.stage === 'snapshot' ? 'content could not be saved' : 'search/links could not be indexed'}: {warning.error}
 							</li>
 						))}

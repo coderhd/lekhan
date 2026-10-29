@@ -26,6 +26,7 @@ import { SlashMenuExtension, buildSlashMenuItems } from '@/lib/slash-menu-extens
 import { SlashMenuComponent } from './slash-menu'
 import ProfileMenu from './profile-menu'
 import ThemeToggle from './theme-toggle'
+import PublicPageFooter from './public-page-footer'
 import { useGlobalSearch } from '@/components/global-search-palette'
 import { ColorHighlightPopover } from './color-highlight-popover'
 import { ImageUploadButton } from './image-upload-button'
@@ -35,7 +36,7 @@ import { PromptDialog } from './ui/prompt-dialog'
 import * as Y from 'yjs'
 import { Mention } from '@tiptap/extension-mention'
 import MentionList, { MentionItem } from './mention-list'
-import { fetchPageDetails, fetchPageMemberRole, updatePageTitle, fetchMentionablePageCollaborators, fetchPageTags, fetchWorkspacePages, createPage } from '@/services/graph'
+import { fetchPageDetails, fetchPageMemberRole, updatePageTitle, updatePageProperties, fetchMentionablePageCollaborators, fetchPageTags, fetchWorkspacePages, createPage } from '@/services/graph'
 import { Wikilink, type WorkspacePageSummary, normalizeWikilinkTarget } from '@/lib/wikilink'
 
 import { TableToolbar } from './table-toolbar'
@@ -43,7 +44,7 @@ import { CodeBlockLanguageSelect } from './code-block-language-select'
 import { DragContextMenu } from './drag-context-menu'
 import { exportToDocx, exportToPdf, downloadBlob } from '@/lib/export-utils'
 import { buildMarkdownExport, exportFilename, serializeExportBodyMarkdown, serializeExportBodyHtml, buildStandaloneHtml } from '@/lib/markdown-export'
-import { Download, FileText, FileSpreadsheet, FileCode, Globe, type LucideIcon } from 'lucide-react'
+import { Download, Copy as CopyIcon, FileText, FileSpreadsheet, FileCode, Globe, type LucideIcon } from 'lucide-react'
 import { track } from '@/lib/analytics'
 
 type ExportType = 'markdown' | 'html' | 'docx' | 'pdf'
@@ -53,6 +54,14 @@ const EXPORT_MENU_ITEMS: { type: ExportType; label: string; icon: LucideIcon; ic
 	{ type: 'html', label: 'Download as HTML (.html)', icon: Globe, iconClass: 'text-orange-500' },
 	{ type: 'docx', label: 'Download as DOCX', icon: FileSpreadsheet, iconClass: 'text-blue-500' },
 	{ type: 'pdf', label: 'Download as PDF', icon: FileText, iconClass: 'text-red-500' },
+]
+
+// Explicit copy-out affordances (SIL-59): a single automatic payload cannot
+// serve both targets — Obsidian prefers `text/html` when present and would drop
+// frontmatter/degrade callouts, so it needs the plain Obsidian markdown alone.
+const COPY_MENU_ITEMS: { target: ClipboardTarget; label: string; icon: LucideIcon; iconClass: string }[] = [
+	{ target: 'obsidian', label: 'Copy as Obsidian markdown', icon: CopyIcon, iconClass: 'text-violet-500' },
+	{ target: 'notion', label: 'Copy for Notion (rich)', icon: CopyIcon, iconClass: 'text-pink-500' },
 ]
 
 interface EditorWorkspaceProps {
@@ -65,6 +74,13 @@ interface EditorWorkspaceProps {
 		email: string
 		full_name?: string
 	}
+	/**
+	 * True when the route granted a synthetic anonymous session (signed-out
+	 * visitor on a public page). Drives the public reading chrome: reduced
+	 * header, Public badge, footer signup CTA. Never inferred from `isViewer`
+	 * — a member viewer is a different experience.
+	 */
+	anonVisitor?: boolean
 }
 
 const CURSOR_COLORS = [
@@ -77,12 +93,15 @@ const CURSOR_COLORS = [
 ]
 
 import { getSharedExtensions } from '@/lib/editor-extensions'
-import { decideMarkdownPaste } from '@/lib/markdown-paste'
+import { classifyClipboardPaste } from '@/lib/markdown-paste'
+import { splitObsidianFrontmatter } from '@/lib/obsidian-clipboard'
+import { notionHtmlToMarkdown } from '@/lib/notion-clipboard'
 import { insertParsedHtml } from '@/lib/insert-parsed-html'
 import { hydrateOnOpen } from '@/lib/import-hydration'
 import { Callout, BLOCKQUOTE_MARKER_RE, handleCalloutInputRule } from '@/lib/callout'
 import { CalloutNodeView } from './callout-node-view'
-import { InputRule } from '@tiptap/core'
+import { buildClipboardPayload, writeClipboardPayload, copyClipboardPayloadToSystem, type ClipboardTarget } from '@/lib/markdown/clipboard'
+import { InputRule, type JSONContent } from '@tiptap/core'
 
 const LiveCallout = Callout.extend({
 	addNodeView() {
@@ -110,6 +129,7 @@ export default function EditorWorkspace({	pageId,
 	token,
 	initialContent,
 	currentUser,
+	anonVisitor = false,
 }: EditorWorkspaceProps) {
 	const router = useRouter()
 	const [title, setTitle] = useState(initialTitle)
@@ -142,6 +162,19 @@ export default function EditorWorkspace({	pageId,
 	const [workspaceId, setWorkspaceId] = useState<string | null>(null)
 	const [workspacePages, setWorkspacePages] = useState<WorkspacePageSummary[]>([])
 
+	// Live Page metadata for clipboard copy-out (S3). The copy handler is
+	// synchronous, so title/tags/properties are mirrored into a ref rather than
+	// read from state (which would be stale inside the editorProps closure).
+	const clipboardMetaRef = useRef<{ title: string; tags: string[]; properties: Record<string, unknown> }>({
+		title: initialTitle,
+		tags: [],
+		properties: {},
+	})
+
+	useEffect(() => {
+		clipboardMetaRef.current.title = title
+	}, [title])
+
 	useEffect(() => {
 		let isMounted = true
 		const loadMentionables = async () => {
@@ -159,6 +192,9 @@ export default function EditorWorkspace({	pageId,
 				const details = await fetchPageDetails(pageId)
 				if (details?.workspace_id && isMounted) {
 					setWorkspaceId(details.workspace_id)
+					// Mirror Page properties for clipboard copy-out (S3); the
+					// synchronous copy handler cannot fetch on demand.
+					clipboardMetaRef.current.properties = details.properties || {}
 					const pages = await fetchWorkspacePages(details.workspace_id)
 					if (isMounted) {
 						const summaries: WorkspacePageSummary[] = pages.map(p => ({ id: p.id, title: p.title }))
@@ -169,14 +205,25 @@ export default function EditorWorkspace({	pageId,
 				console.error('Error fetching workspace pages for wikilinks:', err)
 			}
 		}
-		if (pageId) {
+		// Tags load independently and best-effort: a missing/failed tag fetch must
+		// never block workspace setup (wikilinks) or clipboard metadata.
+		const loadClipboardTags = async () => {
+			try {
+				const pageTags = await fetchPageTags(pageId)
+				if (isMounted) clipboardMetaRef.current.tags = pageTags.map(t => t.tag)
+			} catch (err) {
+				console.error('Error fetching page tags for clipboard:', err)
+			}
+		}
+		if (pageId && !anonVisitor) {
 			loadMentionables()
 			loadWorkspacePages()
+			loadClipboardTags()
 		}
 		return () => {
 			isMounted = false
 		}
-	}, [pageId])
+	}, [pageId, anonVisitor])
 
 	const inFlightPageCreationsRef = useRef<Set<string>>(new Set())
 
@@ -208,7 +255,10 @@ export default function EditorWorkspace({	pageId,
 	handleCreateWikilinkPageRef.current = handleCreateWikilinkPage
 
 	const handleExport = async (type: ExportType) => {
-		if (!editor) return
+		if (!editor) {
+			setIsExportOpen(false)
+			return
+		}
 		setIsExporting(true)
 		track('export_triggered', { format: type })
 		try {
@@ -237,6 +287,36 @@ export default function EditorWorkspace({	pageId,
 			}
 		} catch (err) {
 			console.error('Export error:', err)
+		} finally {
+			setIsExporting(false)
+			setIsExportOpen(false)
+		}
+	}
+
+	// Explicit copy-out (SIL-59): copy the whole Page as an Obsidian-safe
+	// markdown payload, or as the Notion-facing rich (dual-MIME) payload. Used
+	// by the Export menu's "Copy for …" items, outside any copy event.
+	const handleCopyFor = async (target: ClipboardTarget) => {
+		if (!editor) {
+			setIsExportOpen(false)
+			return
+		}
+		setIsExporting(true)
+		try {
+			const payload = buildClipboardPayload(editor.getJSON(), clipboardMetaRef.current, {
+				wholePage: true,
+				target,
+			})
+			const ok = await copyClipboardPayloadToSystem(payload)
+			if (!ok) {
+				toast.error('Could not access the clipboard')
+				return
+			}
+			track('copy_out_resolved', { whole_page: true, target })
+			toast.success(target === 'obsidian' ? 'Copied as Obsidian markdown' : 'Copied for Notion')
+		} catch (err) {
+			console.warn('Copy-out failed:', err)
+			toast.error('Copy failed')
 		} finally {
 			setIsExporting(false)
 			setIsExportOpen(false)
@@ -563,6 +643,32 @@ export default function EditorWorkspace({	pageId,
 			attributes: {
 				class: 'prose dark:prose-invert max-w-none focus:outline-none min-h-[500px] text-on-surface break-words w-full',
 			},
+			handleDOMEvents: {
+				// Copy-out (SIL-9 S3): the default ⌘C writes the Obsidian-flavored
+				// markdown as `text/plain` ONLY. A dual payload is unsafe here —
+				// Obsidian prefers `text/html` when present and runs HTML→markdown,
+				// dropping frontmatter and degrading callouts (QA dogfood, SIL-68).
+				// Notion users use the explicit "Copy for Notion" action. On any
+				// failure we fall back to the browser's native copy.
+				copy: (view, event) => {
+					const { state } = view
+					const { selection } = state
+					if (selection.empty) return false
+					try {
+						const { from, to } = selection
+						const wholePage = from <= 0 && to >= state.doc.content.size
+						const doc = (wholePage ? state.doc : state.doc.cut(from, to)).toJSON() as JSONContent
+						const payload = buildClipboardPayload(doc, clipboardMetaRef.current, { wholePage, target: 'obsidian' })
+						if (!writeClipboardPayload(event, payload)) return false
+						track('copy_out_resolved', { whole_page: wholePage, target: 'obsidian' })
+						event.preventDefault()
+						return true
+					} catch (err) {
+						console.warn('Clipboard copy-out failed; falling back to native copy:', err)
+						return false
+					}
+				},
+			},
 			handlePaste: (_view, event) => {
 				// Use the live editor instance. useEditor may recreate the editor
 				// when [ydoc, provider] deps change (async collab setup), so the
@@ -578,21 +684,117 @@ export default function EditorWorkspace({	pageId,
 					return false
 				}
 
-				const kind = decideMarkdownPaste(plainText, htmlText)
+				const kind = classifyClipboardPaste(plainText, htmlText)
+				const parser = (currentEditor as any).storage?.markdown?.parser
+				const replaceDocument = currentEditor.isEmpty || currentEditor.getText().trim() === ''
 
-				if (kind === 'markdown') {
-					const parser = (currentEditor as any).storage?.markdown?.parser
-					if (parser) {
-						const parsedHtml = parser.parse(plainText)
+				if (kind === 'obsidian-markdown' && parser) {
+					// Strip leading frontmatter before parsing the body, and land
+					// the extracted keys as Page properties (Obsidian dialect).
+					const { properties, body } = splitObsidianFrontmatter(plainText)
+					const parsedHtml = body ? parser.parse(body) : ''
+					const hasProperties = Object.keys(properties).length > 0
+					// A frontmatter-only note has no body HTML; it must still apply
+					// its properties and must not fall through to the native paste,
+					// which would leave the raw YAML in the document.
+					if (parsedHtml || hasProperties) {
+						event.preventDefault()
+						track('paste_in_resolved', { kind: 'obsidian-markdown' })
+						// Snapshot the paste target so a deferred apply can tell
+						// whether the document moved on while the properties RPC
+						// was in flight.
+						const pasteSelection = {
+							from: currentEditor.state.selection.from,
+							to: currentEditor.state.selection.to,
+						}
+						const docAtPaste = currentEditor.state.doc
+						const pastePageId = pageId
+						const applyBody = () => {
+							if (!parsedHtml) return
+							// A page change must not redirect the deferred body into
+							// another document.
+							if (pageIdRef.current !== pastePageId) return
+							// Prefer the live editor: useEditor may have recreated it
+							// while the RPC was pending. Never drop the body just
+							// because the paste captured the previous instance.
+							const liveEditor = editorRef.current ?? currentEditor
+							if (!liveEditor || liveEditor.isDestroyed) return
+							if (liveEditor.state.doc.eq(docAtPaste)) {
+								// Document untouched: insert at the original paste
+								// target with the original replace decision.
+								liveEditor.commands.setTextSelection(pasteSelection)
+								insertParsedHtml(liveEditor, parsedHtml, { replaceDocument })
+							} else {
+								// Edits landed while the RPC was pending. Never
+								// replace the document the user has been typing in;
+								// insert at the live selection instead.
+								insertParsedHtml(liveEditor, parsedHtml, { replaceDocument: false })
+							}
+						}
+						if (hasProperties) {
+							// Persist the properties BEFORE inserting the body: the
+							// insert triggers the debounced save/graph re-index,
+							// which derives tag rows from `pages.properties`. The
+							// apply above re-validates the document so edits typed
+							// during the RPC are never clobbered.
+							updatePageProperties(pageId, properties)
+								.then(() => {
+									// Keep the copy-out metadata ref in step with what
+									// the paste just merged, so an immediate ⌘C emits
+									// the new properties/tags rather than the pre-paste
+									// values. The optimistic merge is authoritative here:
+									// the server derives tag rows from properties only
+									// after the debounced save, so refetching now would
+									// overwrite the correct tags with stale rows.
+									clipboardMetaRef.current.properties = {
+										...clipboardMetaRef.current.properties,
+										...properties,
+									}
+									const mergedTags = clipboardMetaRef.current.properties.tags
+									if (Array.isArray(mergedTags)) {
+										clipboardMetaRef.current.tags = mergedTags.filter(
+											(t): t is string => typeof t === 'string',
+										)
+									}
+									applyBody()
+								})
+								.catch((err) => {
+									console.error('Error applying pasted Page properties:', err)
+									applyBody()
+								})
+						} else {
+							applyBody()
+						}
+						return true
+					}
+				}
+
+				if (kind === 'notion-html' && parser && htmlText) {
+					// Convert Notion HTML to markdown so mentions become Page
+					// links. Fall back to the native HTML paste when conversion
+					// yields nothing rather than dropping content.
+					const markdown = notionHtmlToMarkdown(htmlText)
+					if (markdown) {
+						const parsedHtml = parser.parse(markdown)
 						if (parsedHtml) {
 							event.preventDefault()
-							track('paste_in_resolved', { kind: 'markdown' })
-							// parsedHtml is already HTML — see lib/insert-parsed-html.ts:
-							// the markdown command overrides would re-parse it as markdown.
-							const replaceDocument = currentEditor.isEmpty || currentEditor.getText().trim() === ''
+							track('paste_in_resolved', { kind: 'notion-html' })
 							insertParsedHtml(currentEditor, parsedHtml, { replaceDocument })
 							return true
 						}
+					}
+					return false
+				}
+
+				if (kind === 'markdown' && parser) {
+					const parsedHtml = parser.parse(plainText)
+					if (parsedHtml) {
+						event.preventDefault()
+						track('paste_in_resolved', { kind: 'markdown' })
+						// parsedHtml is already HTML — see lib/insert-parsed-html.ts:
+						// the markdown command overrides would re-parse it as markdown.
+						insertParsedHtml(currentEditor, parsedHtml, { replaceDocument })
+						return true
 					}
 					return false
 				}
@@ -633,6 +835,18 @@ export default function EditorWorkspace({	pageId,
 	// extension storage (e.g. markdown parser) is empty. Keep a ref to the
 	// live editor so paste always reads the current instance.
 	const editorRef = useRef<Editor | null>(null)
+
+	// The page the editor currently shows. A deferred Obsidian paste captures
+	// this at paste time so it can never be redirected into a different document
+	// if the component switches pages while the properties RPC is in flight.
+	const pageIdRef = useRef(pageId)
+
+	// Sync after commit, like editorRef below: mutating a ref during render is
+	// unsound under concurrent renders (an interrupted render for a new pageId
+	// could poison the guard before commit).
+	useLayoutEffect(() => {
+		pageIdRef.current = pageId
+	}, [pageId])
 
 	// Keep the ref in sync after commit instead of mutating it during render.
 	// handlePaste reads editorRef.current inside a user event (post-commit), so
@@ -728,8 +942,11 @@ export default function EditorWorkspace({	pageId,
 		return () => clearTimeout(timer)
 	}, [editor, token, isViewer])
 
-	// Cmd/Ctrl+L opens the Lekhan Bot bar
+	// Cmd/Ctrl+L opens the Lekhan Bot bar; Cmd/Ctrl+Shift+S opens version
+	// history. Anonymous readers get neither — both features are hidden from
+	// the reading surface and history would read from an empty local store.
 	useEffect(() => {
+		if (anonVisitor) return
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
 				e.preventDefault()
@@ -742,7 +959,7 @@ export default function EditorWorkspace({	pageId,
 		}
 		document.addEventListener('keydown', handleKeyDown)
 		return () => document.removeEventListener('keydown', handleKeyDown)
-	}, [handleOpenLekhanBot])
+	}, [handleOpenLekhanBot, anonVisitor])
 
 	useEffect(() => {
 		if (editor && isViewer !== null) {
@@ -786,13 +1003,25 @@ export default function EditorWorkspace({	pageId,
 								</div>
 							)}
 						</div>
-						<div className="hidden md:flex items-center gap-xs ml-2 text-on-surface-variant/60 font-label-sm text-label-sm">
-							<SyncIndicator connectionState={connectionState} isSynced={isSynced} />
-						</div>
+						{anonVisitor && (
+							<span
+								className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold whitespace-nowrap"
+								title="This page is shared publicly — anyone with the link can view it"
+							>
+								<Globe className="w-3.5 h-3.5" />
+								<span>Public</span>
+								<span className="text-on-surface-variant/80 font-semibold">· view-only</span>
+							</span>
+						)}
+						{!anonVisitor && (
+							<div className="hidden md:flex items-center gap-xs ml-2 text-on-surface-variant/60 font-label-sm text-label-sm">
+								<SyncIndicator connectionState={connectionState} isSynced={isSynced} />
+							</div>
+						)}
 					</div>
 
 					<div className="flex items-center gap-sm md:gap-md">
-						<div className="hidden sm:flex -space-x-2 items-center mr-2 md:mr-4">
+						<div className={anonVisitor ? 'hidden' : 'hidden sm:flex -space-x-2 items-center mr-2 md:mr-4'}>
 							{activeUsers.slice(0, 3).map((activeUser, idx) => (
 								<div
 									key={idx}
@@ -828,43 +1057,51 @@ export default function EditorWorkspace({	pageId,
 							)}
 						</div>
 
-						<button
-							onClick={openGlobalSearch}
-							className="hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium bg-surface-container-low"
-							title="Search (Cmd+K)"
-						>
-							<span className="material-symbols-outlined text-primary-container text-lg">search</span>
-						</button>
+						{!anonVisitor && (
+							<button
+								onClick={openGlobalSearch}
+								className="hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium bg-surface-container-low"
+								title="Search (Cmd+K)"
+							>
+								<span className="material-symbols-outlined text-primary-container text-lg">search</span>
+							</button>
+						)}
 
-						<button
-							onClick={() => { setIsHistoryOpen(!isHistoryOpen); setIsAIPanelOpen(false); }}
-							className={`hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium ${isHistoryOpen ? 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/30' : 'bg-surface-container-low'}`}
-							title="Version History"
-						>
-							<span className="material-symbols-outlined text-primary-container text-lg">history</span>
-							<span className="hidden lg:inline">History</span>
-						</button>
+						{!anonVisitor && (
+							<button
+								onClick={() => { setIsHistoryOpen(!isHistoryOpen); setIsAIPanelOpen(false); }}
+								className={`hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium ${isHistoryOpen ? 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/30' : 'bg-surface-container-low'}`}
+								title="Version History"
+							>
+								<span className="material-symbols-outlined text-primary-container text-lg">history</span>
+								<span className="hidden lg:inline">History</span>
+							</button>
+						)}
 
-						<button
-							onClick={() => { setIsAIPanelOpen(!isAIPanelOpen); setIsHistoryOpen(false); }}
-							className={`hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium ${isAIPanelOpen ? 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/30' : 'bg-surface-container-low'}`}
-							title="Settings"
-						>
-							<span className="material-symbols-outlined text-primary-container text-lg">settings</span>
-							<span className="hidden lg:inline">Settings</span>
-						</button>
+						{!anonVisitor && (
+							<button
+								onClick={() => { setIsAIPanelOpen(!isAIPanelOpen); setIsHistoryOpen(false); }}
+								className={`hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium ${isAIPanelOpen ? 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/30' : 'bg-surface-container-low'}`}
+								title="Settings"
+							>
+								<span className="material-symbols-outlined text-primary-container text-lg">settings</span>
+								<span className="hidden lg:inline">Settings</span>
+							</button>
+						)}
 
-						<MobileHeaderMenu
-							isHistoryOpen={isHistoryOpen}
-							setIsHistoryOpen={setIsHistoryOpen}
-							isAIPanelOpen={isAIPanelOpen}
-							setIsAIPanelOpen={setIsAIPanelOpen}
-							theme={theme}
-							toggleTheme={toggleTheme}
-							activeUsers={activeUsers}
-							connectionState={connectionState}
-							isSynced={isSynced}
-						/>
+						{!anonVisitor && (
+							<MobileHeaderMenu
+								isHistoryOpen={isHistoryOpen}
+								setIsHistoryOpen={setIsHistoryOpen}
+								isAIPanelOpen={isAIPanelOpen}
+								setIsAIPanelOpen={setIsAIPanelOpen}
+								theme={theme}
+								toggleTheme={toggleTheme}
+								activeUsers={activeUsers}
+								connectionState={connectionState}
+								isSynced={isSynced}
+							/>
+						)}
 
 						{!isViewer && (
 							<div className="flex items-center gap-sm">
@@ -879,7 +1116,7 @@ export default function EditorWorkspace({	pageId,
 										aria-haspopup="menu"
 										aria-expanded={isExportOpen}
 										className="bg-surface-container-low border border-black/10 dark:border-white/10 text-on-surface px-2.5 h-8 rounded-lg font-medium text-xs hover:bg-black/5 dark:hover:bg-white/10 transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50 disabled:pointer-events-none"
-										title="Export Document"
+										title="Export or copy"
 									>
 										<Download className="w-3.5 h-3.5 text-primary" />
 										<span className="hidden lg:inline font-bold">Export</span>
@@ -904,6 +1141,23 @@ export default function EditorWorkspace({	pageId,
 														</button>
 													)
 												})}
+												<div role="separator" className="my-0.5 h-px bg-black/10 dark:bg-white/10" />
+												{COPY_MENU_ITEMS.map((item) => {
+													const Icon = item.icon
+													return (
+														<button
+															key={item.target}
+															type="button"
+															disabled={isExporting}
+															onClick={() => handleCopyFor(item.target)}
+															className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-on-surface hover:bg-black/5 dark:hover:bg-white/10 text-left transition-colors font-medium w-full disabled:opacity-50 disabled:pointer-events-none"
+															role="menuitem"
+														>
+															<Icon className={`w-4 h-4 ${item.iconClass}`} />
+															<span>{item.label}</span>
+														</button>
+													)
+												})}
 											</div>
 										</div>
 									)}
@@ -919,13 +1173,15 @@ export default function EditorWorkspace({	pageId,
 							</div>
 						)}
 
-						<div className="hidden md:block">
+						<div className={anonVisitor ? 'block' : 'hidden md:block'}>
 							<ThemeToggle />
 						</div>
 
-						<div>
-							<ProfileMenu user={currentUser} size="sm" />
-						</div>
+						{!anonVisitor && (
+							<div>
+								<ProfileMenu user={currentUser} size="sm" />
+							</div>
+						)}
 					</div>
 				</div>
 
@@ -1029,10 +1285,15 @@ export default function EditorWorkspace({	pageId,
 						<ColorHighlightPopover editor={editor} />
 					</div>
 					</div>
+				) : anonVisitor ? (
+					<div className="min-h-[40px] py-2 px-6 md:px-10 flex justify-center items-center bg-primary/10 border-y border-primary/20 text-on-surface-variant text-sm font-medium">
+						<span className="material-symbols-outlined mr-2 text-base">link</span>
+						Anyone with the link can view this page.
+					</div>
 				) : (
 					<div className="min-h-[40px] py-2 px-6 md:px-10 flex justify-center items-center bg-blue-500/10 border-y border-blue-500/20 text-blue-600 dark:text-blue-400 text-sm font-semibold">
 						<span className="material-symbols-outlined mr-2 text-base">visibility</span>
-						You only have viewing access to this document.
+						You have viewing access to this page.
 					</div>
 				)}
 
@@ -1073,6 +1334,8 @@ export default function EditorWorkspace({	pageId,
 								<EditorContent key={previewVersionName || 'preview'} editor={previewEditor} />
 							</div>
 						)}
+
+						{anonVisitor && <PublicPageFooter />}
 					</div>
 				</main>
 

@@ -1,0 +1,84 @@
+---
+title: Troubleshooting
+description: Fixes for the problems people hit most often.
+---
+
+## Sync and offline
+
+**I edited offline — will my changes come back?**
+Yes. Edits are applied to your local replica first and merge when the connection returns. Keep the tab
+open until the sync indicator settles, then reopen the page to confirm.
+
+**A page looks stale on another device.**
+Check the sync indicator first. If it stays disconnected, reload the app; pending local changes are
+replayed on reconnect. If two devices edited the same block offline, Lekhan merges the underlying
+CRDT state — review the result rather than expecting one side to win.
+
+**I see a version conflict banner.**
+That is the merge being surfaced, not data loss. Open the page, review the merged content, and use
+version history if you need to compare with an earlier snapshot.
+
+## AI
+
+**The connection test fails.**
+- Re-check the key: copy it again from the provider dashboard and paste it without trailing spaces.
+- Confirm the model is available to that key (free models are often the first to be withdrawn).
+- For BYOK, confirm your network allows requests to the provider's API domain.
+- For BYOL, confirm the local server is running. For the **Ollama** and **LM Studio** provider types
+  the base URL must **not** end in `/v1` (Ollama: `http://localhost:11434`, LM Studio:
+  `http://localhost:1234`); `/v1` only belongs on the **Custom** provider.
+
+**AI works on one device but not another.**
+Keys are stored as ciphertext you can only decrypt on the device that created them. Your key list may
+appear on the new device, but it cannot be decrypted there — paste the key again to use it. Lekhan
+cannot recover or decrypt a key for you.
+
+**Free models are slow or unavailable.**
+Free tiers are rate-limited and change without notice. Try another free preset or add your own key.
+Free models may change or be slower; this is not a Lekhan outage.
+
+**I do not want AI at all.**
+Do not connect a provider. Every page, import, and export works without AI.
+
+## Imports
+
+**"No markdown files found."**
+Select the folder that directly contains your notes, not its parent and not an export wrapper. For a
+ZIP, make sure the notes are inside it rather than only attachments.
+
+**Some links did not resolve.**
+Links resolve by page title. If the target note was not in the import, the link stays unresolved
+until you create that page. The import report lists link resolution counts.
+
+**An image or embed is missing.**
+Attachments that could not be read are reported as degraded and may appear as links instead. If a vault
+exceeds the import limits (per-file size, total size, or image count) the import stops with an error
+rather than skipping files — split the vault or remove oversized attachments and try again.
+
+**Can I import the same vault twice?**
+You can, but you will get duplicate pages. Import into a fresh workspace if you want a clean copy.
+
+## Search and graph
+
+**A new page is not in search or the graph yet.**
+The index updates as you type. Wait for sync to settle, then search again. Unresolved links still
+appear as edges even when the target page does not exist.
+
+## Billing
+
+**I upgraded but do not see the new limits.**
+Refresh after checkout completes and confirm the plan in **Settings → Billing**. Plan changes attach to
+the workspace, so make sure you are looking at the right one.
+
+**How do I cancel?**
+Open **Settings → Billing** and cancel. You keep access through the end of the paid period, and your
+pages remain exportable.
+
+**I was charged in a different currency than expected.**
+USD is handled by Stripe and INR by Razorpay based on your billing country. Team is USD-only at
+launch.
+
+## Still stuck?
+
+Check the [FAQ](/docs/faq), then contact support with your workspace name, the page involved, and the
+approximate time of the problem.

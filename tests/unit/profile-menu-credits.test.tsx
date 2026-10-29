@@ -22,7 +22,7 @@ vi.mock('next/navigation', () => ({
 describe('ProfileMenu plan badge (T12)', () => {
 	it('shows the plan badge, not a credit counter', () => {
 		render(<ProfileMenu user={{ email: 'user@example.com', full_name: 'Test User' }} />)
-		const avatarBtn = screen.getByRole('button', { name: /TU/i })
+		const avatarBtn = screen.getByRole('button', { name: /Account menu/ })
 		fireEvent.click(avatarBtn)
 
 		expect(screen.getByText('Plan')).toBeInTheDocument()

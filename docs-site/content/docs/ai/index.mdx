@@ -1,0 +1,43 @@
+---
+title: AI on Your Terms
+description: Every plan runs AI on your own key or your own machine — no bundled credits.
+---
+
+Lekhan's AI is a **provider registry**, not a hosted assistant. You connect the providers you trust,
+and every request runs on *your* key or a model on your own machine. Cloud calls are relayed through
+Lekhan's API so the browser never holds your key in the clear, but Lekhan stores no prompts as AI logs,
+never meters usage, and never ships a hosted inference key.
+
+## Three ways to connect AI
+
+<Cards>
+  <Card title="Free-key providers" description="Free-tier presets you can paste a key from: Gemini, Groq, DeepSeek, Z.AI, and more." href="/docs/ai/free-key-on-ramp" />
+  <Card title="BYOK" description="Bring your own cloud key: Anthropic, OpenAI, Gemini, DeepSeek, Qwen, Z.AI, Groq, OpenRouter, Sarvam, or a custom endpoint." href="/docs/ai/byok" />
+  <Card title="BYOL" description="Run a model locally with Ollama, LM Studio, or llama.cpp. Nothing leaves your machine." href="/docs/ai/byol" />
+</Cards>
+
+## The rules, stated plainly
+
+- **No bundled AI credits on any tier.** AI usage is never a Lekhan line item.
+- **No metering.** Lekhan does not count tokens or cap AI usage; the provider's quota applies.
+- **No stored prompts.** Cloud requests are relayed to your provider, not written to AI logs.
+- **Keys are encrypted in your browser** (AES-256-GCM) before they are stored.
+- **Local stays local.** Ollama and LM Studio requests go directly from your browser to `localhost`.
+- **Free models may change or be slower.** Free-tier availability is controlled by the provider.
+
+## Choosing a path
+
+| If you… | Start with |
+| --- | --- |
+| Have never made an API key | [Free-key providers](/docs/ai/free-key-on-ramp) |
+| Already pay for a provider | [BYOK](/docs/ai/byok) |
+| Want prompts to stay on your device | [BYOL](/docs/ai/byol) |
+| Are on a locked-down network | BYOK (cloud) or BYOL (local server) |
+
+You can switch paths at any time. Connecting a local model does not remove your cloud keys, and
+removing a key never touches your pages.
+
+## Where AI appears
+
+Once a provider is connected, the assistant is available in the editor. You can switch providers and
+models per request, so a quick draft can use a fast model while a careful edit uses a stronger one.

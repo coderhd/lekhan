@@ -6,6 +6,7 @@ import {
 	fetchWorkspacePages,
 	createPage,
 	updatePageTitle,
+	updatePageProperties,
 	deletePage,
 	updatePagePublicStatus,
 	fetchPageDetails,
@@ -46,6 +47,7 @@ vi.mock('@/lib/supabase', () => {
 	return {
 		supabase: {
 			from: vi.fn(() => builder),
+			rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
 		},
 	}
 })
@@ -120,6 +122,19 @@ describe('Graph Service', () => {
 		expect(supabase.from).toHaveBeenCalledWith('pages')
 		expect(mockBuilder.update).toHaveBeenCalledWith({ title: 'New Title' })
 		expect(mockBuilder.eq).toHaveBeenCalledWith('id', 'p-1')
+	})
+
+	it('updatePageProperties merges via the atomic RPC', async () => {
+		await updatePageProperties('p-1', { status: 'active' })
+		expect((supabase as any).rpc).toHaveBeenCalledWith('merge_page_properties', {
+			p_page_id: 'p-1',
+			p_patch: { status: 'active' },
+		})
+	})
+
+	it('updatePageProperties propagates RPC errors', async () => {
+		;(supabase as any).rpc.mockResolvedValueOnce({ data: null, error: new Error('boom') })
+		await expect(updatePageProperties('p-1', { a: 1 })).rejects.toThrow('boom')
 	})
 
 	it('deletePage deletes the page and its mapped legacy documents row', async () => {

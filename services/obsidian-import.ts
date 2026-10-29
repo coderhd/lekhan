@@ -1,16 +1,22 @@
 import JSZip from 'jszip'
-import { parseFrontmatter, parseMarkdown } from '@/lib/markdown-io'
+import { markdownEngine, uint8ArrayToBase64 } from '@/lib/markdown/engine'
 import { fitLiveSchema } from '@/lib/import-hydration'
-import { contentToYjsBase64, contentToPlainText, uint8ArrayToBase64 } from '@/lib/yjs-seed'
 import { titleFromFilename } from '@/lib/title-from-filename'
+import { canonicalJson, stableHash } from '@/lib/stable-content'
+import type { ImportIR, ImportPage, ImportReport } from '@/services/import-ir'
+import {
+	MAX_IMPORT_FILE_BYTES,
+	MAX_IMPORT_IMAGE_COUNT,
+	MAX_IMPORT_PAGES,
+	MAX_IMPORT_TOTAL_BYTES,
+} from '@/services/import-limits'
 
-export const MAX_IMPORT_PAGES = 2000
-/** Per-file unpacked byte limit for vault entries (shared across all vault readers). */
-export const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024
-/** Aggregate unpacked byte limit across all accepted vault entries. */
-export const MAX_IMPORT_TOTAL_BYTES = 100 * 1024 * 1024
-/** Maximum number of accepted image attachments (counted separately from Markdown pages). */
-export const MAX_IMPORT_IMAGE_COUNT = 1000
+export {
+	MAX_IMPORT_FILE_BYTES,
+	MAX_IMPORT_IMAGE_COUNT,
+	MAX_IMPORT_PAGES,
+	MAX_IMPORT_TOTAL_BYTES,
+} from '@/services/import-limits'
 
 export interface VaultEntry {
 	/** Vault-relative path with forward slashes, e.g. `guides/foo.md`. */
@@ -268,28 +274,21 @@ export async function readVaultDirectory (handle: VaultDirectoryHandle): Promise
 	return { files, directories: [...directories] }
 }
 
-export interface ObsidianImportPage {
-	title: string
-	folderPath: string | null
-	properties: Record<string, unknown>
-	tags: string[]
-	contentYjsBase64: string
-	plainText: string
-	isFolder: boolean
-}
+/**
+ * @deprecated Use the source-agnostic `ImportPage` from `services/import-ir`.
+ * Kept as an alias so #27 callers and tests keep working while the pipeline
+ * gains more producers.
+ */
+export type ObsidianImportPage = ImportPage
 
-export interface ObsidianImportIR {
-	workspaceId: string
-	pages: ObsidianImportPage[]
-}
+/**
+ * @deprecated Use the source-agnostic `ImportIR` from `services/import-ir`.
+ * Obsidian remains the producer named by `source`.
+ */
+export type ObsidianImportIR = ImportIR & { source: 'obsidian' }
 
-export interface ObsidianImportReport {
-	pages: number
-	folderPages: number
-	linksResolved: number
-	linksUnresolved: number
-	degradedBlocks: number
-}
+/** @deprecated Use `ImportReport`; the shape is shared by every producer. */
+export type ObsidianImportReport = ImportReport
 
 export interface ObsidianImportResult {
 	ir: ObsidianImportIR
@@ -400,6 +399,11 @@ const EMPTY_PAGE_DOC = {
 	content: [{ type: 'heading', attrs: { level: 1 }, content: [] }],
 }
 
+// Every folder page seeds this exact doc; its content hash is a constant.
+// (`fitLiveSchema` is idempotent, so hashing the raw doc equals hashing the
+// seeded one.)
+const EMPTY_PAGE_CONTENT_HASH = stableHash(canonicalJson(EMPTY_PAGE_DOC))
+
 /**
  * Normalize a vault into the IR + report. Pure and synchronous (parsing and
  * Yjs seeding are both sync); the async part is reading the vault (see
@@ -434,9 +438,11 @@ export function importObsidianVault (content: VaultContent, options: ObsidianImp
 			folderPath: segments.length > 1 ? segments.slice(0, -1).join('/') : null,
 			properties: {},
 			tags: [],
-			contentYjsBase64: contentToYjsBase64(EMPTY_PAGE_DOC),
+			contentYjsBase64: markdownEngine.seedToYjsBase64(EMPTY_PAGE_DOC),
 			plainText: '',
 			isFolder: true,
+			contentHash: EMPTY_PAGE_CONTENT_HASH,
+			provenance: { source: 'obsidian', sourcePath: dir },
 		})
 	}
 
@@ -444,7 +450,7 @@ export function importObsidianVault (content: VaultContent, options: ObsidianImp
 		if (!file.path.toLowerCase().endsWith('.md') && !file.path.toLowerCase().endsWith('.markdown')) continue
 
 		const raw = new TextDecoder().decode(file.data)
-		const { data, body } = parseFrontmatter(raw)
+		const { data, body } = markdownEngine.parseFrontmatter(raw)
 
 		const title = data.title ?? titleFromFilename(file.path.split('/').pop() ?? '')
 
@@ -454,16 +460,20 @@ export function importObsidianVault (content: VaultContent, options: ObsidianImp
 		}
 
 		const processedBody = processEmbeds(body, imageIndex, file.path, degraded)
-		const fitted = fitLiveSchema(parseMarkdown(processedBody))
+		const fitted = fitLiveSchema(markdownEngine.parse(processedBody))
 
 		notePages.push({
 			title,
 			folderPath: file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : null,
 			properties,
 			tags: data.tags ?? [],
-			contentYjsBase64: contentToYjsBase64(fitted),
-			plainText: contentToPlainText(fitted),
+			contentYjsBase64: markdownEngine.seedToYjsBase64(fitted),
+			plainText: markdownEngine.plainText(fitted),
 			isFolder: false,
+			// `seedToYjsBase64` applies `fitLiveSchema` again, which is idempotent,
+			// so hashing `fitted` hashes exactly the doc that gets seeded.
+			contentHash: stableHash(canonicalJson(fitted)),
+			provenance: { source: 'obsidian', sourcePath: file.path },
 		})
 	}
 
@@ -499,7 +509,7 @@ export function importObsidianVault (content: VaultContent, options: ObsidianImp
 
 	const pages = [...folderPages, ...notePages]
 	return {
-		ir: { workspaceId, pages },
+		ir: { workspaceId, source: 'obsidian', pages },
 		report: {
 			pages: notePages.length,
 			folderPages: folderPages.length,

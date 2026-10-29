@@ -5,7 +5,7 @@ export default [
   js.configs.recommended,
   ...tsEslint.configs.recommended,
   {
-    ignores: [".next/**", "node_modules/**", "dist/**", ".agents/**"]
+    ignores: [".next/**", "node_modules/**", "dist/**", ".agents/**", "docs-site/**"]
   },
   {
     languageOptions: {
@@ -24,7 +24,28 @@ export default [
     }
   },
   {
-    files: ["server/**/*.js", "*.config.js", "tests/**/*.ts", "scripts/**/*.mjs"],
+    files: ["scripts/**/*.mjs", "scripts/**/*.js"],
+    languageOptions: {
+      globals: {
+        process: "readonly",
+        console: "readonly",
+        Buffer: "readonly",
+        URL: "readonly",
+        fetch: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
+        __dirname: "readonly",
+        __filename: "readonly"
+      }
+    },
+    rules: {
+      "no-empty": ["error", { "allowEmptyCatch": true }]
+    }
+  },
+  {
+    files: ["server/**/*.js", "*.config.js", "tests/**/*.ts"],
     languageOptions: {
       globals: {
         require: true,
@@ -36,8 +57,7 @@ export default [
         setInterval: true,
         clearTimeout: true,
         console: true,
-        URL: true,
-        fetch: true
+        URL: true
       }
     },
     rules: {

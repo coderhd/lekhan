@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest'
-import { parseMarkdown, serializeMarkdown } from '@/lib/markdown-io'
-import { buildStandaloneHtml } from '@/lib/markdown-export'
-import { CALLOUT_TYPES, Callout, BLOCKQUOTE_MARKER_RE, handleCalloutInputRule } from '@/lib/callout'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { MarkdownEngine } from '@/lib/markdown/engine'
+import { buildStandaloneHtml, serializeExportBodyHtml } from '@/lib/markdown-export'
+import { CALLOUT_TYPES, Callout, BLOCKQUOTE_MARKER_RE, calloutDisplayTitle, handleCalloutInputRule } from '@/lib/callout'
 import { InputRule, Editor } from '@tiptap/core'
 import { Document } from '@tiptap/extension-document'
 import { StarterKit } from '@tiptap/starter-kit'
@@ -10,18 +10,28 @@ import { buildSlashMenuItems } from '@/lib/slash-menu-extension'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 import type { JSONContent } from '@tiptap/core'
 
+let engine: MarkdownEngine
+
+beforeEach(() => {
+	engine = new MarkdownEngine()
+})
+
+afterEach(() => {
+	engine.destroy()
+})
+
 /** Doc-level round-trip: parse → serialize → parse yields the same doc. */
 function expectDocRoundTrip(md: string) {
-	const first = parseMarkdown(md)
-	const serialized = serializeMarkdown(first)
-	const second = parseMarkdown(serialized)
+	const first = engine.parse(md)
+	const serialized = engine.serialize(first)
+	const second = engine.parse(serialized)
 	expect(second).toEqual(first)
 }
 
 describe('callout parse/serialize round-trip', () => {
 	it('round-trips a simple callout with type and title', () => {
 		const md = '> [!note] My title\n> Body line one\n'
-		const doc = parseMarkdown(md)
+		const doc = engine.parse(md)
 		const callout = doc.content?.[0]
 		expect(callout?.type).toBe('callout')
 		expect(callout?.attrs).toMatchObject({ type: 'note', title: 'My title', collapsed: false })
@@ -30,36 +40,36 @@ describe('callout parse/serialize round-trip', () => {
 
 	it('serializes an empty-title callout losslessly', () => {
 		const md = '> [!tip]\n> just a body\n'
-		expect(serializeMarkdown(parseMarkdown(md))).toBe(md)
+		expect(engine.serialize(engine.parse(md))).toBe(md)
 	})
 
 	it('round-trips the collapsed flag both directions', () => {
 		const md = '> [!warning]- Collapsed note\n> hidden body\n'
-		const doc = parseMarkdown(md)
+		const doc = engine.parse(md)
 		expect(doc.content?.[0]?.attrs).toMatchObject({ type: 'warning', collapsed: true })
-		expect(serializeMarkdown(doc)).toBe(md)
+		expect(engine.serialize(doc)).toBe(md)
 	})
 
 	it('preserves unknown callout types verbatim', () => {
 		const md = '> [!custom] My custom\n> body\n'
-		const doc = parseMarkdown(md)
+		const doc = engine.parse(md)
 		expect(doc.content?.[0]?.attrs).toMatchObject({ type: 'custom', title: 'My custom' })
-		expect(serializeMarkdown(doc)).toBe(md)
+		expect(engine.serialize(doc)).toBe(md)
 	})
 
 	it('keeps inline marks inside the callout body', () => {
 		const md = '> [!note] Title\n> **bold** and *italic* and `code`\n'
-		expect(serializeMarkdown(parseMarkdown(md))).toBe(md)
+		expect(engine.serialize(engine.parse(md))).toBe(md)
 	})
 
 	it('preserves a blank line between body paragraphs', () => {
 		const md = '> [!note] T\n> p1\n>\n> p2\n'
-		expect(serializeMarkdown(parseMarkdown(md))).toBe(md)
+		expect(engine.serialize(engine.parse(md))).toBe(md)
 	})
 
 	it('round-trips a marker-only first line (no inline body on it)', () => {
 		const md = '> [!note] Title\n>\n> body\n'
-		const doc = parseMarkdown(md)
+		const doc = engine.parse(md)
 		expect(doc.content?.[0]?.attrs).toMatchObject({ type: 'note', title: 'Title', collapsed: false })
 		expect(doc.content?.[0]?.content?.[0]?.type).toBe('paragraph')
 		expectDocRoundTrip(md)
@@ -67,27 +77,27 @@ describe('callout parse/serialize round-trip', () => {
 
 	it('round-trips a callout containing a list', () => {
 		const md = '> [!note] T\n> - item one\n> - item two\n'
-		const doc = parseMarkdown(md)
+		const doc = engine.parse(md)
 		expect(doc.content?.[0]?.content?.some((n) => n.type === 'bulletList')).toBe(true)
 		expectDocRoundTrip(md)
 	})
 
 	it('round-trips a callout containing a code fence', () => {
 		const md = '> [!tip] T\n> ```ts\n> const x = 1\n> ```\n'
-		const doc = parseMarkdown(md)
+		const doc = engine.parse(md)
 		expect(doc.content?.[0]?.content?.some((n) => n.type === 'codeBlock')).toBe(true)
 		expectDocRoundTrip(md)
 	})
 
 	it('leaves a plain blockquote untouched (regression)', () => {
 		const md = '> A blockquote line\n>\n> Second paragraph\n'
-		const doc = parseMarkdown(md)
+		const doc = engine.parse(md)
 		expect(doc.content?.[0]?.type).toBe('blockquote')
-		expect(serializeMarkdown(doc)).toBe(md)
+		expect(engine.serialize(doc)).toBe(md)
 	})
 
 	it('normalizes an uppercase marker to lowercase type', () => {
-		const doc = parseMarkdown('> [!NOTE] Loud\n> body\n')
+		const doc = engine.parse('> [!NOTE] Loud\n> body\n')
 		expect(doc.content?.[0]?.attrs).toMatchObject({ type: 'note' })
 	})
 })
@@ -98,11 +108,63 @@ describe('CALLOUT_TYPES', () => {
 	})
 })
 
+describe('calloutDisplayTitle', () => {
+	it('prefers an explicit title and trims it', () => {
+		expect(calloutDisplayTitle('note', '  My title  ')).toBe('My title')
+	})
+
+	it('falls back to the known type label', () => {
+		expect(calloutDisplayTitle('note', '')).toBe('Note')
+		expect(calloutDisplayTitle('warning', '   ')).toBe('Warning')
+		expect(calloutDisplayTitle('question', '')).toBe('Question')
+	})
+
+	it('capitalizes unknown types instead of showing a blank title', () => {
+		expect(calloutDisplayTitle('custom', '')).toBe('Custom')
+		expect(calloutDisplayTitle('CUSTOM', '')).toBe('Custom')
+	})
+
+	it('treats inherited object keys as ordinary unknown types', () => {
+		// Accepted custom types are user input: an own-property lookup must not
+		// leak `Object.prototype` members (a function) as a title.
+		expect(calloutDisplayTitle('constructor', '')).toBe('Constructor')
+		expect(calloutDisplayTitle('toString', '')).toBe('Tostring')
+		expect(calloutDisplayTitle('hasOwnProperty', '')).toBe('Hasownproperty')
+		expect(calloutDisplayTitle('__proto__', '')).toBe('__proto__')
+	})
+
+	it('normalizes a null or undefined title from JSON input', () => {
+		expect(calloutDisplayTitle('note', null)).toBe('Note')
+		expect(calloutDisplayTitle('note', undefined)).toBe('Note')
+		expect(calloutDisplayTitle(null, '  ')).toBe('Callout')
+	})
+
+	it('ignores non-string attrs instead of throwing', () => {
+		// Attrs are typed `any` on the node; a hand-edited or imported doc can
+		// carry a number here and must not abort the whole export.
+		expect(calloutDisplayTitle('note', 123 as unknown as string)).toBe('Note')
+		expect(calloutDisplayTitle(42 as unknown as string, '')).toBe('Callout')
+	})
+
+	it('falls back to Callout when the type is empty', () => {
+		expect(calloutDisplayTitle('', '')).toBe('Callout')
+	})
+})
+
 describe('callout export HTML', () => {
 	it('wraps the callout in styled standalone HTML', () => {
 		const html = buildStandaloneHtml('<div class="callout callout-note">…</div>', 'Page')
 		expect(html).toContain('<style>')
 		expect(html).toContain('.callout')
+	})
+
+	it('marks the callout as a note for assistive tech', () => {
+		const doc = engine.parse('> [!tip] Title\n> body\n')
+		const html = buildStandaloneHtml(serializeExportBodyHtml(doc), 'Note role')
+		const parsed = new DOMParser().parseFromString(html, 'text/html')
+		const callout = parsed.querySelector('[data-callout]')
+		expect(callout?.getAttribute('role')).toBe('note')
+		expect(callout?.querySelector('.callout-title')?.textContent).toBe('Title')
 	})
 
 	it('restores a titled callout without duplicating the title in the body', () => {
@@ -111,7 +173,7 @@ describe('callout export HTML', () => {
 		// parses it with `parseHTML`. The title lives in a `.callout-title`
 		// div and must never leak into the `.callout-content` body.
 		const md = '> [!note] My title\n> Body line one\n> Body line two\n'
-		const doc = parseMarkdown(md)
+		const doc = engine.parse(md)
 		const editor = new Editor({ extensions: getSharedExtensions({ document: Document }) })
 		editor.commands.setContent(doc)
 		const html = editor.getHTML()

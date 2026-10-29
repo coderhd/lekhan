@@ -52,6 +52,7 @@ vi.mock('@/services/graph', () => ({
 	updatePageTitle: vi.fn().mockResolvedValue(true),
 	fetchMentionablePageCollaborators: vi.fn().mockResolvedValue([]),
 	fetchWorkspacePages: vi.fn().mockResolvedValue([]),
+	fetchPageTags: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock('@/services/db', () => ({

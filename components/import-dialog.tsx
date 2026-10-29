@@ -15,11 +15,11 @@ import {
 	readVaultDirectory,
 	pickVaultDirectory,
 	importObsidianVault,
-	type ObsidianImportIR,
-	type ObsidianImportReport,
 	type VaultContent,
 } from '@/services/obsidian-import'
-import { importVaultIR } from '@/services/vault-import'
+import { readNotionZips, importNotionExport } from '@/services/notion-import'
+import { importVaultIR, generateImportId, vaultFingerprint } from '@/services/vault-import'
+import type { ImportIR, ImportReport, ImportSourceKind } from '@/services/import-ir'
 import { ImportReportCard } from '@/components/import-report-card'
 import { track } from '@/lib/analytics'
 
@@ -49,12 +49,19 @@ export function ImportDialog ({
 }: ImportDialogProps) {
 	const [phase, setPhase] = useState<Phase>('choose')
 	const [errorMessage, setErrorMessage] = useState('')
-	const [report, setReport] = useState<ObsidianImportReport | null>(null)
+	const [report, setReport] = useState<ImportReport | null>(null)
 	const [serverWarnings, setServerWarnings] = useState<Array<{ title: string; stage: string; error: string }>>([])
 	const [createdPages, setCreatedPages] = useState<Array<{ id: string; title: string }>>([])
+	const [resumedCount, setResumedCount] = useState(0)
+	const [activeSource, setActiveSource] = useState<ImportSourceKind>('obsidian')
 	const zipInputRef = useRef<HTMLInputElement>(null)
+	const notionInputRef = useRef<HTMLInputElement>(null)
 	const folderInputRef = useRef<HTMLInputElement>(null)
 	const markdownInputRef = useRef<HTMLInputElement>(null)
+	// Stable import id for one attempt-session (#87), keyed by vault fingerprint
+	// so a retry of the SAME source resumes (server skips landed batches) while a
+	// different source gets a fresh id. Survives the "Try again" reset on purpose.
+	const importSessionRef = useRef<{ fingerprint: string; clientImportId: string } | null>(null)
 
 	const reset = () => {
 		setPhase('choose')
@@ -62,11 +69,15 @@ export function ImportDialog ({
 		setReport(null)
 		setServerWarnings([])
 		setCreatedPages([])
+		setResumedCount(0)
+		setActiveSource('obsidian')
 	}
 
 	const handleOpenChange = (next: boolean) => {
 		if (!next) {
 			reset()
+			// Closing abandons the attempt-session; a later import starts fresh.
+			importSessionRef.current = null
 		}
 		onOpenChange(next)
 	}
@@ -79,7 +90,44 @@ export function ImportDialog ({
 	const countMarkdownNotes = (content: VaultContent) =>
 		content.files.filter(file => MARKDOWN_RE.test(file.path)).length
 
+	const writeResult = async (ir: ImportIR, resultReport: ImportReport, source: ImportSourceKind) => {
+		setPhase('writing')
+		try {
+			// Reuse the attempt-session id when retrying the same import; otherwise
+			// start a new one. This is what makes a retry resume instead of duplicate.
+			const fingerprint = vaultFingerprint(ir)
+			if (importSessionRef.current?.fingerprint !== fingerprint) {
+				importSessionRef.current = { fingerprint, clientImportId: generateImportId() }
+			}
+			const outcome = await importVaultIR(
+				ir,
+				async () => {
+					const { data } = await supabase.auth.getSession()
+					return data.session?.access_token ?? ''
+				},
+				undefined,
+				{ clientImportId: importSessionRef.current.clientImportId }
+			)
+			setReport(resultReport)
+			setServerWarnings(outcome.warnings)
+			setCreatedPages(outcome.createdPages)
+			setResumedCount(outcome.resumedCount)
+			setPhase('done')
+			// The import landed; the attempt-session is spent.
+			importSessionRef.current = null
+			track('import_completed', {
+				source,
+				pages_count: resultReport.pages,
+				folder_pages_count: resultReport.folderPages,
+			})
+			onImportComplete?.()
+		} catch (err) {
+			fail(err instanceof Error ? err.message : String(err))
+		}
+	}
+
 	const runIngestionAndWrite = async (content: VaultContent, workspaceId: string) => {
+		setActiveSource('obsidian')
 		if (countMarkdownNotes(content) === 0) {
 			fail('No markdown notes found in that vault. Make sure you picked the folder that contains your .md files (not a subfolder or an export wrapper).')
 			return
@@ -104,28 +152,26 @@ export function ImportDialog ({
 			return
 		}
 
-		setPhase('writing')
+		await writeResult(result.ir, result.report, 'obsidian')
+	}
+
+	const runNotionIngestionAndWrite = async (files: File[], workspaceId: string) => {
+		setActiveSource('notion')
+		setPhase('ingesting')
+		await new Promise(resolve => setTimeout(resolve, 30))
+
+		let result: ReturnType<typeof importNotionExport>
 		try {
-			const outcome = await importVaultIR(
-				result.ir as ObsidianImportIR,
-				async () => {
-					const { data } = await supabase.auth.getSession()
-					return data.session?.access_token ?? ''
-				}
-			)
-			setReport(result.report)
-			setServerWarnings(outcome.warnings)
-			setCreatedPages(outcome.createdPages)
-			setPhase('done')
-			track('import_completed', {
-				source: 'obsidian',
-				pages_count: result.report.pages,
-				folder_pages_count: result.report.folderPages,
-			})
-			onImportComplete?.()
+			// Parsing happens entirely against the selected zips: Notion sees no
+			// API traffic, so a large export is limited only by this device.
+			const content = await readNotionZips(files)
+			result = importNotionExport(content, { workspaceId, existingPageTitles })
 		} catch (err) {
 			fail(err instanceof Error ? err.message : String(err))
+			return
 		}
+
+		await writeResult(result.ir, result.report, 'notion')
 	}
 
 	const handleZipFile = async (file: File | undefined) => {
@@ -138,6 +184,17 @@ export function ImportDialog ({
 			await runIngestionAndWrite(content, workspace.id)
 		} catch (err) {
 			fail(err instanceof Error ? `Could not read that vault ZIP: ${err.message}` : String(err))
+		}
+	}
+
+	const handleNotionFiles = async (files: File[]) => {
+		if (files.length === 0) return
+		setPhase('picking')
+		try {
+			const workspace = await getWorkspace()
+			await runNotionIngestionAndWrite(files, workspace.id)
+		} catch (err) {
+			fail(err instanceof Error ? `Could not read that Notion export ZIP: ${err.message}` : String(err))
 		}
 	}
 
@@ -172,13 +229,13 @@ export function ImportDialog ({
 			})
 	}
 
-	const handleFolderFiles = async (files: FileList | null) => {
-		if (!files || files.length === 0) return
+	const handleFolderFiles = async (files: File[]) => {
+		if (files.length === 0) return
 		setPhase('picking')
 		try {
 			const workspace = await getWorkspace()
 			setPhase('ingesting')
-			const content = await readVaultFiles(Array.from(files))
+			const content = await readVaultFiles(files)
 			await runIngestionAndWrite(content, workspace.id)
 		} catch (err) {
 			fail(err instanceof Error ? `Could not read that vault: ${err.message}` : String(err))
@@ -193,7 +250,7 @@ export function ImportDialog ({
 				<AlertDialogHeader>
 					<AlertDialogTitle>Import</AlertDialogTitle>
 					<AlertDialogDescription>
-						Bring your existing notes into Lekhan. Nothing is deleted from the source.
+						Bring your existing notes into Lekhan. Nothing is deleted from the source. Compatibility across tools — never live sync.
 					</AlertDialogDescription>
 				</AlertDialogHeader>
 
@@ -207,6 +264,18 @@ export function ImportDialog ({
 							<span>
 								<span className="block font-bold">Obsidian vault (.zip)</span>
 								<span className="block text-on-surface-variant text-sm">A ZIP of your vault folder — links, tags and callouts are preserved.</span>
+							</span>
+						</button>
+						<button
+							onClick={() => notionInputRef.current?.click()}
+							className="flex items-start gap-sm p-md rounded-lg border border-black/10 dark:border-white/10 hover:bg-surface-container-high text-left premium-transition"
+						>
+							<span className="material-symbols-outlined mt-0.5">database</span>
+							<span>
+								<span className="block font-bold">Notion export (.zip)</span>
+								<span className="block text-on-surface-variant text-sm">
+									Export → Markdown &amp; CSV. Notion&apos;s export queue can take up to 30 hours for large workspaces (download links expire after 7 days); select every part it produced. Parsed entirely on your device — no Notion API.
+								</span>
 							</span>
 						</button>
 						<button
@@ -238,11 +307,13 @@ export function ImportDialog ({
 				)}
 
 				{busy && (
-					<div className="py-lg flex flex-col items-center gap-sm" data-testid="import-progress">
+					<div className="py-lg flex flex-col items-center gap-sm" data-testid="import-progress" role="status" aria-live="polite">
 						<div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
 						<p className="text-on-surface-variant text-sm">
 							{phase === 'picking' && 'Preparing…'}
-							{phase === 'ingesting' && 'Reading your vault — parsing notes, links and attachments…'}
+							{phase === 'ingesting' && (activeSource === 'notion'
+								? 'Reading your Notion export — parsing pages, database CSVs and links on your device…'
+								: 'Reading your vault — parsing notes, links and attachments…')}
 							{phase === 'writing' && 'Creating pages in your workspace…'}
 						</p>
 					</div>
@@ -253,6 +324,7 @@ export function ImportDialog ({
 						report={report}
 						serverWarnings={serverWarnings}
 						createdPages={createdPages}
+						resumedCount={resumedCount}
 						onOpenPage={(pageId) => {
 							handleOpenChange(false)
 							onOpenPage(pageId)
@@ -294,6 +366,23 @@ export function ImportDialog ({
 					}}
 				/>
 				<input
+					ref={notionInputRef}
+					data-testid="notion-zip-input"
+					type="file"
+					accept=".zip"
+					multiple
+					className="hidden"
+					onChange={(e) => {
+						// Snapshot BEFORE clearing the input: assigning `value = ''`
+						// empties the live FileList in real browsers, and a Notion
+						// multi-part selection would otherwise silently import zero
+						// files. Same hazard for the webkitdirectory fallback.
+						const files = Array.from(e.target.files ?? [])
+						e.target.value = ''
+						void handleNotionFiles(files)
+					}}
+				/>
+				<input
 					ref={markdownInputRef}
 					type="file"
 					accept=".md,.markdown,.mdown,.txt"
@@ -316,7 +405,7 @@ export function ImportDialog ({
 					webkitdirectory=""
 					className="hidden"
 					onChange={(e) => {
-						const files = e.target.files
+						const files = Array.from(e.target.files ?? [])
 						e.target.value = ''
 						void handleFolderFiles(files)
 					}}

@@ -62,6 +62,7 @@ provider registry).
 | H0 — Tier limits & local-first version history | #82 | Git-style milestones, non-destructive restore, visual word-diff viewer, quota pruning |
 | H0 — AI Provider Registry & Unified Settings Suite | #28 | 3-tier access ladder (local BYOL, free presets, cloud BYOK), zero-knowledge encrypted vault, 5-tab settings |
 | H0 — Sync Server Hardening (durability, capped debounce, ledger, scale) | #77 | 2s/10s capped debounce snapshot engine, durable Postgres collaborator ledger, automated retention cron, load-shedding |
+| H0 — Trust-building redesign of public marketing pages | #93 | Asymmetric landing remix with real screenshots, voice-clean rewritten copy, claims-traced honesty audit across `/`, `/about`, `/faq`, `/contact` + legal consistency; shipped PR #135 after pullfrog approval + CodeRabbit waiver (docs/reviews/pr-93-review.md) |
 
 | Epic | Issue | Blocker edges | Notes |
 |---|---|---|---|
@@ -94,11 +95,11 @@ provider registry).
 | #82 | Tier plumbing + local-first version history | P0 | 16h | Aug 31 → Sep 1 | **Shipped** (PR #99) |
 | — | 🔒 **Private beta opens** (gate #84 clears) | — | — | **Sep 2** | — |
 | #28 | AI Provider Registry (final spec 4h incl.) | P0 | 64h | Sep 2 → Sep 10 | **Shipped** (PR #107) |
-| #29 | Billing: Stripe/Razorpay + founding prices + referral credits | P0 | 60h | Sep 11 → Sep 22 | In progress — T1–T12 landed; T13 (ownership transfer) next |
-| #87 | Idempotent imports | P1 | 12h | Sep 23 → Sep 24 | Backlog |
+| #29 | Billing: Stripe/Razorpay + founding prices + referral credits | P0 | 60h | Sep 11 → Sep 22 | In progress — T1–T14 landed on `plan/29-real-billing`; env apply + founding backfill pending |
+| #87 | Idempotent imports | P1 | 12h | Sep 23 → Sep 24 | **Shipped** (PR #132 → `3b0a5d8`; #130 merged the base, #132 the retry-identity fixes) |
 | #31 | i18n framework | P0 | 24h | Sep 25 → Sep 29 | Backlog |
 | #32 | Docs site (agent 32h; prose content owner-driven in parallel) | P0 | 32h | Sep 30 → Oct 7 | Backlog |
-| #30 | Publish polish | P0 | 12h | Oct 8 → Oct 9 | Backlog |
+| #30 | Publish polish | P0 | 12h | Oct 8 → Oct 9 | **Delivered** (PR #147, merged Oct 25) |
 | — | 🚀 **Public launch** | — | — | **Oct 12** (aggressive Oct 8) | — |
 
 *#85 inserted ahead of beta: content funnel has no conversion target without it. Shipped Aug 24 (#91): /early live, self-hosted double opt-in over Brevo transactional, race-safe spot numbering, outbox retry drain.*
@@ -138,7 +139,7 @@ unblocks H2 agents. The Tauri desktop shell (#88) delivers the files-on-disk pro
 | Epic | Issue | Blocker edges | Spec ref |
 |---|---|---|---|
 | H1 — Graph view + backlink pane | #38 | → H2 Databases #47 (blocker) | §4 |
-| H1 — Dual-Dialect Interop Bridge (Obsidian-native files + Notion-compatible content) | #78 | ← #27; subsumes the import half of #45 | `docs/superpowers/specs/…` (spec in issue body) |
+| H1 — Dual-Dialect Interop Bridge (Obsidian-native files + Notion-compatible content) | #78 | ← #27; subsumes the import half of #45 | `docs/superpowers/specs/…` (spec in issue body) · **S1 clipboard paste-in shipped Oct 8** (Obsidian-markdown + Notion-HTML paste, gap-2 retroactive link resolution; PR #134, `docs/reviews/pr-57-review.md`) · **S3 clipboard copy-out shipped** (Obsidian markdown + Notion HTML payloads, target-aware; PR #154, `docs/reviews/pr-59-review.md`) |
 | H1 — Daily notes / quick capture / inbox | #39 | — | §4 |
 | H1 — Public pages + publish | #40 | ← #30 | §4 |
 | H1 — Comments + page mentions | #41 | — | §4 |

@@ -8,6 +8,7 @@ import * as Y from 'yjs'
 import { prosemirrorJSONToYXmlFragment } from 'y-prosemirror'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 import { insertParsedHtml } from '@/lib/insert-parsed-html'
+import { canonicalJson, stableHash } from '@/lib/stable-content'
 
 export interface PageMeta {
 	title?: string
@@ -31,7 +32,7 @@ function pageMetaToData(meta: PageMeta): Record<string, unknown> {
 	for (const [key, value] of Object.entries(meta.properties)) {
 		if (!RESERVED_KEYS.has(key)) data[key] = value
 	}
-	if (meta.title !== undefined) data.title = meta.title
+	if (typeof meta.title === 'string' && meta.title.trim() !== '') data.title = meta.title
 	if (meta.tags && meta.tags.length > 0) data.tags = meta.tags
 	return data
 }
@@ -64,6 +65,100 @@ export function schemaKey(extensions?: AnyExtension[]): string {
 			return `${e.name}::${opts}::${content}`
 		})
 		.join('||')
+}
+
+/**
+ * Strip the live editor's auto-filled placeholder headings from a doc. The
+ * live editor's `CustomDocument` is `heading block*`, so every Page doc opens
+ * with a title heading and an empty page carries an empty first heading. Those
+ * headings are not page content: without stripping, an empty page exports a
+ * stray `# ` and markdown hydration appends a trailing `# `. Non-empty
+ * headings the user authored are kept.
+ *
+ * Lives on the engine (ADR 0005: engine is the single markdown seam) so the
+ * Obsidian clipboard/export profile and `lib/markdown-export.ts` share one
+ * implementation.
+ */
+export function stripAutoHeading(doc: JSONContent): JSONContent {
+	const content = [...(doc.content ?? [])]
+	if (content[0]?.type === 'heading' && !(content[0].content ?? []).length) {
+		content.shift()
+	}
+	const last = content[content.length - 1]
+	if (content.length > 1 && last?.type === 'heading' && !(last.content ?? []).length) {
+		content.pop()
+	}
+	return { ...doc, content }
+}
+
+/**
+ * Wikilinks are inline text (`[[Page]]`, not a schema node), so the markdown
+ * serializer escapes their brackets to avoid emitting link syntax. The Obsidian
+ * profile is the only place that escaped form should be reversed: `\[\[Page\]\]`
+ * and `\[\[Page|Alias\]\]` become the native wikilink. The alias pipe is
+ * optionally escaped by the serializer too.
+ */
+const ESCAPED_WIKILINK_RE = /\\\[\\\[([^[\]\\]+?)(?:\\?\|([^[\]\\]+?))?\\\]\\\]/g
+
+// A fenced code block opener/closer (``` or ~~~, optionally indented).
+const FENCE_RE = /^\s*(`{3,}|~{3,})/
+// An inline code span delimited by a run of backticks.
+const CODE_SPAN_RE = /(`+)[\s\S]*?\1/g
+// A GFM table row opens with a pipe, optionally behind blockquote markers.
+const TABLE_ROW_RE = /^\s*(?:>\s*)*\|/
+
+/**
+ * Restore escaped wikilink syntax in one run of ordinary inline text. Inside a
+ * table row the alias pipe is the column delimiter, so it must stay escaped —
+ * otherwise the cell splits in two when the payload is parsed again.
+ */
+function restoreWikilinksInText(text: string, inTable: boolean): string {
+	return text.replace(ESCAPED_WIKILINK_RE, (_match, target: string, alias?: string) => {
+		if (!alias) return `[[${target}]]`
+		return inTable ? `[[${target}\\|${alias}]]` : `[[${target}|${alias}]]`
+	})
+}
+
+/**
+ * Reverse the serializer's wikilink escaping on serialized markdown while
+ * leaving user code alone: fenced blocks and inline code spans are copied
+ * verbatim (a copy must never rewrite source code), and table rows keep the
+ * alias delimiter escaped so the table still round-trips.
+ */
+export function restoreWikilinks(markdown: string): string {
+	let fence: string | null = null
+	return markdown
+		.split('\n')
+		.map((line) => {
+			const fenceMatch = line.match(FENCE_RE)
+			if (fenceMatch) {
+				const marker = fenceMatch[1]
+				if (fence === null) {
+					fence = marker
+					return line
+				}
+				// A closing fence uses the same character and is at least as long.
+				if (marker[0] === fence[0] && marker.length >= fence.length) {
+					fence = null
+					return line
+				}
+				return line
+			}
+			if (fence !== null) return line
+
+			const inTable = TABLE_ROW_RE.test(line)
+			let restored = ''
+			let cursor = 0
+			CODE_SPAN_RE.lastIndex = 0
+			let codeMatch: RegExpExecArray | null
+			while ((codeMatch = CODE_SPAN_RE.exec(line)) !== null) {
+				restored += restoreWikilinksInText(line.slice(cursor, codeMatch.index), inTable)
+				restored += codeMatch[0]
+				cursor = codeMatch.index + codeMatch[0].length
+			}
+			return restored + restoreWikilinksInText(line.slice(cursor), inTable)
+		})
+		.join('\n')
 }
 
 export function uint8ArrayToBase64(bytes: Uint8Array): string {
@@ -162,6 +257,28 @@ export class MarkdownEngine {
 		return this.serialize(doc, exts)
 	}
 
+	// -- Obsidian profile (clipboard copy-out + vault export, SIL-9 S3/S4) --
+
+	/**
+	 * Obsidian-flavored body markdown: callouts (`> [!type]`), wikilinks
+	 * (`[[Page]]` / `[[Page|Alias]]`) and inline `#tags` are preserved by the
+	 * export serializer; the placeholder title heading is stripped so frontmatter
+	 * (not a duplicated heading) carries the Page title. Shared by clipboard
+	 * copy-out and the S4 vault export.
+	 */
+	serializeObsidianBody(doc: JSONContent): string {
+		return restoreWikilinks(this.serializeExport(stripAutoHeading(doc)))
+	}
+
+	/**
+	 * Full Obsidian-flavored Page file: YAML frontmatter assembled from Page
+	 * properties (title, tags, remaining properties) followed by the
+	 * Obsidian-flavored body. Returns the bare body when there is no meta.
+	 */
+	serializeObsidianPage(doc: JSONContent, meta: PageMeta): string {
+		return this.assembleMarkdownFile(meta, this.serializeObsidianBody(doc))
+	}
+
 	// -- Yjs / plain text (Page graph) --
 
 	seedToYjsBase64(content: JSONContent): string {
@@ -170,6 +287,16 @@ export class MarkdownEngine {
 		schema.nodeFromJSON(fitted).check()
 		const ydoc = new Y.Doc()
 		try {
+			// A Y.Doc normally gets a RANDOM clientID at construction, which is
+			// baked into every struct and so makes the encoded update differ (a
+			// few bytes) between two seeds of identical content. Batching for
+			// `/api/import` measures the REAL serialized byte length, so that
+			// nondeterminism could shift a page across a batch boundary between
+			// retries while the vault fingerprint stays the same — the server
+			// would then replay a completed batch whose page set no longer matches
+			// (#87). Deriving the clientID from the content makes seeding
+			// byte-stable while keeping distinct docs' origins distinct.
+			ydoc.clientID = parseInt(stableHash(canonicalJson(fitted)).slice(0, 8), 16) || 1
 			prosemirrorJSONToYXmlFragment(schema, fitted, ydoc.getXmlFragment('default'))
 			const bytes = Y.encodeStateAsUpdate(ydoc)
 			return uint8ArrayToBase64(bytes)

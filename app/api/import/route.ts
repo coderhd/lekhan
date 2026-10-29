@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { readJsonWithLimit, PayloadTooLargeError } from '@/lib/request-limits'
 import { encryptSnapshot } from '@/lib/server-crypto'
+import {
+	claimImportBatch,
+	completeImportBatch,
+	deriveBatchPageId,
+	failImportBatch,
+	type ImportBatchResult,
+} from '@/lib/import-ledger'
 import graphIndex from '../../../server/graph-index.js'
 
 // The import payload is the base64-encoded IR. A 64 MB ceiling keeps peak
@@ -34,7 +41,14 @@ interface ImportPageInput {
 interface ImportBody {
 	workspaceId?: unknown
 	pages?: unknown
+	/** Stable id for one import attempt-session (#87); paired with batchIndex. */
+	clientImportId?: unknown
+	/** Zero-based batch ordinal within the attempt-session (#87). */
+	batchIndex?: unknown
 }
+
+// A clientImportId is always a UUID; reject non-UUIDs before hitting the DB.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 interface ResolvedPage {
 	title: string
@@ -93,6 +107,10 @@ export async function POST(request: NextRequest) {
 		}
 	)
 
+	// Set once a batch is claimed from the idempotency ledger (#87), so the
+	// failure path can mark it retryable.
+	let ledgerId: string | null = null
+
 	try {
 		const { data: { user } } = await supabaseClient.auth.getUser()
 		if (!user) {
@@ -122,6 +140,30 @@ export async function POST(request: NextRequest) {
 				{ error: `Import exceeds maximum of ${MAX_IMPORT_PAGES} pages` },
 				{ status: 400 }
 			)
+		}
+
+		// Idempotency contract (#87): clientImportId and batchIndex travel
+		// together. Omitting both preserves the legacy single-shot behaviour;
+		// supplying one alone is a caller bug, not an import.
+		const hasClientImportId = typeof body.clientImportId === 'string' && body.clientImportId.length > 0
+		const hasBatchIndex = typeof body.batchIndex === 'number'
+		let clientImportId: string | null = null
+		let batchIndex: number | null = null
+		if (hasClientImportId || hasBatchIndex) {
+			if (!hasClientImportId || !hasBatchIndex) {
+				return NextResponse.json(
+					{ error: 'clientImportId and batchIndex must be provided together' },
+					{ status: 400 }
+				)
+			}
+			clientImportId = body.clientImportId as string
+			batchIndex = body.batchIndex as number
+			if (!UUID_RE.test(clientImportId)) {
+				return NextResponse.json({ error: 'clientImportId must be a UUID' }, { status: 400 })
+			}
+			if (!Number.isInteger(batchIndex) || batchIndex < 0) {
+				return NextResponse.json({ error: 'batchIndex must be a non-negative integer' }, { status: 400 })
+			}
 		}
 
 		// Validate + normalize every page before touching the database so a bad
@@ -169,6 +211,34 @@ export async function POST(request: NextRequest) {
 		}
 		if (workspace.owner_id !== user.id) {
 			return NextResponse.json({ error: 'Forbidden: Only the workspace owner can import' }, { status: 403 })
+		}
+
+		// Idempotency ledger (#87): claim this batch before touching pages. A
+		// batch that already landed is replayed from its recorded report instead
+		// of being re-created; a batch in flight elsewhere is refused.
+		if (clientImportId !== null && batchIndex !== null) {
+			const claim = await claimImportBatch(supabaseAdmin, {
+				workspaceId,
+				ownerId: user.id,
+				clientImportId,
+				batchIndex,
+			})
+			if (claim.kind === 'completed') {
+				return NextResponse.json({
+					success: true,
+					resumed: true,
+					importedCount: claim.result.importedCount,
+					pages: claim.result.pages,
+					warnings: claim.result.warnings,
+				})
+			}
+			if (claim.kind === 'in-progress') {
+				return NextResponse.json(
+					{ error: 'This import batch is already being processed', code: 'batch_in_progress' },
+					{ status: 409 }
+				)
+			}
+			ledgerId = claim.ledgerId
 		}
 
 		// Existing workspace pages serve two purposes: reusing folder-page
@@ -237,12 +307,20 @@ export async function POST(request: NextRequest) {
 		}
 
 		// Resolve every leaf's parent first (creating folder-pages as needed),
-		// so all leaf rows exist in one shape before batching.
-		const pendingLeaves: Array<{ row: Record<string, unknown>; source: ResolvedPage }> = []
-		for (const page of pages) {
+		// so all leaf rows exist in one shape before batching. On the idempotent
+		// path each leaf gets a deterministic id derived from the batch identity,
+		// so a retry re-inserts the same rows rather than new ones.
+		const idempotent = clientImportId !== null && batchIndex !== null
+		const pendingLeaves: Array<{ id: string | null; row: Record<string, unknown>; source: ResolvedPage }> = []
+		for (const [ordinal, page] of pages.entries()) {
 			const parentId = await ensureFolderChain(page.folderPath)
+			const id = idempotent
+				? deriveBatchPageId(workspaceId, clientImportId as string, batchIndex as number, ordinal)
+				: null
 			pendingLeaves.push({
+				id,
 				row: {
+					...(id ? { id } : {}),
 					workspace_id: workspaceId,
 					owner_id: user.id,
 					title: page.title,
@@ -258,6 +336,23 @@ export async function POST(request: NextRequest) {
 		const createdLeaves: Array<{ id: string; source: ResolvedPage }> = []
 		for (let offset = 0; offset < pendingLeaves.length; offset += INSERT_CHUNK_SIZE) {
 			const chunk = pendingLeaves.slice(offset, offset + INSERT_CHUNK_SIZE)
+			if (idempotent) {
+				// Deterministic ids make the batch replay-safe: a retry after a
+				// partial landing inserts only the missing leaves (ON CONFLICT DO
+				// NOTHING) instead of duplicating the ones that already landed
+				// (#87, AC1). The ids are known up-front, so no row mapping is
+				// needed from the response.
+				const { error: upsertError } = await supabaseAdmin
+					.from('pages')
+					.upsert(chunk.map(entry => entry.row), { onConflict: 'id', ignoreDuplicates: true })
+				if (upsertError) {
+					throw upsertError
+				}
+				for (const entry of chunk) {
+					createdLeaves.push({ id: entry.id as string, source: entry.source })
+				}
+				continue
+			}
 			const { data: insertedRows, error: insertError } = await supabaseAdmin
 				.from('pages')
 				.insert(chunk.map(entry => entry.row))
@@ -333,13 +428,37 @@ export async function POST(request: NextRequest) {
 			})
 		}
 
-		return NextResponse.json({
-			success: true,
+		const result: ImportBatchResult = {
 			importedCount: createdPages.length,
 			pages: createdPages,
 			warnings,
+		}
+
+		// Record the batch so a retry replays this report instead of re-creating
+		// pages. One retry covers a transient write hiccup; a persistent failure
+		// is surfaced as retryable rather than silently forfeiting idempotency.
+		if (ledgerId) {
+			let recorded = await completeImportBatch(supabaseAdmin, ledgerId, result)
+			if (!recorded) {
+				recorded = await completeImportBatch(supabaseAdmin, ledgerId, result)
+			}
+			if (!recorded) {
+				throw new Error('Failed to record import checkpoint')
+			}
+		}
+
+		return NextResponse.json({
+			success: true,
+			importedCount: result.importedCount,
+			pages: result.pages,
+			warnings: result.warnings,
 		})
 	} catch (err: unknown) {
+		// A claimed batch that failed mid-import is marked retryable so the next
+		// attempt can reclaim it; batches that already completed are untouched.
+		if (ledgerId) {
+			await failImportBatch(supabaseAdmin, ledgerId).catch(() => {})
+		}
 		// Log the detail server-side; never echo internal error messages back.
 		console.error('[API Import Error]', err)
 		return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

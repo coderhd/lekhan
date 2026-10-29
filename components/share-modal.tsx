@@ -182,12 +182,13 @@ export default function ShareModal({
 							<div>
 								<p className='text-sm font-semibold text-on-surface'>Anyone with the link can view</p>
 								<p className='text-xs text-on-surface-variant/60 mt-0.5'>
-									{isPublic ? 'Document is visible to anyone without sign in' : 'Only invited collaborators can access'}
+									{isPublic ? 'Anyone with the link can view this page' : 'Only invited collaborators can view or edit'}
 								</p>
 							</div>
 						</div>
 						<button
 							onClick={handleTogglePublic}
+							aria-label={isPublic ? 'Turn off public link access' : 'Turn on public link access'}
 							className={`relative inline-flex h-6 w-11 shrink-0 ml-2 items-center rounded-full border transition-colors duration-200 focus:outline-none ${isPublic ? 'bg-primary-container border-primary-container' : 'bg-black/10 dark:bg-transparent border-black/20 dark:border-white/20'}`}
 						>
 							<span
@@ -202,6 +203,7 @@ export default function ShareModal({
 								type='text'
 								value={`${typeof window !== 'undefined' ? window.location.origin : ''}/page/${documentId}`}
 								readOnly
+								aria-label='Public page link'
 								className='flex-1 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl p-2.5 text-xs text-on-surface outline-none cursor-text selection:bg-primary-container/30'
 							/>
 							<button
@@ -211,6 +213,7 @@ export default function ShareModal({
 								}}
 								className='rounded-xl bg-surface-container-high border border-black/10 dark:border-white/10 p-2.5 text-on-surface hover:bg-black/5 dark:hover:bg-white/5 transition'
 								title='Copy link'
+								aria-label='Copy public page link'
 							>
 								<Copy className='h-4 w-4' />
 							</button>

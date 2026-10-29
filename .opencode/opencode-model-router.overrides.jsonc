@@ -13,9 +13,10 @@
 // the active preset against the catalog and reports mismatches.
 //
 // Tier mapping to .agents/model-routing.md: fast=B, medium=A, heavy=S.
-// costRatio values are derived from real relative req/month throughput on the
-// Go plan (B:A:S ~= 37,800 : 7,900 : 1,080), not the plugin's 1/5/20 default —
-// see .agents/model-routing.md for the full model table and rationale.
+// costRatio values are relative req/month throughput on the Go plan, normalised
+// to the fast tier: fast = DeepSeek V4.1 Flash (~37,800/mo) = 1 · medium =
+// Qwen3.8 Flash (~27,000/mo) ≈ 1.4 · heavy = MiMo-V2.6-Pro (~16,300/mo) ≈ 2.3.
+// Not the plugin's 1/5/20 default — see .agents/model-routing.md for the table.
 {
   "presets": {
     "lekhan-go": {
@@ -27,14 +28,14 @@
       },
       "medium": {
         "model": "opencode-go/qwen3.8-flash",
-        "costRatio": 5,
-        "description": "Tier A — Qwen3.8 Flash (AA Intelligence 56, 27,000 req/month)",
+        "costRatio": 1.4,
+        "description": "Tier A — Qwen3.8 Flash (~27,000 req/month)",
         "whenToUse": ["spec'd ticket needing some judgment", "unspec'd but narrow/contained work"]
       },
       "heavy": {
         "model": "opencode-go/mimo-v2.6-pro",
-        "costRatio": 35,
-        "description": "Tier S / frontier — MiMo-V2.6-Pro (replaces GLM-5.3 per owner call; reserve for unspec'd/design work and ADR-governed systems)",
+        "costRatio": 2.3,
+        "description": "Tier S / frontier — MiMo-V2.6-Pro (~16,300 req/month; replaces GLM-5.3 per owner call — reserve for unspec'd/design work and ADR-governed systems)",
         "whenToUse": [
           "no spec exists and the agent must design it",
           "touches sync/CRDT/auth/encryption (ADR 0001/0003/0004)",

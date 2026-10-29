@@ -1,20 +1,27 @@
-import { describe, it, expect } from 'vitest'
-import { splitIntoBatches, BATCH_BYTE_BUDGET } from '@/services/vault-import'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import {
+	splitIntoBatches,
+	BATCH_BYTE_BUDGET,
+	importVaultIR,
+	generateImportId,
+	vaultFingerprint,
+} from '@/services/vault-import'
 
 function makePage (title: string, base64Length: number) {
 	return {
 		title,
-		folderPath: null,
-		properties: {},
-		tags: [],
+		folderPath: null as string | null,
+		properties: {} as Record<string, unknown>,
+		tags: [] as string[],
 		contentYjsBase64: 'A'.repeat(base64Length),
 		plainText: '',
 		isFolder: false,
+		contentHash: `hash-${title}`,
 	}
 }
 
 function makeIR (pages: ReturnType<typeof makePage>[]) {
-	return { workspaceId: 'ws-1', pages }
+	return { workspaceId: 'ws-1', source: 'obsidian' as const, pages }
 }
 
 describe('splitIntoBatches', () => {
@@ -51,5 +58,222 @@ describe('splitIntoBatches', () => {
 		expect(batches).toHaveLength(1)
 		expect(batches[0].pages.map(p => p.title)).toEqual(['small'])
 		expect(oversized.map(p => p.title)).toEqual(['huge'])
+	})
+
+	it('orders pages deterministically so batchIndex maps to stable content', () => {
+		// Directory enumeration order is implementation-defined; the fingerprint
+		// is order-independent. Sorting keeps the positional batchIndex stable
+		// across a retry so the server replays the right pages (#87).
+		const { batches } = splitIntoBatches(makeIR([
+			makePage('c', 100),
+			makePage('a', 100),
+			makePage('b', 100),
+		]))
+		expect(batches.flatMap(b => b.pages.map(p => p.title))).toEqual(['a', 'b', 'c'])
+	})
+
+	it('keeps batch membership stable for folder/title pairs that flatten alike', () => {
+		// `("a", "b/c")` and `("a/b", "c")` flatten to the same string, so a
+		// separator-based sort key ties them and leaves their order dependent on
+		// directory enumeration. With a budget that forces one page per batch, a
+		// reorder would move a page across a positional batchIndex and the ledger
+		// would replay the wrong page set (PR #132 review).
+		const base = makePage('c', 400)
+		const nestedTitle = { ...base, title: 'b/c', folderPath: 'a' }
+		const nestedFolder = { ...base, folderPath: 'a/b' }
+		const budget = 900
+
+		const identity = (layout: ReturnType<typeof splitIntoBatches>) =>
+			layout.batches.map(batch => batch.pages.map(page => `${page.folderPath}|${page.title}`))
+
+		const forward = splitIntoBatches(makeIR([nestedTitle, nestedFolder]), budget)
+		const reversed = splitIntoBatches(makeIR([nestedFolder, nestedTitle]), budget)
+
+		expect(forward.batches).toHaveLength(2)
+		expect(identity(forward)).toEqual(identity(reversed))
+	})
+})
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+describe('generateImportId', () => {
+	it('emits a UUID the server will accept', () => {
+		expect(generateImportId()).toMatch(UUID_RE)
+		expect(generateImportId()).not.toBe(generateImportId())
+	})
+})
+
+describe('vaultFingerprint', () => {
+	it('is stable across page order', () => {
+		const a = makeIR([makePage('a', 10), makePage('b', 20)])
+		const b = makeIR([makePage('b', 20), makePage('a', 10)])
+		expect(vaultFingerprint(a)).toBe(vaultFingerprint(b))
+	})
+
+	it('diverges for different content or workspace', () => {
+		const base = makeIR([makePage('a', 10)])
+		const differentContent = makeIR([{ ...makePage('a', 10), plainText: 'a different body' }])
+		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(differentContent))
+		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint({ ...base, workspaceId: 'ws-2' }))
+	})
+
+	it('is stable when only the nondeterministic Yjs encoding differs', () => {
+		// Two ingestions of the same vault seed Yjs with different random
+		// clientIDs, so contentYjsBase64 (and its length) varies. The fingerprint
+		// must ignore it — otherwise a retry mints a new clientImportId (#87 AC1).
+		const a = makeIR([makePage('a', 10)])
+		const b = makeIR([{ ...makePage('a', 10), contentYjsBase64: 'B'.repeat(99) }])
+		expect(vaultFingerprint(a)).toBe(vaultFingerprint(b))
+	})
+
+	it('diverges when rich-text content changes but plain text does not', () => {
+		// `plainText` drops marks/structure, so an italic-only edit can leave it
+		// unchanged while the imported doc materially differs. The content hash
+		// must carry that difference (external review finding, PR #132).
+		const base = makeIR([makePage('a', 10)])
+		const restyled = makeIR([{ ...makePage('a', 10), contentHash: 'different-content' }])
+		expect(base.pages[0].plainText).toBe(restyled.pages[0].plainText)
+		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(restyled))
+	})
+
+	it('diverges when page properties or tags change', () => {
+		const base = makeIR([makePage('a', 10)])
+		const withProps = makeIR([{ ...makePage('a', 10), properties: { author: 'Harsh' } }])
+		const withTags = makeIR([{ ...makePage('a', 10), tags: ['work'] }])
+		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(withProps))
+		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(withTags))
+	})
+
+	it('diverges when folder/note role changes for the same path', () => {
+		const base = makeIR([makePage('a', 10)])
+		const asFolder = makeIR([{ ...makePage('a', 10), isFolder: true }])
+		expect(vaultFingerprint(base)).not.toBe(vaultFingerprint(asFolder))
+	})
+
+	it('does not alias distinct folder/title locations that flatten alike', () => {
+		// `("a", "b/c")` and `("a/b", "c")` flatten to the same `a/b/c` string, but
+		// the server treats folderPath as hierarchy and title as the leaf title,
+		// so they are different pages. If the fingerprint aliased them, a reorder
+		// across a batch boundary could replay the wrong page set (PR #132 review).
+		const base = makePage('c', 10)
+		const nestedTitle = makeIR([{ ...base, title: 'b/c', folderPath: 'a' }])
+		const nestedFolder = makeIR([{ ...base, folderPath: 'a/b' }])
+		expect(vaultFingerprint(nestedTitle)).not.toBe(vaultFingerprint(nestedFolder))
+	})
+
+	it('distinguishes metadata that collided under the old 32-bit digest', () => {
+		// Exact pair reported by external review: with FNV-1a both one-page
+		// vaults fingerprinted as `ws-1:1:2b72a1f3`, so a metadata-only edit
+		// reused the retry id and the server replayed the stale batch. SHA-256
+		// must keep them distinct (PR #132).
+		const page = (source: string) => makeIR([{
+			...makePage('Collision note', 10),
+			properties: { source },
+			contentHash: '6282d4f9',
+			plainText: 'same body',
+		}])
+		expect(vaultFingerprint(page('hVLr33HNxn')))
+			.not.toBe(vaultFingerprint(page('P3C4Z3fYdn')))
+	})
+
+	it('diverges when a Date-valued property changes but serializes the same shape', () => {
+		// `gray-matter` parses unquoted YAML timestamps into `Date`. A naive
+		// object walk sees no enumerable keys and collapses every date to `{}`,
+		// so a timestamp-only edit would reuse the stale id and replay the old
+		// batch (external review finding, PR #132). Different dates must diverge.
+		const first = makeIR([{
+			...makePage('a', 10),
+			properties: { updated: new Date('2026-01-01T00:00:00Z') },
+		}])
+		const second = makeIR([{
+			...makePage('a', 10),
+			properties: { updated: new Date('2026-06-01T00:00:00Z') },
+		}])
+		expect(vaultFingerprint(first)).not.toBe(vaultFingerprint(second))
+	})
+
+	it('is stable for identical Date-valued properties across ingestions', () => {
+		const stamp = () => new Date('2026-01-01T00:00:00Z')
+		const a = makeIR([{ ...makePage('a', 10), properties: { updated: stamp() } }])
+		const b = makeIR([{ ...makePage('a', 10), properties: { updated: stamp() } }])
+		expect(vaultFingerprint(a)).toBe(vaultFingerprint(b))
+	})
+})
+
+describe('importVaultIR idempotency (#87)', () => {
+	const originalFetch = global.fetch
+	afterEach(() => { global.fetch = originalFetch })
+
+	const jsonResponse = (payload: object) => new Response(JSON.stringify(payload), {
+		status: 200,
+		headers: { 'Content-Type': 'application/json' },
+	})
+
+	it('sends a stable clientImportId and batchIndex with the batch', async () => {
+		global.fetch = vi.fn(async () => jsonResponse({
+			success: true,
+			importedCount: 1,
+			pages: [{ id: 'p-1', title: 'a' }],
+			warnings: [],
+		})) as unknown as typeof global.fetch
+
+		const outcome = await importVaultIR(makeIR([makePage('a', 100)]), async () => 'tok', undefined, {
+			clientImportId: 'fixed-import-id',
+		})
+
+		const init = (global.fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0][1]
+		const body = JSON.parse(String(init.body))
+		expect(body.clientImportId).toBe('fixed-import-id')
+		expect(body.batchIndex).toBe(0)
+		expect(outcome.resumedCount).toBe(0)
+	})
+
+	it('aggregates resumed pages from a replayed batch', async () => {
+		global.fetch = vi.fn(async () => jsonResponse({
+			success: true,
+			resumed: true,
+			importedCount: 2,
+			pages: [{ id: 'p-1', title: 'a' }, { id: 'p-2', title: 'b' }],
+			warnings: [],
+		})) as unknown as typeof global.fetch
+
+		const outcome = await importVaultIR(makeIR([makePage('a', 100), makePage('b', 100)]), async () => 'tok')
+
+		expect(outcome.resumedCount).toBe(2)
+		expect(outcome.createdPages).toHaveLength(2)
+	})
+
+	it('generates a fresh uuid when the caller has no session id', async () => {
+		global.fetch = vi.fn(async () => jsonResponse({
+			success: true,
+			importedCount: 1,
+			pages: [{ id: 'p-1', title: 'a' }],
+			warnings: [],
+		})) as unknown as typeof global.fetch
+
+		await importVaultIR(makeIR([makePage('a', 100)]), async () => 'tok')
+
+		const init = (global.fetch as unknown as { mock: { calls: Array<[string, RequestInit]> } }).mock.calls[0][1]
+		const body = JSON.parse(String(init.body))
+		expect(body.clientImportId).toMatch(UUID_RE)
+	})
+
+	it('retries a 409 batch_in_progress instead of failing the import', async () => {
+		let call = 0
+		global.fetch = vi.fn(async () => {
+			call += 1
+			if (call === 1) {
+				return new Response(JSON.stringify({ error: 'busy', code: 'batch_in_progress' }), {
+					status: 409,
+					headers: { 'Content-Type': 'application/json' },
+				})
+			}
+			return jsonResponse({ success: true, importedCount: 1, pages: [{ id: 'p-1', title: 'a' }], warnings: [] })
+		}) as unknown as typeof global.fetch
+
+		const outcome = await importVaultIR(makeIR([makePage('a', 100)]), async () => 'tok')
+
+		expect(global.fetch).toHaveBeenCalledTimes(2)
+		expect(outcome.createdPages).toHaveLength(1)
 	})
 })

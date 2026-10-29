@@ -1,0 +1,41 @@
+---
+title: Graph
+description: The connectivity view over your pages, links, and tags.
+---
+
+The **graph** is the view of your workspace as a network: pages are nodes, page links are edges, and
+tags cluster related pages.
+
+## The graph index
+
+Lekhan keeps an incrementally maintained **graph index** derived from page content. It stores:
+
+- page links (`[[...]]`, including unresolved ones),
+- tags (`#tag`), and
+- search text.
+
+The editor updates the index as you write. Because the index is derived from content, you never have
+to maintain it by hand — link a page and the graph updates.
+
+## Using the graph
+
+- **Trace connections** from a page outward through its links and backlinks.
+- **Find clusters** around a topic or tag.
+- **Jump into context** instead of searching for a title you half-remember.
+
+<Callout type="info" title="Graph and privacy">
+The graph is built from your own content inside your workspace. Local-first pages remain editable
+offline; the index catches up as changes sync.
+</Callout>
+
+## Graph, search, and tags together
+
+The same index powers [backlinks](/docs/concepts/links-and-backlinks),
+[tags](/docs/concepts/tags), and global search. Use search when you know roughly what
+you want; use the graph when you want to see how ideas connect.
+
+## Related
+
+- [Pages](/docs/concepts/pages)
+- [Links and backlinks](/docs/concepts/links-and-backlinks)
+- [Tags](/docs/concepts/tags)

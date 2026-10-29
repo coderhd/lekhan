@@ -60,6 +60,9 @@ export default function ProfileMenu({ user, size = 'md' }: ProfileMenuProps) {
 			<button
 				onClick={() => setIsOpen(!isOpen)}
 				className={triggerClasses}
+				aria-label={`Account menu (${displayName})`}
+				aria-haspopup="menu"
+				aria-expanded={isOpen}
 			>
 				{initials}
 			</button>

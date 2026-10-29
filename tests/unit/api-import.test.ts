@@ -16,6 +16,24 @@ vi.mock('../../server/graph-index.js', () => ({
 	default: { normalizeTitle: normalizeTitleMock, indexPage: indexPageMock, indexPages: indexPagesMock },
 }))
 
+// The idempotency ledger is exercised directly in import-ledger.test.ts; here we
+// assert the route's contract with it (replay, 409, checkpoint, failure). The
+// real deterministic-id helper is kept so the route's upsert ids are asserted.
+const claimImportBatchMock = vi.hoisted(() => vi.fn())
+const completeImportBatchMock = vi.hoisted(() => vi.fn(async () => true))
+const failImportBatchMock = vi.hoisted(() => vi.fn(async () => {}))
+vi.mock('@/lib/import-ledger', async importOriginal => {
+	const actual = await importOriginal<typeof import('@/lib/import-ledger')>()
+	return {
+		...actual,
+		claimImportBatch: claimImportBatchMock,
+		completeImportBatch: completeImportBatchMock,
+		failImportBatch: failImportBatchMock,
+	}
+})
+
+const CLIENT_IMPORT_ID = '11111111-1111-4111-8111-111111111111'
+
 // Partially mock request-limits so the 413 path can be triggered without
 // shipping a multi-megabyte body.
 vi.mock('@/lib/request-limits', async importOriginal => {
@@ -33,6 +51,7 @@ vi.mock('@/lib/request-limits', async importOriginal => {
 interface AdminOptions {
 	workspaceOwner?: string | null
 	existingPages?: Array<{ id: string; title: string; parent_id: string | null; properties?: Record<string, unknown> }>
+	existingPagesError?: Error | null
 	folderIds?: string[]
 	uploadError?: Error | null
 }
@@ -50,6 +69,7 @@ function makeAdminClient(options: AdminOptions = {}) {
 		uploadedPaths: [] as string[],
 		folderInserts: [] as Record<string, unknown>[],
 		batchInserts: [] as Array<Record<string, unknown>[]>,
+		upserts: [] as Array<{ rows: Array<Record<string, unknown>>; options: unknown }>,
 	}
 	let pageCounter = 0
 
@@ -63,11 +83,16 @@ function makeAdminClient(options: AdminOptions = {}) {
 	})
 
 	const makeChain = () => {
-		const chain: Record<string, unknown> & { __insertRows?: unknown } = {}
+		const chain: Record<string, unknown> & { __insertRows?: unknown; __upsertRows?: unknown; __upsertOptions?: unknown } = {}
 		chain.select = vi.fn(() => chain)
 		chain.eq = vi.fn(() => chain)
 		chain.insert = vi.fn((rows: unknown) => {
 			chain.__insertRows = rows
+			return chain
+		})
+		chain.upsert = vi.fn((rows: unknown, opts: unknown) => {
+			chain.__upsertRows = rows
+			chain.__upsertOptions = opts
 			return chain
 		})
 		chain.maybeSingle = vi.fn(async () => {
@@ -81,7 +106,14 @@ function makeAdminClient(options: AdminOptions = {}) {
 		})
 		chain.then = (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
 			thenableResult(() => {
+				// Idempotent leaf path: upsert with ON CONFLICT DO NOTHING.
+				if (chain.__upsertRows !== undefined) {
+					const rows = chain.__upsertRows as Array<Record<string, unknown>>
+					calls.upserts.push({ rows, options: chain.__upsertOptions })
+					return { data: null, error: null }
+				}
 				if (chain.__insertRows === undefined) {
+					if (options.existingPagesError) return { data: null, error: options.existingPagesError }
 					return { data: options.existingPages ?? [], error: null }
 				}
 				const rows = Array.isArray(chain.__insertRows) ? chain.__insertRows : [chain.__insertRows]
@@ -197,6 +229,11 @@ describe('API Route: POST /api/import', () => {
 			indexed: (items ?? []).map(item => item.pageId),
 			errors: [] as Array<{ pageId: string; error: string }>,
 		}))
+		claimImportBatchMock.mockReset()
+		completeImportBatchMock.mockReset()
+		completeImportBatchMock.mockResolvedValue(true)
+		failImportBatchMock.mockReset()
+		failImportBatchMock.mockResolvedValue(undefined)
 		h.count = 0
 		h.adminClient = null
 		h.callerClient = null
@@ -372,5 +409,153 @@ describe('API Route: POST /api/import', () => {
 		expect(data.warnings[0].stage).toBe('snapshot')
 		expect(data.warnings[0].error).toMatch(/storage down/)
 		expect(indexPageMock).not.toHaveBeenCalled()
+	})
+
+	// -------------------------------------------------------------------------
+	// Idempotent batches (#87)
+	// -------------------------------------------------------------------------
+
+	it('replays a completed batch instead of inserting pages again', async () => {
+		claimImportBatchMock.mockResolvedValue({
+			kind: 'completed',
+			result: {
+				importedCount: 2,
+				pages: [{ id: 'p-1', title: 'A' }, { id: 'p-2', title: 'B' }],
+				warnings: [],
+			},
+		})
+		clients = makeAdminClient({ workspaceOwner: 'owner-1' })
+		h.adminClient = clients.admin
+		const POST = await loadRoute()
+
+		const res = await POST(makeRequest({
+			workspaceId: 'ws1',
+			pages: [{ ...validPage, title: 'A' }, { ...validPage, title: 'B' }],
+			clientImportId: CLIENT_IMPORT_ID,
+			batchIndex: 0,
+		}))
+
+		expect(res.status).toBe(200)
+		const data = await res.json()
+		expect(data.resumed).toBe(true)
+		expect(data.importedCount).toBe(2)
+		expect(data.pages).toHaveLength(2)
+		// Nothing was written: no leaf insert, no snapshot upload, no index pass.
+		expect(clients.calls.batchInserts).toHaveLength(0)
+		expect(clients.calls.uploadedPaths).toHaveLength(0)
+		expect(indexPagesMock).not.toHaveBeenCalled()
+		expect(completeImportBatchMock).not.toHaveBeenCalled()
+	})
+
+	it('returns 409 while a batch is being processed elsewhere', async () => {
+		claimImportBatchMock.mockResolvedValue({ kind: 'in-progress' })
+		clients = makeAdminClient({ workspaceOwner: 'owner-1' })
+		h.adminClient = clients.admin
+		const POST = await loadRoute()
+
+		const res = await POST(makeRequest({
+			workspaceId: 'ws1',
+			pages: [validPage],
+			clientImportId: CLIENT_IMPORT_ID,
+			batchIndex: 0,
+		}))
+
+		expect(res.status).toBe(409)
+		expect(clients.calls.batchInserts).toHaveLength(0)
+	})
+
+	it('records a checkpoint after a claimed batch succeeds', async () => {
+		claimImportBatchMock.mockResolvedValue({ kind: 'claimed', ledgerId: 'ledger-1' })
+		clients = makeAdminClient({ workspaceOwner: 'owner-1' })
+		h.adminClient = clients.admin
+		const POST = await loadRoute()
+
+		const res = await POST(makeRequest({
+			workspaceId: 'ws1',
+			pages: [{ ...validPage, title: 'A' }],
+			clientImportId: CLIENT_IMPORT_ID,
+			batchIndex: 3,
+		}))
+
+		expect(res.status).toBe(200)
+		const data = await res.json()
+		expect(data.resumed).toBeUndefined()
+		expect(claimImportBatchMock).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+			workspaceId: 'ws1',
+			ownerId: 'owner-1',
+			clientImportId: CLIENT_IMPORT_ID,
+			batchIndex: 3,
+		}))
+		expect(completeImportBatchMock).toHaveBeenCalledTimes(1)
+		const [, ledgerId, result] = completeImportBatchMock.mock.calls[0] as unknown as [unknown, string, { importedCount: number }]
+		expect(ledgerId).toBe('ledger-1')
+		expect(result.importedCount).toBe(1)
+	})
+
+	it('inserts an idempotent batch with deterministic ids and duplicate-tolerant upsert', async () => {
+		claimImportBatchMock.mockResolvedValue({ kind: 'claimed', ledgerId: 'ledger-8' })
+		clients = makeAdminClient({ workspaceOwner: 'owner-1' })
+		h.adminClient = clients.admin
+		const POST = await loadRoute()
+
+		const res = await POST(makeRequest({
+			workspaceId: 'ws1',
+			pages: [{ ...validPage, title: 'A' }, { ...validPage, title: 'B' }],
+			clientImportId: CLIENT_IMPORT_ID,
+			batchIndex: 2,
+		}))
+
+		expect(res.status).toBe(200)
+		// The legacy (non-idempotent) insert path is not used.
+		expect(clients.calls.batchInserts).toHaveLength(0)
+		expect(clients.calls.upserts).toHaveLength(1)
+
+		const { rows, options } = clients.calls.upserts[0]
+		expect(options).toEqual({ onConflict: 'id', ignoreDuplicates: true })
+		const { deriveBatchPageId } = await import('@/lib/import-ledger')
+		const expectedIds = [
+			deriveBatchPageId('ws1', CLIENT_IMPORT_ID, 2, 0),
+			deriveBatchPageId('ws1', CLIENT_IMPORT_ID, 2, 1),
+		]
+		expect(rows.map(row => row.id)).toEqual(expectedIds)
+
+		const data = await res.json()
+		expect(data.importedCount).toBe(2)
+		expect(data.pages.map((page: { id: string }) => page.id)).toEqual(expectedIds)
+	})
+
+	it('marks a claimed batch failed when the import throws', async () => {
+		claimImportBatchMock.mockResolvedValue({ kind: 'claimed', ledgerId: 'ledger-2' })
+		clients = makeAdminClient({ workspaceOwner: 'owner-1', existingPagesError: new Error('boom') })
+		h.adminClient = clients.admin
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+		const POST = await loadRoute()
+
+		const res = await POST(makeRequest({
+			workspaceId: 'ws1',
+			pages: [validPage],
+			clientImportId: CLIENT_IMPORT_ID,
+			batchIndex: 0,
+		}))
+		errSpy.mockRestore()
+
+		expect(res.status).toBe(500)
+		expect(failImportBatchMock).toHaveBeenCalledWith(expect.anything(), 'ledger-2')
+		expect(completeImportBatchMock).not.toHaveBeenCalled()
+	})
+
+	it('rejects idempotency fields supplied alone or malformed', async () => {
+		const POST = await loadRoute()
+		const bodies = [
+			{ workspaceId: 'ws1', pages: [validPage], clientImportId: CLIENT_IMPORT_ID },
+			{ workspaceId: 'ws1', pages: [validPage], batchIndex: 0 },
+			{ workspaceId: 'ws1', pages: [validPage], clientImportId: 'not-a-uuid', batchIndex: 0 },
+			{ workspaceId: 'ws1', pages: [validPage], clientImportId: CLIENT_IMPORT_ID, batchIndex: -1 },
+			{ workspaceId: 'ws1', pages: [validPage], clientImportId: CLIENT_IMPORT_ID, batchIndex: 1.5 },
+		]
+		for (const body of bodies) {
+			const res = await POST(makeRequest(body))
+			expect(res.status).toBe(400)
+		}
 	})
 })
