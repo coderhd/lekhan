@@ -301,10 +301,8 @@ export function buildVaultFiles(pages: VaultPage[]): VaultExportResult {
 		} catch (err) {
 			// One unserializable doc must not destroy the whole vault. Skip the note
 			// and name it in the report instead of failing silently or aborting.
-			// Drop the note's own title→path entry so wikilinks to it are reported
-			// unresolved rather than rewritten at a file that was never written.
-			const key = normalizeTitle(page.title)
-			if (key && pathByTitle.get(key) === path.replace(/\.md$/, '')) pathByTitle.delete(key)
+			// (Pass 3 rebuilds the title map from `notes`, so a skipped page is
+			// never a valid link target.)
 			warnings.push({
 				title: page.title,
 				stage: 'serialize',
