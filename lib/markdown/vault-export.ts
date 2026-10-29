@@ -313,7 +313,16 @@ export function buildVaultFiles(pages: VaultPage[]): VaultExportResult {
 		}
 	}
 
-	// Pass 3 — rewrite wikilinks against the final set of written notes.
+	// Pass 3 — rebuild the title map from successfully serialized notes (first
+	// successful note wins for duplicate titles), then rewrite wikilinks against
+	// that final set. Rebuilding — rather than only deleting failures — lets a
+	// later duplicate take over when the first page with that title failed.
+	pathByTitle.clear()
+	for (const { page, path } of notes) {
+		const key = normalizeTitle(page.title)
+		if (key && !pathByTitle.has(key)) pathByTitle.set(key, path.replace(/\.md$/, ''))
+	}
+
 	for (const { page, path, body, properties, tags } of notes) {
 		if (properties.database) databasePages += 1
 		try {

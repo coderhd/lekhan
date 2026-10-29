@@ -60,4 +60,38 @@ describe('buildVaultFiles — serialize-stage honesty', () => {
 		expect(body).toContain('[[Broken]]')
 		expect(body).not.toContain('broken|')
 	})
+
+	it('promotes a later duplicate note when the first duplicate fails to serialize', () => {
+		const dupFail: VaultPage = {
+			id: 'c',
+			parentId: null,
+			title: 'Dup',
+			properties: {},
+			doc: doc('payload'),
+		}
+		const dupOk: VaultPage = {
+			id: 'd',
+			parentId: null,
+			title: 'Dup',
+			properties: {},
+			doc: doc('safe'),
+		}
+		const link: VaultPage = {
+			id: 'e',
+			parentId: null,
+			title: 'Links',
+			properties: {},
+			doc: doc('see [[Dup]]'),
+		}
+
+		const { files, report } = buildVaultFiles([link, dupFail, dupOk])
+
+		expect(files.some((file) => file.path === 'dup.md')).toBe(false)
+		expect(files.some((file) => file.path === 'dup-2.md')).toBe(true)
+		const links = files.find((file) => file.path === 'links.md')
+		const body = typeof links?.data === 'string' ? links.data : ''
+		expect(body).toContain('[[dup-2|Dup]]')
+		expect(report.linksResolved).toBe(1)
+		expect(report.linksUnresolved).toBe(0)
+	})
 })
