@@ -6,7 +6,7 @@ process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = 'mock-anon-key'
 
 const auth = require('../../server/auth')
 
-const { getServerMetrics } = require('../../server/index.js')
+const { getServerMetrics, resolveRelayReadOnly } = require('../../server/index.js')
 
 describe('Server Metrics & Health System', () => {
 	it('provides valid server metrics format from production getServerMetrics', () => {
@@ -264,7 +264,7 @@ describe('Server Pages Cutover & Graph Index Integration', () => {
 		expect(role.role).toBe('viewer')
 	})
 
-	it('getDocumentOwnerPlan reads the owner plan via pages', async () => {
+	it('getDocumentOwnerPlan reads the owner plan from the workspace_plans row', async () => {
 		const mockAdmin = {
 			from: vi.fn().mockImplementation((table: string) => {
 				if (table === 'pages') {
@@ -279,11 +279,26 @@ describe('Server Pages Cutover & Graph Index Integration', () => {
 						}),
 					}
 				}
-				if (table === 'profiles') {
+				if (table === 'workspaces') {
 					return {
 						select: vi.fn().mockReturnValue({
 							eq: vi.fn().mockReturnValue({
-								single: vi.fn().mockResolvedValue({ data: { plan: 'pro' }, error: null }),
+								maybeSingle: vi.fn().mockResolvedValue({
+									data: { id: 'ws-123' },
+									error: null,
+								}),
+							}),
+						}),
+					}
+				}
+				if (table === 'workspace_plans') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({
+									data: { workspace_id: 'ws-123', tier: 'pro', status: 'active' },
+									error: null,
+								}),
 							}),
 						}),
 					}
@@ -294,6 +309,137 @@ describe('Server Pages Cutover & Graph Index Integration', () => {
 
 		const limit = await auth.getDocumentOwnerPlan(mockAdmin, 'page-1')
 		expect(limit).toBe('pro')
+		// T11: the deprecated profiles.plan mirror is no longer read here.
+		expect(mockAdmin.from).not.toHaveBeenCalledWith('profiles')
+	})
+
+	it('getDocumentOwnerEntitlement carries past-due grace state from the workspace row', async () => {
+		const pastDueSince = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
+		const mockAdmin = {
+			from: vi.fn().mockImplementation((table: string) => {
+				if (table === 'pages') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({ data: { owner_id: 'user-123' }, error: null }),
+							}),
+						}),
+					}
+				}
+				if (table === 'workspaces') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'ws-123' }, error: null }),
+							}),
+						}),
+					}
+				}
+				if (table === 'workspace_plans') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({
+									data: {
+										workspace_id: 'ws-123',
+										tier: 'pro',
+										status: 'past_due',
+										past_due_since: pastDueSince,
+										seats: null,
+									},
+									error: null,
+								}),
+							}),
+						}),
+					}
+				}
+				return {}
+			}),
+		} as any
+
+		const entitlement = await auth.getDocumentOwnerEntitlement(mockAdmin, 'page-1')
+		expect(entitlement.tier).toBe('pro')
+		// D9: inside the 7-day grace window the relay stays fully writable.
+		expect(entitlement.inGracePeriod).toBe(true)
+		expect(entitlement.relayReadOnly).toBe(false)
+	})
+
+	it('getDocumentOwnerEntitlement turns the relay read-only once past-due grace expires', async () => {
+		const pastDueSince = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString()
+		const mockAdmin = {
+			from: vi.fn().mockImplementation((table: string) => {
+				if (table === 'pages') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({ data: { owner_id: 'user-123' }, error: null }),
+							}),
+						}),
+					}
+				}
+				if (table === 'workspaces') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'ws-123' }, error: null }),
+							}),
+						}),
+					}
+				}
+				if (table === 'workspace_plans') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({
+									data: {
+										workspace_id: 'ws-123',
+										tier: 'pro',
+										status: 'past_due',
+										past_due_since: pastDueSince,
+										seats: null,
+									},
+									error: null,
+								}),
+							}),
+						}),
+					}
+				}
+				return {}
+			}),
+		} as any
+
+		const entitlement = await auth.getDocumentOwnerEntitlement(mockAdmin, 'page-1')
+		expect(entitlement.inGracePeriod).toBe(false)
+		expect(entitlement.relayReadOnly).toBe(true)
+	})
+
+	it('getDocumentOwnerPlan returns free when the owner has no workspace row', async () => {
+		const mockAdmin = {
+			from: vi.fn().mockImplementation((table: string) => {
+				if (table === 'pages') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({ data: { owner_id: 'user-123' }, error: null }),
+							}),
+						}),
+					}
+				}
+				if (table === 'workspaces') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+							}),
+						}),
+					}
+				}
+				return {}
+			}),
+		} as any
+
+		expect(await auth.getDocumentOwnerPlan(mockAdmin, 'page-1')).toBe('free')
+		expect(mockAdmin.from).not.toHaveBeenCalledWith('profiles')
 	})
 
 	it('indexPage writes links, tags and searchable_text via the admin client', async () => {
@@ -357,5 +503,25 @@ describe('Server Pages Cutover & Graph Index Integration', () => {
 
 		const role = await auth.verifyUserRole(mockSupabase, 'page-1', 'anonymous')
 		expect(role.role).toBe('viewer')
+	})
+})
+
+describe('Sync relay write gate (T11 / D9)', () => {
+	it('keeps active and in-grace writers writable', () => {
+		expect(resolveRelayReadOnly('owner', { relayReadOnly: false })).toBe(false)
+		expect(resolveRelayReadOnly('editor', { relayReadOnly: false })).toBe(false)
+	})
+
+	it('forces viewers read-only regardless of entitlement', () => {
+		expect(resolveRelayReadOnly('viewer', { relayReadOnly: false })).toBe(true)
+	})
+
+	it('turns the relay read-only only after past-due grace expiry', () => {
+		expect(resolveRelayReadOnly('owner', { relayReadOnly: true })).toBe(true)
+		expect(resolveRelayReadOnly('author', { relayReadOnly: true })).toBe(true)
+	})
+
+	it('does not block an owner with no resolvable workspace row', () => {
+		expect(resolveRelayReadOnly('owner', null)).toBe(false)
 	})
 })

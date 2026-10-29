@@ -95,7 +95,7 @@ provider registry).
 | #82 | Tier plumbing + local-first version history | P0 | 16h | Aug 31 → Sep 1 | **Shipped** (PR #99) |
 | — | 🔒 **Private beta opens** (gate #84 clears) | — | — | **Sep 2** | — |
 | #28 | AI Provider Registry (final spec 4h incl.) | P0 | 64h | Sep 2 → Sep 10 | **Shipped** (PR #107) |
-| #29 | Billing: Stripe/Razorpay + founding prices + referral credits | P0 | 60h | Sep 11 → Sep 22 | Backlog |
+| #29 | Billing: Stripe/Razorpay + founding prices + referral credits | P0 | 60h | Sep 11 → Sep 22 | In progress — T1–T14 landed on `plan/29-real-billing`; env apply + founding backfill pending |
 | #87 | Idempotent imports | P1 | 12h | Sep 23 → Sep 24 | **Shipped** (PR #132 → `3b0a5d8`; #130 merged the base, #132 the retry-identity fixes) |
 | #31 | i18n framework | P0 | 24h | Sep 25 → Sep 29 | Backlog |
 | #32 | Docs site (agent 32h; prose content owner-driven in parallel) | P0 | 32h | Sep 30 → Oct 7 | Backlog |

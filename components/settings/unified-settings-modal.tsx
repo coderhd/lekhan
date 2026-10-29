@@ -141,7 +141,7 @@ export function UnifiedSettingsModal({ isOpen, onClose, registryState, onSaveReg
 						{activeTab === 'plan' && (
 							<div id="modal-panel-plan" role="tabpanel" aria-labelledby="modal-tab-plan" className="animate-in fade-in slide-in-from-right-4 duration-300">
 								<h2 className="text-2xl font-display-lg text-on-surface mb-2">Plan & Usage</h2>
-								<p className="text-sm text-on-surface-variant mb-8">View your current billing and credit usage.</p>
+								<p className="text-sm text-on-surface-variant mb-8">View your current billing and plan usage.</p>
 								<div className="p-8 border border-dashed border-black/10 dark:border-white/10 rounded-2xl flex items-center justify-center text-on-surface-variant">
 									Coming Soon
 								</div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 import Link from 'next/link'
 import Image from 'next/image'
@@ -15,6 +15,14 @@ export default function SignupPage() {
 	const [loading, setLoading] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const [successMessage, setSuccessMessage] = useState<string | null>(null)
+	// Referral capture (PDEC-5): read `?ref` once at mount and pass it on signup so the
+	// handle_new_user companion trigger can persist referral_attribution. No UI change.
+	const [referredBy, setReferredBy] = useState<string | null>(null)
+
+	useEffect(() => {
+		const ref = new URLSearchParams(window.location.search).get('ref')
+		setReferredBy(ref ? ref.trim().slice(0, 100) : null)
+	}, [])
 
 	const handleSignup = async (e: React.FormEvent) => {
 		e.preventDefault()
@@ -30,6 +38,7 @@ export default function SignupPage() {
 				options: {
 					data: {
 						full_name: fullName,
+						...(referredBy ? { referred_by: referredBy } : {}),
 					},
 				},
 			})

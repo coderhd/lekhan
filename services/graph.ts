@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { Backlink, DocumentVersion, MemberPageItem, MemberRole, Page, PageInvitation, PageInvitationProjection, PageLink, PageMember, PageTag, Workspace } from '@/types'
-import { getPlanCollaboratorLimit, getUserAICredits } from '@/services/db'
+import { getOwnerEntitlement } from '@/services/db'
+import { getPlanLimits } from '@/lib/tier-limits'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -316,8 +317,8 @@ export async function createPageInvitation (
 	token: string
 ): Promise<void> {
 	const pageDetails = await fetchPageDetails(pageId)
-	const ownerCredits = await getUserAICredits(pageDetails.owner_id)
-	const allowedLimit = getPlanCollaboratorLimit(ownerCredits.plan)
+	const ownerEntitlement = await getOwnerEntitlement(pageDetails.owner_id)
+	const allowedLimit = getPlanLimits(ownerEntitlement.tier, ownerEntitlement.seats).maxDistinctCollaborators
 
 	const { count: memberCount, error: memberError } = await supabase
 		.from('page_members')
@@ -339,7 +340,7 @@ export async function createPageInvitation (
 	const totalCount = (memberCount || 0) + (inviteCount || 0)
 
 	if (totalCount >= allowedLimit) {
-		throw new CollaboratorLimitError(`Collaborator limit reached for page owner's ${ownerCredits.plan.toUpperCase()} plan (max ${allowedLimit}). Upgrade plan to add more collaborators.`)
+		throw new CollaboratorLimitError(`Collaborator limit reached for page owner's ${ownerEntitlement.tier.toUpperCase()} plan (max ${allowedLimit}). Upgrade plan to add more collaborators.`)
 	}
 
 	const { error } = await supabase
@@ -388,8 +389,8 @@ export async function acceptPageInvitation (invite: PageInvitation, userId: stri
 	}
 
 	const pageDetails = await fetchPageDetails(invite.page_id)
-	const ownerCredits = await getUserAICredits(pageDetails.owner_id)
-	const allowedLimit = getPlanCollaboratorLimit(ownerCredits.plan)
+	const ownerEntitlement = await getOwnerEntitlement(pageDetails.owner_id)
+	const allowedLimit = getPlanLimits(ownerEntitlement.tier, ownerEntitlement.seats).maxDistinctCollaborators
 
 	const { count: memberCount, error: memberError } = await supabase
 		.from('page_members')
@@ -412,7 +413,7 @@ export async function acceptPageInvitation (invite: PageInvitation, userId: stri
 	}
 
 	if ((memberCount || 0) + (inviteCount || 0) >= allowedLimit) {
-		throw new Error(`Collaborator limit reached for this page's owner (${ownerCredits.plan.toUpperCase()} plan, max ${allowedLimit}).`)
+		throw new Error(`Collaborator limit reached for this page's owner (${ownerEntitlement.tier.toUpperCase()} plan, max ${allowedLimit}).`)
 	}
 
 	const { error: memberError2 } = await supabase

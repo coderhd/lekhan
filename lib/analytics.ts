@@ -56,6 +56,14 @@ export interface EventPayloadMap {
 		plan: string
 		billing_cycle?: 'yearly' | 'monthly' | string
 	}
+	billing_checkout_started: {
+		tier: 'plus' | 'pro' | 'team' | string
+		cycle: 'monthly' | 'annual' | string
+		currency: 'USD' | 'INR' | string
+	}
+	billing_referral_credit_applied: {
+		months: number
+	}
 	ai_provider_connected: { kind: 'byok' | 'byol' | 'preset' | string }
 	ai_message_sent: { action?: string }
 	daily_active_edit: Record<string, never> | void
@@ -88,6 +96,8 @@ const EVENT_ALLOWED_KEYS: Record<EventName, Set<string>> = {
 	export_triggered: new Set(['format']),
 	paywall_hit: new Set(['gate']),
 	upgrade_clicked: new Set(['plan', 'billing_cycle']),
+	billing_checkout_started: new Set(['tier', 'cycle', 'currency']),
+	billing_referral_credit_applied: new Set(['months']),
 	ai_provider_connected: new Set(['kind']),
 	ai_message_sent: new Set(['action']),
 	daily_active_edit: new Set([]),

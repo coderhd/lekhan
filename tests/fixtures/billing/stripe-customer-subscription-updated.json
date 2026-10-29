@@ -1,0 +1,30 @@
+{
+	"id": "evt_test_stripe_sub_updated_001",
+	"object": "event",
+	"api_version": "2026-09-30.endive",
+	"created": 1770000100,
+	"livemode": false,
+	"type": "customer.subscription.updated",
+	"data": {
+		"object": {
+			"id": "sub_test_001",
+			"object": "subscription",
+			"status": "active",
+			"cancel_at_period_end": false,
+			"customer": "cus_test_001",
+			"metadata": { "workspace_id": "11111111-1111-4111-8111-111111111111", "is_founding": "false" },
+			"items": {
+				"data": [
+					{
+						"id": "si_test_001",
+						"object": "subscription_item",
+						"quantity": 1,
+						"current_period_start": 1767225600,
+						"current_period_end": 1769904000,
+						"price": { "id": "price_test_plus_monthly_ga", "object": "price", "currency": "usd" }
+					}
+				]
+			}
+		}
+	}
+}

@@ -20,18 +20,20 @@ vi.mock('@/lib/supabase', () => ({
 	},
 }))
 
-describe('Settings Usage & Credits Tab', () => {
-	it('renders 4 tabs and switches to Usage & Credits tab', () => {
+describe('Settings AI Usage Tab (T12 credits retirement)', () => {
+	it('renders the tabs and shows the de-metered AI access panel', () => {
 		render(
 			<GlobalHeaderProvider>
 				<SettingsClient user={{ email: 'test@example.com' }} token="mock" />
 			</GlobalHeaderProvider>
 		)
-		const usageTab = screen.getByRole('tab', { name: /Usage & Credits/i })
+		const usageTab = screen.getByRole('tab', { name: /AI Usage/i })
 		expect(usageTab).toBeInTheDocument()
 
 		fireEvent.click(usageTab)
-		expect(screen.getByText(/^AI Credit Consumption$/i)).toBeInTheDocument()
-		expect(screen.getByText(/Sarvam AI Credit Consumption Rates/i)).toBeInTheDocument()
+		expect(screen.getByText(/^AI access$/i)).toBeInTheDocument()
+		expect(screen.getByText(/Lekhan never meters AI/i)).toBeInTheDocument()
+		expect(screen.queryByText(/AI Credit Consumption/i)).not.toBeInTheDocument()
+		expect(screen.queryByText(/Credits Remaining/i)).not.toBeInTheDocument()
 	})
 })

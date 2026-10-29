@@ -85,12 +85,24 @@ describe('POST /api/cron/retention-prune', () => {
 						}),
 					}
 				}
-				if (table === 'profiles') {
+				if (table === 'workspaces') {
 					return {
 						select: vi.fn().mockReturnValue({
 							eq: vi.fn().mockReturnValue({
 								maybeSingle: vi.fn().mockResolvedValue({
-									data: { plan: 'free' },
+									data: { id: 'ws-1' },
+									error: null,
+								}),
+							}),
+						}),
+					}
+				}
+				if (table === 'workspace_plans') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({
+									data: { workspace_id: 'ws-1', tier: 'free', status: 'none' },
 									error: null,
 								}),
 							}),
@@ -161,12 +173,24 @@ describe('POST /api/cron/retention-prune', () => {
 						}),
 					}
 				}
-				if (table === 'profiles') {
+				if (table === 'workspaces') {
 					return {
 						select: vi.fn().mockReturnValue({
 							eq: vi.fn().mockReturnValue({
 								maybeSingle: vi.fn().mockResolvedValue({
-									data: { plan: 'free' },
+									data: { id: 'ws-1' },
+									error: null,
+								}),
+							}),
+						}),
+					}
+				}
+				if (table === 'workspace_plans') {
+					return {
+						select: vi.fn().mockReturnValue({
+							eq: vi.fn().mockReturnValue({
+								maybeSingle: vi.fn().mockResolvedValue({
+									data: { workspace_id: 'ws-1', tier: 'free', status: 'none' },
 									error: null,
 								}),
 							}),
