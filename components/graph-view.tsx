@@ -387,8 +387,11 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 	const hoverCardAbove = (hoverCard?.y ?? 0) >= 96
 	// Half of the card's max width: keeps both edges inside the pane.
 	const hoverCardHalfWidth = Math.min(HOVER_CARD_MARGIN, Math.max(8, size.width / 2))
+	// Report the node's real degree even when the canvas sampled edges away;
+	// otherwise a hub would appear to have only its sampled links.
+	const hoveredEdgeSource = sample.sampled ? filtered.edges : positioned.edges
 	const hoveredEdges = hoveredNode
-		? positioned.edges.filter(edge => edge.source === hoveredNode.id || edge.target === hoveredNode.id)
+		? hoveredEdgeSource.filter(edge => edge.source === hoveredNode.id || edge.target === hoveredNode.id)
 		: []
 	const hoveredNeighbours = hoveredNode
 		? Array.from(new Set(hoveredEdges.map(edge => (edge.source === hoveredNode.id ? edge.target : edge.source))))
@@ -479,7 +482,7 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 						</div>
 					)}
 
-					{linkCount === 0 && nodes.length > 0 && filtering && (
+					{linkCount === 0 && nodes.length > 0 && filtering && visiblePages > 0 && (
 						<div className="pointer-events-none absolute inset-x-4 top-4 z-10 mx-auto max-w-md rounded-xl border border-black/10 bg-surface-container/95 p-3 text-center shadow-lg backdrop-blur dark:border-white/10">
 							<p className="text-sm font-semibold text-on-surface">No links between the filtered pages</p>
 							<p className="mt-0.5 text-xs text-on-surface-variant">
@@ -585,7 +588,8 @@ function useDebouncedGraphFilter (filter: GraphFilterState, delay: number): Grap
 }
 
 /** Loading placeholder for the graph surface. */
-export function GraphViewSkeleton () {	return (
+export function GraphViewSkeleton () {
+	return (
 		<div
 			role="status"
 			aria-busy="true"

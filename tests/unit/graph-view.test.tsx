@@ -279,6 +279,17 @@ describe('GraphView', () => {
 		expect(screen.queryByText(/no page links yet/i)).not.toBeInTheDocument()
 	})
 
+	it('does not show a no-links banner when only a ghost target matches', async () => {
+		render(<GraphView data={data} />)
+
+		fireEvent.change(screen.getByRole('searchbox', { name: /filter pages by title/i }), { target: { value: 'later' } })
+
+		await waitFor(() => expect(screen.queryByRole('link', { name: 'Alpha' })).not.toBeInTheDocument())
+		expect(screen.getByRole('img')).toBeInTheDocument()
+		expect(screen.queryByText(/no links between the filtered pages/i)).not.toBeInTheDocument()
+		expect(screen.queryByText(/no page links yet/i)).not.toBeInTheDocument()
+	})
+
 	it('shows an empty state instead of a canvas when the workspace has no pages', () => {
 		render(<GraphView data={{ nodes: [], edges: [], tags: [], totalPages: 0, totalLinks: 0, unresolvedLinks: 0 }} />)
 
