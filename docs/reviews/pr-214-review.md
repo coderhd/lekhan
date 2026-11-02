@@ -65,3 +65,19 @@
     writable rooms still persist; un-hydratable rooms are refused.
   - `tests/unit/sync-connection-guard.test.ts` — read-only/viewer frame rule.
   - `tests/unit/sync-persister.test.ts` TC06/TC07 — XmlFragment indexing.
+
+## Post-rebase re-verification (2026-11-02, resumed run)
+
+The branch was rebased onto `origin/main` at `000e2f8` (GV-T3 backlink drawer,
+PR #193) with no conflicts, then the full gate was re-run from the rebased tip
+`2fce8a4`:
+
+- `npm run typecheck` — clean.
+- `npm run lint` — clean.
+- `npm test` — 109 files / 975 passed, 1 skipped; no unhandled errors.
+- `npm run build` — clean (static routes prerendered).
+
+State at hand-off: branch `fix/214-vault-export-cold-export` is 2 commits ahead
+of `origin/main` and **not yet pushed**. The Paperclip control plane and its
+GitHub credential broker became unavailable during the run, so pushing + opening
+the PR could not be completed; no code work remains before SHIP.
