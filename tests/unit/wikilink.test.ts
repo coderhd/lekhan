@@ -509,3 +509,39 @@ describe('`[[` popup — round 3: closed link with alias (clean-room residual bl
 		}
 	})
 })
+
+describe('`[[` popup — pullfrog review follow-up (SIL-159)', () => {
+	it('activates with no preceding space: `[[` right after a word character', () => {
+		let editor: Editor | null = null
+		try {
+			editor = new Editor({
+				extensions: [
+					StarterKit,
+					Wikilink.configure({
+						workspacePages: [{ id: 'p1', title: 'Meeting Notes' }],
+						suggestion: {
+							char: '[[',
+							allowedPrefixes: null,
+							items: ({ query }: { query: string }) => buildWikilinkSuggestions([{ id: 'p1', title: 'Meeting Notes' }], query),
+							command: () => {},
+						},
+					}),
+				],
+				content: '<p>Hello quick</p>',
+			})
+			// Insert `[[New` directly against the trailing "o" of "Hello" —
+			// no space prefix. allowedPrefixes: null must allow mid-word
+			// firing (Obsidian parity, PR review comment on #187).
+			editor.commands.insertContentAt(6, '[[New')
+
+			expect(
+				((editor.state as any) as Record<string, any>)['wikilinkSuggestion$'].active
+			).toBe(true)
+			expect(
+				((editor.state as any) as Record<string, any>)['wikilinkSuggestion$'].query
+			).toBe('New')
+		} finally {
+			editor?.destroy()
+		}
+	})
+})
