@@ -85,6 +85,16 @@ npm run build       ✅
 Playwright specs are env-gated (`E2E_EMAIL`/`E2E_PASSWORD`) and were not executed in this
 environment; they are documented in the spec and are not part of `npm test`.
 
+## Post-review fixes (external Pullfrog review on PR #185)
+
+- **Inline finding (index spaces):** `sectionEnd` was an index into the filtered `Y.XmlElement`
+  list but was passed to `fragment.insert`, which positions over all raw children. Fixed in
+  `299a2e4` by carrying each element's raw index and adding a mixed-children regression test; the
+  Pullfrog review otherwise reported "no critical issues".
+- **Keyboard note:** Chrome honours the page's `preventDefault()` for `Ctrl+Shift+C`; Firefox
+  reserves it for the node picker and may not allow the page to override it. The dashboard Capture
+  button is the documented non-keyboard path; the shortcut itself is spec-locked.
+
 ## Residual risks (accepted)
 
 - Concurrent first captures on a brand-new page can seed two Inbox sections (finding 8).
