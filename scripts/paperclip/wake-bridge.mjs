@@ -28,9 +28,6 @@ const logPath = path.join(dir, 'wake-bridge.log')
 
 const ONCE = process.argv.includes('--once')
 const DRY = process.argv.includes('--dry-run')
-
-const POLL_MS = Number(process.env.WAKE_BRIDGE_POLL_MS || 15_000)
-const COOLDOWN_MS = Number(process.env.WAKE_BRIDGE_COOLDOWN_MS || 10 * 60_000)
 const MAX_WAKES_PER_TICK = 6
 
 function loadEnv() {
@@ -45,9 +42,22 @@ function loadEnv() {
 }
 
 const env = loadEnv()
-const API = process.env.PAPERCLIP_API_URL || env.PAPERCLIP_API_URL || 'http://127.0.0.1:8080'
-const KEY = process.env.PAPERCLIP_API_KEY || env.PAPERCLIP_API_KEY
-const COMPANY = env.PAPERCLIP_COMPANY_ID || 'b044e7dc-7bb3-46b8-a47f-596a3c75d879'
+/** Same precedence as the sibling Paperclip scripts: process env, then env file, then default. */
+const envValue = (k, fallback) => process.env[k] ?? env[k] ?? fallback
+
+const API = envValue('PAPERCLIP_API_URL')
+const KEY = envValue('PAPERCLIP_API_KEY')
+const COMPANY = envValue('PAPERCLIP_COMPANY_ID', 'b044e7dc-7bb3-46b8-a47f-596a3c75d879')
+
+// Tuning is read from the process env OR the onboarding env file, so a LaunchAgent
+// install does not force hand-editing a plist.
+const POLL_MS = Number(envValue('WAKE_BRIDGE_POLL_MS', 15_000))
+const COOLDOWN_MS = Number(envValue('WAKE_BRIDGE_COOLDOWN_MS', 10 * 60_000))
+
+if (!API || !KEY) {
+	process.stderr.write('wake-bridge: PAPERCLIP_API_URL and PAPERCLIP_API_KEY must be set (env or ~/.paperclip-onboarding/paperclip.env)\n')
+	process.exit(1)
+}
 
 function log(line) {
 	const entry = `${new Date().toISOString()} ${line}\n`
@@ -135,25 +145,29 @@ async function tick() {
 			const detail = await get(`/api/issues/${issue.id}`)
 			const edges = Array.isArray(detail.blockedBy) ? detail.blockedBy.length : 0
 			const prev = state.blockedEdges[issue.id]
+			state.blockedEdges[issue.id] = edges
 			if (typeof prev === 'number' && prev > 0 && edges === 0) {
 				const agent = agentById.get(issue.assigneeAgentId)
-				if (agent && agent.status !== 'running' && !busyAgents.has(issue.assigneeAgentId)) {
+				const key = `${issue.assigneeAgentId}:${issue.id}`
+				const last = state.wakes[key] ?? 0
+				// Same cooldown as the actionable path: an agent already woken for
+				// this issue must not be woken again by the edge-cleared safety net.
+				if (agent && agent.status !== 'running' && !busyAgents.has(issue.assigneeAgentId) && now - last >= COOLDOWN_MS) {
 					candidates.push({
 						issue: { ...issue, status: 'blocked' },
 						agent,
-						key: `${issue.assigneeAgentId}:${issue.id}`,
+						key,
 						reason: 'blockers-cleared',
 					})
 				}
 			}
-			state.blockedEdges[issue.id] = edges
 		} catch {
 			/* detail read is best-effort */
 		}
 	}
 
 	if (candidates.length === 0) {
-		if (!ONCE && !DRY) saveState(state)
+		saveState(state)
 		return 0
 	}
 

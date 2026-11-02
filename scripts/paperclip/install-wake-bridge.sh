@@ -11,7 +11,7 @@ set -euo pipefail
 
 LABEL="com.lekhan.wake-bridge"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-NODE_BIN="$(command -v node)"
+NODE_BIN="$(command -v node || true)"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT="$REPO_ROOT/scripts/paperclip/wake-bridge.mjs"
 
@@ -30,6 +30,16 @@ fi
 }
 
 mkdir -p "$HOME/Library/LaunchAgents"
+
+# Optional tuning captured at install time (the bridge also reads these from
+# ~/.paperclip-onboarding/paperclip.env, so either source works).
+EXTRA_ENV=""
+for var in WAKE_BRIDGE_POLL_MS WAKE_BRIDGE_COOLDOWN_MS; do
+  if [[ -n "${!var:-}" ]]; then
+    EXTRA_ENV="${EXTRA_ENV}    <key>$var</key><string>${!var}</string>
+"
+  fi
+done
 
 cat > "$PLIST" <<PLIST_EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -51,7 +61,7 @@ cat > "$PLIST" <<PLIST_EOF
   <dict>
     <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
     <key>HOME</key><string>$HOME</string>
-  </dict>
+$EXTRA_ENV  </dict>
 </dict>
 </plist>
 PLIST_EOF

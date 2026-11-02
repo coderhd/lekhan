@@ -115,7 +115,9 @@ node scripts/paperclip/wake-bridge.mjs --once             # single real pass
 tail -f ~/.paperclip-onboarding/wake-bridge.log
 ```
 
-Tuning (env): `WAKE_BRIDGE_POLL_MS` (default 15000), `WAKE_BRIDGE_COOLDOWN_MS` (default 600000).
+Tuning: `WAKE_BRIDGE_POLL_MS` (default 15000) and `WAKE_BRIDGE_COOLDOWN_MS` (default 600000) — set them in
+`~/.paperclip-onboarding/paperclip.env` or export them before running the installer, which copies them into
+the LaunchAgent.
 
 **Rule for agents:** when you hand work to another agent, assign the issue — the assignment itself is
 the wake. Do not rely on a coordinator to notice it later.
