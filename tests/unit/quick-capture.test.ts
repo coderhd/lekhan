@@ -1,3 +1,34 @@
+const wsProviderSpy = vi.hoisted(() => vi.fn())
+
+vi.mock('y-websocket', () => {
+	class FakeWebsocketProvider {
+		synced = false
+		ws: { readyState: number; bufferedAmount: number } | null = { readyState: 1, bufferedAmount: 0 }
+		destroy = vi.fn()
+		private handlers = new Map<string, Set<(...args: any[]) => void>>()
+
+		constructor (url: string, room: string, doc: Y.Doc, options: any) {
+			wsProviderSpy(url, room, doc, options)
+			setTimeout(() => this.emit('sync', true), 0)
+		}
+
+		on (event: string, handler: (...args: any[]) => void) {
+			if (!this.handlers.has(event)) this.handlers.set(event, new Set())
+			this.handlers.get(event)!.add(handler)
+		}
+
+		off (event: string, handler: (...args: any[]) => void) {
+			this.handlers.get(event)?.delete(handler)
+		}
+
+		emit (event: string, ...args: any[]) {
+			for (const handler of this.handlers.get(event) ?? []) handler(...args)
+		}
+	}
+
+	return { WebsocketProvider: FakeWebsocketProvider }
+})
+
 import { describe, it, expect, vi, beforeAll } from 'vitest'
 import * as Y from 'yjs'
 import { Editor } from '@tiptap/core'
@@ -39,8 +70,8 @@ function seed (ydoc: Y.Doc, content: any[]) {
 }
 
 /** One capture, exactly like production: a Yjs transaction on the page doc. */
-function capture (ydoc: Y.Doc, text: string, now = NOW, pageTitle = '2026-11-02') {
-	return appendCaptureBlockToYDoc(ydoc, { pageTitle, text, now })
+function capture (ydoc: Y.Doc, text: string, now = NOW) {
+	return appendCaptureBlockToYDoc(ydoc, { text, now })
 }
 
 function inboxBullets (json: any): string[] {
@@ -86,7 +117,7 @@ describe('buildCaptureText', () => {
 })
 
 describe('appendCaptureBlockToYDoc', () => {
-	it('seeds the title and Inbox section on an empty page and appends a timestamped bullet', () => {
+	it('seeds an empty leading heading and Inbox section on an empty page, then appends a timestamped bullet', () => {
 		const ydoc = new Y.Doc()
 
 		expect(capture(ydoc, 'Buy milk')).toBe('09:41 Buy milk #inbox')
@@ -94,7 +125,9 @@ describe('appendCaptureBlockToYDoc', () => {
 		const json = readYDoc(ydoc)
 		expect(json.content.map((node: any) => node.type)).toEqual(['heading', 'heading', 'bulletList'])
 		expect(json.content[0]).toMatchObject({ type: 'heading', attrs: { level: 1 } })
-		expect(json.content[0].content?.[0]?.text).toBe('2026-11-02')
+		// EMPTY_PAGE_DOC convention: the page title lives in `pages.title` and
+		// frontmatter, never as a duplicated body heading.
+		expect(json.content[0].content ?? []).toHaveLength(0)
 		expect(json.content[1]).toMatchObject({ type: 'heading', attrs: { level: 2 } })
 		expect(json.content[1].content?.[0]?.text).toBe('Inbox')
 		expect(inboxBullets(json)).toEqual(['09:41 Buy milk #inbox'])
@@ -166,7 +199,7 @@ describe('appendCaptureBlockToYDoc', () => {
 			{ type: 'paragraph', content: [{ type: 'text', text: 'random thoughts' }] },
 		])
 
-		capture(ydoc, 'Call [[Alice]]', NOW, 'Project log')
+		capture(ydoc, 'Call [[Alice]]', NOW)
 
 		const json = readYDoc(ydoc)
 		expect(json.content.map((node: any) => node.type)).toEqual([
@@ -186,7 +219,7 @@ describe('appendCaptureBlockToYDoc', () => {
 			{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Existing title' }] },
 		])
 
-		capture(ydoc, 'note', NOW, 'Existing title')
+		capture(ydoc, 'note', NOW)
 
 		const json = readYDoc(ydoc)
 		expect(json.content.filter((node: any) => node.type === 'heading')).toHaveLength(2)
@@ -225,7 +258,6 @@ describe('appendCaptureBlockToYDoc', () => {
 describe('appendCaptureBlock (CRDT append orchestrator)', () => {
 	const baseArgs = {
 		pageId: 'page-1',
-		pageTitle: '2026-11-02',
 		token: 'token-1',
 		text: 'Buy milk',
 		now: NOW,
@@ -295,5 +327,28 @@ describe('appendCaptureBlock (CRDT append orchestrator)', () => {
 			appendCaptureBlock({ ...baseArgs, connect, syncTimeoutMs: 20 }),
 		).rejects.toMatchObject({ name: 'CaptureError', code: 'timeout' })
 		expect(destroy).toHaveBeenCalledTimes(1)
+	})
+
+	it('connects to the page room over y-websocket with the editor token params', async () => {
+		wsProviderSpy.mockClear()
+
+		const result = await appendCaptureBlock({
+			pageId: 'page-42',
+			token: 'jwt-token',
+			text: 'From the real connector',
+			now: NOW,
+			wsUrl: 'wss://sync.example',
+		})
+
+		expect(result.bulletText).toBe('09:41 From the real connector #inbox')
+		const [url, room, doc, options] = wsProviderSpy.mock.calls[0]
+		expect(url).toBe('wss://sync.example')
+		expect(room).toBe('page-42')
+		expect(doc).toBeInstanceOf(Y.Doc)
+		expect(options).toEqual({
+			params: { token: 'jwt-token', documentId: 'page-42' },
+			connect: true,
+		})
+		expect(doc.getXmlFragment('default').toString()).toContain('From the real connector #inbox')
 	})
 })

@@ -51,6 +51,15 @@ test.describe('Quick capture', () => {
 	test('a capture on device A is visible on device B without a reload', async ({ page, browser }) => {
 		const marker = `e2e-live-${Date.now()}`
 
+		// Both devices use one E2E account here. That proves the CRDT channel and
+		// the append live-sync path; a second collaborator admitted through
+		// page_members needs a seeded second account and an explicit share step,
+		// which this env-gated spec does not set up.
+		test.info().annotations.push({
+			type: 'limitation',
+			description: 'Two contexts, one E2E account: proves live CRDT visibility, not page_members admission.',
+		})
+
 		// Device B opens today's daily page first, so it is subscribed to the room.
 		const otherContext = await browser.newContext()
 		const deviceB = await otherContext.newPage()

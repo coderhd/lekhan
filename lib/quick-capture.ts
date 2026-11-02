@@ -22,7 +22,9 @@ export const CAPTURE_FRAGMENT_FIELD = 'default'
 
 const INBOX_TAG_RE = /(?:^|\s)#inbox\b/i
 const INBOX_SECTION_LEVEL = 2
-const DEFAULT_SYNC_TIMEOUT_MS = 10_000
+// The sync hub runs on Render's free tier, which documents ~50s cold starts;
+// `useEditorCollab` grants the same 60s grace before calling a connection dead.
+const DEFAULT_SYNC_TIMEOUT_MS = 60_000
 
 export type CaptureErrorCode = 'empty' | 'offline' | 'forbidden' | 'timeout'
 
@@ -112,7 +114,6 @@ function captureListItem (bulletText: string): Y.XmlElement {
 
 function captureBulletList (bulletText: string): Y.XmlElement {
 	const list = new Y.XmlElement('bulletList')
-	list.setAttribute('tight', true as unknown as string)
 	list.insert(0, [captureListItem(bulletText)])
 	return list
 }
@@ -127,8 +128,6 @@ function isElement (node: unknown): node is Y.XmlElement {
 
 export interface AppendCaptureOptions {
 	pageId: string
-	/** Page title, used only when seeding a brand-new (empty) document. */
-	pageTitle?: string
 	token: string
 	text: string
 	now?: Date
@@ -163,7 +162,6 @@ export type CaptureConnector = (
 ) => CaptureConnection | Promise<CaptureConnection>
 
 export interface AppendCaptureToDocOptions {
-	pageTitle?: string
 	text: string
 	now: Date
 }
@@ -174,9 +172,10 @@ export interface AppendCaptureToDocOptions {
  * The Inbox section is the last top-level bullet list between the `Inbox`
  * heading and the next heading of level ≤ 2. When the section is missing it is
  * created at the end of the page; when the page is empty (a freshly created
- * daily page) the title heading is seeded first so the document keeps the
- * editor's required leading heading. Everything happens in one Yjs transaction,
- * so collaborators receive a single atomic update.
+ * daily page) an empty leading heading is seeded first, matching
+ * `EMPTY_PAGE_DOC` and the export engine's "title lives in frontmatter, not a
+ * duplicated body heading" convention. Everything happens in one Yjs
+ * transaction, so collaborators receive a single atomic update.
  *
  * Returns the bullet line that was written, or `null` for an empty capture.
  */
@@ -203,7 +202,7 @@ export function appendCaptureBlockToYDoc (
 				fragment.delete(0, fragment.length)
 			}
 			fragment.insert(0, [
-				headingElement(1, options.pageTitle ?? ''),
+				headingElement(1, ''),
 				headingElement(INBOX_SECTION_LEVEL, CAPTURE_INBOX_HEADING),
 				captureBulletList(bulletText),
 			])
@@ -284,26 +283,19 @@ const websocketConnector: CaptureConnector = async (doc, { pageId, token, wsUrl 
 		connect: true,
 	})
 
-	const synced = new Promise<void>((resolve, reject) => {
+	const synced = new Promise<void>((resolve) => {
+		// A cold sync hub can fail the first attempts and retry for up to a
+		// minute; `connection-error` is not fatal here, the caller's timeout is.
 		if (provider.synced) {
 			resolve()
 			return
 		}
 		const handleSync = (isSynced: boolean) => {
 			if (!isSynced) return
-			cleanup()
+			provider.off('sync', handleSync)
 			resolve()
 		}
-		const handleError = () => {
-			cleanup()
-			reject(new CaptureError('offline', 'Could not reach the sync server.'))
-		}
-		const cleanup = () => {
-			provider.off('sync', handleSync)
-			provider.off('connection-error', handleError)
-		}
 		provider.on('sync', handleSync)
-		provider.on('connection-error', handleError)
 	})
 
 	return {
@@ -339,7 +331,6 @@ export async function appendCaptureBlock (
 		await withTimeout(connection.synced, options.syncTimeoutMs ?? DEFAULT_SYNC_TIMEOUT_MS)
 
 		appendCaptureBlockToYDoc(ydoc, {
-			pageTitle: options.pageTitle,
 			text: options.text,
 			now,
 		})

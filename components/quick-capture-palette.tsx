@@ -13,7 +13,7 @@ import {
 import { useRouter } from 'next/navigation'
 import * as Dialog from '@radix-ui/react-dialog'
 import { supabase } from '@/lib/supabase'
-import { ensureWorkspace } from '@/services/graph'
+import { ensureWorkspace, fetchPageDetails, fetchPageMemberRole } from '@/services/graph'
 import { fetchRecentPages, searchPages } from '@/services/search'
 import { ensureDailyPage } from '@/lib/daily-notes'
 import { appendCaptureBlock, CaptureError } from '@/lib/quick-capture'
@@ -171,7 +171,18 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 			}
 
 			let destination = target
-			if (!destination) {
+			if (destination) {
+				// The picker also surfaces shared read-only pages; the sync hub
+				// silently drops viewer writes, so fail before connecting rather
+				// than showing a success toast for a discarded capture.
+				const page = await fetchPageDetails(destination.id)
+				if (page.owner_id !== userId) {
+					const role = await fetchPageMemberRole(destination.id, userId)
+					if (role !== 'owner' && role !== 'editor') {
+						throw new CaptureError('forbidden', 'No edit access to that page.')
+					}
+				}
+			} else {
 				const workspace = await ensureWorkspace(userId)
 				const page = await ensureDailyPage(
 					{ id: workspace.id, owner_id: workspace.owner_id },
@@ -182,7 +193,6 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 
 			const { bulletText } = await appendCaptureBlock({
 				pageId: destination.id,
-				pageTitle: destination.title,
 				token,
 				text: body,
 			})
@@ -269,7 +279,7 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 											className="w-full bg-transparent outline-none text-on-surface placeholder:text-on-surface-variant/50"
 										/>
 									</div>
-									<div role="listbox" aria-label="Pages" className="max-h-[45vh] overflow-y-auto py-1">
+									<div className="max-h-[45vh] overflow-y-auto py-1">
 										{loading ? (
 											<p className="px-4 py-3 text-sm text-on-surface-variant">Searching…</p>
 										) : rows.length === 0 ? (
@@ -281,8 +291,6 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 												<button
 													key={row.id}
 													type="button"
-													role="option"
-													aria-selected={index === selectedIndex}
 													onClick={() => choosePage(row)}
 													onMouseEnter={() => setSelectedIndex(index)}
 													className={`w-full flex items-center gap-sm px-4 py-2 text-left premium-transition ${
@@ -358,7 +366,11 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 								</div>
 
 								<div className="flex items-center gap-2">
-									{submitting && <span role="status" className="text-xs text-on-surface-variant">Capturing…</span>}
+									{submitting && (
+										<span role="status" className="text-xs text-on-surface-variant">
+											Capturing… the sync server may be waking up.
+										</span>
+									)}
 									<button
 										type="button"
 										onClick={() => setOpen(false)}
@@ -366,14 +378,16 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 									>
 										Cancel
 									</button>
-									<button
-										type="button"
-										onClick={() => { void submit() }}
-										disabled={submitting || text.trim() === ''}
-										className={`min-h-11 rounded-lg bg-primary px-4 text-sm font-bold text-on-primary hover:bg-primary/90 premium-transition disabled:opacity-60 ${FOCUS_RING}`}
-									>
-										Capture
-									</button>
+									{mode !== 'pick' && (
+										<button
+											type="button"
+											onClick={() => { void submit() }}
+											disabled={submitting || text.trim() === ''}
+											className={`min-h-11 rounded-lg bg-primary px-4 text-sm font-bold text-on-primary hover:bg-primary/90 premium-transition disabled:opacity-60 ${FOCUS_RING}`}
+										>
+											Capture
+										</button>
+									)}
 								</div>
 							</div>
 						</Dialog.Content>

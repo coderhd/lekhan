@@ -24,8 +24,12 @@ vi.mock('@/components/session-reauth-provider', () => ({
 }))
 
 const ensureWorkspace = vi.fn()
+const fetchPageDetails = vi.fn()
+const fetchPageMemberRole = vi.fn()
 vi.mock('@/services/graph', () => ({
 	ensureWorkspace: (...args: any[]) => ensureWorkspace(...args),
+	fetchPageDetails: (...args: any[]) => fetchPageDetails(...args),
+	fetchPageMemberRole: (...args: any[]) => fetchPageMemberRole(...args),
 }))
 
 const searchPages = vi.fn()
@@ -89,6 +93,8 @@ describe('QuickCapturePalette', () => {
 		})
 		reauth.useSessionReauth.mockReturnValue({ isLocked: false, lockSession: vi.fn(), unlockSession: vi.fn() })
 		ensureWorkspace.mockResolvedValue({ id: 'ws-1', owner_id: 'user-1' })
+		fetchPageDetails.mockResolvedValue({ id: 'page-9', owner_id: 'user-1' })
+		fetchPageMemberRole.mockResolvedValue(null)
 		ensureDailyPage.mockResolvedValue({ id: 'daily-1', title: '2026-11-02' })
 		appendCaptureBlock.mockResolvedValue({ bulletText: '09:41 Buy milk #inbox' })
 		searchPages.mockResolvedValue([
@@ -145,7 +151,6 @@ describe('QuickCapturePalette', () => {
 		expect(ensureDailyPage).toHaveBeenCalledWith({ id: 'ws-1', owner_id: 'user-1' }, expect.any(Date))
 		expect(appendCaptureBlock).toHaveBeenCalledWith({
 			pageId: 'daily-1',
-			pageTitle: '2026-11-02',
 			token: 'token-1',
 			text: 'Call [[Alice Chen]] about #launch',
 		})
@@ -193,7 +198,7 @@ describe('QuickCapturePalette', () => {
 		expect(searchPages).toHaveBeenCalledWith('apollo', expect.any(Number))
 
 		await act(async () => {
-			fireEvent.click(screen.getByRole('option', { name: /project apollo/i }))
+			fireEvent.click(screen.getByRole('button', { name: /project apollo/i }))
 		})
 
 		await act(async () => {
@@ -203,9 +208,41 @@ describe('QuickCapturePalette', () => {
 		expect(ensureDailyPage).not.toHaveBeenCalled()
 		expect(appendCaptureBlock).toHaveBeenCalledWith(expect.objectContaining({
 			pageId: 'page-9',
-			pageTitle: 'Project Apollo',
 			text: 'Ship the captions',
 		}))
+	})
+
+	it('hides the Capture button while the page picker is open', async () => {
+		renderPalette()
+		await openViaKey()
+
+		fireEvent.click(screen.getByRole('button', { name: /send to a page/i }))
+
+		expect(screen.getByLabelText(/find a page/i)).toBeTruthy()
+		expect(screen.queryByRole('button', { name: /^capture$/i })).toBeNull()
+	})
+
+	it('refuses to capture into a page the user can only view', async () => {
+		fetchPageDetails.mockResolvedValue({ id: 'page-9', owner_id: 'someone-else' })
+		fetchPageMemberRole.mockResolvedValue('viewer')
+		renderPalette()
+		await openViaKey()
+
+		fireEvent.change(captureInput(), { target: { value: 'Should not land' } })
+		fireEvent.click(screen.getByRole('button', { name: /send to a page/i }))
+		fireEvent.change(screen.getByLabelText(/find a page/i), { target: { value: 'apollo' } })
+		await act(async () => { await vi.advanceTimersByTimeAsync(210) })
+		await act(async () => {
+			fireEvent.click(screen.getByRole('button', { name: /project apollo/i }))
+		})
+		await act(async () => {
+			fireEvent.keyDown(captureInput(), { key: 'Enter' })
+		})
+
+		expect(fetchPageMemberRole).toHaveBeenCalledWith('page-9', 'user-1')
+		expect(appendCaptureBlock).not.toHaveBeenCalled()
+		expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/edit access/i))
+		expect(screen.getByRole('dialog')).toBeTruthy()
 	})
 
 	it('surfaces a failure and keeps the palette open for a retry', async () => {
