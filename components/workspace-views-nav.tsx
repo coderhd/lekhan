@@ -29,7 +29,7 @@ export default function WorkspaceViewsNav ({ active }: { active: WorkspaceView }
 						key={view.id}
 						href={view.href}
 						aria-current={selected ? 'page' : undefined}
-						className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium premium-transition ${FOCUS_RING} ${selected
+						className={`flex min-h-11 items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-medium premium-transition ${FOCUS_RING} ${selected
 							? 'bg-primary-container font-bold text-on-primary-container shadow-sm'
 							: 'text-on-surface-variant hover:bg-black/5 hover:text-on-surface dark:hover:bg-white/10'
 							}`}

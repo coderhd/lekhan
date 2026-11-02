@@ -358,7 +358,7 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 					aria-label="Zoom in"
 					title="Zoom in"
 					onClick={() => zoomBy(1.25)}
-					className={`flex h-9 w-9 items-center justify-center rounded-lg text-on-surface-variant hover:bg-black/5 hover:text-on-surface dark:hover:bg-white/10 ${FOCUS_RING}`}
+					className={`flex h-11 w-11 items-center justify-center rounded-lg text-on-surface-variant hover:bg-black/5 hover:text-on-surface dark:hover:bg-white/10 ${FOCUS_RING}`}
 				>
 					<Plus size={18} aria-hidden="true" />
 				</button>
@@ -367,7 +367,7 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 					aria-label="Zoom out"
 					title="Zoom out"
 					onClick={() => zoomBy(0.8)}
-					className={`flex h-9 w-9 items-center justify-center rounded-lg text-on-surface-variant hover:bg-black/5 hover:text-on-surface dark:hover:bg-white/10 ${FOCUS_RING}`}
+					className={`flex h-11 w-11 items-center justify-center rounded-lg text-on-surface-variant hover:bg-black/5 hover:text-on-surface dark:hover:bg-white/10 ${FOCUS_RING}`}
 				>
 					<Minus size={18} aria-hidden="true" />
 				</button>
@@ -376,7 +376,7 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 					aria-label="Reset view"
 					title="Reset view"
 					onClick={resetView}
-					className={`flex h-9 w-9 items-center justify-center rounded-lg text-on-surface-variant hover:bg-black/5 hover:text-on-surface dark:hover:bg-white/10 ${FOCUS_RING}`}
+					className={`flex h-11 w-11 items-center justify-center rounded-lg text-on-surface-variant hover:bg-black/5 hover:text-on-surface dark:hover:bg-white/10 ${FOCUS_RING}`}
 				>
 					<RotateCcw size={16} aria-hidden="true" />
 				</button>

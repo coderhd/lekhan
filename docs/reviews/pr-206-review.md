@@ -66,8 +66,18 @@
    guard redirects before rendering any workspace content; the static shell only shows
    chrome. Documented in `app/graph/page.tsx`.
 
-## Verified positively
+## External review (PR #184)
 
+- **Pullfrog — pass, one minor inline suggestion:** canvas zoom/reset controls were
+  `h-9 w-9` (36 px) and the new view tabs ≈28 px tall, below the repo's 44 px
+  #79 UX-parity touch-target bar. **Fixed:** controls are now `h-11 w-11` (44 px) and
+  the Pages/Graph tabs use `min-h-11` with `px-3.5 py-2`. No other findings.
+- **CodeRabbit — unavailable:** check concluded `neutral` with
+  "Review limit reached … Next included review available in 37 minutes" (rate limited
+  before analysis). Recorded as an explicit waiver on the PR per the merge gate; the
+  reviewer produced no findings because it never ran.
+
+## Verified positively
 - Zero write paths: no `insert`/`update`/`delete`/`upsert`/`rpc`; `ensureWorkspace` is
   deliberately not called. `lib/tier-limits.ts`, IndexedDB and CRDT code untouched.
 - Serialization: ghost dedupe/labels, tag facets, stable ordering, empty input, dropped
