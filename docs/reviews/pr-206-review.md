@@ -73,9 +73,10 @@
   #79 UX-parity touch-target bar. **Fixed:** controls are now `h-11 w-11` (44 px) and
   the Pages/Graph tabs use `min-h-11` with `px-3.5 py-2`. No other findings.
 - **CodeRabbit — unavailable:** check concluded `neutral` with
-  "Review limit reached … Next included review available in 37 minutes" (rate limited
-  before analysis). Recorded as an explicit waiver on the PR per the merge gate; the
-  reviewer produced no findings because it never ran.
+  "Review limit reached"; after the advertised reset a `@coderabbitai review` re-run at
+  13:45 UTC still returned "Action not completed — Review rate limited". No CodeRabbit
+  findings were produced because the diff was never analyzed. An explicit merge-gate
+  waiver naming the reviewer and reason is recorded on PR #184.
 
 ## Verified positively
 - Zero write paths: no `insert`/`update`/`delete`/`upsert`/`rpc`; `ensureWorkspace` is
