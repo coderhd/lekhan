@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom'
 import React from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, beforeAll, afterEach, afterAll } from 'vitest'
 import GraphView, { GraphViewSkeleton } from '@/components/graph-view'
 import type { PositionedGraph } from '@/lib/graph-view/layout'
 import type { WorkspaceGraphData } from '@/lib/graph-view/types'
@@ -76,6 +76,16 @@ const positioned = (
 	degree: 1,
 })
 
+const hoverLayout: PositionedGraph = {
+	nodes: [
+		{ ...positioned('p-1', 'page', 'Alpha'), degree: 1 },
+		{ ...positioned('p-2', 'page', 'Beta'), degree: 1 },
+	],
+	edges: [{ id: 'l-1', source: 'p-1', target: 'p-2', unresolved: false }],
+	bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 },
+	iterations: 1,
+}
+
 class ResizeObserverStub {
 	callback: ResizeObserverCallback
 	constructor (callback: ResizeObserverCallback) {
@@ -102,20 +112,28 @@ const context2d = new Proxy({}, {
 })
 
 describe('GraphView', () => {
-	beforeEach(() => {
-		vi.clearAllMocks()
-		// jsdom has no PointerEvent; testing-library then builds a plain Event
-		// and drops clientX/clientY. A MouseEvent subclass restores coordinates.
-		vi.stubGlobal('PointerEvent', class PointerEventPolyfill extends MouseEvent {})
-		vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+	// Install prototype spies once: the debounced filter commits a paint effect
+	// during teardown, after per-test restore hooks have already run.
+	beforeAll(() => {
 		vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context2d as unknown as CanvasRenderingContext2D)
 		vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
 			width: 800, height: 600, left: 0, top: 0, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => ({}),
 		})
 	})
 
+	beforeEach(() => {
+		vi.clearAllMocks()
+		// jsdom has no PointerEvent; testing-library then builds a plain Event
+		// and drops clientX/clientY. A MouseEvent subclass restores coordinates.
+		vi.stubGlobal('PointerEvent', class PointerEventPolyfill extends MouseEvent {})
+		vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+	})
+
 	afterEach(() => {
 		vi.unstubAllGlobals()
+	})
+
+	afterAll(() => {
 		vi.restoreAllMocks()
 	})
 
@@ -181,12 +199,6 @@ describe('GraphView', () => {
 	})
 
 	it('highlights a hovered node and its incident links', () => {
-		const hoverLayout: PositionedGraph = {
-			nodes: [positioned('p-1', 'page', 'Alpha'), positioned('p-2', 'page', 'Beta')],
-			edges: [{ id: 'l-1', source: 'p-1', target: 'p-2', unresolved: false }],
-			bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 },
-			iterations: 1,
-		}
 		render(<GraphView data={data} layout={hoverLayout} />)
 
 		fireEvent.pointerMove(screen.getByRole('img'), { clientX: 400, clientY: 300 })
@@ -198,6 +210,25 @@ describe('GraphView', () => {
 		expect(document.querySelector('[data-highlighted-node="p-1"]')).not.toBeNull()
 	})
 
+	it('clears the hover card and highlight on leave and pointer cancel', () => {
+		render(<GraphView data={data} layout={hoverLayout} />)
+		const canvas = screen.getByRole('img')
+
+		fireEvent.pointerMove(canvas, { clientX: 400, clientY: 300 })
+		expect(screen.getByTestId('graph-hover-card')).toBeInTheDocument()
+
+		fireEvent.pointerLeave(canvas)
+		expect(screen.queryByTestId('graph-hover-card')).not.toBeInTheDocument()
+		expect(document.querySelector('[data-highlighted-node]')).toBeNull()
+
+		fireEvent.pointerMove(canvas, { clientX: 400, clientY: 300 })
+		expect(screen.getByTestId('graph-hover-card')).toBeInTheDocument()
+
+		fireEvent.pointerCancel(canvas)
+		expect(screen.queryByTestId('graph-hover-card')).not.toBeInTheDocument()
+		expect(document.querySelector('[data-highlighted-node]')).toBeNull()
+	})
+
 	it('highlights a node from the keyboard page list', () => {
 		render(<GraphView data={data} layout={layout(positioned('p-1'))} />)
 
@@ -206,37 +237,46 @@ describe('GraphView', () => {
 		expect(document.querySelector('[data-highlighted-node="p-1"]')).not.toBeNull()
 	})
 
-	it('filters nodes by title before laying the graph out', () => {
+	it('filters nodes by title before laying the graph out', async () => {
 		render(<GraphView data={tagged} />)
 
 		fireEvent.change(screen.getByRole('searchbox', { name: /filter pages by title/i }), { target: { value: 'beta' } })
 
+		await waitFor(() => expect(screen.queryByRole('link', { name: 'Alpha' })).not.toBeInTheDocument())
 		expect(screen.getByRole('link', { name: 'Beta' })).toBeInTheDocument()
-		expect(screen.queryByRole('link', { name: 'Alpha' })).not.toBeInTheDocument()
 		expect(screen.getByRole('status')).toHaveTextContent('1 of 2 pages')
 	})
 
-	it('filters nodes by tag facet', () => {
+	it('filters nodes by tag facet', async () => {
 		render(<GraphView data={tagged} />)
 
 		fireEvent.click(screen.getByRole('checkbox', { name: /#research/i }))
 
+		await waitFor(() => expect(screen.queryByRole('link', { name: 'Beta' })).not.toBeInTheDocument())
 		expect(screen.getByRole('link', { name: 'Alpha' })).toBeInTheDocument()
-		expect(screen.queryByRole('link', { name: 'Beta' })).not.toBeInTheDocument()
 	})
 
-	it('explains that no pages match the filters and lets the user clear them', () => {
+	it('explains that no pages match the filters and lets the user clear them', async () => {
 		render(<GraphView data={tagged} />)
 
 		fireEvent.change(screen.getByRole('searchbox', { name: /filter pages by title/i }), { target: { value: 'zzz' } })
 
+		expect(await screen.findByText(/no pages match these filters/i)).toBeInTheDocument()
 		expect(screen.queryByRole('img')).not.toBeInTheDocument()
-		expect(screen.getByText(/no pages match these filters/i)).toBeInTheDocument()
 
 		fireEvent.click(screen.getByRole('button', { name: /clear filters/i }))
 
-		expect(screen.getByRole('img')).toBeInTheDocument()
+		expect(await screen.findByRole('img')).toBeInTheDocument()
 		expect(screen.getByRole('link', { name: 'Alpha' })).toBeInTheDocument()
+	})
+
+	it('does not claim the workspace has no links when the filter removed them', async () => {
+		render(<GraphView data={tagged} />)
+
+		fireEvent.change(screen.getByRole('searchbox', { name: /filter pages by title/i }), { target: { value: 'alpha' } })
+
+		expect(await screen.findByText(/no links between the filtered pages/i)).toBeInTheDocument()
+		expect(screen.queryByText(/no page links yet/i)).not.toBeInTheDocument()
 	})
 
 	it('shows an empty state instead of a canvas when the workspace has no pages', () => {
@@ -268,16 +308,12 @@ describe('GraphView', () => {
 			totalLinks: 1_001,
 			unresolvedLinks: 0,
 		}
-		const sampleLayout: PositionedGraph = {
-			nodes: [positioned('p-1'), positioned('p-2', 'page', 'Beta')],
-			edges: [],
-			bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 },
-			iterations: 1,
-		}
 
-		render(<GraphView data={sampled} layout={sampleLayout} />)
+		render(<GraphView data={sampled} />)
 
 		expect(screen.getByText('Showing 1,000 of 1,001 links')).toBeInTheDocument()
+		// The canvas summary must not claim more edges than were rendered.
+		expect(screen.getByRole('img')).toHaveAccessibleName(/1,000 of 1,001 page links shown/i)
 	})
 })
 

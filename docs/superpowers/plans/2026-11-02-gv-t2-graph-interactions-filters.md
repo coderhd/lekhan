@@ -15,18 +15,22 @@ since GV-T1 is not yet on `main`). Spec:
   - Title: trimmed, case-insensitive substring over node titles.
   - Tag facets: multi-select; a page matches when it carries **any** selected tag
     (OR within facets); title and tag facets are combined with **AND**.
-  - Ghost nodes carry no tags. A ghost survives when it is incident on a visible page,
-    so a filtered page keeps the unresolved target it links to. Edges survive only when
-    both endpoints survive.
+  - Ghost nodes carry no tags. A ghost is selected directly when no filter is
+    active or when a non-empty title filter matches its title; with only tag
+    facets selected it survives only as context for a visible page that links to
+    it. Edges survive only when both endpoints survive.
   - Filters are applied to the data **before** `computeGraphLayout`, so the force
-    simulation re-seeds on every filter change (never CSS-hiding).
+    simulation re-seeds on every filter change (never CSS-hiding). The layout feed
+    is debounced by 150 ms because a synchronous force layout costs ~200 ms on the
+    500-page corpus; the input and chips stay instant.
 
 `lib/graph-view/degrade.ts` (new, pure)
 
 - `EDGE_BUDGET = 1000` — above this the renderer samples.
 - `sampleEdges(edges, budget?)` → `{ edges, shown, total, sampled }`. Deterministic,
-  evenly-spaced stride over the input (keeps first and last, no randomness, no silent
-  truncation of the input array).
+  evenly-spaced stride over the input sorted by stable edge id (so the same edge set
+  samples identically regardless of fetch order); keeps the first and last in id order
+  when the budget allows two slots, and never mutates the input.
 - `edgeCountBadge(shown, total)` → `{ label, description } | null`; `null` when nothing
   was sampled. Label is `Showing 1,000 of 2,400 links` (thousands separators).
 - `formatCount(n)` — deterministic comma grouping (no locale dependence).

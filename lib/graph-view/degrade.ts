@@ -22,23 +22,29 @@ export interface EdgeBadge {
 }
 
 /**
- * Deterministic, evenly-spaced edge sampling. Keeps the first and last edge of
- * the (stable) input order so the map does not lose its oldest/newest links,
- * and never mutates `edges`. At or below the budget the original array is
- * returned untouched.
+ * Deterministic edge sampling. When the corpus is over budget the edges are
+ * sorted by stable id first, so the same edge set samples identically no matter
+ * what order the database returned (`fetchWorkspaceGraph` has no ORDER BY).
+ * Keeps the first and last edge in id order when the budget allows more than
+ * one slot, and never mutates `edges`. At or below the budget the original
+ * array is returned untouched.
  */
 export function sampleEdges (edges: GraphEdge[], budget: number = EDGE_BUDGET): EdgeSample {
 	const total = edges.length
-	if (budget <= 0 || total <= budget) {
+	if (total <= budget) {
 		return { edges, shown: total, total, sampled: false }
 	}
+	if (budget <= 0) {
+		// A misconfigured budget must not silently disable the degradation guard.
+		return { edges: [], shown: 0, total, sampled: true }
+	}
 
-	const lastIndex = total - 1
-	const step = (lastIndex) / (budget - 1)
+	const ordered = [...edges].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+	const step = (ordered.length - 1) / (budget - 1)
 	const sampled: GraphEdge[] = []
 	for (let index = 0; index < budget; index += 1) {
 		const sourceIndex = budget === 1 ? 0 : Math.round(index * step)
-		sampled.push(edges[sourceIndex])
+		sampled.push(ordered[sourceIndex])
 	}
 
 	return { edges: sampled, shown: sampled.length, total, sampled: true }
@@ -50,11 +56,16 @@ export function formatCount (value: number): string {
 }
 
 /** Visible badge for a sampled graph; `null` when every link is drawn. */
-export function edgeCountBadge (shown: number, total: number): EdgeBadge | null {
+export function edgeCountBadge (
+	shown: number,
+	total: number,
+	options: { filtered?: boolean } = {},
+): EdgeBadge | null {
 	if (shown >= total) return null
 	const label = `Showing ${formatCount(shown)} of ${formatCount(total)} links`
+	const scope = options.filtered ? 'the filtered links' : 'the links'
 	return {
 		label,
-		description: `${label} — the rest are sampled out to keep the graph interactive.`,
+		description: `${label} — the rest of ${scope} are sampled out to keep the graph interactive.`,
 	}
 }

@@ -120,6 +120,19 @@ describe('filterGraphData', () => {
 		expect(edgeIds(filtered.edges)).toEqual(['e-3', 'e-4'])
 	})
 
+	it('does not drag unrelated ghosts into a facet-only filter', () => {
+		const withOrphan = {
+			nodes: [...graph.nodes, node('ghost:orphan', 'Orphan', [], 'unresolved')],
+			edges: [...graph.edges, edge('e-5', 'p-2', 'ghost:orphan', true)],
+		}
+
+		const filtered = filterGraphData(withOrphan, { title: '', tags: ['research'] })
+
+		// ghost:orphan is linked only from the journal-only Beta, so it has no
+		// visible page to keep it as context.
+		expect(ids(filtered.nodes)).toEqual(['p-1', 'p-3', 'ghost:later'])
+	})
+
 	it('combines title and tag facets with AND', () => {
 		const filtered = filterGraphData(graph, { title: 'gamma', tags: ['research'] })
 

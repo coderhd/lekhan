@@ -50,10 +50,11 @@ export interface FilteredGraph {
  * - Title is a trimmed, case-insensitive substring match over node titles.
  * - Tag facets are multi-select and use OR within the group; a page matches when
  *   it carries any selected tag. Title and facets combine with AND.
- * - Ghost nodes carry no tags. With facets active they are not selected directly;
- *   they survive only as context for a visible page that links to them, so a
- *   filtered page keeps the unresolved target it points at. Without facets, a
- *   ghost matches the title filter on its own title as well.
+ * - Tag facets never apply to ghost nodes, which carry no tags. A ghost is
+ *   selected directly when no filter is active, or when a non-empty title filter
+ *   matches its title. With only tag facets selected it survives only as context
+ *   for a visible page that links to it, so a filtered page keeps the unresolved
+ *   target it points at.
  * - An edge survives only when both endpoints survive.
  *
  * The result feeds `computeGraphLayout` directly, so filtering re-seeds the
@@ -67,15 +68,17 @@ export function filterGraphData (
 	const facetsActive = state.tags.length > 0
 	const selected = new Set(state.tags)
 	const titleMatches = (node: GraphNode) => query.length === 0 || node.title.toLowerCase().includes(query)
+	// Ghosts are selected by title only when a real title query is present, or
+	// when nothing is filtered at all. Facet-only filtering keeps them as edge
+	// context (added below) instead of showing unrelated unresolved targets.
+	const ghostMatchesTitle = !facetsActive || query.length > 0
 	const visible = new Set<string>()
 
 	for (const node of data.nodes) {
 		if (!titleMatches(node)) continue
 		if (node.kind === 'page') {
 			if (facetsActive && !node.tags.some(tag => selected.has(tag))) continue
-		} else if (facetsActive) {
-			// Ghosts cannot carry tags; they are added back below when a visible
-			// page links to them.
+		} else if (!ghostMatchesTitle) {
 			continue
 		}
 		visible.add(node.id)

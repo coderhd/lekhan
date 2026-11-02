@@ -1,6 +1,6 @@
 'use client'
 
-import { useId } from 'react'
+import { useId, useRef } from 'react'
 import { Search, X } from 'lucide-react'
 import {
 	isGraphFilterActive,
@@ -33,8 +33,16 @@ export default function GraphFilters ({
 	dispatch,
 }: GraphFiltersProps) {
 	const titleId = useId()
+	const titleInputRef = useRef<HTMLInputElement>(null)
 	const active = isGraphFilterActive(state)
 	const pageNoun = totalPages === 1 ? 'page' : 'pages'
+
+	// Clearing unmounts the button; return focus to the title input so keyboard
+	// users do not fall back to <body> and restart their tab order.
+	const clearFilters = () => {
+		dispatch({ type: 'clear' })
+		titleInputRef.current?.focus()
+	}
 
 	return (
 		<div className="flex flex-col gap-3 rounded-2xl border border-black/10 bg-surface-container-lowest p-3 dark:border-white/10">
@@ -48,6 +56,7 @@ export default function GraphFilters ({
 					/>
 					<input
 						id={titleId}
+						ref={titleInputRef}
 						type="search"
 						value={state.title}
 						onChange={event => dispatch({ type: 'set-title', title: event.target.value })}
@@ -67,7 +76,7 @@ export default function GraphFilters ({
 				{active && (
 					<button
 						type="button"
-						onClick={() => dispatch({ type: 'clear' })}
+						onClick={clearFilters}
 						className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-on-surface-variant premium-transition hover:bg-black/5 hover:text-on-surface dark:hover:bg-white/10 ${FOCUS_RING}`}
 					>
 						<X size={14} aria-hidden="true" />
@@ -86,18 +95,18 @@ export default function GraphFilters ({
 							<label
 								key={facet.tag}
 								htmlFor={id}
-								className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-sm premium-transition ${
+								className={`inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full border px-3.5 text-sm premium-transition focus-within:ring-2 focus-within:ring-primary-container focus-within:ring-offset-2 ${
 									checked
 										? 'border-primary-container bg-primary-container/25 text-on-surface'
 										: 'border-black/10 text-on-surface-variant hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10'
-								} ${FOCUS_RING}`}
+								}`}
 							>
 								<input
 									id={id}
 									type="checkbox"
 									checked={checked}
 									onChange={() => dispatch({ type: 'toggle-tag', tag: facet.tag })}
-									className="h-4 w-4 shrink-0 rounded border-black/20 accent-primary dark:border-white/20"
+									className="h-4 w-4 shrink-0 rounded border-black/20 accent-primary focus-visible:outline-none dark:border-white/20"
 								/>
 								<span className="font-medium">#{facet.tag}</span>
 								<span className="text-xs text-on-surface-variant">{facet.count}</span>

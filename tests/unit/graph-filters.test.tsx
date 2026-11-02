@@ -31,15 +31,18 @@ describe('GraphFilters', () => {
 		expect(dispatch).toHaveBeenCalledWith({ type: 'set-title', title: 'alp' })
 	})
 
-	it('renders tag facets as native, labelled checkbox chips', () => {
+	it('renders tag facets as native, labelled, keyboard-focusable checkbox chips', () => {
 		render(<GraphFilters state={EMPTY_GRAPH_FILTER} facets={facets} visiblePages={4} totalPages={4} dispatch={vi.fn()} />)
 
 		const research = screen.getByRole('checkbox', { name: /#research/i })
 		expect(research).not.toBeChecked()
-		expect(research.closest('label')).not.toBeNull()
+		const chip = research.closest('label')
+		expect(chip).not.toBeNull()
 		expect(screen.getByRole('group', { name: /filter by tag/i })).toBeInTheDocument()
 
-		fireEvent.click(research)
+		research.focus()
+		expect(research).toHaveFocus()
+		expect(chip?.className).toContain('focus-within:ring-2')
 	})
 
 	it('reports the checked facet state and dispatches toggles', () => {
@@ -76,6 +79,8 @@ describe('GraphFilters', () => {
 
 		fireEvent.click(clear)
 		expect(dispatch).toHaveBeenCalledWith({ type: 'clear' })
+		// The button unmounts on clear; focus must not fall back to <body>.
+		expect(screen.getByRole('searchbox', { name: /filter pages by title/i })).toHaveFocus()
 	})
 
 	it('omits the facet group when the workspace has no tags', () => {

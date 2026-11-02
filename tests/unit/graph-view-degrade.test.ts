@@ -37,15 +37,24 @@ describe('sampleEdges', () => {
 		expect(input).toHaveLength(2_400)
 	})
 
-	it('is deterministic and keeps the first and last links', () => {
+	it('is deterministic and keeps the first and last link in id order', () => {
 		const input = edges(1_001)
 		const first = sampleEdges(input)
 		const second = sampleEdges(input)
 
 		expect(first.edges.map(edge => edge.id)).toEqual(second.edges.map(edge => edge.id))
 		expect(first.edges[0].id).toBe('e-0')
-		expect(first.edges[first.edges.length - 1].id).toBe('e-1000')
+		expect(first.edges[first.edges.length - 1].id).toBe('e-999')
 		expect(new Set(first.edges.map(edge => edge.id)).size).toBe(first.shown)
+	})
+
+	it('samples the same set regardless of fetch order', () => {
+		const input = edges(1_001)
+		const reversed = [...input].reverse()
+
+		expect(sampleEdges(reversed).edges.map(edge => edge.id)).toEqual(
+			sampleEdges(input).edges.map(edge => edge.id),
+		)
 	})
 
 	it('handles a budget of one link without dividing by zero', () => {
@@ -53,6 +62,16 @@ describe('sampleEdges', () => {
 
 		expect(sample.shown).toBe(1)
 		expect(sample.edges.map(edge => edge.id)).toEqual(['e-0'])
+	})
+
+	it('fails closed when the budget is zero or negative', () => {
+		for (const budget of [0, -5]) {
+			const sample = sampleEdges(edges(10), budget)
+			expect(sample.sampled).toBe(true)
+			expect(sample.shown).toBe(0)
+			expect(sample.edges).toEqual([])
+			expect(sample.total).toBe(10)
+		}
 	})
 })
 
@@ -82,5 +101,9 @@ describe('edgeCountBadge', () => {
 
 	it('uses the same wording for a large corpus', () => {
 		expect(edgeCountBadge(1_000, 2_400)?.label).toBe('Showing 1,000 of 2,400 links')
+	})
+
+	it('names the filtered set when a filter produced the total', () => {
+		expect(edgeCountBadge(1_000, 2_400, { filtered: true })?.description).toMatch(/filtered links/i)
 	})
 })

@@ -20,8 +20,9 @@ import {
 	graphFilterReducer,
 	isGraphFilterActive,
 	type GraphFilterAction,
+	type GraphFilterState,
 } from '@/lib/graph-view/filters'
-import { edgeCountBadge, sampleEdges } from '@/lib/graph-view/degrade'
+import { edgeCountBadge, formatCount, sampleEdges } from '@/lib/graph-view/degrade'
 import type { WorkspaceGraphData } from '@/lib/graph-view/types'
 import GraphFilters from './graph-filters'
 
@@ -30,7 +31,8 @@ const LABEL_ZOOM = 0.55
 const GHOST_LABEL_ZOOM = 0.4
 const MAX_LABEL_CHARS = 28
 const DRAG_THRESHOLD = 4
-const HOVER_CARD_MARGIN = 96
+const HOVER_CARD_MARGIN = 140
+const FILTER_DEBOUNCE_MS = 150
 
 export interface GraphViewProps {
 	data: WorkspaceGraphData
@@ -86,13 +88,17 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 	const lastLayoutRef = useRef<PositionedGraph | null>(null)
 
 	const [filter, dispatch] = useReducer(graphFilterReducer, EMPTY_GRAPH_FILTER)
+	// A force layout is synchronous and costs ~200 ms on the 500-page corpus, so
+	// the filter feed is debounced: the input and chips stay instant while the
+	// simulation re-seeds once the user pauses (still before paint, never CSS).
+	const appliedFilter = useDebouncedGraphFilter(filter, FILTER_DEBOUNCE_MS)
 	const [size, setSize] = useState<Size>({ width: 0, height: 0 })
 	const [camera, setCamera] = useState<Camera | null>(null)
 	const [highlightedId, setHighlightedId] = useState<string | null>(null)
 	const [hoverCard, setHoverCard] = useState<HoverCard | null>(null)
 	const [cursor, setCursor] = useState<'default' | 'grab' | 'grabbing' | 'pointer'>('grab')
 
-	const filtered = useMemo(() => filterGraphData(data, filter), [data, filter])
+	const filtered = useMemo(() => filterGraphData(data, appliedFilter), [data, appliedFilter])
 	const sample = useMemo(() => sampleEdges(filtered.edges), [filtered.edges])
 	const positioned = useMemo(
 		() => layout ?? computeGraphLayout(filtered.nodes, sample.edges),
@@ -100,11 +106,11 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 	)
 	const nodes = positioned.nodes
 	const nodeById = useMemo(() => new Map(nodes.map(node => [node.id, node])), [nodes])
-	const badge = edgeCountBadge(sample.shown, sample.total)
+	const filtering = isGraphFilterActive(appliedFilter)
+	const badge = edgeCountBadge(sample.shown, sample.total, { filtered: filtering })
 	const visiblePages = filtered.nodes.filter(node => node.kind === 'page').length
 	const workspaceEmpty = data.nodes.length === 0
 	const noMatches = !workspaceEmpty && filtered.nodes.length === 0
-	const filtering = isGraphFilterActive(filter)
 
 	// Drop stale hover/focus highlight when the filter changes the node set.
 	const handleFilter = useCallback((action: GraphFilterAction) => {
@@ -355,6 +361,8 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 
 	const handlePointerCancel = () => {
 		dragRef.current = null
+		setHighlightedId(null)
+		setHoverCard(null)
 		setCursor('grab')
 	}
 
@@ -372,7 +380,13 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 
 	const linkCount = positioned.edges.length
 	const unresolvedShown = positioned.edges.filter(edge => edge.unresolved).length
+	const shownLinkSummary = sample.sampled
+		? `${formatCount(linkCount)} of ${formatCount(sample.total)} page links shown`
+		: plural(linkCount, 'page link')
 	const hoveredNode = hoverCard ? nodeById.get(hoverCard.id) ?? null : null
+	const hoverCardAbove = (hoverCard?.y ?? 0) >= 96
+	// Half of the card's max width: keeps both edges inside the pane.
+	const hoverCardHalfWidth = Math.min(HOVER_CARD_MARGIN, Math.max(8, size.width / 2))
 	const hoveredEdges = hoveredNode
 		? positioned.edges.filter(edge => edge.source === hoveredNode.id || edge.target === hoveredNode.id)
 		: []
@@ -382,7 +396,7 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 			.filter((title): title is string => Boolean(title))
 		: []
 	const description = [
-		`${plural(visiblePages, 'page')} and ${plural(linkCount, 'page link')}${filtering ? ' after filtering' : ''} in this workspace.`,
+		`${plural(visiblePages, 'page')} and ${shownLinkSummary}${filtering ? ' after filtering' : ''} in this workspace.`,
 		unresolvedShown > 0
 			? `${plural(unresolvedShown, 'unresolved link')} shown as dashed ghost nodes.`
 			: '',
@@ -456,11 +470,20 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 						)}
 					</div>
 
-					{linkCount === 0 && nodes.length > 0 && (
+					{linkCount === 0 && nodes.length > 0 && !filtering && (
 						<div className="pointer-events-none absolute inset-x-4 top-4 z-10 mx-auto max-w-md rounded-xl border border-black/10 bg-surface-container/95 p-3 text-center shadow-lg backdrop-blur dark:border-white/10">
 							<p className="text-sm font-semibold text-on-surface">No page links yet</p>
 							<p className="mt-0.5 text-xs text-on-surface-variant">
 								Type <code className="rounded bg-black/5 px-1 py-0.5 dark:bg-white/10">[[Page title]]</code> in any page to draw the first edge.
+							</p>
+						</div>
+					)}
+
+					{linkCount === 0 && nodes.length > 0 && filtering && (
+						<div className="pointer-events-none absolute inset-x-4 top-4 z-10 mx-auto max-w-md rounded-xl border border-black/10 bg-surface-container/95 p-3 text-center shadow-lg backdrop-blur dark:border-white/10">
+							<p className="text-sm font-semibold text-on-surface">No links between the filtered pages</p>
+							<p className="mt-0.5 text-xs text-on-surface-variant">
+								These pages match, but none of them link to each other. Clear or widen the filters to see connections.
 							</p>
 						</div>
 					)}
@@ -480,8 +503,17 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 						<div
 							data-testid="graph-hover-card"
 							aria-hidden="true"
-							className="pointer-events-none absolute z-20 w-max max-w-[260px] -translate-x-1/2 -translate-y-[calc(100%+14px)] rounded-lg bg-inverse-surface px-2.5 py-1.5 text-xs text-inverse-on-surface shadow-xl"
-							style={{ left: clamp(hoverCard?.x ?? 0, HOVER_CARD_MARGIN, Math.max(HOVER_CARD_MARGIN, size.width - HOVER_CARD_MARGIN)), top: hoverCard?.y ?? 0 }}
+							className={`pointer-events-none absolute z-20 w-max max-w-[260px] -translate-x-1/2 rounded-lg bg-inverse-surface px-2.5 py-1.5 text-xs text-inverse-on-surface shadow-xl ${
+								hoverCardAbove ? '-translate-y-[calc(100%+14px)]' : 'translate-y-[14px]'
+							}`}
+							style={{
+								left: clamp(
+									hoverCard?.x ?? 0,
+									hoverCardHalfWidth,
+									Math.max(hoverCardHalfWidth, size.width - hoverCardHalfWidth),
+								),
+								top: hoverCard?.y ?? 0,
+							}}
 						>
 							<p className="font-semibold">{hoveredNode.title}</p>
 							<p className="mt-0.5 text-[11px] opacity-80">
@@ -539,9 +571,21 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 	)
 }
 
+/**
+ * Coalesce filter changes that trigger a synchronous force layout. The bar and
+ * chips stay instant; the simulation re-seeds once the user pauses typing.
+ */
+function useDebouncedGraphFilter (filter: GraphFilterState, delay: number): GraphFilterState {
+	const [applied, setApplied] = useState(filter)
+	useEffect(() => {
+		const timer = setTimeout(() => setApplied(filter), delay)
+		return () => clearTimeout(timer)
+	}, [filter, delay])
+	return applied
+}
+
 /** Loading placeholder for the graph surface. */
-export function GraphViewSkeleton () {
-	return (
+export function GraphViewSkeleton () {	return (
 		<div
 			role="status"
 			aria-busy="true"
