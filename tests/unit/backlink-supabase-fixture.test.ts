@@ -43,7 +43,20 @@ const LINK: FixtureLink = { from_page_id: 'a-1', from_title: 'Alpha', to_page_id
 let server: Server
 let memberClient: SupabaseClient
 let strangerClient: SupabaseClient
+let targetViewerClient: SupabaseClient
+let nullEmbedClient: SupabaseClient
 const seenQueries: string[] = []
+
+// Fixture stand-in for the current `select_page_links` policy
+// (`20260814000001_restrict_page_links_policy.sql`): a row is visible only
+// when the caller can access the *from* page. Target access alone must not
+// leak a private linking page's title.
+const CAN_ACCESS: Record<string, { from: boolean; targetPublic: boolean }> = {
+	'member-key': { from: true, targetPublic: true },
+	'stranger-key': { from: false, targetPublic: true },
+	'target-viewer-key': { from: false, targetPublic: true },
+	'null-embed-key': { from: true, targetPublic: true },
+}
 
 function createFixtureServer (): Server {
 	return createServer((req, res) => {
@@ -57,10 +70,17 @@ function createFixtureServer (): Server {
 		seenQueries.push(url.search)
 		const apiKey = String(req.headers.apikey ?? '')
 		const toPageId = (url.searchParams.get('to_page_id') || '').replace(/^eq\./, '')
+		const grant = CAN_ACCESS[apiKey]
+		const matchesTarget = toPageId === LINK.to_page_id
 
-		// Fixture stand-in for the `select_page_links` RLS policy: a member sees
-		// links whose endpoints they can access; a stranger sees none.
-		const visible = apiKey === 'member-key' && toPageId === LINK.to_page_id
+		if (matchesTarget && apiKey === 'null-embed-key') {
+			res.writeHead(200, { 'content-type': 'application/json' })
+			res.end(JSON.stringify([{ from_page_id: LINK.from_page_id, pages: null }]))
+			return
+		}
+
+		// from-only policy: target visibility is irrelevant to the decision.
+		const visible = Boolean(grant?.from) && matchesTarget
 
 		res.writeHead(200, { 'content-type': 'application/json' })
 		res.end(JSON.stringify(visible
@@ -77,10 +97,16 @@ describe('fetchPageBacklinks — PostgREST contract fixture', () => {
 		const url = `http://127.0.0.1:${port}`
 
 		memberClient = createClient(url, 'member-key', {
-			auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+			auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'fixture-member' },
 		})
 		strangerClient = createClient(url, 'stranger-key', {
-			auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+			auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'fixture-stranger' },
+		})
+		targetViewerClient = createClient(url, 'target-viewer-key', {
+			auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'fixture-target-viewer' },
+		})
+		nullEmbedClient = createClient(url, 'null-embed-key', {
+			auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'fixture-null-embed' },
 		})
 	})
 
@@ -100,8 +126,18 @@ describe('fetchPageBacklinks — PostgREST contract fixture', () => {
 		expect(seenQueries[0]).toContain('to_page_id=eq.b-1')
 	})
 
-	it('returns an empty list for a non-member (RLS-shaped response)', async () => {
+	it('returns an empty list for a caller with no access to either endpoint', async () => {
 		holder.client = strangerClient
+		expect(await fetchPageBacklinks('b-1')).toEqual([])
+	})
+
+	it('does not leak a private linking page to a viewer of the public target', async () => {
+		holder.client = targetViewerClient
+		expect(await fetchPageBacklinks('b-1')).toEqual([])
+	})
+
+	it('drops rows with no linkable title (null pages embed)', async () => {
+		holder.client = nullEmbedClient
 		expect(await fetchPageBacklinks('b-1')).toEqual([])
 	})
 
@@ -134,7 +170,7 @@ describe.skipIf(!hasRealProject)('fetchPageBacklinks — real Supabase fixture',
 
 	beforeAll(async () => {
 		admin = createClient(realConfig.url!, realConfig.serviceKey!, {
-			auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+			auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'fixture-real-admin' },
 		})
 
 		const member = await admin.auth.admin.createUser({ email: memberEmail, password, email_confirm: true })
@@ -159,7 +195,15 @@ describe.skipIf(!hasRealProject)('fetchPageBacklinks — real Supabase fixture',
 
 		const target = await admin
 			.from('pages')
-			.insert({ workspace_id: workspace.data.id, owner_id: member.data.user.id, title: 'Beta target' })
+			.insert({
+				workspace_id: workspace.data.id,
+				owner_id: member.data.user.id,
+				title: 'Beta target',
+				// Public target + private source is the exact regression shape the
+				// `restrict_page_links_policy` migration closed: a stranger who can
+				// read the target must still not see the private linking page.
+				is_public: true,
+			})
 			.select('id')
 			.single()
 		if (target.error) throw target.error
@@ -172,6 +216,21 @@ describe.skipIf(!hasRealProject)('fetchPageBacklinks — real Supabase fixture',
 			to_title: 'Beta target',
 		})
 		if (link.error) throw link.error
+
+		// Decoy: a link that must not leak into the target's backlink list.
+		const decoyTarget = await admin
+			.from('pages')
+			.insert({ workspace_id: workspace.data.id, owner_id: member.data.user.id, title: 'Gamma decoy' })
+			.select('id')
+			.single()
+		if (decoyTarget.error) throw decoyTarget.error
+		const decoyLink = await admin.from('page_links').insert({
+			workspace_id: workspace.data.id,
+			from_page_id: source.data.id,
+			to_page_id: decoyTarget.data.id,
+			to_title: 'Gamma decoy',
+		})
+		if (decoyLink.error) throw decoyLink.error
 	})
 
 	afterAll(async () => {
@@ -184,17 +243,18 @@ describe.skipIf(!hasRealProject)('fetchPageBacklinks — real Supabase fixture',
 
 	it('resolves the inbound link for a member and hides it from a non-member', async () => {
 		const member = createClient(realConfig.url!, realConfig.anonKey!, {
-			auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+			auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'fixture-real-member' },
 		})
 		const signIn = await member.auth.signInWithPassword({ email: memberEmail, password })
 		if (signIn.error) throw signIn.error
 
 		holder.client = member
 		const asMember = await fetchPageBacklinks(targetPageId)
-		expect(asMember.map((row) => row.from_title)).toEqual(['Alpha source'])
+		expect(asMember).toHaveLength(1)
+		expect(asMember[0].from_title).toBe('Alpha source')
 
 		const stranger = createClient(realConfig.url!, realConfig.anonKey!, {
-			auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+			auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'fixture-real-stranger' },
 		})
 		const strangerSignIn = await stranger.auth.signInWithPassword({ email: strangerEmail, password })
 		if (strangerSignIn.error) throw strangerSignIn.error

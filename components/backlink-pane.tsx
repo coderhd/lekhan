@@ -1,10 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Link2, X } from 'lucide-react'
 import { fetchPageBacklinks } from '@/services/graph'
 import { buildBacklinkContext } from '@/lib/backlinks/context'
+import type { Backlink } from '@/types'
 
 export interface BacklinkRow {
 	/** Linking page id. Empty/null marks an unresolved (title-only) row. */
@@ -81,6 +82,11 @@ interface BacklinkPaneProps {
 	pageId: string
 	onClose: () => void
 	/**
+	 * Title of the page whose backlinks are shown. Used as the match target for
+	 * the optional 120-char context line; without it rows stay title-only.
+	 */
+	pageTitle?: string
+	/**
 	 * Optional linking-page bodies keyed by page id. The v1 editor passes none
 	 * because `fetchPageBacklinks` carries titles only; when a caller does have
 	 * bodies, each row gains a 120-char context line. The backlink query itself
@@ -97,10 +103,10 @@ interface BacklinkPaneProps {
  * no write path. Focus is trapped while it is mounted and returned to the
  * trigger on close; Escape and the labelled close button both dismiss it.
  */
-export default function BacklinkPane ({ pageId, onClose, bodyByPage }: BacklinkPaneProps) {
+export default function BacklinkPane ({ pageId, pageTitle, onClose, bodyByPage }: BacklinkPaneProps) {
 	const router = useRouter()
 	const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
-	const [rows, setRows] = useState<BacklinkRow[]>([])
+	const [backlinks, setBacklinks] = useState<Backlink[]>([])
 	const [reloadKey, setReloadKey] = useState(0)
 	const panelRef = useRef<HTMLDivElement>(null)
 	const closeRef = useRef<HTMLButtonElement>(null)
@@ -111,13 +117,9 @@ export default function BacklinkPane ({ pageId, onClose, bodyByPage }: BacklinkP
 		setStatus('loading')
 
 		fetchPageBacklinks(pageId)
-			.then((backlinks) => {
+			.then((result) => {
 				if (!active) return
-				setRows((backlinks || []).map((backlink) => ({
-					pageId: backlink.from_page_id || null,
-					title: backlink.from_title,
-					context: buildBacklinkContext(bodyByPage?.[backlink.from_page_id], backlink.from_title),
-				})))
+				setBacklinks(result || [])
 				setStatus('ready')
 			})
 			.catch((error) => {
@@ -127,13 +129,32 @@ export default function BacklinkPane ({ pageId, onClose, bodyByPage }: BacklinkP
 			})
 
 		return () => { active = false }
-	}, [pageId, reloadKey, bodyByPage])
+	}, [pageId, reloadKey])
+
+	// Derive rows without refetching when optional bodies arrive: the query is
+	// always the same `fetchPageBacklinks(pageId)` read.
+	const rows = useMemo<BacklinkRow[]>(() => backlinks.map((backlink) => ({
+		pageId: backlink.from_page_id || null,
+		title: backlink.from_title,
+		context: pageTitle
+			? buildBacklinkContext(bodyByPage?.[backlink.from_page_id], pageTitle)
+			: undefined,
+	})), [backlinks, bodyByPage, pageTitle])
 
 	useEffect(() => {
 		restoreFocusRef.current = document.activeElement as HTMLElement | null
 		closeRef.current?.focus()
 		return () => {
-			restoreFocusRef.current?.focus?.()
+			const previous = restoreFocusRef.current
+			if (previous?.isConnected) {
+				previous.focus()
+				return
+			}
+			// The mobile menu item unmounts when it opens the drawer; fall back
+			// to a stable trigger so focus never lands on <body>.
+			const triggers = Array.from(document.querySelectorAll<HTMLElement>('[data-backlink-trigger]'))
+			const visible = triggers.find((trigger) => trigger.offsetParent !== null) ?? triggers[0]
+			visible?.focus()
 		}
 	}, [])
 
@@ -141,9 +162,18 @@ export default function BacklinkPane ({ pageId, onClose, bodyByPage }: BacklinkP
 		router.push(`/page/${targetPageId}`)
 	}, [router])
 
-	const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+	const handleKeyDown = useCallback((event: globalThis.KeyboardEvent) => {
+		// Modal: block the editor/search global shortcuts while the drawer is up.
+		const isGlobalShortcut = (event.metaKey || event.ctrlKey) && ['k', 'l', 's', 'S'].includes(event.key)
+		if (isGlobalShortcut) {
+			event.preventDefault()
+			event.stopImmediatePropagation()
+			return
+		}
+
 		if (event.key === 'Escape') {
 			event.preventDefault()
+			event.stopPropagation()
 			onClose()
 			return
 		}
@@ -155,15 +185,25 @@ export default function BacklinkPane ({ pageId, onClose, bodyByPage }: BacklinkP
 		const first = focusable[0]
 		const last = focusable[focusable.length - 1]
 		const active = document.activeElement
+		const insidePanel = Boolean(panelRef.current?.contains(active))
 
-		if (event.shiftKey && (active === first || !panelRef.current?.contains(active))) {
-			event.preventDefault()
-			last.focus()
-		} else if (!event.shiftKey && active === last) {
+		if (event.shiftKey) {
+			if (!insidePanel || active === first) {
+				event.preventDefault()
+				last.focus()
+			}
+		} else if (!insidePanel || active === last) {
 			event.preventDefault()
 			first.focus()
 		}
-	}
+	}, [onClose])
+
+	// Capture phase so a click that blurs to <body> cannot route Tab/Escape to
+	// the editor behind the backdrop.
+	useEffect(() => {
+		document.addEventListener('keydown', handleKeyDown, true)
+		return () => document.removeEventListener('keydown', handleKeyDown, true)
+	}, [handleKeyDown])
 
 	return (
 		<>
@@ -178,7 +218,6 @@ export default function BacklinkPane ({ pageId, onClose, bodyByPage }: BacklinkP
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby="backlink-pane-title"
-				onKeyDown={handleKeyDown}
 				className="fixed inset-y-0 right-0 z-[60] flex w-full flex-col border-l border-black/10 bg-background shadow-2xl dark:border-white/10 md:w-[400px]"
 			>
 				<header className="flex flex-none items-center justify-between border-b border-black/10 px-4 py-3 dark:border-white/10">

@@ -952,7 +952,7 @@ export default function EditorWorkspace({	pageId,
 	// history. Anonymous readers get neither — both features are hidden from
 	// the reading surface and history would read from an empty local store.
 	useEffect(() => {
-		if (anonVisitor) return
+		if (anonVisitor || isBacklinksOpen) return
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
 				e.preventDefault()
@@ -965,7 +965,7 @@ export default function EditorWorkspace({	pageId,
 		}
 		document.addEventListener('keydown', handleKeyDown)
 		return () => document.removeEventListener('keydown', handleKeyDown)
-	}, [handleOpenLekhanBot, anonVisitor])
+	}, [handleOpenLekhanBot, anonVisitor, isBacklinksOpen])
 
 	useEffect(() => {
 		if (editor && isViewer !== null) {
@@ -1077,10 +1077,12 @@ export default function EditorWorkspace({	pageId,
 							<button
 								onClick={() => { setIsBacklinksOpen(!isBacklinksOpen); setIsHistoryOpen(false); setIsAIPanelOpen(false); }}
 								aria-pressed={isBacklinksOpen}
+								aria-label="Backlinks"
+								data-backlink-trigger
 								className={`hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium ${isBacklinksOpen ? 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/30' : 'bg-surface-container-low'}`}
 								title="Backlinks"
 							>
-								<span className="material-symbols-outlined text-primary-container text-lg">link</span>
+								<span className="material-symbols-outlined text-primary-container text-lg" aria-hidden="true">link</span>
 								<span className="hidden lg:inline">Backlinks</span>
 							</button>
 						)}
@@ -1323,7 +1325,7 @@ export default function EditorWorkspace({	pageId,
 
 			<div className="flex-1 flex overflow-hidden relative">
 				{/* Main Workspace (Expanded, Dark Continuous Canvas) */}
-				<main className={`flex-1 flex flex-col items-center bg-background relative scroll-smooth transition-all overflow-y-auto no-scrollbar py-8 pb-36 ${isAIPanelOpen || isHistoryOpen || isBacklinksOpen ? 'lg:mr-80' : ''}`}>
+				<main className={`flex-1 flex flex-col items-center bg-background relative scroll-smooth transition-all overflow-y-auto no-scrollbar py-8 pb-36 ${isBacklinksOpen ? 'lg:mr-[400px]' : (isAIPanelOpen || isHistoryOpen ? 'lg:mr-80' : '')}`}>
 
 					{!isViewer && editor && (
 						<div className="sticky top-2 z-30 flex items-center justify-center gap-2 mb-2">
@@ -1394,6 +1396,7 @@ export default function EditorWorkspace({	pageId,
 				{isBacklinksOpen && (
 					<BacklinkPane
 						pageId={pageId}
+						pageTitle={title}
 						onClose={() => setIsBacklinksOpen(false)}
 					/>
 				)}

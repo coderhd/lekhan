@@ -63,6 +63,7 @@ export default function MobileHeaderMenu({
 		<div className="relative flex items-center md:hidden" ref={menuRef}>
 			<button
 				onClick={() => setIsOpen(!isOpen)}
+				data-backlink-trigger
 				className={`flex items-center justify-center h-8 w-8 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface ${isOpen ? 'bg-primary/10 text-primary border-primary/30' : 'bg-surface-container-low'}`}
 				title="More options"
 			>

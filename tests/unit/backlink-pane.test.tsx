@@ -70,13 +70,61 @@ describe('BacklinkPane', () => {
 		expect(router.push).not.toHaveBeenCalled()
 	})
 
-	it('renders a <=120-char context line when linking-page bodies are available', async () => {
+	it('renders a <=120-char context line around the viewed page title when bodies are available', async () => {
 		backlinks.mockResolvedValue([row('p-1', 'Alpha')])
-		const body = `${'prefix '.repeat(30)}[[Alpha]]${' suffix'.repeat(30)}`
-		render(<BacklinkPane pageId="p-42" onClose={vi.fn()} bodyByPage={{ 'p-1': body }} />)
+		const body = `${'prefix '.repeat(30)}[[This page]]${' suffix'.repeat(30)}`
+		render(
+			<BacklinkPane
+				pageId="p-42"
+				pageTitle="This page"
+				onClose={vi.fn()}
+				bodyByPage={{ 'p-1': body }}
+			/>,
+		)
 
-		const context = await screen.findByText(/\[\[Alpha\]\]/)
+		const context = await screen.findByText(/\[\[This page\]\]/)
 		expect(context.textContent!.length).toBeLessThanOrEqual(120)
+	})
+
+	it('keeps rows title-only when the linking page body is unavailable', async () => {
+		backlinks.mockResolvedValue([row('p-1', 'Alpha')])
+		render(<BacklinkPane pageId="p-42" pageTitle="This page" onClose={vi.fn()} />)
+
+		await screen.findByRole('button', { name: /\bAlpha\b/ })
+		expect(screen.getByRole('listitem').querySelectorAll('p')).toHaveLength(0)
+	})
+
+	it('shows a retry affordance when the query fails, then recovers', async () => {
+		backlinks.mockRejectedValueOnce(new Error('network down'))
+		render(<BacklinkPane pageId="p-42" onClose={vi.fn()} />)
+
+		expect(await screen.findByRole('alert')).toHaveTextContent(/Couldn't load backlinks/)
+		backlinks.mockResolvedValueOnce([row('p-1', 'Alpha')])
+		fireEvent.click(screen.getByRole('button', { name: /try again/i }))
+
+		expect(await screen.findByRole('button', { name: /\bAlpha\b/ })).toBeInTheDocument()
+	})
+
+	it('keeps Tab and global shortcuts inside the drawer after focus blurs to body', async () => {
+		backlinks.mockResolvedValue([row('p-1', 'Alpha')])
+		const onClose = vi.fn()
+		render(<BacklinkPane pageId="p-42" onClose={onClose} />)
+
+		const close = screen.getByRole('button', { name: /close backlinks/i })
+		await screen.findByRole('button', { name: /\bAlpha\b/ })
+
+		;(document.body as HTMLElement).focus()
+		fireEvent.keyDown(document.body, { key: 'Tab' })
+		expect(close).toHaveFocus()
+
+		const bubbleListener = vi.fn()
+		document.addEventListener('keydown', bubbleListener)
+		fireEvent.keyDown(document, { key: 'k', metaKey: true })
+		document.removeEventListener('keydown', bubbleListener)
+		expect(bubbleListener).not.toHaveBeenCalled()
+
+		fireEvent.keyDown(document.body, { key: 'Escape' })
+		expect(onClose).toHaveBeenCalledTimes(1)
 	})
 
 	it('exposes a labelled close button that calls onClose', () => {
