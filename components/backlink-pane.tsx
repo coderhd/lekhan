@@ -59,14 +59,14 @@ export function BacklinkList ({ rows, onNavigate }: BacklinkListProps) {
 							<button
 								type="button"
 								onClick={() => onNavigate(row.pageId as string)}
-								className="w-full rounded-lg border border-transparent px-3 py-2 text-left transition-colors hover:border-black/10 hover:bg-black/5 dark:hover:border-white/10 dark:hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-container"
+								className="w-full min-h-11 rounded-lg border border-transparent px-3 py-2 text-left transition-colors hover:border-black/10 hover:bg-black/5 dark:hover:border-white/10 dark:hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-container"
 							>
 								{content}
 							</button>
 						) : (
 							<div
 								aria-disabled="true"
-								className="w-full rounded-lg border border-dashed border-black/10 px-3 py-2 text-left opacity-80 dark:border-white/10"
+								className="w-full min-h-11 rounded-lg border border-dashed border-black/10 px-3 py-2 text-left opacity-80 dark:border-white/10"
 							>
 								{content}
 							</div>
@@ -230,7 +230,7 @@ export default function BacklinkPane ({ pageId, pageTitle, onClose, bodyByPage }
 						type="button"
 						onClick={onClose}
 						aria-label="Close backlinks"
-						className="rounded-full p-2 text-on-surface-variant transition-colors hover:bg-black/5 hover:text-on-surface dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-container"
+						className="rounded-full p-3 text-on-surface-variant transition-colors hover:bg-black/5 hover:text-on-surface dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-container"
 					>
 						<X className="h-5 w-5" aria-hidden="true" />
 					</button>
@@ -259,7 +259,7 @@ export default function BacklinkPane ({ pageId, pageTitle, onClose, bodyByPage }
 							<button
 								type="button"
 								onClick={() => setReloadKey((key) => key + 1)}
-								className="rounded-lg border border-black/10 px-3 py-1.5 text-xs font-semibold text-on-surface transition-colors hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-container"
+								className="min-h-11 rounded-lg border border-black/10 px-4 py-2 text-xs font-semibold text-on-surface transition-colors hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-container"
 							>
 								Try again
 							</button>
