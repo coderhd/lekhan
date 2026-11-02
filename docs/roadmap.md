@@ -137,9 +137,9 @@ unblocks H2 agents. The Tauri desktop shell (#88) delivers the files-on-disk pro
 
 | Epic | Issue | Blocker edges | Spec ref |
 |---|---|---|---|
-| H1 — Graph view + backlink pane | #38 | → H2 Databases #47 (blocker) | §4 |
+| H1 — Graph view + backlink pane | #38 | → H2 Databases #47 (blocker) | `2026-11-02-h1-graph-view-backlink-pane-design.md` (specced + sliced 2026-11-02, SIL-206–208) |
 | H1 — Dual-Dialect Interop Bridge (Obsidian-native files + Notion-compatible content) | #78 | ← #27; subsumes the import half of #45 | `docs/superpowers/specs/…` (spec in issue body) |
-| H1 — Daily notes / quick capture / inbox | #39 | — | §4 |
+| H1 — Daily notes / quick capture / inbox | #39 | — | `2026-11-02-h1-daily-notes-quick-capture-inbox-design.md` (specced + sliced 2026-11-02, SIL-203–205; first H1 epic per sequencing) |
 | H1 — Public pages + publish | #40 | ← #30 | §4 |
 | H1 — Comments + page mentions | #41 | — | §4 |
 | H1 — Templates | #42 | — | §4 |
