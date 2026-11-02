@@ -44,7 +44,7 @@ describe('Hub Page Persister (server/persister.js)', () => {
 	function createTestPersister(overrides = {}) {
 		return createPagePersister({
 			supabaseAdmin,
-			indexer: { indexPage: indexPageMock },
+			indexer: { indexPage: indexPageMock } as any,
 			retentionEngine: { pruneExpiredDocumentVersions: pruneExpiredMock },
 			authService: { getDocumentOwnerPlan: getDocumentOwnerPlanMock },
 			...overrides,
@@ -166,5 +166,40 @@ describe('Hub Page Persister (server/persister.js)', () => {
 			searchable_text: 'Hello from persister',
 			updated_at: expect.any(String)
 		}))
+	})
+
+	it('TC06: indexes Tiptap Collaboration XmlFragment documents (quick-capture tags/links)', async () => {
+		// The live editor stores the page as an XmlFragment named 'default', not
+		// a Y.Text. Asking for the text form throws in Yjs, so the persister must
+		// walk the fragment instead of rejecting the save (which would leave
+		// #inbox / [[links]] out of the graph index).
+		const collabDoc = new Y.Doc()
+		const fragment = collabDoc.getXmlFragment('default')
+
+		const heading = new Y.XmlElement('heading')
+		heading.setAttribute('level', '2')
+		const headingText = new Y.XmlText()
+		headingText.insert(0, 'Inbox')
+		heading.insert(0, [headingText])
+
+		const list = new Y.XmlElement('bulletList')
+		const item = new Y.XmlElement('listItem')
+		const paragraph = new Y.XmlElement('paragraph')
+		const bulletText = new Y.XmlText()
+		bulletText.insert(0, '09:41 Call [[Alice]] about #launch #inbox')
+		paragraph.insert(0, [bulletText])
+		item.insert(0, [paragraph])
+		list.insert(0, [item])
+
+		fragment.insert(0, [heading, list])
+
+		const persister = createTestPersister()
+		const result = await persister.persist('doc-123', collabDoc)
+
+		expect(result.success).toBe(true)
+		expect(result.nonCriticalResults.indexingSuccess).toBe(true)
+		const indexedText = indexPageMock.mock.calls.at(-1)[2]
+		expect(indexedText).toContain('Inbox')
+		expect(indexedText).toContain('Call [[Alice]] about #launch #inbox')
 	})
 })

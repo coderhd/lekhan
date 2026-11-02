@@ -15,6 +15,42 @@ const { getDocumentOwnerPlan } = require('./auth.js')
  * @param {Object} [config.authService] - Optional plan lookup service
  * @returns {{ persist: (documentId: string, ydoc: import('yjs').Doc, options?: { isE2EEnabled?: boolean }) => Promise<{ success: boolean, documentId: string, nonCriticalResults: { indexingSuccess: boolean, retentionSuccess: boolean } }> }}
  */
+/**
+ * Extract searchable text from a page's Yjs document.
+ *
+ * The live editor (Tiptap Collaboration) stores the document as an
+ * `XmlFragment` named `default`; older/plain documents use a `Y.Text` with the
+ * same name. Yjs throws when a name is already bound to a different
+ * constructor, so try the text form first and walk the fragment on failure.
+ * Block-level nodes are joined with newlines so `#tags` and `[[links]]` at
+ * block boundaries remain regex-matchable.
+ */
+function extractDocumentText (ydoc) {
+	try {
+		return ydoc.getText('default').toString()
+	} catch {
+		// Not a Y.Text document — fall through to the XmlFragment form.
+	}
+
+	const fragment = ydoc.getXmlFragment('default')
+	// Structural checks instead of `instanceof`: server (CJS) and client (ESM)
+	// builds of yjs can hand back different constructors for the same classes.
+	const collect = (type) => {
+		if (!type) {
+			return ''
+		}
+		if (typeof type.toArray === 'function') {
+			return type.toArray().map(child => collect(child)).join('')
+		}
+		return typeof type.toString === 'function' ? type.toString() : ''
+	}
+	return fragment
+		.toArray()
+		.map(node => collect(node))
+		.filter(Boolean)
+		.join('\n')
+}
+
 function createPagePersister({
 	supabaseAdmin,
 	isE2EEnabled: defaultE2EEnabled = false,
@@ -46,7 +82,7 @@ function createPagePersister({
 				}
 
 				// 3. Extract text content; update pages first, fall back to legacy documents
-				const textContent = ydoc.getText('default').toString()
+				const textContent = extractDocumentText(ydoc)
 				const { data: pageRow } = await supabaseAdmin
 					.from('pages')
 					.select('id')
