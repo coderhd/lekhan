@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { MemberPageItem, Page } from '@/types'
+import { MemberPageItem, Page, Workspace } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { ensureWorkspace, fetchWorkspacePages, fetchSharedPages, createPage, deletePage, updatePageTitle, fetchPendingPageInvitations } from '@/services/graph'
 import { importMarkdownFile } from '@/services/import'
 import Invitations from './invitations'
 import ProfileMenu from './profile-menu'
 import ThemeToggle from './theme-toggle'
+import DailyStrip from './daily-strip'
 import { useGlobalSearch } from '@/components/global-search-palette'
 import GlobalLoader from './global-loader'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
@@ -35,6 +36,7 @@ export default function Dashboard({ user }: DashboardProps) {
 	const { open: openGlobalSearch } = useGlobalSearch()
 	const [myPages, setMyPages] = useState<Page[]>([])
 	const [sharedPages, setSharedPages] = useState<MemberPageItem[]>([])
+	const [workspace, setWorkspace] = useState<Workspace | null>(null)
 	const [pendingInvitesCount, setPendingInvitesCount] = useState(0)
 	const [loading, setLoading] = useState(true)
 	const [fetchError, setFetchError] = useState(false)
@@ -117,6 +119,7 @@ export default function Dashboard({ user }: DashboardProps) {
 				fetchPendingPageInvitations(user.email)
 			])
 			if (requestId !== fetchRequestIdRef.current) return
+			setWorkspace(workspace)
 			setMyPages(owned)
 			setSharedPages(shared)
 			setPendingInvitesCount(invites.length)
@@ -347,6 +350,10 @@ export default function Dashboard({ user }: DashboardProps) {
 			{/* Main Content */}
 			<main className="pt-8 pb-xl px-6 md:px-10 flex justify-center">
 				<div className="max-w-7xl w-full flex flex-col gap-xl">
+
+					{!loading && !fetchError && workspace && (
+						<DailyStrip workspaceId={workspace.id} ownerId={user.id} />
+					)}
 
 					{loading ? (
 						<div className="flex justify-center items-center min-h-[calc(100vh-6rem)]">
