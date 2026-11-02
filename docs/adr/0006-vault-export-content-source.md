@@ -68,3 +68,34 @@ and surfaced as a warning in the `FidelityReport` — never silently dropped.
   websocket per Page even when every Page is already cached locally, and offers
   no offline export.
 - **Server export endpoint.** Rejected: violates story 13's client-side guarantee.
+
+## Amendment — hydration gate and read-only gap syncs (SIL-214)
+
+**Status:** Accepted · **Date:** 2026-11-02 · **Issue:** SIL-214
+
+The gap-sync in step 2 was implemented with a short-lived **writable**
+`WebsocketProvider`. `y-websocket` calls `persistence.bindState()` without
+awaiting it and sends sync step 1 immediately, so a cold room answered with an
+empty document; on the last close `writeState` persisted that empty doc over the
+real snapshot. The S4 export therefore both lost content (B1) and destroyed
+stored snapshots (B2).
+
+Decision:
+
+1. **Hydrate before sync.** The server awaits `bindState` (the Supabase download
+   + decrypt) in the upgrade path before `setupWSConnection` runs. Every client
+   — not just the export — now receives a hydrated document on its first sync.
+2. **Gate persistence.** `writeState` refuses to save a room that is not
+   `hydrated` (pending/failed), and refuses a room that only ever had read-only
+   connections. A failed hydration can no longer overwrite the stored snapshot.
+3. **Read-only gap sync.** Export connects with `readOnly=1`: update frames are
+   rejected and closing the room never triggers a save. The read path is now
+   non-destructive by construction, not by timing.
+4. **Honest empty reads.** The source distinguishes `ok` / `empty` /
+   `unavailable`. The loader treats `empty` as unknown when Page metadata
+   (`searchable_text`) says content exists, and the FidelityReport names the
+   page instead of claiming a clean export.
+
+The local-first ordering in the Decision section is unchanged: a local
+`y-indexeddb` copy is still preferred, and only gaps open a remote room (now
+read-only).

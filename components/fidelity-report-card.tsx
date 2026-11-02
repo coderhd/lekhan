@@ -16,11 +16,12 @@ interface FidelityReportCardProps {
 /** Warning copy differs by direction: import warns about writes/indexing, export about reads or serialization. */
 function warningReason(warning: FidelityWarning, isExport: boolean): string {
 	if (isExport) {
-		// The export has two degraded stages: the content read (IndexedDB/doc fetch)
+		// The export has three degraded stages: the content read (IndexedDB/doc
+		// fetch), a completed read with no body for a Page known to have content,
 		// and serializing a doc that was read. Naming the wrong one is not honest.
-		return warning.stage === 'serialize'
-			? 'note could not be serialized'
-			: 'content could not be read'
+		if (warning.stage === 'serialize') return 'note could not be serialized'
+		if (warning.stage === 'content-unverified') return 'note was exported without its body'
+		return 'content could not be read'
 	}
 	return warning.stage === 'snapshot' ? 'content could not be saved' : 'search/links could not be indexed'
 }
@@ -58,6 +59,9 @@ export function FidelityReportCard({
 	}, [report, serverWarnings.length, isExport])
 
 	const containerTestId = isExport ? 'export-report' : 'import-report'
+	// An export with content warnings is not "complete": say so instead of
+	// showing a green check over empty/unverified notes (SIL-214).
+	const exportHasWarnings = isExport && serverWarnings.length > 0
 	const noun = isExport ? 'written to your vault' : 'created'
 	const folderCopy = isExport
 		? `${report.folderPages} folder${report.folderPages === 1 ? '' : 's'} mirrored from your workspace`
@@ -66,8 +70,20 @@ export function FidelityReportCard({
 	return (
 		<div className="w-full rounded-lg border border-black/10 dark:border-white/10 bg-surface-container p-md text-sm" data-testid={containerTestId}>
 			<div className="flex items-center gap-sm mb-sm">
-				<span className="material-symbols-outlined text-green-600 dark:text-green-400">check_circle</span>
-				<p className="font-bold">{isExport ? 'Export complete' : 'Import complete'}</p>
+				<span
+					className={`material-symbols-outlined ${
+						exportHasWarnings ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'
+					}`}
+				>
+					{exportHasWarnings ? 'warning' : 'check_circle'}
+				</span>
+				<p className="font-bold">
+					{isExport
+						? exportHasWarnings
+							? 'Export finished with issues'
+							: 'Export complete'
+						: 'Import complete'}
+				</p>
 			</div>
 
 			<ul className="space-y-1 mb-md text-on-surface-variant">

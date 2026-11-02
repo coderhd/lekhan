@@ -1,7 +1,7 @@
 import * as Y from 'yjs'
 import type { JSONContent } from '@tiptap/core'
 import { markdownEngine } from '@/lib/markdown/engine'
-import type { LoadPageDoc } from '@/lib/markdown/vault-export-loader'
+import type { LoadPageDoc, PageDocReadResult } from '@/lib/markdown/vault-export-loader'
 
 /**
  * Browser edge of the vault-export content loader (SIL-9 S4a, ADR 0006).
@@ -169,29 +169,36 @@ async function readLocalCopy(pageId: string, timeoutMs: number, signal?: AbortSi
 }
 
 /**
- * Gap-sync a single Page from the collab server with a short-lived provider,
- * then tear it down. Returns `null` only on timeout/error/abort — a successful
- * sync of an empty room returns the Page's (empty) doc, so a never-edited Page
- * is exported as a title-only note without a false "content could not be read"
- * warning (`loadVaultPageDocs` warns only on `null`).
+ * Gap-sync a single Page from the collab server with a short-lived **read-only**
+ * provider, then tear it down.
+ *
+ * `readOnly=1` is what makes the read non-destructive: the server hydrates the
+ * room before answering sync, rejects this connection's update frames, and
+ * never persists a room that only had read-only connections (SIL-214 B2).
+ *
+ * A completed sync with no blocks is reported as `empty`, not `ok`; the loader
+ * decides whether that is a genuinely empty Page or unknown content. A
+ * timeout/error/abort is `unavailable` — the two must not be conflated.
  */
 async function readRemoteCopy(
 	pageId: string,
 	opts: { token: string; wsUrl: string; timeoutMs: number },
 	signal?: AbortSignal,
-): Promise<JSONContent | null> {
-	if (signal?.aborted) return null
+): Promise<PageDocReadResult> {
+	if (signal?.aborted) return { doc: null, status: 'unavailable' }
 	const { WebsocketProvider } = await import('y-websocket')
 	const doc = new Y.Doc()
 	const provider = new WebsocketProvider(opts.wsUrl, pageId, doc, {
-		params: { token: opts.token, documentId: pageId },
+		params: { token: opts.token, documentId: pageId, readOnly: '1' },
 		connect: true,
 	})
 	try {
 		await waitForEvent(provider, 'sync', opts.timeoutMs, signal)
-		return toJson(doc)
+		return hasContent(doc)
+			? { doc: toJson(doc), status: 'ok' }
+			: { doc: null, status: 'empty' }
 	} catch {
-		return null
+		return { doc: null, status: 'unavailable' }
 	} finally {
 		provider.destroy()
 		doc.destroy()
@@ -206,11 +213,13 @@ async function readRemoteCopy(
 export function createClientPageDocSource(options: ClientPageDocSourceOptions): LoadPageDoc {
 	const wsUrl = options.wsUrl ?? process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:8080'
 	const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
-	return async (pageId: string, signal?: AbortSignal) => {
-		if (signal?.aborted) return null
+	return async (pageId: string, signal?: AbortSignal): Promise<PageDocReadResult> => {
+		if (signal?.aborted) return { doc: null, status: 'unavailable' }
 		const local = await readLocalCopy(pageId, timeoutMs, signal)
-		if (signal?.aborted) return null
-		if (local) return local
+		if (signal?.aborted) return { doc: null, status: 'unavailable' }
+		// A cached body is authoritative for this device; an empty/absent cache
+		// still gap-syncs so a Page edited on another device is not lost.
+		if (local) return { doc: local, status: 'ok' }
 		return readRemoteCopy(pageId, { token: options.token, wsUrl, timeoutMs }, signal)
 	}
 }

@@ -141,6 +141,36 @@ describe('Event Instrumentation', () => {
 			)
 			expect(screen.getByTestId('export-report')).toBeInTheDocument()
 			expect(screen.getByText(/content could not be read/)).toBeInTheDocument()
+			// A warned export must not claim a clean completion (SIL-214 B1).
+			expect(screen.getByText('Export finished with issues')).toBeInTheDocument()
+			expect(screen.queryByText('Export complete')).not.toBeInTheDocument()
+		})
+
+		it('names an unverified body separately from an unreadable page', () => {
+			render(
+				<FidelityReportCard
+					report={{
+						direction: 'export',
+						pages: 1,
+						folderPages: 0,
+						linksResolved: 0,
+						linksUnresolved: 0,
+						degradedBlocks: 0,
+						omissions: [],
+						warnings: [],
+					}}
+					serverWarnings={[
+						{
+							title: 'Cold Note',
+							stage: 'content-unverified',
+							error: 'the stored page has content, but the exported body was empty',
+						},
+					]}
+				/>
+			)
+
+			expect(screen.getByText(/note was exported without its body/)).toBeInTheDocument()
+			expect(screen.getByText(/the stored page has content/)).toBeInTheDocument()
 		})
 	})
 

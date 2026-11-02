@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import * as Y from 'yjs'
 import { MarkdownEngine, base64ToUint8Array, fitLiveSchema } from '@/lib/markdown/engine'
 import { loadVaultPageDocs, toVaultPage } from '@/lib/markdown/vault-export-loader'
+import type { PageDocReadResult } from '@/lib/markdown/vault-export-loader'
 import type { VaultPage } from '@/lib/markdown/vault-export'
 import type { JSONContent } from '@tiptap/core'
 
@@ -69,7 +70,17 @@ describe('toVaultPage', () => {
 			properties: { author: 'Ada' },
 			tags: ['pkm'],
 			isFolder: false,
+			hasStoredContent: false,
 		})
+	})
+
+	it('carries searchable_text as evidence that the Page has a body', () => {
+		expect(
+			toVaultPage({ id: 'p1', parentId: null, title: 'Guide', searchableText: 'Hello world' }).hasStoredContent,
+		).toBe(true)
+		expect(
+			toVaultPage({ id: 'p2', parentId: null, title: 'Blank', searchableText: '   ' }).hasStoredContent,
+		).toBe(false)
 	})
 
 	it('marks imported folder pages (properties.importFolder)', () => {
@@ -83,11 +94,14 @@ describe('loadVaultPageDocs', () => {
 		type: 'doc',
 		content: [{ type: 'paragraph', content: [{ type: 'text', text: label }] }],
 	})
+	const ok = (label: string): PageDocReadResult => ({ doc: DOC(label), status: 'ok' })
+	const empty: PageDocReadResult = { doc: null, status: 'empty' }
+	const unavailable: PageDocReadResult = { doc: null, status: 'unavailable' }
 
 	it('fills the doc for every non-folder page, preserving order', async () => {
 		const pages = [page('a'), page('b'), page('c')]
 		const { pages: out, warnings } = await loadVaultPageDocs(pages, {
-			loadDoc: async (id) => DOC(`body:${id}`),
+			loadDoc: async (id) => ok(`body:${id}`),
 		})
 		expect(warnings).toEqual([])
 		expect(out.map((p) => p.id)).toEqual(['a', 'b', 'c'])
@@ -105,7 +119,7 @@ describe('loadVaultPageDocs', () => {
 				peak = Math.max(peak, active)
 				await new Promise((resolve) => setTimeout(resolve, 2))
 				active -= 1
-				return DOC(id)
+				return ok(id)
 			},
 		})
 		expect(peak).toBeLessThanOrEqual(3)
@@ -116,7 +130,7 @@ describe('loadVaultPageDocs', () => {
 		const seen: string[] = []
 		const pages = [page('a'), page('folder', { isFolder: true }), page('b')]
 		const { pages: out } = await loadVaultPageDocs(pages, {
-			loadDoc: async (id) => { seen.push(id); return DOC(id) },
+			loadDoc: async (id) => { seen.push(id); return ok(id) },
 		})
 		expect(seen).toEqual(['a', 'b'])
 		expect(out.find((p) => p.id === 'folder')?.doc).toBeUndefined()
@@ -127,7 +141,7 @@ describe('loadVaultPageDocs', () => {
 		const { pages: out, warnings } = await loadVaultPageDocs(pages, {
 			loadDoc: async (id) => {
 				if (id === 'bad') throw new Error('collab unavailable')
-				return DOC(id)
+				return ok(id)
 			},
 		})
 		expect(out.find((p) => p.id === 'bad')?.doc).toBeUndefined()
@@ -135,17 +149,37 @@ describe('loadVaultPageDocs', () => {
 		expect(warnings).toEqual([{ title: 'Bad Page', stage: 'content', error: 'collab unavailable' }])
 	})
 
-	it('warns (and continues) when a page resolves to null', async () => {
-		const pages = [page('empty', { title: 'Empty' })]
-		const { warnings } = await loadVaultPageDocs(pages, { loadDoc: async () => null })
-		expect(warnings).toEqual([{ title: 'Empty', stage: 'content', error: 'page content was not available' }])
+	it('warns (and continues) when a read is unavailable', async () => {
+		const pages = [page('down', { title: 'Down' })]
+		const { warnings } = await loadVaultPageDocs(pages, { loadDoc: async () => unavailable })
+		expect(warnings).toEqual([{ title: 'Down', stage: 'content', error: 'page content was not available' }])
+	})
+
+	it('does not warn for a genuinely empty page with no indexed content', async () => {
+		const pages = [page('blank', { title: 'Blank' })]
+		const { pages: out, warnings } = await loadVaultPageDocs(pages, { loadDoc: async () => empty })
+		expect(warnings).toEqual([])
+		expect(out[0].doc).toBeUndefined()
+	})
+
+	it('warns instead of reporting success when an empty read meets stored content (SIL-214 B1)', async () => {
+		const pages = [page('cold', { title: 'Cold Note', hasStoredContent: true })]
+		const { pages: out, warnings } = await loadVaultPageDocs(pages, { loadDoc: async () => empty })
+		expect(out[0].doc).toBeUndefined()
+		expect(warnings).toEqual([
+			{
+				title: 'Cold Note',
+				stage: 'content-unverified',
+				error: 'the stored page has content, but the exported body was empty',
+			},
+		])
 	})
 
 	it('reports progress once per non-folder page with the right total', async () => {
 		const progress: Array<{ done: number; total: number }> = []
 		const pages = [page('a'), page('folder', { isFolder: true }), page('b')]
 		await loadVaultPageDocs(pages, {
-			loadDoc: async (id) => DOC(id),
+			loadDoc: async (id) => ok(id),
 			onProgress: (p) => progress.push(p),
 		})
 		expect(progress).toHaveLength(2)
@@ -153,7 +187,7 @@ describe('loadVaultPageDocs', () => {
 	})
 
 	it('handles an empty workspace without spawning work', async () => {
-		const { pages: out, warnings } = await loadVaultPageDocs([], { loadDoc: async () => DOC('x') })
+		const { pages: out, warnings } = await loadVaultPageDocs([], { loadDoc: async () => ok('x') })
 		expect(out).toEqual([])
 		expect(warnings).toEqual([])
 	})
@@ -166,7 +200,7 @@ describe('loadVaultPageDocs', () => {
 			signal: controller.signal,
 			loadDoc: async () => {
 				calls += 1
-				return DOC('x')
+				return ok('x')
 			},
 		})
 		expect(calls).toBe(0)
@@ -186,7 +220,7 @@ describe('loadVaultPageDocs', () => {
 				started.push(id)
 				if (started.length === 2) controller.abort()
 				if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
-				return DOC(id)
+				return ok(id)
 			},
 		})
 		expect(started).toEqual(['p0', 'p1'])

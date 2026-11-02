@@ -21,7 +21,6 @@ import { createClientPageDocSource } from '@/lib/markdown/vault-export-source'
 import { buildZipBlob } from '@/lib/zip-write'
 import { downloadBlob } from '@/lib/export-utils'
 import { fetchWorkspacePageTags } from '@/services/graph'
-import type { FidelityWarning } from '@/lib/fidelity-report'
 import type { Page } from '@/types'
 
 type Phase = 'confirm' | 'exporting' | 'done' | 'error'
@@ -42,7 +41,6 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 	const [phase, setPhase] = useState<Phase>('confirm')
 	const [progress, setProgress] = useState({ done: 0, total: 0 })
 	const [report, setReport] = useState<FidelityExportReport | null>(null)
-	const [warnings, setWarnings] = useState<FidelityWarning[]>([])
 	const [errorMessage, setErrorMessage] = useState('')
 
 	// Monotonic id for the in-flight export. Closing/cancelling (or starting a
@@ -69,7 +67,6 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 		setPhase('confirm')
 		setProgress({ done: 0, total: 0 })
 		setReport(null)
-		setWarnings([])
 		setErrorMessage('')
 	}
 
@@ -107,7 +104,15 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 			const tagsByPage = await fetchWorkspacePageTags(pages.map((page) => page.id))
 			const vaultPages: VaultPage[] = pages.map((page) =>
 				toVaultPage(
-					{ id: page.id, parentId: page.parent_id, title: page.title, properties: page.properties },
+					{
+						id: page.id,
+						parentId: page.parent_id,
+						title: page.title,
+						properties: page.properties,
+						// Indexed body text is the client-side evidence that an
+						// empty read is unknown rather than a clean empty note.
+						searchableText: page.searchable_text,
+					},
 					tagsByPage.get(page.id) ?? [],
 				),
 			)
@@ -127,13 +132,19 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 			const { files, report: exportReport } = buildVaultFiles(loaded)
 			downloadBlob(buildZipBlob(files), 'lekhan-vault.zip')
 
-			setWarnings(loadWarnings)
-			setReport(exportReport)
+			// The report is the single honest surface: content-read warnings
+			// travel with it so "Export complete" cannot appear when bodies are
+			// unverified (SIL-214 B1).
+			const fullReport: FidelityExportReport = {
+				...exportReport,
+				warnings: [...loadWarnings, ...exportReport.warnings],
+			}
+			setReport(fullReport)
 			setPhase('done')
 			track('export_vault_completed', {
-				pages: exportReport.pages,
-				links_unresolved: exportReport.linksUnresolved,
-				warnings: loadWarnings.length,
+				pages: fullReport.pages,
+				links_unresolved: fullReport.linksUnresolved,
+				warnings: fullReport.warnings.length,
 			})
 		} catch (err) {
 			if (runId !== runIdRef.current || controller.signal.aborted) return
@@ -217,7 +228,7 @@ export function VaultExportDialog({ open, onOpenChange, pages }: VaultExportDial
 								The zip has been downloaded. Drop it into Obsidian (File → Open vault) to open it.
 							</AlertDialogDescription>
 						</AlertDialogHeader>
-						<FidelityReportCard report={report} serverWarnings={[...warnings, ...report.warnings]} />
+						<FidelityReportCard report={report} serverWarnings={report.warnings} />
 						<AlertDialogFooter>
 							<button
 								onClick={() => handleOpenChange(false)}
