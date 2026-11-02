@@ -33,7 +33,8 @@ const WikilinkList = forwardRef<WikilinkListRef, WikilinkListProps>(({ items, co
 		if (!container) return
 		const selected = container.querySelector(`[data-index="${selectedIndex}"]`)
 		if (selected) {
-			selected.scrollIntoView({ block: 'nearest' })
+			// jsdom and some embedded webviews do not implement scrollIntoView.
+			selected.scrollIntoView?.({ block: 'nearest' })
 		}
 	}, [selectedIndex])
 
@@ -73,6 +74,8 @@ const WikilinkList = forwardRef<WikilinkListRef, WikilinkListProps>(({ items, co
 	return (
 		<div
 			ref={containerRef}
+			role="listbox"
+			aria-label="Page suggestions"
 			className="bg-surface-container/95 dark:bg-surface-container border border-outline/20 rounded-xl p-1.5 shadow-2xl backdrop-blur-md w-64 max-h-60 overflow-y-auto space-y-1 z-50"
 		>
 			<div className="px-2 py-1 text-[10px] font-label-sm uppercase tracking-wider text-on-surface-variant/70">
@@ -102,6 +105,8 @@ const WikilinkList = forwardRef<WikilinkListRef, WikilinkListProps>(({ items, co
 						data-index={index}
 						data-testid={isCreate ? 'wikilink-create-item' : 'wikilink-page-item'}
 						onClick={() => command(item)}
+						role="option"
+						aria-selected={index === selectedIndex}
 						className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-xs transition-colors ${
 							index === selectedIndex
 								? 'bg-primary-container text-on-primary-container font-medium'

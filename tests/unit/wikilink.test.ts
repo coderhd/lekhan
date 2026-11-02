@@ -369,3 +369,143 @@ describe('`[[` suggestion popup lifecycle (SIL-159 #142)', () => {
 		editor.destroy()
 	})
 })
+describe('`[[` popup — clean-room review round 2 (SIL-159)', () => {
+	const suggestionState2 = (state: EditorState) =>
+		(state as unknown as Record<string, any>)['wikilinkSuggestion$']
+
+	const PAGES2 = [{ id: 'p1', title: 'Meeting Notes' }]
+
+	const makeEditor2 = () => {
+		const editor = new Editor({
+			extensions: [
+				StarterKit,
+				Wikilink.configure({
+					workspacePages: PAGES2,
+					suggestion: {
+						char: '[[',
+						allowedPrefixes: null,
+						items: ({ query }: { query: string }) => buildWikilinkSuggestions(PAGES2, query),
+						command: () => {},
+					},
+				}),
+			],
+			content: '<p>Hello quick</p>',
+		})
+		return editor
+	}
+
+	it('BLOCKER regression: caret inside a closed [[Link]] never activates the popup', () => {
+		const editor = makeEditor2()
+		editor.commands.setContent('<p>[[Meeting Notes]] done</p>')
+		// Caret one character into the closed link body ("[[M|eeting Notes]]").
+		editor.commands.setTextSelection(4)
+
+		expect(suggestionState2(editor.state).active).toBe(false)
+		editor.destroy()
+	})
+
+	it('BLOCKER regression: typing inside a closed link then committing cannot orphan the ]] tail', () => {
+		const editor = makeEditor2()
+		editor.commands.setContent('<p>[[Meeting Notes]] done</p>')
+		// A user replaces one character inside the link body ("[[M|xting…") —
+		// matcher input ends at the caret, but the trailing `]]` must keep
+		// the popup down so a stray commit can never orphan the tail.
+		editor.commands.insertContentAt({ from: 4, to: 5 }, '')
+		editor.commands.setTextSelection(4)
+		editor.commands.insertContent('x')
+
+		// Popup never fires inside the closed link…
+		expect(suggestionState2(editor.state).active).toBe(false)
+		// …and the document survives the edit untouched by popup logic.
+		expect(editor.getText()).toBe('[[Mxeting Notes]] done')
+
+		editor.destroy()
+	})
+
+	it('closes when the whole `[[` gesture range is deleted (criterion 2)', () => {
+		const editor = makeEditor2()
+		editor.commands.insertContentAt(6, ' [[New')
+		expect(suggestionState2(editor.state).active).toBe(true)
+
+		const range = suggestionState2(editor.state).range as { from: number; to: number }
+		editor.commands.deleteRange(range)
+		expect(suggestionState2(editor.state).active).toBe(false)
+
+		// And it comes back when the gesture is typed again at the same spot.
+		editor.commands.insertContentAt(range.from, ' [[Az')
+		expect(suggestionState2(editor.state).active).toBe(true)
+
+		editor.destroy()
+	})
+})
+
+describe('buildWikilinkSuggestions — grammar-only query falls back to hint (clean-room NIT)', () => {
+	it('shows the hint instead of an empty list when the sanitized create target is empty', () => {
+		const items = buildWikilinkSuggestions([], '[[')
+		expect(items).toHaveLength(1)
+		expect(items[0].kind).toBe('hint')
+	})
+})
+
+describe('`[[` popup — round 3: closed link with alias (clean-room residual blocker)', () => {
+	it('caret inside "[[spaced target|alias]]" does not activate (corruption guard)', () => {
+		let editor: Editor | null = null
+		try {
+			editor = new Editor({
+				extensions: [
+					StarterKit,
+					Wikilink.configure({
+						workspacePages: [{ id: 'p1', title: 'Something' }],
+						suggestion: {
+							char: '[[',
+							allowedPrefixes: null,
+							items: () => [],
+							command: () => {},
+						},
+					}),
+				],
+				content: '<p>[[te st|al]] done</p>',
+			})
+			// Caret two characters into the target body ("[[te|st|al]]"), where
+			// the stock matcher's space-stopped match leaves the closed "]]" on
+			// the tail — committing there would orphan " st|al]]".
+			editor.commands.setTextSelection(7)
+			expect(
+				((editor.state as any) as Record<string, any>)['wikilinkSuggestion$'].active
+			).toBe(false)
+		} finally {
+			editor?.destroy()
+		}
+	})
+
+	it('a genuinely open link with a typed alias still opens ("[[te|al", nothing ahead)', () => {
+		let editor: Editor | null = null
+		try {
+			editor = new Editor({
+				extensions: [
+					StarterKit,
+					Wikilink.configure({
+						workspacePages: [{ id: 'p1', title: 'Something' }],
+						suggestion: {
+							char: '[[',
+							allowedPrefixes: null,
+							items: () => [],
+							command: () => {},
+						},
+					}),
+				],
+				// No space in the body, so the stock matcher's match reaches the
+				// caret and activation is possible; nothing ahead but paragraph end.
+				content: '<p>[[te|al</p>',
+			})
+			// Caret inside the paragraph, right at the end of the alias — not
+			// past the paragraph boundary, where nodeBefore is not text.
+			editor.commands.setTextSelection(editor.state.doc.content.size - 1)
+			expect(
+				((editor.state as any) as Record<string, any>)['wikilinkSuggestion$'].active
+			).toBe(true)
+		} finally {
+			editor?.destroy()
+		}
+	})
+})

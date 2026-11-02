@@ -139,6 +139,60 @@ export function exitWikilinkSuggestion (editor: any) {
 	view.dispatch(view.state.tr.setMeta(wikilinkSuggestionPluginKey, { exit: true }))
 }
 
+/**
+ * Default `shouldShow` for the `[[` popup (clean-room review round 2, Axis 3):
+ * Tiptap's Suggestion matcher only inspects the text **before** the caret, so
+ * sitting the caret inside an already closed link ("[[Meeting Notes]] done",
+ * caret after "Me") still "matches" — and committing would replace only the
+ * prefix, orphaning the `]]` tail into the CRDT document. Suppress the popup
+ * whenever the forward text from the range end reaches a closing `]]` before
+ * any opener (`[[`), `|`, or other grammar breaker — the link under the caret
+ * is already closed — or whenever the query itself was typed through a
+ * closer.
+ */
+const WIKILINK_SNIFF_LIMIT = 256
+
+export function isInsideClosedWikilink (doc: any, to: number): boolean {
+	if (!doc?.textBetween) return false
+	try {
+		const size = doc.content.size
+		const text = doc.textBetween(Math.min(to, size), Math.min(to + WIKILINK_SNIFF_LIMIT, size), '\n\n') || ''
+		// Inside a wikilink body only `[^[\]|]` characters are legal; the first
+		// grammar character encountered decides. `|` is deliberately NOT a
+		// breaker: it appears both in an open alias being typed ("[[t|al") and
+		// ahead of the closing "]]" of a closed link ("[[t|al]]") — only that
+		// closing "]]" (or an opener) proves the caret's position either way
+		// (clean-room round 3 residual blocker).
+		for (let i = 0; i < text.length; i++) {
+			const ch = text[i]
+			if (ch === ']') return text[i + 1] === ']'
+			if (ch === '[') return false
+		}
+		return false
+	} catch {
+		return false
+	}
+}
+
+export function defaultWikilinkSuggestionShouldShow ({
+	editor,
+	range,
+	query,
+}: {
+	editor: any
+	range: { from: number; to: number }
+	query?: string
+}): boolean {
+	if (String(query || '').includes(']]')) return false
+	try {
+		const doc = editor?.state?.doc
+		if (doc && range && isInsideClosedWikilink(doc, range.to)) return false
+	} catch {
+		// Never let popup suppression logic crash the popup; default open.
+	}
+	return true
+}
+
 /** Characters that cannot round-trip through the wikilink grammar. */
 const UNLINKABLE_CHARS_ALL = /[[\]|]/g
 
@@ -212,6 +266,11 @@ export function buildWikilinkSuggestions (
 		const safeTarget = sanitizeWikilinkTarget(trimmed)
 		if (safeTarget) {
 			results.push({ id: WIKILINK_CREATE_ITEM_ID, title: safeTarget, kind: 'create' })
+		} else if (results.length === 0) {
+			// A query of nothing but grammar characters ("[[") sanitizes to an
+			// empty create target and matches no pages — show the guide hint
+			// rather than a bare empty popup (clean-room round 2 NIT).
+			results.push({ id: WIKILINK_HINT_ITEM_ID, title: '', kind: 'hint' })
 		}
 	}
 	return results
@@ -313,17 +372,24 @@ export const Wikilink = Extension.create<WikilinkOptions>({
 		// consumer configures a suggestion, keeping decoration-only usages
 		// (markdown export, tests) free of popup behavior. Own pluginKey by
 		// default — the shared "suggestion" key would collide with the
-		// Mention/Slash Suggestion plugins in the same editor state. The
-		// default shouldShow kills the popup as soon as the person has typed
-		// through `]]` themselves: the link is closed, the range is grammar-
-		// complete, and re-persisting a stale active range would corrupt
-		// commit targets (clean-room findings 1–2).
+		// Mention/Slash Suggestion plugins in the same editor state.
+		//
+		// shouldShow composes the consumer's filter (if any) with the
+		// grammar guard below: without it, sitting the caret inside an
+		// already-closed "[[Link]]" still matches (the Suggestion matcher
+		// only reads text before the caret) and a commit would orphan the
+		// `]]` tail into the document (clean-room round 2, Axis 3 BLOCKER).
 		if (this.options.suggestion) {
+			const consumer: any = this.options.suggestion
+			const { shouldShow: consumerShouldShow, ...suggestionOptions } = consumer
 			plugins.push(Suggestion({
 				editor: this.editor,
 				pluginKey: wikilinkSuggestionPluginKey,
-				shouldShow: ({ query }: any) => !String(query || '').includes(']]'),
-				...this.options.suggestion,
+				...suggestionOptions,
+				shouldShow: (args: any) => {
+					if (consumerShouldShow && !consumerShouldShow(args)) return false
+					return defaultWikilinkSuggestionShouldShow(args)
+				},
 			}))
 		}
 
