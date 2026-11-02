@@ -67,10 +67,15 @@ Migration: `supabase/migrations/20261102000000_studio_rag.sql`
 ```sql
 create extension if not exists vector;
 
+-- Chunk/summary rows must belong to the page's own workspace. `id` alone is
+-- already unique, but a composite key is required for the child FKs below.
+alter table public.pages
+  add constraint pages_id_workspace_id_key unique (id, workspace_id);
+
 -- One row per retrievable block-run. Re-indexed only when content_hash changes.
 create table public.page_chunks (
   id             uuid primary key default gen_random_uuid(),
-  page_id        uuid not null references public.pages(id) on delete cascade,
+  page_id        uuid not null,
   workspace_id   uuid not null references public.workspaces(id) on delete cascade,
   chunk_ordinal  integer not null,
   block_id       text not null,              -- stable within a page: ordinal + content hash
@@ -83,7 +88,9 @@ create table public.page_chunks (
   tsv            tsvector generated always as (to_tsvector('english', content)) stored,
   created_at     timestamptz not null default now(),
   updated_at     timestamptz not null default now(),
-  unique (page_id, chunk_ordinal)
+  unique (page_id, chunk_ordinal),
+  foreign key (page_id, workspace_id)
+    references public.pages (id, workspace_id) on delete cascade on update cascade
 );
 
 create index page_chunks_workspace_idx on public.page_chunks (workspace_id, page_id);
@@ -93,13 +100,15 @@ create index page_chunks_embedding_idx on public.page_chunks
 
 -- One summary embedding per page: narrows candidates before chunk scoring.
 create table public.page_summaries (
-  page_id          uuid primary key references public.pages(id) on delete cascade,
+  page_id          uuid primary key,
   workspace_id     uuid not null references public.workspaces(id) on delete cascade,
   summary          text not null,
   content_hash     text not null,
   embedding        halfvec(1536),
   embedding_model  text,
-  updated_at       timestamptz not null default now()
+  updated_at       timestamptz not null default now(),
+  foreign key (page_id, workspace_id)
+    references public.pages (id, workspace_id) on delete cascade on update cascade
 );
 
 create index page_summaries_embedding_idx on public.page_summaries
