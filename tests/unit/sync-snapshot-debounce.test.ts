@@ -1,12 +1,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as Y from 'yjs'
 
+// Keep this timing suite deterministic: `server/index.js` otherwise builds a
+// real Supabase persister and the upload fetch can outlast the 5 s test budget.
+const { setPagePersister } = require('../../server/index.js')
+
 describe('Sync Server Hardened Capped-Debounce Timing & Serialization', () => {
 	beforeEach(() => {
 		// The persister hits Supabase on save; stub fetch so tests are
 		// deterministic and never depend on DNS/network timing (SIL-108).
 		vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'no network' }), { status: 500 })))
 		vi.useFakeTimers()
+		setPagePersister({
+			persist: vi.fn().mockResolvedValue({
+				success: true,
+				documentId: 'doc',
+				nonCriticalResults: { indexingSuccess: true, retentionSuccess: true },
+			}),
+		})
 	})
 
 	afterEach(() => {

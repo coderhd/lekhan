@@ -1,5 +1,5 @@
 const Y = require('yjs')
-const { getYDoc } = require('y-websocket/bin/utils')
+const { getYDoc, docs } = require('y-websocket/bin/utils')
 
 /**
  * Hydration-gated persistence for the y-websocket hub (SIL-214).
@@ -75,13 +75,20 @@ function createCollabPersistence({
 			)
 		}
 
+		// A failed room has no trustworthy base; it is rejected by
+		// `openHydratedDoc`, so never wire a save listener that could later
+		// write it back.
+		if (hydration.status !== 'hydrated') return
+
 		// Attach the debounced-save listener after hydration so the load itself
-		// never schedules a save. `origin === 'supabase-load'` is still skipped
-		// for defensive parity with the previous implementation.
+		// never schedules a save. The status guard keeps any future server-side
+		// `Y.applyUpdate` (import seeding, version restore) from bypassing the
+		// hydration gate.
 		ydoc.on('update', (update, origin) => {
 			if (origin === 'supabase-load') {
 				return
 			}
+			if (ydoc.__hydration?.status !== 'hydrated') return
 			scheduleSave(documentId, ydoc)
 		})
 	}
@@ -101,20 +108,23 @@ function createCollabPersistence({
 				logger.warn(
 					`[Persist] Refusing to save ${documentId}: hydration is ${hydration?.status ?? 'not started'}. Stored snapshot left untouched.`,
 				)
-				return
+				return { ok: false, skipped: true, reason: 'not-hydrated' }
 			}
 			if (ydoc.__everWritable !== true) {
 				// Only read-only (export) connections ever owned this room, so
 				// there is nothing to save and no reason to touch storage.
-				return
+				return { ok: false, skipped: true, reason: 'read-only' }
 			}
 
 			try {
 				await persistState(documentId, ydoc)
+				return { ok: true }
 			} catch (err) {
 				// Let y-websocket destroy the room; do not leave an unhandled
-				// rejection behind.
+				// rejection behind. The result lets the shutdown flush report
+				// how many saves actually failed.
 				logger.error(`[Persist Error] Failed to save ${documentId}:`, err)
+				return { ok: false, error: err }
 			}
 		},
 	}
@@ -161,8 +171,11 @@ async function openHydratedDoc(documentId, { timeoutMs = DEFAULT_HYDRATION_TIMEO
 
 		// Do not hand a client an empty room we could not hydrate: a normal
 		// editor would look like a blank Page and silently lose writes, and a
-		// vault export would read an empty body. The caller can retry.
+		// vault export would read an empty body. Drop the room so the caller's
+		// retry re-attempts the download instead of reusing a settled failure.
 		if (doc.__hydration?.status === 'failed') {
+			docs.delete(documentId)
+			doc.destroy()
 			throw new Error(`document ${documentId} could not be hydrated from its stored snapshot`)
 		}
 		return doc

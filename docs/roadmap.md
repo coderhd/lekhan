@@ -63,6 +63,7 @@ provider registry).
 | H0 — AI Provider Registry & Unified Settings Suite | #28 | 3-tier access ladder (local BYOL, free presets, cloud BYOK), zero-knowledge encrypted vault, 5-tab settings |
 | H0 — Sync Server Hardening (durability, capped debounce, ledger, scale) | #77 | 2s/10s capped debounce snapshot engine, durable Postgres collaborator ledger, automated retention cron, load-shedding |
 | H0 — Trust-building redesign of public marketing pages | #93 | Asymmetric landing remix with real screenshots, voice-clean rewritten copy, claims-traced honesty audit across `/`, `/about`, `/faq`, `/contact` + legal consistency; shipped PR #135 after pullfrog approval + CodeRabbit waiver (docs/reviews/pr-93-review.md) |
+| H0 — Vault-export cold-room hotfix (SIL-214) | SIL-214 | Hydrate collab rooms before sync, gate snapshot writes on hydration + writable ownership, read-only gap-sync for export, honest empty/unknown bodies in the FidelityReport, persister indexes XmlFragment text so `searchable_text` is real evidence; regression tests cover a cold server |
 
 | Epic | Issue | Blocker edges | Notes |
 |---|---|---|---|

@@ -15,10 +15,14 @@ describe('Sync Server Health, Metrics & Load Shedding', () => {
 		expect(metrics.memory).toHaveProperty('heapUsedMb')
 		expect(metrics.memory).toHaveProperty('heapTotalMb')
 		expect(metrics.memory).toHaveProperty('heapLimitMb')
+		expect(metrics.memory).toHaveProperty('limitMb')
 		expect(metrics).toHaveProperty('limits')
 		expect(metrics.limits).toHaveProperty('maxConnections', 1500)
 		expect(metrics.limits).toHaveProperty('heapShedRatio', HEAP_SHED_RATIO)
+		expect(metrics.limits).toHaveProperty('heapShedMinMb')
+		expect(metrics.limits).toHaveProperty('memoryLimitMb')
 		expect(metrics.limits).toHaveProperty('heapUtilizationPct')
+		expect(metrics.limits).toHaveProperty('heapLimitUtilizationPct')
 		expect(metrics.limits).toHaveProperty('isShedding')
 	})
 
@@ -37,7 +41,7 @@ describe('Sync Server Health, Metrics & Load Shedding', () => {
 		expect(pressure.heapLimit).toBeGreaterThan(0)
 		// A healthy idle process must not be "exhausted" just because its
 		// committed heap is small.
-		expect(pressure.utilization).toBeLessThan(HEAP_SHED_RATIO)
+		expect(pressure.heapLimitUtilization).toBeLessThan(HEAP_SHED_RATIO)
 		expect(pressure.isMemoryExhausted).toBe(false)
 		expect(getServerMetrics().status).toBe('ok')
 	})

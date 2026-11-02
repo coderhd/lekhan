@@ -69,7 +69,14 @@ describe('vault export against a cold collab room (SIL-214)', () => {
 		persisted = []
 		setPersistence(
 			createCollabPersistence({
-				loadState: async (documentId: string) => stored.get(documentId) ?? null,
+				// A deterministic delay makes the test sensitive to the ordering
+				// bug: without the upgrade-path hydration gate, y-websocket sends
+				// sync step 1 (and the client reads an empty doc) before this
+				// resolves.
+				loadState: async (documentId: string) => {
+					await new Promise((resolve) => setTimeout(resolve, 120))
+					return stored.get(documentId) ?? null
+				},
 				persistState: async (documentId: string, ydoc: Y.Doc) => {
 					persisted.push(documentId)
 					stored.set(documentId, Y.encodeStateAsUpdate(ydoc))

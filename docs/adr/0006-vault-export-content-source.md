@@ -89,8 +89,9 @@ Decision:
    `hydrated` (pending/failed), and refuses a room that only ever had read-only
    connections. A failed hydration can no longer overwrite the stored snapshot.
 3. **Read-only gap sync.** Export connects with `readOnly=1`: update frames are
-   rejected and closing the room never triggers a save. The read path is now
-   non-destructive by construction, not by timing.
+   rejected and a room that never admitted a writable connection never persists
+   on close. The read path is now non-destructive by construction, not by
+   timing.
 4. **Honest empty reads.** The source distinguishes `ok` / `empty` /
    `unavailable`. The loader treats `empty` as unknown when Page metadata
    (`searchable_text`) says content exists, and the FidelityReport names the

@@ -133,7 +133,7 @@ describe('createCollabPersistence', () => {
 		expect(clearSave).toHaveBeenCalledWith('page-1')
 	})
 
-	it('swallows a persistence error so y-websocket can still destroy the room', async () => {
+	it('reports a persistence error without throwing, so y-websocket can destroy the room', async () => {
 		const { persistence } = setup({
 			persistState: vi.fn().mockRejectedValue(new Error('upload failed')),
 		})
@@ -141,10 +141,27 @@ describe('createCollabPersistence', () => {
 		await persistence.bindState('page-1', doc)
 		markWritable(doc)
 
-		await expect(persistence.writeState('page-1', doc)).resolves.toBeUndefined()
+		const result = await persistence.writeState('page-1', doc)
+		expect(result.ok).toBe(false)
+		expect(result.error).toBeInstanceOf(Error)
 		expect(silentLogger.error).toHaveBeenCalledWith(
 			expect.stringContaining('Failed to save page-1'),
 			expect.any(Error),
 		)
+	})
+
+	it('does not attach a save listener when hydration failed', async () => {
+		const { persistence, scheduleSave } = setup({
+			loadState: async () => {
+				throw new Error('storage down')
+			},
+		})
+		const doc = new Y.Doc()
+
+		await persistence.bindState('page-1', doc)
+		doc.getText('default').insert(0, 'would-be edit')
+
+		expect(scheduleSave).not.toHaveBeenCalled()
+		expect(doc.__hydration.status).toBe('failed')
 	})
 })

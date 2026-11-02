@@ -10,14 +10,31 @@ const { admitCollaborator } = require('./ledger.js')
 const { decryptSnapshot } = require('./crypto')
 const { createPagePersister } = require('./persister')
 const { createCollabPersistence, markWritable, openHydratedDoc } = require('./collab-persistence')
+const { isBlockedWriteFrame } = require('./connection-guard')
 
 const port = process.env.PORT || 8080
 const MAX_CONNECTIONS = 1500
 const MAX_PAYLOAD_BYTES = 10 * 1024 * 1024 // 10 MB payload guard
+
+/** Parse an env number without letting a typo become NaN. */
+function positiveNumber (value, fallback) {
+	const parsed = Number(value)
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function nonNegativeNumber (value, fallback) {
+	const parsed = Number(value)
+	return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
+}
+
 // Load-shed against the V8 heap **limit**, not `heapTotal` (which starts near
-// ~20 MB and made a healthy idle process look 85% full) — SIL-214 F3.
-const HEAP_SHED_RATIO = Number(process.env.SYNC_HEAP_SHED_RATIO || 0.9)
-const HYDRATION_TIMEOUT_MS = Number(process.env.SYNC_HYDRATION_TIMEOUT_MS || 15000)
+// ~20 MB and made a healthy idle process look 85% full) — SIL-214 F3. A minimum
+// absolute usage keeps a tiny heap from shedding on a ratio that is meaningful
+// only at scale; SYNC_MEMORY_LIMIT_MB lets a container measure RSS instead.
+const HEAP_SHED_RATIO = Math.min(0.99, Math.max(0.5, positiveNumber(process.env.SYNC_HEAP_SHED_RATIO, 0.9)))
+const HEAP_SHED_MIN_MB = nonNegativeNumber(process.env.SYNC_HEAP_SHED_MIN_MB, 128)
+const MEMORY_LIMIT_MB = nonNegativeNumber(process.env.SYNC_MEMORY_LIMIT_MB, 0)
+const HYDRATION_TIMEOUT_MS = positiveNumber(process.env.SYNC_HYDRATION_TIMEOUT_MS, 15000)
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const supabaseKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-key'
@@ -34,7 +51,15 @@ const supabaseAdmin = createClient(
 	}
 )
 
-const pagePersister = createPagePersister({ supabaseAdmin })
+let pagePersister = createPagePersister({ supabaseAdmin })
+
+/**
+ * Test seam: replace the persistence sink so timing/serialization tests do not
+ * need a live Supabase instance. Production never calls this.
+ */
+function setPagePersister (persister) {
+	pagePersister = persister
+}
 
 const wss = new WebSocket.Server({
 	noServer: true,
@@ -113,27 +138,42 @@ function resolveRelayReadOnly (role, entitlement) {
  * memory-pressure signal: `heapTotal` is the lazily-grown committed heap, so an
  * almost-idle process (e.g. ~20 MB used of a ~4 GB limit) can read as >85% and
  * shed healthy connections (SIL-214 F3). The limit is the ceiling V8 will
- * actually let us reach before an OOM.
+ * actually let us reach before an OOM, and the absolute floor keeps a tiny
+ * heap from tripping the ratio at trivial sizes.
+ *
+ * When `SYNC_MEMORY_LIMIT_MB` is set (the container's real budget), RSS is the
+ * authoritative signal because Buffers and WebSocket payloads live off-heap.
  */
 function readHeapPressure () {
 	const mem = process.memoryUsage()
 	const heapLimit = v8.getHeapStatistics().heap_size_limit || mem.heapTotal || 1
 	const heapUsed = mem.heapUsed || 0
-	const utilization = heapLimit > 0 ? heapUsed / heapLimit : 0
+	const heapUsedMb = heapUsed / (1024 * 1024)
+	const heapLimitUtilization = heapLimit > 0 ? heapUsed / heapLimit : 0
+	const rssLimitBytes = MEMORY_LIMIT_MB * 1024 * 1024
+	const rssExhausted = rssLimitBytes > 0 && mem.rss > rssLimitBytes
+	const heapExhausted =
+		heapLimit > 0 && heapLimitUtilization > HEAP_SHED_RATIO && heapUsedMb >= HEAP_SHED_MIN_MB
 	return {
 		mem,
 		heapLimit,
 		heapUsed,
-		utilization,
-		isMemoryExhausted: heapLimit > 0 && utilization > HEAP_SHED_RATIO,
+		heapUsedMb,
+		heapLimitUtilization,
+		rssLimitBytes,
+		isMemoryExhausted: rssExhausted || heapExhausted,
 	}
 }
 
 // Health and metrics helper
 function getServerMetrics () {
-	const { mem, heapLimit, heapUsed, utilization, isMemoryExhausted } = readHeapPressure()
+	const { mem, heapLimit, heapUsed, heapLimitUtilization, isMemoryExhausted } = readHeapPressure()
 	const heapTotal = mem.heapTotal || 1
-	const heapUtilizationPct = Math.round(utilization * 100)
+	// Preserve the historical `heapUtilizationPct` meaning (share of committed
+	// heap) and expose the limit-based pressure metric separately, so external
+	// dashboards do not silently change denominator.
+	const heapUtilizationPct = Math.round((heapUsed / heapTotal) * 100)
+	const heapLimitUtilizationPct = Math.round(heapLimitUtilization * 100)
 	const totalConnections = wss.clients.size + pendingUpgrades
 	const isShedding = totalConnections >= MAX_CONNECTIONS || isMemoryExhausted
 
@@ -148,11 +188,15 @@ function getServerMetrics () {
 			heapUsedMb: Math.round((heapUsed / (1024 * 1024)) * 10) / 10,
 			heapTotalMb: Math.round((heapTotal / (1024 * 1024)) * 10) / 10,
 			heapLimitMb: Math.round((heapLimit / (1024 * 1024)) * 10) / 10,
+			limitMb: MEMORY_LIMIT_MB,
 		},
 		limits: {
 			maxConnections: MAX_CONNECTIONS,
 			heapShedRatio: HEAP_SHED_RATIO,
+			heapShedMinMb: HEAP_SHED_MIN_MB,
+			memoryLimitMb: MEMORY_LIMIT_MB,
 			heapUtilizationPct,
+			heapLimitUtilizationPct,
 			isShedding,
 		},
 	}
@@ -337,11 +381,6 @@ server.on('upgrade', async (request, socket, head) => {
 			return
 		}
 
-		// Only a writable connection may make this room eligible for a save on
-		// close. Viewers, billing-limited relays, and export reads are all
-		// excluded.
-		if (!readOnly && !resolveRelayReadOnly(role, ownerEntitlement)) markWritable(doc)
-
 		// The client may have gone away while we hydrated.
 		if (socket.destroyed) return
 
@@ -354,6 +393,12 @@ server.on('upgrade', async (request, socket, head) => {
 			ws.documentId = documentId
 			// Export gap-syncs are read-only even for an otherwise writable owner.
 			ws.isReadOnly = readOnly
+			// Only an actually established writable connection makes the room
+			// eligible for a save on close. Marking before the socket is live
+			// would make a dead upgrade look writable, and a later export could
+			// then persist a room it never wrote to. Viewers, billing-limited
+			// relays, and export reads are all excluded.
+			if (!readOnly && !resolveRelayReadOnly(role, ownerEntitlement)) markWritable(doc)
 			wss.emit('connection', ws, request)
 		})
 	} catch (err) {
@@ -378,17 +423,12 @@ wss.on('connection', (ws, request) => {
 					return
 				}
 
-				// 2. Block Viewer and read-only writes. Sync step 1 (syncType 0)
-				// must still pass: it carries the client's state vector and is
-				// what makes the server send its state. Step 2 / update frames
-				// are writes and are rejected.
-				if ((ws.isViewer || ws.isReadOnly) && isBinary && data && data.length >= 2) {
-					const messageType = data[0]
-					const syncType = data[1]
-					if (messageType === 0 && (syncType === 1 || syncType === 2)) {
-						console.log('[Security] Rejected read-only edit message payload')
-						return
-					}
+				// 2. Block Viewer and read-only writes. Sync step 1 must still
+				// pass: it carries the client's state vector. Step 2 / update
+				// frames are writes and are rejected.
+				if (isBlockedWriteFrame(ws, data, isBinary)) {
+					console.log('[Security] Rejected read-only edit message payload')
+					return
 				}
 				listener.call(this, data, isBinary)
 			}
@@ -499,10 +539,10 @@ async function gracefulShutdown () {
 		// its stored snapshot.
 		promises.push(collabPersistence.writeState(docName, doc))
 	}
-	const results = await Promise.allSettled(promises)
-	const rejected = results.filter((r) => r.status === 'rejected')
-	if (rejected.length > 0) {
-		console.error(`[Shutdown] Warning: ${rejected.length} document saves failed during shutdown flush.`)
+	const results = await Promise.all(promises)
+	const failed = results.filter((result) => result && result.ok === false && !result.skipped)
+	if (failed.length > 0) {
+		console.error(`[Shutdown] Warning: ${failed.length} document saves failed during shutdown flush.`)
 	}
 	console.log('[Shutdown] All states flushed. Exiting.')
 	process.exit(0)
@@ -521,6 +561,7 @@ module.exports = {
 	server,
 	wss,
 	saveDocumentState,
+	setPagePersister,
 	triggerSerializedSave,
 	scheduleDebouncedSave,
 	saveDebounceTimers,
