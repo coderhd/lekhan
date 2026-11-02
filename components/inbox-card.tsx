@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, Inbox as InboxIcon, RefreshCw } from 'lucide-react'
 import { fetchInboxItems, type InboxItem } from '@/lib/inbox'
-import { ensureDailyPage } from '@/lib/daily-notes'
+import { dailyTitle, ensureDailyPage } from '@/lib/daily-notes'
 
 const FOCUS_RING =
 	'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-container focus-visible:ring-offset-2'
@@ -76,22 +76,52 @@ export default function InboxCard ({ workspaceId, ownerId, today }: InboxCardPro
 	}, [load])
 
 	// A capture lands in the page body immediately, but the graph index that
-	// this card reads updates on the hub's ~2s idle save. Refetch when the tab
-	// regains focus, and when the capture palette reports a successful capture.
+	// this card reads updates on the hub's idle save. Refetch when the tab
+	// regains focus, and retry briefly after the palette reports a capture so
+	// the count does not race the indexer.
 	useEffect(() => {
+		let timers: number[] = []
+		const clearTimers = () => {
+			for (const timer of timers) window.clearTimeout(timer)
+			timers = []
+		}
 		const refresh = () => { void load(true) }
+		const refreshAfterCapture = () => {
+			clearTimers()
+			refresh()
+			timers = [
+				window.setTimeout(refresh, 2_500),
+				window.setTimeout(refresh, 6_000),
+			]
+		}
 		const onVisibility = () => {
 			if (document.visibilityState === 'visible') refresh()
 		}
 		window.addEventListener('focus', refresh)
-		window.addEventListener('lekhan:inbox-changed', refresh)
+		window.addEventListener('lekhan:inbox-changed', refreshAfterCapture)
 		document.addEventListener('visibilitychange', onVisibility)
 		return () => {
+			clearTimers()
 			window.removeEventListener('focus', refresh)
-			window.removeEventListener('lekhan:inbox-changed', refresh)
+			window.removeEventListener('lekhan:inbox-changed', refreshAfterCapture)
 			document.removeEventListener('visibilitychange', onVisibility)
 		}
 	}, [load])
+
+	// A dashboard tab can stay open across local midnight; the 14-day window
+	// must move with the user's day, not the mount time.
+	const dayRef = useRef(dailyTitle(new Date()))
+	useEffect(() => {
+		if (today) return
+		const interval = window.setInterval(() => {
+			const current = dailyTitle(new Date())
+			if (current !== dayRef.current) {
+				dayRef.current = current
+				void load(true)
+			}
+		}, 60_000)
+		return () => window.clearInterval(interval)
+	}, [load, today])
 
 	const openInbox = useCallback(async () => {
 		if (!workspaceId || opening) return
@@ -124,10 +154,16 @@ export default function InboxCard ({ workspaceId, ownerId, today }: InboxCardPro
 					<h2 id="inbox-card-heading" className="font-semibold text-on-surface">Inbox</h2>
 					<span
 						aria-live="polite"
-						aria-label={`${items.length} pending captures`}
+						aria-label={
+							loading
+								? 'Loading pending captures'
+								: error
+									? 'Inbox unavailable'
+									: `${items.length} pending captures`
+						}
 						className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary"
 					>
-						{loading ? '…' : items.length}
+						{loading ? '…' : error ? '!' : items.length}
 					</span>
 				</div>
 

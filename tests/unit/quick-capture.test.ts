@@ -173,6 +173,15 @@ describe('appendBulletToSectionToYDoc', () => {
 		expect(ydoc.getXmlFragment('default').length).toBe(0)
 	})
 
+	it('is idempotent for the same bullet text', () => {
+		const ydoc = new Y.Doc()
+
+		appendBulletToSectionToYDoc(ydoc, { section: 'Related actions', text: '[[2026-11-02]] Call Alice' })
+		appendBulletToSectionToYDoc(ydoc, { section: 'Related actions', text: '[[2026-11-02]] Call Alice' })
+
+		expect(inboxBullets(readYDoc(ydoc))).toEqual(['[[2026-11-02]] Call Alice'])
+	})
+
 	it('does not treat a deeper H3 section as the H2 target', () => {
 		const ydoc = new Y.Doc()
 		seed(ydoc, [

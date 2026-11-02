@@ -47,8 +47,8 @@ write path — this entire epic composes existing Page machinery.
   section, created on demand, and rewrites the row as `<capture text> [[<target title>]]`
   without `#inbox`), `Del` → delete, `t` → add tags. Processed items (linked or deleted)
   leave the Inbox count; tagged items stay pending. `o`/`Del`/`t` only fire when the
-  selection is inside a `#inbox` list item (the same set the count reads), so the count and
-  the keyboard actions never disagree.
+  selection is inside a `#inbox` list/task item, so typing elsewhere is never intercepted
+  (the count reads `#inbox` lines in daily pages; a bullet on any page is triageable).
 - **Calendar affordance (small):** dashboard header strip lists today's date; clicking
   opens/creates today's daily page; left/right arrows move day; days with daily pages show
   a dot (queried by title format + `#daily` tag).

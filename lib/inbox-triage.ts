@@ -1,3 +1,4 @@
+import type { Node as PMNode } from '@tiptap/pm/model'
 import type { EditorState } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
 
@@ -21,6 +22,21 @@ export interface InboxRow {
 
 const INBOX_TAG_RE = /(?:^|\s)#inbox\b/i
 const TAG_NAME_RE = /^[a-zA-Z0-9_][a-zA-Z0-9_\-/]*$/
+const ROW_NODE_TYPES = new Set(['listItem', 'taskItem'])
+
+/**
+ * One capture row's text, with block children separated like the persister's
+ * index text. `textContent` concatenates blocks (`#inboxextra note`), which
+ * would make a multi-paragraph capture undetectable and its stale-row guard
+ * compare the wrong string.
+ */
+function rowText (node: PMNode): string {
+	return node.textBetween(0, node.content.size, '\n', '\n').trim()
+}
+
+function isRowNode (node: PMNode): boolean {
+	return ROW_NODE_TYPES.has(node.type.name)
+}
 
 /** Remove the `#inbox` marker, preserving the rest of the row text. */
 export function stripInboxTag (text: string): string {
@@ -78,9 +94,10 @@ export function findInboxRowAtSelection (state: EditorState): InboxRow | null {
 
 	for (let depth = $from.depth; depth > 0; depth--) {
 		const node = $from.node(depth)
-		if (node.type.name !== 'listItem') continue
-		if (!INBOX_TAG_RE.test(node.textContent)) continue
-		return { pos: $from.before(depth), text: node.textContent }
+		if (!isRowNode(node)) continue
+		const text = rowText(node)
+		if (!INBOX_TAG_RE.test(text)) continue
+		return { pos: $from.before(depth), text }
 	}
 
 	return null
@@ -92,10 +109,10 @@ export function findInboxRowAtSelection (state: EditorState): InboxRow | null {
  */
 export function deleteInboxRow (view: EditorView, row: InboxRow): boolean {
 	const item = view.state.doc.nodeAt(row.pos)
-	if (!item || item.type.name !== 'listItem') return false
+	if (!item || !isRowNode(item)) return false
 	// Pos alone is not identity: a collaborator may have inserted above this
 	// row while the triage dialog was open. Never delete a different capture.
-	if (item.textContent !== row.text) return false
+	if (rowText(item) !== row.text) return false
 
 	const $pos = view.state.doc.resolve(row.pos)
 	const parent = $pos.parent
@@ -111,10 +128,10 @@ export function deleteInboxRow (view: EditorView, row: InboxRow): boolean {
 /** Replace the focused row's text, keeping its list item and position. */
 export function replaceInboxRowText (view: EditorView, row: InboxRow, text: string): boolean {
 	const item = view.state.doc.nodeAt(row.pos)
-	if (!item || item.type.name !== 'listItem') return false
+	if (!item || !isRowNode(item)) return false
 	// The dialog can stay open across collaborator edits; only rewrite the
 	// row if it is still the same capture we captured on keypress.
-	if (item.textContent !== row.text) return false
+	if (rowText(item) !== row.text) return false
 
 	// A capture is one paragraph. If the row gained extra blocks, replace its
 	// whole content so no stale fragment is left behind.

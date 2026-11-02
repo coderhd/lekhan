@@ -100,4 +100,22 @@ describe('InboxTriageDialog', () => {
 		expect(input).toHaveAttribute('aria-invalid', 'true')
 		expect(screen.getByText(/use one tag/i)).toBeInTheDocument()
 	})
+
+	it('ignores Enter for an invalid tag', async () => {
+		const onTag = vi.fn()
+		renderDialog({ mode: 'tag', onTag })
+
+		const input = await screen.findByLabelText('Tag')
+		fireEvent.change(input, { target: { value: 'two words' } })
+		fireEvent.keyDown(input, { key: 'Enter' })
+
+		expect(onTag).not.toHaveBeenCalled()
+	})
+
+	it('disables the picker while a link is being saved', async () => {
+		renderDialog({ busy: true })
+
+		expect(await screen.findByText(/linking/i)).toBeInTheDocument()
+		expect(await screen.findByRole('button', { name: /Project Alpha/i })).toBeDisabled()
+	})
 })

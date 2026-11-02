@@ -130,6 +130,23 @@ function isElement (node: unknown): node is Y.XmlElement {
 	return node instanceof Y.XmlElement
 }
 
+/** True when the section already has a bullet with exactly this text. */
+function sectionHasBullet (
+	elements: Array<Y.XmlElement | Y.XmlText | Y.XmlHook>,
+	sectionIndex: number,
+	sectionEnd: number,
+	text: string,
+): boolean {
+	for (let index = sectionIndex + 1; index < sectionEnd; index++) {
+		const node = elements[index]
+		if (!isElement(node) || node.nodeName !== 'bulletList') continue
+		for (const item of node.toArray()) {
+			if (isElement(item) && elementText(item).trim() === text) return true
+		}
+	}
+	return false
+}
+
 export interface AppendCaptureOptions {
 	pageId: string
 	token: string

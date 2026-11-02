@@ -16,6 +16,8 @@ export interface InboxTriageDialogProps {
 	mode: InboxTriageMode | null
 	/** The focused row text, shown as context for the action. */
 	rowText: string | null
+	/** True while the link/tag write is in flight. */
+	busy?: boolean
 	onOpenChange: (open: boolean) => void
 	onSelectPage: (page: SearchResult) => void
 	onTag: (tag: string) => void
@@ -31,6 +33,7 @@ export interface InboxTriageDialogProps {
 export default function InboxTriageDialog ({
 	mode,
 	rowText,
+	busy = false,
 	onOpenChange,
 	onSelectPage,
 	onTag,
@@ -99,6 +102,7 @@ export default function InboxTriageDialog ({
 	}, [selectedIndex, rows])
 
 	const onSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+		if (busy) return
 		if (event.key === 'ArrowDown') {
 			event.preventDefault()
 			setSelectedIndex(previous => Math.min(previous + 1, Math.max(rows.length - 1, 0)))
@@ -113,6 +117,7 @@ export default function InboxTriageDialog ({
 	}
 
 	const submitTag = () => {
+		if (busy || !tagValid) return
 		const value = tag.trim().replace(/^#+/, '')
 		if (!value) return
 		onTag(value)
@@ -132,6 +137,7 @@ export default function InboxTriageDialog ({
 				<Dialog.Content
 					className="fixed left-1/2 top-1/4 z-[100000] w-[92vw] max-w-xl -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-black/10 bg-surface-container shadow-2xl animate-in zoom-in-95 dark:border-white/10"
 					data-testid="inbox-triage-dialog"
+					aria-busy={busy}
 				>
 					<Dialog.Title className="flex items-center gap-2 px-4 pt-4 text-sm font-bold uppercase tracking-wider text-on-surface-variant">
 						{mode === 'tag' ? (
@@ -160,6 +166,7 @@ export default function InboxTriageDialog ({
 								value={tag}
 								onChange={event => setTag(event.target.value)}
 								onKeyDown={onTagKeyDown}
+								disabled={busy}
 								placeholder="tag-name"
 								aria-invalid={tag.trim() !== '' && !tagValid}
 								aria-describedby="inbox-triage-tag-hint"
@@ -183,10 +190,14 @@ export default function InboxTriageDialog ({
 									value={query}
 									onChange={event => setQuery(event.target.value)}
 									onKeyDown={onSearchKeyDown}
+									disabled={busy}
 									placeholder="Search pages…"
 									className="w-full bg-transparent text-on-surface outline-none placeholder:text-on-surface-variant/50"
 								/>
 							</div>
+							<p className="sr-only" aria-live="polite">
+								{rows[selectedIndex]?.title ?? ''}
+							</p>
 							<div className="max-h-[45vh] overflow-y-auto py-1">
 								{loading ? (
 									<p role="status" className="px-4 py-3 text-sm text-on-surface-variant">Searching…</p>
@@ -206,6 +217,7 @@ export default function InboxTriageDialog ({
 											ref={index === selectedIndex ? activeRowRef : undefined}
 											onClick={() => chooseRow(row)}
 											onMouseEnter={() => setSelectedIndex(index)}
+											disabled={busy}
 											aria-label={`Link to ${row.title}`}
 											aria-current={index === selectedIndex ? 'true' : undefined}
 											className={`flex w-full items-center gap-2 px-4 py-2 text-left premium-transition ${
@@ -228,10 +240,16 @@ export default function InboxTriageDialog ({
 					)}
 
 					<div className="flex items-center justify-end gap-2 border-t border-black/5 px-4 py-3 dark:border-white/5">
+						{busy && (
+							<span role="status" className="mr-auto text-xs text-on-surface-variant">
+								{mode === 'tag' ? 'Saving…' : 'Linking… the sync server may be waking up.'}
+							</span>
+						)}
 						<button
 							type="button"
 							onClick={() => onOpenChange(false)}
-							className={`min-h-11 rounded-lg px-3 text-sm font-medium text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/10 ${FOCUS_RING}`}
+							disabled={busy}
+							className={`min-h-11 rounded-lg px-3 text-sm font-medium text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-60 ${FOCUS_RING}`}
 						>
 							Cancel
 						</button>
@@ -239,7 +257,7 @@ export default function InboxTriageDialog ({
 							<button
 								type="button"
 								onClick={submitTag}
-								disabled={!tagValid}
+								disabled={!tagValid || busy}
 								className={`min-h-11 rounded-lg bg-primary px-4 text-sm font-bold text-on-primary hover:bg-primary/90 premium-transition disabled:opacity-60 ${FOCUS_RING}`}
 							>
 								Add tag

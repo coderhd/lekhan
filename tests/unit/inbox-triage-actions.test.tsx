@@ -53,6 +53,7 @@ describe('linkInboxRow', () => {
 			target: { id: 'target-1', title: 'Alice Chen' },
 			dailyPageTitle: '2026-11-02',
 			token: 'token-1',
+			ensureCanEdit: async () => true,
 			append,
 		})
 
@@ -99,6 +100,7 @@ describe('linkInboxRow', () => {
 			target: { id: 'target-1', title: 'Alice Chen' },
 			dailyPageTitle: '2026-11-02',
 			token: 'token-1',
+			ensureCanEdit: async () => true,
 			append,
 		})).rejects.toBeInstanceOf(InboxTriageError)
 
@@ -117,6 +119,7 @@ describe('linkInboxRow', () => {
 			target: { id: 'target-1', title: 'Alice Chen' },
 			dailyPageTitle: '2026-11-02',
 			token: 'token-1',
+			ensureCanEdit: async () => true,
 			append,
 		})).rejects.toThrow('offline')
 

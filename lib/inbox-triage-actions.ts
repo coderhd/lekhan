@@ -49,7 +49,7 @@ export interface LinkInboxRowOptions {
 	dailyPageTitle: string
 	token: string
 	/** Pre-flight permission check (the hub silently drops viewer writes). */
-	ensureCanEdit?: (pageId: string) => Promise<boolean>
+	ensureCanEdit: (pageId: string) => Promise<boolean>
 	/** Injection seam for tests; production uses the CRDT append. */
 	append?: (input: AppendToSectionInput) => Promise<unknown>
 }
@@ -68,8 +68,7 @@ export interface LinkInboxRowOptions {
  * (a collaborator inserted or edited above/before it).
  */
 export async function linkInboxRow (options: LinkInboxRowOptions): Promise<void> {
-	const { view, row, target, dailyPageTitle, token } = options
-	const ensureCanEdit = options.ensureCanEdit ?? (async () => true)
+	const { view, row, target, dailyPageTitle, token, ensureCanEdit } = options
 	const append = options.append ?? appendBulletToPageSection
 
 	if (!(await ensureCanEdit(target.id))) {

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { Editor } from '@tiptap/core'
 import { StarterKit } from '@tiptap/starter-kit'
+import { TaskItem } from '@tiptap/extension-task-item'
+import { TaskList } from '@tiptap/extension-task-list'
 import {
 	appendInboxTag,
 	buildLinkedRowText,
@@ -35,6 +37,8 @@ function createEditor (onLink = vi.fn(), onTag = vi.fn()) {
 	editor = new Editor({
 		extensions: [
 			StarterKit,
+			TaskList,
+			TaskItem.configure({ nested: true }),
 			InboxTriage.configure({ onLink, onTag }),
 		],
 		content: INBOX_DOC,
@@ -42,12 +46,19 @@ function createEditor (onLink = vi.fn(), onTag = vi.fn()) {
 	return { editor, onLink, onTag }
 }
 
+function createEditorWith (content: string | Record<string, unknown>) {
+	editor = new Editor({
+		extensions: [StarterKit, TaskList, TaskItem.configure({ nested: true })],
+		content,
+	})
+	return editor
+}
 /** Position immediately before the list item that contains `text`. */
 function listItemPos (instance: Editor, text: string): number {
 	let found = -1
 	instance.state.doc.descendants((node, pos) => {
 		if (found !== -1) return false
-		if (node.type.name === 'listItem' && node.textContent.includes(text)) {
+		if ((node.type.name === 'listItem' || node.type.name === 'taskItem') && node.textContent.includes(text)) {
 			found = pos
 			return false
 		}
@@ -110,6 +121,42 @@ describe('inbox triage helpers', () => {
 		expect(replaceInboxRowText(editor.view, row!, '09:41 Buy milk [[Groceries]]')).toBe(true)
 		expect(editor.getText()).toContain('09:41 Buy milk [[Groceries]]')
 		expect(editor.getText()).toContain('10:15 Call Alice #inbox')
+	})
+
+	it('detects a multi-paragraph capture row and replaces all of its blocks', () => {
+		const instance = createEditorWith(
+			'<h2>Inbox</h2><ul><li><p>09:41 Buy milk #inbox</p><p>extra note</p></li></ul>',
+		)
+		instance.commands.setTextSelection(listItemPos(instance, 'Buy milk') + 3)
+		const row = findInboxRowAtSelection(instance.state)
+
+		expect(row?.text).toBe('09:41 Buy milk #inbox\nextra note')
+		expect(replaceInboxRowText(instance.view, row!, '09:41 Buy milk [[Groceries]]')).toBe(true)
+		expect(instance.getText()).toContain('09:41 Buy milk [[Groceries]]')
+		expect(instance.getText()).not.toContain('extra note')
+	})
+
+	it('treats a task item tagged #inbox as a capture row', () => {
+		const instance = createEditorWith({
+			type: 'doc',
+			content: [
+				{ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Inbox' }] },
+				{
+					type: 'taskList',
+					content: [{
+						type: 'taskItem',
+						attrs: { checked: false },
+						content: [{ type: 'paragraph', content: [{ type: 'text', text: '09:41 Do thing #inbox' }] }],
+					}],
+				},
+			],
+		} as any)
+		instance.commands.setTextSelection(listItemPos(instance, 'Do thing') + 3)
+
+		const row = findInboxRowAtSelection(instance.state)
+		expect(row?.text).toBe('09:41 Do thing #inbox')
+		expect(deleteInboxRow(instance.view, row!)).toBe(true)
+		expect(instance.getText()).not.toContain('Do thing')
 	})
 
 	it('builds the linked daily row and the target related-action bullet', () => {

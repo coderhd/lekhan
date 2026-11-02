@@ -139,6 +139,7 @@ export default function EditorWorkspace({	pageId,
 	const router = useRouter()
 	const [title, setTitle] = useState(initialTitle)
 	const [inboxTriage, setInboxTriage] = useState<{ mode: InboxTriageMode; row: InboxRow } | null>(null)
+	const [inboxBusy, setInboxBusy] = useState(false)
 	const inboxBusyRef = useRef(false)
 	// The editor is created with the extension configured once; keep the
 	// callbacks stable and read the latest state through this ref.
@@ -932,6 +933,7 @@ export default function EditorWorkspace({	pageId,
 		if (!editor || !inboxTriage || inboxBusyRef.current) return
 
 		inboxBusyRef.current = true
+		setInboxBusy(true)
 		try {
 			await linkInboxRow({
 				view: editor.view,
@@ -968,6 +970,7 @@ export default function EditorWorkspace({	pageId,
 			}
 		} finally {
 			inboxBusyRef.current = false
+			setInboxBusy(false)
 		}
 	}, [currentUser.id, editor, inboxTriage, title, token])
 
@@ -1504,6 +1507,7 @@ export default function EditorWorkspace({	pageId,
 			<InboxTriageDialog
 				mode={inboxTriage?.mode ?? null}
 				rowText={inboxTriage?.row.text ?? null}
+				busy={inboxBusy}
 				onOpenChange={open => { if (!open) setInboxTriage(null) }}
 				onSelectPage={target => { void handleInboxLink(target) }}
 				onTag={handleInboxTag}
