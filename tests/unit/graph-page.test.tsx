@@ -19,10 +19,6 @@ vi.mock('@/services/graph', () => ({
 	fetchWorkspacePageTags: vi.fn(),
 }))
 
-vi.mock('@/components/global-loader', () => ({
-	default: ({ text }: { text?: string }) => <div role="status">{text}</div>,
-}))
-
 const getUser = supabase.auth.getUser as unknown as ReturnType<typeof vi.fn>
 const workspaces = fetchWorkspaces as unknown as ReturnType<typeof vi.fn>
 const workspaceGraph = fetchWorkspaceGraph as unknown as ReturnType<typeof vi.fn>
@@ -101,6 +97,14 @@ describe('GraphPage', () => {
 		expect(pageTags).toHaveBeenCalledWith(['p-1', 'p-2'])
 		// Read-only route: no workspace write path is touched.
 		expect(screen.getByText(/1 unresolved/i)).toBeInTheDocument()
+	})
+
+	it('shows the graph skeleton while the workspace graph loads', async () => {
+		workspaces.mockReturnValue(new Promise(() => {}))
+
+		render(<GraphPage />)
+
+		expect(await screen.findByRole('status', { name: /building your graph/i })).toHaveAttribute('aria-busy', 'true')
 	})
 
 	it('redirects signed-out visitors to login', async () => {

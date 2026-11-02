@@ -8,9 +8,8 @@ import { supabase } from '@/lib/supabase'
 import { fetchWorkspaceGraph, fetchWorkspaces, fetchWorkspacePageTags } from '@/services/graph'
 import { serializeWorkspaceGraph } from '@/lib/graph-view/serialize'
 import type { WorkspaceGraphData } from '@/lib/graph-view/types'
-import GraphView from './graph-view'
+import GraphView, { GraphViewSkeleton } from './graph-view'
 import WorkspaceViewsNav from './workspace-views-nav'
-import GlobalLoader from './global-loader'
 
 const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-container focus-visible:ring-offset-2'
 
@@ -100,11 +99,7 @@ export default function GraphPage () {
 					aria-label="Workspace graph"
 					className="h-[calc(100vh-14rem)] min-h-[420px] w-full"
 				>
-					{status === 'loading' && (
-						<div className="flex h-full items-center justify-center rounded-2xl border border-black/10 dark:border-white/10">
-							<GlobalLoader fullScreen={false} text="Building your graph…" />
-						</div>
-					)}
+					{status === 'loading' && <GraphViewSkeleton />}
 
 					{status === 'error' && (
 						<div className="flex h-full flex-col items-center justify-center gap-4 rounded-2xl border border-black/10 text-center dark:border-white/10">
