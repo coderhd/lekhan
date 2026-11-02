@@ -1,0 +1,71 @@
+# Stage 5 Clean-Room Adversarial Review — H0 Real Billing epic (#29 / SIL-162)
+
+- **Gate:** Stage 5 (REVIEW) per repo AGENTS.md 6-stage lifecycle; single pre-PR adversarial gate.
+- **Review target:** `git diff origin/main...HEAD` on `plan/29-real-billing`, tip `eca9226` (local; `origin/plan/29-real-billing` = `0bc413d`). 137 files, +19,490 / −549 vs `origin/main` (`b4c0432`).
+- **Method:** four independent clean-room adversarial subagents (one per AGENTS.md axis; no shared context, no implementer loyalty), plus Tech Lead spot-verification of every HIGH finding against the committed code before adoption. Reviewers were read-only; the verdict below is the Tech Lead's synthesis.
+- **Scope exclusions:** the uncommitted `.env.example` observability change (#90 work-in-progress) and untracked files were excluded; committed code only.
+- **Ground truth:** `docs/superpowers/specs/29-spec.md` rev 2 · `docs/superpowers/plans/2026-10-07-h0-real-billing.md` rev 3 (PDEC rulings) · `docs/prd/h0-real-billing-prd.md` · `CONTEXT.md` · `docs/adr/0005-founding-roster-predicate-boundaries.md` · rulings `0bc413d` (SIL-142) and `ab3fea2` (SIL-141/PDEC-13).
+- **Baseline entering the gate (PO Checkpoint D):** typecheck PASS, lint PASS, tests 99 files / 867 PASS, build PASS.
+
+---
+
+## VERDICT: REVISE
+
+No CRITICAL findings. Three HIGH findings are **blocking for the PR path** — all three violate a pinned spec/ADR/PRD contract on the money path, and each has a scoped fix. Everything else is non-blocking hygiene; the backend security surface (Axis 4) is clean at its CRITICAL/HIGH levels.
+
+### 🚨 Verified-blocking findings (fixes land back on SIL-32, PO lead)
+
+#### ⚠️ HIGH-1 — Ownership transfer never re-evaluates `is_founding`; founding pricing leaks to a non-cohort successor
+- **Files:** `services/billing/ownership-transfer.ts:383-437` (only swaps `owner_id`, clears `gateway_customer_id` — never touches `workspace_plans.is_founding`); `app/api/billing/checkout/route.ts:110-111` (resolves founding eligibility from the persisted row only).
+- **Contract violated:** ADR 0005 §Ownership-transfer guardrail (binding ruling, commit `ab3fea2`): *"when workspace ownership transfer ships, `is_founding` re-evaluates from the new owner's roster status — inherit if founding, clear if not — for unlocked workspaces"* + *"US-8's plan must state this explicitly."* PDEC-13 repeats it; plan rev 3's T13 text states it nowhere; `tests/unit/billing-ownership-transfer.test.ts` has zero `is_founding` assertions. The migration header at `20261008000000_founding_roster_backfill.sql:30-31` even claims the guardrail is honored.
+- **Failure scenario:** a founding owner with an unlocked workspace (`status='none'`, `gateway_subscription_id NULL`) runs the two-step transfer to any non-cohort account. The successor checks out, and `checkout/route.ts` grants the lifetime founding price lock from the persisted row — irreversible once subscribed and the exact cohort-leakage scenario ADR 0005 §Q2-why-not-B cites as disqualifying. (Locked-with-live-subscription rows keeping their price is ADR-sanctioned and NOT this bug.)
+- **Fix:** in `acceptOwnershipTransfer`, after the owner swap, re-evaluate the flag per ADR for unlocked rows: clear `is_founding` unless the new owner is themselves founding (mirroring the `20261008000001` inheritance guards); leave locked rows untouched. State it explicitly in plan T13 AND pin with transfer tests: founding → non-cohort successor ⇒ `is_founding=false`; non-cohort → founding successor with founding sibling ⇒ inherits.
+
+#### ⚠️ HIGH-2 — Post-grace read-only degradation is silent in the surfaces users live in; green "Synced" masks dropped writes
+- **Files:** `server/index.js:308` (`ws.isViewer` stamped once at upgrade), `server/index.js:334-340` (binary updates silently discarded), `components/editor-workspace.tsx` (derives editability from page role, not relay state), `components/sync-indicator.tsx:46-52`.
+- **Contract violated:** US-7 ("a failed renewal is not silent feature removal"). The honest "Sync is read-only" banner exists only in Settings → Billing.
+- **Failure scenario:** a grace-expired owner keeps typing against a green "Synced" indicator while every binary update (y-protocol sync messages 1/2) is dropped server-side; collaborators are silently converted to viewers. A related honest-by-accident gap: `incomplete` rows fail closed to read-only with no client explanation.
+- **Fix:** surface the sanctioned read-only reason at the relay/editor (one-shot control message or an already-existing client fetch carrying `relayReadOnly` + grace expiry), map to a persistent editor banner, and give `SyncIndicator` an amber "Read-only sync" state while writes are rejected.
+
+#### ⚠️ HIGH-3 — Published Team volume tiers are not implemented; seats 11–25 are charged the 2–10 rate
+- **Files:** `lib/billing/price-catalog.ts:49-52` (`TEAM_PRICE_AMOUNTS` = flat founding $8 / GA $10 per seat at ANY seat count), `lib/billing/prices.ts:148-168`, `lib/billing/stripe.ts:153-157`; `seat_price_tiers` JSONB (migration `20261007000000:30`) is read by nothing in `lib/`/`app/`.
+- **Contract violated:** PRD §5.1 (`docs/prd/h0-real-billing-prd.md:80-81`: 11–25 seats $7 founding / $9 GA; 26+ $6/$8) and `docs/marketing/founding-cohort-launch.md:155-161` ("see volume tiers").
+- **Failure scenario:** a founding team buying 15 seats is charged 15 × $8 = $120/mo where the published table promises 15 × $7 = $105/mo (GA: $150 vs $135). The UI honestly displays what it charges (not a deceptive checkout), but it is a broken published price promise on the money path.
+- **Fix:** either (a) mint per-bracket price objects and dispatch seats→bracket server-side in `resolvePriceRequest` + Stripe quantity assembly (and referral-credit math), or (b) an explicit TL scope-cut ruling that ships flat-rate pricing with PRD/launch copy corrected before GA. Decision required; do not merge with the current published tables.
+
+### ⚠️ to 💡 Non-blocking findings (fix opportunistically on branch or RAISE priority with PO)
+
+- **MEDIUM — Razorpay portal not fail-closed after transfer.** `app/api/billing/portal/route.ts:42` + `services/billing/ownership-transfer.ts:411-429`: transfer clears `gateway_customer_id` (fail-closed for Stripe) but keeps `gateway_subscription_id`, which is the Razorpay portal lookup key per SIL-56 escalation 1 — the successor can open the outgoing owner's Razorpay payment page and see/modify the outgoing owner's mandate. Fix: treat transferred Razorpay rows as `no_billing_account` until the successor's own checkout activates; correct the false "fail closed" comment.
+- **MEDIUM — CRON_SECRET compared with `===`, not timing-safe** (`app/api/cron/billing-reconcile/route.ts:16`, `app/api/cron/retention-prune/route.ts:19`) — violates the axis mandate; the codebase already has the correct pattern (`timingSafeEqual` in ownership-transfer.ts:160 and webhook-processor.ts:194). One shared helper fixes both.
+- **MEDIUM — Team seats unvalidated server-side.** No min/max enforcement: `seats: 1` under-bills Team (TEAM_MIN_SEATS=2 exists only as catalog/client value, `stripe.ts:153` clamps floor 1 only), `seats: 500` bills 500 and drives `maxDistinctCollaborators = 500` via `getPlanLimits`. Fix: integer bounds in checkout/plan-change routes with test pins.
+- **MEDIUM — Crash window in referral Stripe credit can double-credit when the claimed row set later expands** (`services/billing/referral-credits.ts:575-608, 649-666`): idempotency key is derived from the *visible* claimed row ids, not persisted at claim time. Persist the key at claim (or store `balance_transaction_id`) so recovery reuses it.
+- **MEDIUM — No app-level replay of recorded-but-unprocessed `gateway_events`; conversion grants are webhook-only** (`services/billing/reconciliation.ts:608-683`, `webhook-processor.ts:384`): after provider redelivery policies are exhausted, an unapplied conversion month can be silently lost. Fix: reconcile step re-drives unprocessed raw events (safe thanks to raw-record-first), or grant fallback.
+- **MEDIUM — Referral-ledger error overrides plan state in type** (`components/billing/billing-settings.tsx` / `settings-client.tsx` variants); LOW-flavored but matches "no permissive default" hygiene.
+- **MEDIUM — Grace/incomplete UI honesty polish:** currency fetch error says "no billing record yet" to a paying owner; loading flash renders 'Free'; `incomplete` subscriptions are offered "Cancel at period end"; `version-drawer.tsx:150-168` shows Team owners "Cloud: 1 day" retention (missing `team` key in `retentionMap`).
+- **MEDIUM — Cycle switch unreachable on own tier** (`components/pricing-plans.tsx:401-404, 459-475`): own-tier button disabled, so a Razorpay monthly→annual switch has no UI entry despite on-page copy promising it (Stripe users can use the portal).
+- **MEDIUM — Geo currency default can clobber an explicit pick** (`pricing-plans.tsx:163-170`): late-arriving server default overwrites user selection; and the client `detectCurrency()` seed contradicts the in-file "server derives it" rule.
+- **LOW —** a11y: unlabeled profile-menu dropdown trigger (no `aria-expanded`/Escape), settings tabs without roving tabindex; `useEffect` hygiene: unguarded `loadBilling`/`loadUser` vs a guarded sibling; bot bar lost its dedicated credit-removal pin when `tests/unit/bot-bar-credits.test.tsx` was deleted (global sweep still covers it); `LEKHAN_FAKE_PAYMENTS` has no production guard; migration re-run hazards and QA-doc header staleness (`20261008000001` header overstates, file 1 backfill re-run can downgrade the trigger body, `docs/qa/29-founding-backfill-verification.md` §5 outdated vs ADR 0005); relay read-only gate evaluated only at upgrade.
+
+### ✅ Verified clean (adversarially probed, no violation found)
+
+- **Spec & domain (Axis 1):** workspace=billing root keyed by `workspaces.id` (`workspace_plans.workspace_id` PK → FK); free tier survives fully unmetered (AI route doc cap + credit gate deleted, removal tests subscribed); `profiles.plan` has exactly one sanctioned writer (spec §4.4 mirror in the read-back apply primitive, used by webhook + reconcile); prices/amounts resolve server-side only (client payloads are `{tier, cycle, currency, seats}`; webhooks ignore payloads, reverse-map provider ids against env, refuse ambiguous bindings); Team-in-INR rejected at four server layers with USD escape hatch as ruled; credits retirement complete per T12 scope with a file-walk removal test; provider-QA-only gate honestly documented (see below); entitlements↔tier-limits parity proven for all 4 canonical tiers (incl. seats-based Team cap, legacy normalization, mirror-writer normalization).
+- **Frontend & a11y (Axis 2):** all new clickable elements are native `<button>`s (test-enforced for billing actions); settings tabs are genuine tablist/tab/tabpanel with arrow-key support; bot bar implements Escape close; grace/cancel copy in Settings is exact, server-derived, and honest ("nothing has been deleted"); no credit-counter remnants anywhere (grep + file-walk test); free-tier CTAs wall-free; `usePlanTier` understates rather than overstates on failed reads.
+- **CRDT & storage (Axis 3):** raw-record-then-apply per SIL-142 ruling is hard-wired and crash-window-tested (`event_id` UNIQUE verified live in DB; duplicate ⇒ 200 no-op; unprocessed-conflict ⇒ idempotent repair; 502 + `processed_at IS NULL` on projection failure → provider redelivery); `workspace_plans` converges by fresh read-back with stale-generation terminal guard; all four migrations idempotent (proven locally AND live on the hosted project, fingerprint evidence `f1035a7`); IndexedDB atomicity, snapshot/delta compression, and sync topology untouched — relay only *gains* a read-only gate, never weakens admission; referral claim machinery race-safe (conditional claim, settle stamp guard, TTL recovery) except the crash window noted above.
+- **Backend security (Axis 4):** webhooks fail closed with missing/unset secrets on both rails (Stripe `constructEvent` over raw body; Razorpay HMAC with `timingSafeEqual`); read-back-wins kills payload tampering; all seven billing routes authenticate and resolve workspace server-side by `owner_id` (members 404, transfer owner-enforced); checkout/plan-change body is price-free; transfer double-billing/gap/invariant rejections implemented AND tested (`tests/unit/billing-ownership-transfer.test.ts:240,251,275,296,333`); fake gateway env-gated and in-memory; secrets never in client bundles (`NEXT_PUBLIC_*` grep clean, no client import of `stripe.ts`/`razorpay.ts`, env-check script prints names/presence only); RLS topology on `gateway_events`/`workspace_plans`/ledger confirmed live (service-role-only writes, owner-scoped reads).
+
+### Provider-QA-only gate (SHIP scheduling input — NOT blocking, per dispatch)
+
+At `eca9226` the plan status honestly gates BUILD-complete on provider-side provisioning (pending `docs/ops/provisioning/29-provider-test-credentials.md` card / SIL-32). Items SHIP must schedule:
+1. Full manual QA script (`docs/qa/29-billing-manual-qa.md`): Stripe test cards (success/decline/3DS) + portal round-trip via `stripe listen`; Razorpay UPI/card flows + signed-fixture replay; `LEKHAN_FAKE_PAYMENTS=1` UI walkthrough; missed-webhook drill on staging.
+2. Webhook endpoint registration/verification in both provider dashboards.
+3. Stripe Billing Portal subscription-update enablement (PDEC-12).
+4. 27 provider test credentials + staging origin.
+5. Production-env founding reconciliation (`?ref`-less sweep) per SIL-140 runbook — staging evidence ≠ cohort evidence (SIL-142 freeze pin).
+6. SIL-56 deferred live-sandbox verifications: `customer_notify` on PATCH, cross-frequency scheduled changes, `expire_by` hygiene.
+
+---
+
+### Gate disposition
+
+- **Stage 5 gate: CLOSED with verdict REVISE.** HIGH-1/2/3 stop the PR path; scoped fixes return to SIL-32 (PO lead dispatches; workspace remains `plan/29-real-billing`).
+- Review methodology note: four-axis parallel clean-room subagents (fresh context, read-only), Tech Lead spot-verified all HIGH findings against committed code (grep/file evidence) before adoption; Med/LOW findings accepted with file:line citations from reviewers whose verified-track-record confirmed on every spot check.
