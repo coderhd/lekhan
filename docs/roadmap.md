@@ -179,22 +179,21 @@ is distribution for the H1 plugin API.
 
 ---
 
-## H3 — Studio (NotebookLM iteration, thin v1 + temporal v2) `h3`
+## H3 — Studio (deep RAG + agentic track) `h3`
 
-> **Respec 2026-08-30:** Office Suite as interactive editors (Sheets/Slides/Mail/Chat as defined in `2026-08-12-global-pkm-suite-strategy-design.md:96`) is **discarded** per `docs/decisions/h3-studio/02-positioning-individual-pkm-first` and `chatgpt-strategy-summary:13` (collapse roadmap). H3 is now **Studio at the Workspace root** — see `docs/superpowers/specs/2026-08-30-h3-studio-thin-v1-temporal-v2-design.md`. Office artifacts (PPTX/XLSX/DOCX) remain as **generated views** over the graph, not editors. Solo-dev pace acknowledged.
+> **Respec 2026-11-02:** H3 is a **NotebookLM / Open Notebook-style Studio** over the live knowledge graph — not an office suite (discarded 2026-08-30, `docs/decisions/h3-studio/02-positioning-individual-pkm-first`) and no longer "thin v1 first". Per `docs/decisions/h3-studio/08-deep-rag-first-embedder-and-eval-stack`, the **deep retrieval layer is the primary path**: server-side `pgvector`, pluggable `Embedder`, hybrid retrieval with citations, a bounded agent layer, and a Python eval harness. Full design: `docs/superpowers/specs/2026-11-02-h3-studio-rag-agentic-design.md`.
 
-| Epic | Issue | Blocker edges | Spec ref |
-|---|---|---|---|
-| H3 — Studio thin v1 (corpus picker → `studio_create_pages` → new `Page` with `[[cite]]`) | — *new, needs issue* | ← `pages`/`page_links` (no `page_chunks` yet) | `2026-08-30-h3-studio-thin-v1-temporal-v2-design.md` §4 thin v1 |
-| H3 — Studio: Sheets grouped view (XLSX renderer over `properties`) | #52 | ← #47 (respec’d: was “grids over properties” editor — now renderer, see #52 comment 2026-08-30) | `2026-08-30-h3-studio` §4 Office |
-| H3 — Studio: Slides grouped view (PPTX renderer, ordered `Page` deck) | #53 | ← #47 (respec’d as above) | `2026-08-30-h3-studio` §4 Office |
-| H3 — Mail (threads as linked pages) | #54 | ← #50 | *Deferred to H4+ — not H3* (see #54 comment 2026-08-30) |
-| H3 — Chat (agent workspace) | #55 | ← #50 | *Deferred to H4+ — not H3* (see #55 comment 2026-08-30) |
-| H3 — Studio temporal v2 (block-aware `page_chunks` + `pgvector` + `valid_from/until` + `as-of`/`between`) | — *parked, see `04-retrieval-architecture-plan` + spec §4 v2* | ← thin v1 tripwire | `2026-08-30-h3-studio` §4 v2, `docs/decisions/h3-studio/04-retrieval-architecture-plan.md` |
+| Phase | Work | Gate |
+|---|---|---|
+| **A — Ingestion** | `page_chunks` + `page_summaries` schema, `Embedder` seam + embed route, block-aware chunker, idempotent indexer + backfill cron, eval skeleton + 40-question golden set | re-index of an unchanged workspace embeds zero chunks; local (Ollama) embed path works |
+| **B — Retrieval** | `hybrid_search_chunks` (vector + `tsvector` RRF), retrieval service with link-graph expansion + two-tier narrowing, citations to `page_id`+`block_id`, optional rerank, first committed eval report | recall@10 ≥ 0.85 · citation precision ≥ 0.90 · p95 ≤ 400 ms |
+| **C — Studio** | corpus picker on real retrieval → generate → `studio_create_pages` write-back with `[[cite]]` | every claim citable and clickable |
+| **D — Agents** | typed graph tools, planner→executor runtime with budgets, traces, agent UI, agent eval suite | 20-task success ≥ 80% within budget |
+| **E — Interop & proof** | MCP server (Claude Desktop / Cursor / VS Code), demo artifacts, portfolio write-up with numbers | unauthorised page returns a permission error, never content |
 
-**Sequencing narrative:** Studio thin v1 needs no `page_chunks` — uses `searchable_text` + `tag`/`link` filters + `AIClient` + one `studio_create_pages` tx (graph-native write-back, then `exportToDocx/Pdf` free per `03`). Deep `page_chunks` + `hybrid_search` + link-graph + temporal (`valid_from/until`) is **parked v2**, built only if thin tripwire fires (large corpora). `pptxgenjs`/`exceljs` renderers ride the same `Page` `properties` that `#47` Databases will type — no separate service. `MCP server` (H3.0, weeks) reuses `search_pages`/`hybrid_search` + `can_access_page()` RLS; `Tauri` sidecar (`.lekhan/embeddings/` + `LocalEmbedder|RemoteEmbedder`) stages after `#88`. Suite pricing narrative still rides `#29`.
+**Office artifacts** (PPTX/XLSX/DOCX) stay as **generated views** over `Page`s, not editors (`03`).
 
----
+**Sequencing narrative:** A and B are the core — a measured retrieval system is the part that cannot be faked. C makes it usable, D makes it agentic, E makes it legible to an outside client (MCP) and to a reviewer (committed eval reports). Temporal retrieval over `page_versions` (`04`) stays parked until A–C are green; it remains the harder-to-copy wedge.
 
 ## Open questions / unrecorded
 
