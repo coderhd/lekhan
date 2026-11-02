@@ -12,7 +12,7 @@
 [![Security](https://img.shields.io/badge/Encryption-AES--256--GCM-blueviolet.svg)](#-security--encryption)
 [![License](https://img.shields.io/badge/License-AGPL%20v3%20%2F%20MIT-blue.svg)](LICENSE)
 
-[Early Access Waitlist](https://lekhan.app/early) · [Report Bug](https://github.com/coderhd/lekhan/issues) · [Roadmap](#-product-roadmap)
+[Early Access Waitlist](https://lekhan.online/early) · [Report Bug](https://github.com/coderhd/lekhan/issues) · [Roadmap](#-product-roadmap)
 
 </div>
 
