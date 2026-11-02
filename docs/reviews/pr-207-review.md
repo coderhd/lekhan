@@ -98,13 +98,12 @@ npx tsc --noEmit              clean
 npm run lint                  clean
 npm test                      103 files, 919 tests passed
 npm run build                 clean (24 routes; /graph prerendered static shell)
-npm run test:perf             pass at 513 ms (500 pages / 2,020 links, < 1 s)
+npm run test:perf             pass (500 pages / 2,020 links: 513 ms, then 818 ms under load 60, both < 1 s)
 ```
 
-_Note:_ a later isolated perf run was attempted while the shared machine was at load
-average ~92 from other parallel agent worktrees and measured 2.7 s; the diff does not
-touch `lib/graph-view/layout.ts` or the serializer, and the test passed at 513 ms on the
-same checkout under normal load. Re-run `npm run test:perf` on an idle machine before
-merge. Likewise, one full-suite run hit the known timing-flaky
-`tests/unit/sync-snapshot-debounce.test.ts` under load; it passes in isolation and on the
-next full run (919/919).
+_Note:_ the shared machine also runs several parallel agent worktrees; at load average ~90 the
+timing test measured 2.7 s. The diff does not touch `lib/graph-view/layout.ts` or the
+serializer, and the test passed at 513 ms and again at 818 ms under heavy but lower load, so
+re-run `npm run test:perf` on an idle machine before merge if CI uses a strict wall clock.
+Likewise, one full-suite run hit the known timing-flaky `tests/unit/sync-snapshot-debounce.test.ts`
+under load; it passes in isolation and on the next full run (919/919).
