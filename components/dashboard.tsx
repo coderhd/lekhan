@@ -11,6 +11,7 @@ import ProfileMenu from './profile-menu'
 import ThemeToggle from './theme-toggle'
 import DailyStrip from './daily-strip'
 import { useGlobalSearch } from '@/components/global-search-palette'
+import { useQuickCapture } from '@/components/quick-capture-palette'
 import GlobalLoader from './global-loader'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check } from 'lucide-react'
@@ -34,6 +35,7 @@ import { GlobalHeaderSlot } from './layout/global-header-context'
 export default function Dashboard({ user }: DashboardProps) {
 	const router = useRouter()
 	const { open: openGlobalSearch } = useGlobalSearch()
+	const { open: openQuickCapture } = useQuickCapture()
 	const [myPages, setMyPages] = useState<Page[]>([])
 	const [sharedPages, setSharedPages] = useState<MemberPageItem[]>([])
 	const [workspace, setWorkspace] = useState<Workspace | null>(null)
@@ -297,6 +299,15 @@ export default function Dashboard({ user }: DashboardProps) {
 			/>
 			<GlobalHeaderSlot slot="right">
 				<div className="flex items-center gap-md">
+					<button
+						onClick={openQuickCapture}
+						className="flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 py-2 premium-transition text-on-surface-variant hover:text-on-surface hover:bg-black/5 dark:hover:bg-white/10"
+						title="Quick capture (Cmd+Shift+C)"
+						aria-label="Quick capture"
+					>
+						<span aria-hidden className="material-symbols-outlined leading-none">bolt</span>
+						<span className="hidden text-sm font-medium sm:inline">Capture</span>
+					</button>
 					<button
 						onClick={openGlobalSearch}
 						className="p-2 flex items-center justify-center rounded-lg hover:bg-black/5 dark:hover:bg-white/10 premium-transition text-on-surface-variant hover:text-on-surface relative hover:scale-110 active:scale-90"

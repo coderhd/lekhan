@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import Dashboard from '@/components/dashboard'
 import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
 import GlobalSearchPalette from '@/components/global-search-palette'
+import QuickCapturePalette from '@/components/quick-capture-palette'
 
 vi.mock('@/components/session-reauth-provider', () => ({
 	useSessionReauth: () => ({ isLocked: false, lockSession: vi.fn(), unlockSession: vi.fn() }),
@@ -83,11 +84,13 @@ function fireAuth(event: string, session: any) {
 
 function renderDashboard() {
 	return render(
-		<GlobalSearchPalette>
-			<GlobalHeaderProvider>
-				<Dashboard user={user} />
-			</GlobalHeaderProvider>
-		</GlobalSearchPalette>
+		<QuickCapturePalette>
+			<GlobalSearchPalette>
+				<GlobalHeaderProvider>
+					<Dashboard user={user} />
+				</GlobalHeaderProvider>
+			</GlobalSearchPalette>
+		</QuickCapturePalette>
 	)
 }
 
