@@ -43,8 +43,11 @@ write path — this entire epic composes existing Page machinery.
   summary card (count + top 5 pending items); opening it opens today's daily page scrolled
   to the section. Inbox items are bullet blocks tagged `#inbox`; triage = edit/move/link/tag.
 - **Triage actions (keyboard-first):** on a capture row, `o` → link it to a page
-  (via `[[wikilink]]` into the target page's related-actions block), `Del` → delete,
-  `t` → add tags. Processed items (linked or deleted) leave the Inbox count.
+  (appends `[[<daily page title>]] <capture text>` to the target page's `Related actions`
+  section, created on demand, and rewrites the row as `<capture text> [[<target title>]]`
+  without `#inbox`), `Del` → delete, `t` → add tags. Processed items (linked or deleted)
+  leave the Inbox count; tagged items stay pending. `o`/`Del`/`t` only fire when the
+  selection is inside a `#inbox` list item under an `Inbox` heading (level ≤ 2).
 - **Calendar affordance (small):** dashboard header strip lists today's date; clicking
   opens/creates today's daily page; left/right arrows move day; days with daily pages show
   a dot (queried by title format + `#daily` tag).

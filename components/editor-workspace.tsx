@@ -38,6 +38,18 @@ import { Mention } from '@tiptap/extension-mention'
 import MentionList, { MentionItem } from './mention-list'
 import { fetchPageDetails, fetchPageMemberRole, updatePageTitle, updatePageProperties, fetchMentionablePageCollaborators, fetchPageTags, fetchWorkspacePages, createPage } from '@/services/graph'
 import { Wikilink, type WorkspacePageSummary, normalizeWikilinkTarget } from '@/lib/wikilink'
+import { InboxTriage } from '@/lib/inbox-triage-extension'
+import {
+	appendInboxTag,
+	buildLinkedRowText,
+	buildRelatedActionText,
+	replaceInboxRowText,
+	RELATED_ACTIONS_HEADING,
+	type InboxRow,
+} from '@/lib/inbox-triage'
+import InboxTriageDialog, { type InboxTriageMode } from './inbox-triage-dialog'
+import { appendBulletToPageSection } from '@/lib/quick-capture'
+import type { SearchResult } from '@/types'
 
 import { TableToolbar } from './table-toolbar'
 import { CodeBlockLanguageSelect } from './code-block-language-select'
@@ -133,6 +145,21 @@ export default function EditorWorkspace({	pageId,
 }: EditorWorkspaceProps) {
 	const router = useRouter()
 	const [title, setTitle] = useState(initialTitle)
+	const [inboxTriage, setInboxTriage] = useState<{ mode: InboxTriageMode; row: InboxRow } | null>(null)
+	const [inboxBusy, setInboxBusy] = useState(false)
+	// The editor is created with the extension configured once; keep the
+	// callbacks stable and read the latest state through this ref.
+	const inboxCallbacksRef = useRef<{
+		onLink: (row: InboxRow) => void
+		onTag: (row: InboxRow) => void
+	}>({ onLink: () => {}, onTag: () => {} })
+
+	useEffect(() => {
+		inboxCallbacksRef.current = {
+			onLink: row => setInboxTriage({ mode: 'link', row }),
+			onTag: row => setInboxTriage({ mode: 'tag', row }),
+		}
+	}, [])
 	const [userColor] = useState(() => CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)])
 	const [isShareOpen, setIsShareOpen] = useState(false)
 	const [isHistoryOpen, setIsHistoryOpen] = useState(false)
@@ -637,6 +664,10 @@ export default function EditorWorkspace({	pageId,
 					},
 				},
 			}),
+			InboxTriage.configure({
+				onLink: row => inboxCallbacksRef.current.onLink(row),
+				onTag: row => inboxCallbacksRef.current.onTag(row),
+			}),
 		],
 
 		editorProps: {
@@ -900,6 +931,86 @@ export default function EditorWorkspace({	pageId,
 			},
 		})
 	}, [editor])
+
+	// Inbox triage (DN-T3). `o` appends a back-reference to the chosen page's
+	// Related-actions section over that page's CRDT channel, then marks the
+	// daily row processed by dropping `#inbox`. `t` keeps the row pending.
+	const handleInboxLink = useCallback(async (target: SearchResult) => {
+		if (!editor || !inboxTriage || inboxBusy) return
+
+		const row = inboxTriage.row
+		const item = editor.state.doc.nodeAt(row.pos)
+		if (!item || item.type.name !== 'listItem') {
+			toast.error('That capture moved. Focus it again and retry.')
+			setInboxTriage(null)
+			return
+		}
+
+		setInboxBusy(true)
+		try {
+			// The picker surfaces shared read-only pages; the sync hub drops
+			// viewer writes without an error, so refuse before connecting.
+			const targetPage = await fetchPageDetails(target.id)
+			if (targetPage.owner_id !== currentUser.id) {
+				const role = await fetchPageMemberRole(target.id, currentUser.id)
+				if (role !== 'owner' && role !== 'editor') {
+					toast.error('You do not have edit access to that page.')
+					return
+				}
+			}
+
+			await appendBulletToPageSection({
+				pageId: target.id,
+				token,
+				section: RELATED_ACTIONS_HEADING,
+				text: buildRelatedActionText(title, row.text),
+			})
+
+			if (!replaceInboxRowText(editor.view, row, buildLinkedRowText(row.text, target.title))) {
+				throw new Error('The capture row moved before it could be linked.')
+			}
+
+			toast.success(`Linked to ${target.title}`)
+			setInboxTriage(null)
+		} catch (error) {
+			console.error('Failed to link inbox capture:', error)
+			toast.error('Could not link that capture. Check your connection and try again.')
+		} finally {
+			setInboxBusy(false)
+		}
+	}, [currentUser.id, editor, inboxBusy, inboxTriage, title, token])
+
+	const handleInboxTag = useCallback((tag: string) => {
+		if (!editor || !inboxTriage) return
+
+		const next = appendInboxTag(inboxTriage.row.text, tag)
+		if (!next) {
+			toast.error('Use one tag word, for example "launch".')
+			return
+		}
+
+		if (!replaceInboxRowText(editor.view, inboxTriage.row, next)) {
+			toast.error('That capture moved. Focus it again and retry.')
+			setInboxTriage(null)
+			return
+		}
+
+		toast.success(`Tagged #${tag.replace(/^#+/, '').toLowerCase()}`)
+		setInboxTriage(null)
+	}, [editor, inboxTriage])
+
+	// Deep link from the dashboard Inbox card: `/page/<id>?section=inbox`
+	// scrolls the editor to the Inbox heading once the live doc is ready.
+	useEffect(() => {
+		if (!editor || !isLocalSynced) return
+		if (typeof window === 'undefined') return
+		const params = new URLSearchParams(window.location.search)
+		if (params.get('section') !== 'inbox') return
+
+		const headings = Array.from(editor.view.dom.querySelectorAll('h1, h2, h3'))
+		const inbox = headings.find(heading => heading.textContent?.trim().toLowerCase() === 'inbox')
+		inbox?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+	}, [editor, isLocalSynced])
 
 	// Document-level language detection (debounced on content change)
 	useEffect(() => {
@@ -1391,6 +1502,14 @@ export default function EditorWorkspace({	pageId,
 					/>
 				)}
 			</div>
+
+			<InboxTriageDialog
+				mode={inboxTriage?.mode ?? null}
+				rowText={inboxTriage?.row.text ?? null}
+				onOpenChange={open => { if (!open) setInboxTriage(null) }}
+				onSelectPage={target => { void handleInboxLink(target) }}
+				onTag={handleInboxTag}
+			/>
 
 			<ShareModal
 				isOpen={isShareOpen}

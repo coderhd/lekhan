@@ -37,6 +37,7 @@ import { prosemirrorJSONToYDoc, yXmlFragmentToProseMirrorRootNode } from '@tipta
 import type { Schema } from '@tiptap/pm/model'
 import { getSharedExtensions } from '@/lib/editor-extensions'
 import {
+	appendBulletToSectionToYDoc,
 	appendCaptureBlock,
 	appendCaptureBlockToYDoc,
 	buildCaptureText,
@@ -113,6 +114,63 @@ describe('buildCaptureText', () => {
 
 	it('rejects an empty capture', () => {
 		expect(buildCaptureText('   \n ', NOW)).toBeNull()
+	})
+})
+
+describe('appendBulletToSectionToYDoc', () => {
+	it('creates the named section and seeds an empty leading heading on an empty page', () => {
+		const ydoc = new Y.Doc()
+
+		expect(appendBulletToSectionToYDoc(ydoc, {
+			section: 'Related actions',
+			text: '[[2026-11-02]] Call Alice',
+		})).toBe(true)
+
+		const json = readYDoc(ydoc)
+		expect(json.content[0]).toMatchObject({ type: 'heading', attrs: { level: 1 } })
+		expect(json.content[1].content?.[0]?.text).toBe('Related actions')
+		expect(inboxBullets(json)).toEqual(['[[2026-11-02]] Call Alice'])
+	})
+
+	it('extends an existing section without duplicating the heading', () => {
+		const ydoc = new Y.Doc()
+		seed(ydoc, [
+			{ type: 'heading', attrs: { level: 1 } },
+			{ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Inbox' }] },
+			{
+				type: 'bulletList',
+				content: [
+					{ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: '09:41 Keep #inbox' }] }] },
+				],
+			},
+			{ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Related actions' }] },
+			{
+				type: 'bulletList',
+				content: [
+					{ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: '[[2026-11-01]] Earlier' }] }] },
+				],
+			},
+		])
+
+		appendBulletToSectionToYDoc(ydoc, {
+			section: 'Related actions',
+			text: '[[2026-11-02]] Call Alice',
+		})
+
+		const json = readYDoc(ydoc)
+		expect(json.content.filter((node: any) => node.type === 'heading' && node.content?.[0]?.text === 'Related actions')).toHaveLength(1)
+		expect(inboxBullets(json)).toEqual([
+			'09:41 Keep #inbox',
+			'[[2026-11-01]] Earlier',
+			'[[2026-11-02]] Call Alice',
+		])
+	})
+
+	it('rejects empty text so no empty bullet is written', () => {
+		const ydoc = new Y.Doc()
+
+		expect(appendBulletToSectionToYDoc(ydoc, { section: 'Related actions', text: '   ' })).toBe(false)
+		expect(ydoc.getXmlFragment('default').length).toBe(0)
 	})
 })
 

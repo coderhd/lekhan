@@ -10,6 +10,7 @@ import Invitations from './invitations'
 import ProfileMenu from './profile-menu'
 import ThemeToggle from './theme-toggle'
 import DailyStrip from './daily-strip'
+import InboxCard from './inbox-card'
 import { useGlobalSearch } from '@/components/global-search-palette'
 import { useQuickCapture } from '@/components/quick-capture-palette'
 import GlobalLoader from './global-loader'
@@ -363,7 +364,10 @@ export default function Dashboard({ user }: DashboardProps) {
 				<div className="max-w-7xl w-full flex flex-col gap-xl">
 
 					{!fetchError && workspace && (
-						<DailyStrip workspaceId={workspace.id} ownerId={user.id} />
+						<div className="flex flex-col gap-md">
+							<DailyStrip workspaceId={workspace.id} ownerId={user.id} />
+							<InboxCard workspaceId={workspace.id} ownerId={user.id} />
+						</div>
 					)}
 
 					{loading ? (
