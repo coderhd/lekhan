@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { useEditor, EditorContent, Editor, ReactNodeViewRenderer } from '@tiptap/react'
 import Collaboration from '@tiptap/extension-collaboration'
@@ -63,6 +64,10 @@ const COPY_MENU_ITEMS: { target: ClipboardTarget; label: string; icon: LucideIco
 	{ target: 'obsidian', label: 'Copy as Obsidian markdown', icon: CopyIcon, iconClass: 'text-violet-500' },
 	{ target: 'notion', label: 'Copy for Notion (rich)', icon: CopyIcon, iconClass: 'text-pink-500' },
 ]
+
+// GV-T3: the backlink drawer is split out and only mounted when opened, so the
+// editor bundle does not pay for the pane on every page load.
+const BacklinkPane = dynamic(() => import('./backlink-pane'), { ssr: false })
 
 interface EditorWorkspaceProps {
 	pageId: string
@@ -137,6 +142,7 @@ export default function EditorWorkspace({	pageId,
 	const [isShareOpen, setIsShareOpen] = useState(false)
 	const [isHistoryOpen, setIsHistoryOpen] = useState(false)
 	const [isAIPanelOpen, setIsAIPanelOpen] = useState(false)
+	const [isBacklinksOpen, setIsBacklinksOpen] = useState(false)
 	const [previewDoc, setPreviewDoc] = useState<Y.Doc | null>(null)
 	const [previewVersionName, setPreviewVersionName] = useState<string | null>(null)
 	const [isViewer, setIsViewer] = useState<boolean | null>(null)
@@ -946,7 +952,7 @@ export default function EditorWorkspace({	pageId,
 	// history. Anonymous readers get neither — both features are hidden from
 	// the reading surface and history would read from an empty local store.
 	useEffect(() => {
-		if (anonVisitor) return
+		if (anonVisitor || isBacklinksOpen) return
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
 				e.preventDefault()
@@ -959,7 +965,7 @@ export default function EditorWorkspace({	pageId,
 		}
 		document.addEventListener('keydown', handleKeyDown)
 		return () => document.removeEventListener('keydown', handleKeyDown)
-	}, [handleOpenLekhanBot, anonVisitor])
+	}, [handleOpenLekhanBot, anonVisitor, isBacklinksOpen])
 
 	useEffect(() => {
 		if (editor && isViewer !== null) {
@@ -1069,7 +1075,21 @@ export default function EditorWorkspace({	pageId,
 
 						{!anonVisitor && (
 							<button
-								onClick={() => { setIsHistoryOpen(!isHistoryOpen); setIsAIPanelOpen(false); }}
+								onClick={() => { setIsBacklinksOpen(!isBacklinksOpen); setIsHistoryOpen(false); setIsAIPanelOpen(false); }}
+								aria-pressed={isBacklinksOpen}
+								aria-label="Backlinks"
+								data-backlink-trigger
+								className={`hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium ${isBacklinksOpen ? 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/30' : 'bg-surface-container-low'}`}
+								title="Backlinks"
+							>
+								<span className="material-symbols-outlined text-primary-container text-lg" aria-hidden="true">link</span>
+								<span className="hidden lg:inline">Backlinks</span>
+							</button>
+						)}
+
+						{!anonVisitor && (
+							<button
+								onClick={() => { setIsHistoryOpen(!isHistoryOpen); setIsAIPanelOpen(false); setIsBacklinksOpen(false); }}
 								className={`hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium ${isHistoryOpen ? 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/30' : 'bg-surface-container-low'}`}
 								title="Version History"
 							>
@@ -1080,7 +1100,7 @@ export default function EditorWorkspace({	pageId,
 
 						{!anonVisitor && (
 							<button
-								onClick={() => { setIsAIPanelOpen(!isAIPanelOpen); setIsHistoryOpen(false); }}
+								onClick={() => { setIsAIPanelOpen(!isAIPanelOpen); setIsHistoryOpen(false); setIsBacklinksOpen(false); }}
 								className={`hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium ${isAIPanelOpen ? 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/30' : 'bg-surface-container-low'}`}
 								title="Settings"
 							>
@@ -1095,6 +1115,8 @@ export default function EditorWorkspace({	pageId,
 								setIsHistoryOpen={setIsHistoryOpen}
 								isAIPanelOpen={isAIPanelOpen}
 								setIsAIPanelOpen={setIsAIPanelOpen}
+								isBacklinksOpen={isBacklinksOpen}
+								setIsBacklinksOpen={setIsBacklinksOpen}
 								theme={theme}
 								toggleTheme={toggleTheme}
 								activeUsers={activeUsers}
@@ -1303,7 +1325,7 @@ export default function EditorWorkspace({	pageId,
 
 			<div className="flex-1 flex overflow-hidden relative">
 				{/* Main Workspace (Expanded, Dark Continuous Canvas) */}
-				<main className={`flex-1 flex flex-col items-center bg-background relative scroll-smooth transition-all overflow-y-auto no-scrollbar py-8 pb-36 ${isAIPanelOpen || isHistoryOpen ? 'lg:mr-80' : ''}`}>
+				<main className={`flex-1 flex flex-col items-center bg-background relative scroll-smooth transition-all overflow-y-auto no-scrollbar py-8 pb-36 ${isBacklinksOpen ? 'lg:mr-[400px]' : (isAIPanelOpen || isHistoryOpen ? 'lg:mr-80' : '')}`}>
 
 					{!isViewer && editor && (
 						<div className="sticky top-2 z-30 flex items-center justify-center gap-2 mb-2">
@@ -1370,6 +1392,14 @@ export default function EditorWorkspace({	pageId,
 					isDetecting={isDetectingLanguage}
 				/>
 
+
+				{isBacklinksOpen && (
+					<BacklinkPane
+						pageId={pageId}
+						pageTitle={title}
+						onClose={() => setIsBacklinksOpen(false)}
+					/>
+				)}
 
 				{engineRef.current && workspaceId && (
 					<VersionDrawer
