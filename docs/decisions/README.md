@@ -30,6 +30,8 @@ A running log of product/architecture decisions and open questions for Lekhan �
 
 ## Process / engineering lifecycle
 - [[01-weekly-retro-hygiene-rules]] — blocked-column SLA, sprint-label integrity, bot-fixture parity in DoD (2026-10-27 retro)
+- [[02-sprint-planning-label-checklist]] — sprint planning runbook: estimate → label → retry → verify before close (2026-10-27 retro)
+- [[03-runtime-enforcement-for-retro-rules]] — rules get runtime owners, label checklist on every commit path, executable commitment unit (2026-11-02 retro)
 
 ## External input
 - [[chatgpt-strategy-summary-2026-08-29]] — analysis received from a separate ChatGPT conversation, not a decision made here
