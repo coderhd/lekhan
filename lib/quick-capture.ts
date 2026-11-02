@@ -85,7 +85,11 @@ function headingLevel (node: Y.XmlElement): number {
 }
 
 function isSectionHeading (node: Y.XmlElement, section: string): boolean {
-	return isHeading(node) && elementText(node).trim().toLowerCase() === section.trim().toLowerCase()
+	return (
+		isHeading(node) &&
+		headingLevel(node) <= INBOX_SECTION_LEVEL &&
+		elementText(node).trim().toLowerCase() === section.trim().toLowerCase()
+	)
 }
 
 function textType (text: string): Y.XmlText {

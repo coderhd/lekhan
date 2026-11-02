@@ -99,6 +99,12 @@ describe('pendingInboxLines', () => {
 
 	it('does not count lookalike tags such as #inboxing', () => {
 		expect(pendingInboxLines('09:41 #inboxing is not a capture')).toEqual([])
+		expect(pendingInboxLines('09:41 #inbox_notes is not a capture')).toEqual([])
+	})
+
+	it('counts punctuation-terminated tags like the graph index does', () => {
+		expect(pendingInboxLines('09:41 #inbox*')).toEqual(['09:41 #inbox*'])
+		expect(pendingInboxLines('09:41 (see #inbox)')).toEqual(['09:41 (see #inbox)'])
 	})
 
 	it('tolerates an empty or missing body', () => {

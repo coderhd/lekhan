@@ -7,7 +7,6 @@ import {
 	buildRelatedActionText,
 	deleteInboxRow,
 	findInboxRowAtSelection,
-	isInboxRowPosition,
 	replaceInboxRowText,
 	stripInboxTag,
 } from '@/lib/inbox-triage'
@@ -90,13 +89,16 @@ describe('inbox triage helpers', () => {
 		expect(appendInboxTag('09:41 Call #inbox', '!!!')).toBeNull()
 	})
 
-	it('recognizes only rows under an Inbox heading', () => {
+	it('refuses to rewrite a row whose text changed underneath it', () => {
 		const { editor } = createEditor()
-		const inbox = listItemPos(editor, 'Buy milk')
-		const notes = listItemPos(editor, 'random thought')
+		editor.commands.setTextSelection(listItemPos(editor, 'Buy milk') + 3)
+		const row = findInboxRowAtSelection(editor.state)!
 
-		expect(isInboxRowPosition(editor.state.doc, inbox)).toBe(true)
-		expect(isInboxRowPosition(editor.state.doc, notes)).toBe(false)
+		// A collaborator edits the row between keypress and apply.
+		expect(replaceInboxRowText(editor.view, row, '09:41 Buy milk (edited) #inbox')).toBe(true)
+
+		expect(replaceInboxRowText(editor.view, row, '09:41 Buy milk [[Groceries]]')).toBe(false)
+		expect(editor.getText()).toContain('09:41 Buy milk (edited) #inbox')
 	})
 
 	it('replaces the focused row text without touching its neighbours', () => {
@@ -135,7 +137,7 @@ describe('InboxTriage keyboard plugin', () => {
 		})
 	})
 
-	it('does not fire for a row outside the Inbox section', () => {
+	it('fires on a #inbox bullet outside the Inbox heading (count/actions agree)', () => {
 		const { editor, onLink, onTag } = createEditor()
 		editor.commands.setTextSelection(listItemPos(editor, 'random thought') + 3)
 		editor.commands.focus()
@@ -143,8 +145,8 @@ describe('InboxTriage keyboard plugin', () => {
 		press(editor, 'o')
 		press(editor, 't')
 
-		expect(onLink).not.toHaveBeenCalled()
-		expect(onTag).not.toHaveBeenCalled()
+		expect(onLink).toHaveBeenCalledTimes(1)
+		expect(onTag).toHaveBeenCalledTimes(1)
 	})
 
 	it('does not fire with a modifier held (shortcuts keep working)', () => {
@@ -157,8 +159,17 @@ describe('InboxTriage keyboard plugin', () => {
 		expect(onLink).not.toHaveBeenCalled()
 	})
 
-	it('Delete removes exactly the focused row', () => {
-		const { editor } = createEditor()
+	it('does not fire while an IME composition is active', () => {
+		const { editor, onLink } = createEditor()
+		editor.commands.setTextSelection(listItemPos(editor, 'Call Alice') + 3)
+		editor.commands.focus()
+
+		press(editor, 'o', { isComposing: true })
+
+		expect(onLink).not.toHaveBeenCalled()
+	})
+
+	it('Delete removes exactly the focused row', () => {		const { editor } = createEditor()
 		const row = findInboxRowAtSelection(
 			(editor.commands.setTextSelection(listItemPos(editor, 'Buy milk') + 3), editor.state),
 		)
@@ -181,6 +192,17 @@ describe('InboxTriage keyboard plugin', () => {
 		expect(event.defaultPrevented).toBe(true)
 		expect(editor.getText()).not.toContain('Buy milk')
 		expect(editor.getText()).toContain('Call Alice')
+	})
+
+	it('Shift+Delete does not delete the row (cut gesture stays native)', () => {
+		const { editor } = createEditor()
+		editor.commands.setTextSelection(listItemPos(editor, 'Buy milk') + 3)
+		editor.commands.focus()
+
+		const event = press(editor, 'Delete', { shiftKey: true })
+
+		expect(event.defaultPrevented).toBe(false)
+		expect(editor.getText()).toContain('Buy milk')
 	})
 
 	it('the t key opens the tag action for the focused row', () => {

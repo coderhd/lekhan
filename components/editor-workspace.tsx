@@ -39,16 +39,9 @@ import MentionList, { MentionItem } from './mention-list'
 import { fetchPageDetails, fetchPageMemberRole, updatePageTitle, updatePageProperties, fetchMentionablePageCollaborators, fetchPageTags, fetchWorkspacePages, createPage } from '@/services/graph'
 import { Wikilink, type WorkspacePageSummary, normalizeWikilinkTarget } from '@/lib/wikilink'
 import { InboxTriage } from '@/lib/inbox-triage-extension'
-import {
-	appendInboxTag,
-	buildLinkedRowText,
-	buildRelatedActionText,
-	replaceInboxRowText,
-	RELATED_ACTIONS_HEADING,
-	type InboxRow,
-} from '@/lib/inbox-triage'
+import { type InboxRow } from '@/lib/inbox-triage'
+import { InboxTriageError, linkInboxRow, tagInboxRow } from '@/lib/inbox-triage-actions'
 import InboxTriageDialog, { type InboxTriageMode } from './inbox-triage-dialog'
-import { appendBulletToPageSection } from '@/lib/quick-capture'
 import type { SearchResult } from '@/types'
 
 import { TableToolbar } from './table-toolbar'
@@ -146,7 +139,7 @@ export default function EditorWorkspace({	pageId,
 	const router = useRouter()
 	const [title, setTitle] = useState(initialTitle)
 	const [inboxTriage, setInboxTriage] = useState<{ mode: InboxTriageMode; row: InboxRow } | null>(null)
-	const [inboxBusy, setInboxBusy] = useState(false)
+	const inboxBusyRef = useRef(false)
 	// The editor is created with the extension configured once; keep the
 	// callbacks stable and read the latest state through this ref.
 	const inboxCallbacksRef = useRef<{
@@ -936,67 +929,72 @@ export default function EditorWorkspace({	pageId,
 	// Related-actions section over that page's CRDT channel, then marks the
 	// daily row processed by dropping `#inbox`. `t` keeps the row pending.
 	const handleInboxLink = useCallback(async (target: SearchResult) => {
-		if (!editor || !inboxTriage || inboxBusy) return
+		if (!editor || !inboxTriage || inboxBusyRef.current) return
 
-		const row = inboxTriage.row
-		const item = editor.state.doc.nodeAt(row.pos)
-		if (!item || item.type.name !== 'listItem') {
-			toast.error('That capture moved. Focus it again and retry.')
-			setInboxTriage(null)
-			return
-		}
-
-		setInboxBusy(true)
+		inboxBusyRef.current = true
 		try {
-			// The picker surfaces shared read-only pages; the sync hub drops
-			// viewer writes without an error, so refuse before connecting.
-			const targetPage = await fetchPageDetails(target.id)
-			if (targetPage.owner_id !== currentUser.id) {
-				const role = await fetchPageMemberRole(target.id, currentUser.id)
-				if (role !== 'owner' && role !== 'editor') {
-					toast.error('You do not have edit access to that page.')
-					return
-				}
-			}
-
-			await appendBulletToPageSection({
-				pageId: target.id,
+			await linkInboxRow({
+				view: editor.view,
+				row: inboxTriage.row,
+				target,
+				dailyPageTitle: title,
 				token,
-				section: RELATED_ACTIONS_HEADING,
-				text: buildRelatedActionText(title, row.text),
+				ensureCanEdit: async (pageId) => {
+					// The picker surfaces shared read-only pages; the sync hub
+					// drops viewer writes without an error, so refuse first.
+					const targetPage = await fetchPageDetails(pageId)
+					if (targetPage.owner_id === currentUser.id) return true
+					const role = await fetchPageMemberRole(pageId, currentUser.id)
+					return role === 'owner' || role === 'editor'
+				},
 			})
-
-			if (!replaceInboxRowText(editor.view, row, buildLinkedRowText(row.text, target.title))) {
-				throw new Error('The capture row moved before it could be linked.')
-			}
 
 			toast.success(`Linked to ${target.title}`)
 			setInboxTriage(null)
+			window.dispatchEvent(new CustomEvent('lekhan:inbox-changed'))
 		} catch (error) {
-			console.error('Failed to link inbox capture:', error)
-			toast.error('Could not link that capture. Check your connection and try again.')
+			if (error instanceof InboxTriageError) {
+				if (error.code === 'forbidden') {
+					toast.error('You do not have edit access to that page.')
+				} else if (error.code === 'stale') {
+					toast.error('That capture moved. Focus it again and retry.')
+					setInboxTriage(null)
+				} else {
+					toast.error('Could not link that capture.')
+				}
+			} else {
+				console.error('Failed to link inbox capture:', error)
+				toast.error('Could not link that capture. Check your connection and try again.')
+			}
 		} finally {
-			setInboxBusy(false)
+			inboxBusyRef.current = false
 		}
-	}, [currentUser.id, editor, inboxBusy, inboxTriage, title, token])
+	}, [currentUser.id, editor, inboxTriage, title, token])
 
 	const handleInboxTag = useCallback((tag: string) => {
 		if (!editor || !inboxTriage) return
 
-		const next = appendInboxTag(inboxTriage.row.text, tag)
-		if (!next) {
-			toast.error('Use one tag word, for example "launch".')
-			return
-		}
-
-		if (!replaceInboxRowText(editor.view, inboxTriage.row, next)) {
-			toast.error('That capture moved. Focus it again and retry.')
+		try {
+			const { changed } = tagInboxRow({
+				view: editor.view,
+				row: inboxTriage.row,
+				tag,
+			})
+			const label = tag.trim().replace(/^#+/, '').toLowerCase()
+			toast.success(changed ? `Tagged #${label}` : `Already tagged #${label}`)
 			setInboxTriage(null)
-			return
+			window.dispatchEvent(new CustomEvent('lekhan:inbox-changed'))
+		} catch (error) {
+			if (error instanceof InboxTriageError && error.code === 'stale') {
+				toast.error('That capture moved. Focus it again and retry.')
+				setInboxTriage(null)
+			} else if (error instanceof InboxTriageError && error.code === 'invalid-tag') {
+				toast.error('Use one tag word, for example "launch".')
+			} else {
+				console.error('Failed to tag inbox capture:', error)
+				toast.error('Could not tag that capture. Try again.')
+			}
 		}
-
-		toast.success(`Tagged #${tag.replace(/^#+/, '').toLowerCase()}`)
-		setInboxTriage(null)
 	}, [editor, inboxTriage])
 
 	// Deep link from the dashboard Inbox card: `/page/<id>?section=inbox`

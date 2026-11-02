@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Link2, Search, Tag as TagIcon } from 'lucide-react'
 import { searchPages } from '@/services/search'
+import { isValidInboxTag } from '@/lib/inbox-triage'
 import type { SearchResult } from '@/types'
 
 const FOCUS_RING =
@@ -43,6 +44,8 @@ export default function InboxTriageDialog ({
 	const [selectedIndex, setSelectedIndex] = useState(0)
 	const [tag, setTag] = useState('')
 	const requestRef = useRef(0)
+	const activeRowRef = useRef<HTMLButtonElement | null>(null)
+	const tagValid = isValidInboxTag(tag)
 
 	// Reset per opening so a previous action never leaks into the next one.
 	useEffect(() => {
@@ -86,6 +89,14 @@ export default function InboxTriageDialog ({
 	const chooseRow = useCallback((row: SearchResult) => {
 		onSelectPage(row)
 	}, [onSelectPage])
+
+	// Keep the arrow-key selection visible inside the 45vh results viewport.
+	useEffect(() => {
+		const row = activeRowRef.current
+		if (row && typeof row.scrollIntoView === 'function') {
+			row.scrollIntoView({ block: 'nearest' })
+		}
+	}, [selectedIndex, rows])
 
 	const onSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
 		if (event.key === 'ArrowDown') {
@@ -150,10 +161,14 @@ export default function InboxTriageDialog ({
 								onChange={event => setTag(event.target.value)}
 								onKeyDown={onTagKeyDown}
 								placeholder="tag-name"
+								aria-invalid={tag.trim() !== '' && !tagValid}
+								aria-describedby="inbox-triage-tag-hint"
 								className="w-full rounded-lg bg-black/5 px-3 py-2 text-on-surface outline-none placeholder:text-on-surface-variant/50 focus:ring-2 focus:ring-primary-container/50 dark:bg-white/5"
 							/>
-							<p className="mt-2 text-xs text-on-surface-variant">
-								Adds <code>#tag</code> to the row. It stays in the Inbox until linked or deleted.
+							<p id="inbox-triage-tag-hint" className="mt-2 text-xs text-on-surface-variant">
+								{tag.trim() !== '' && !tagValid
+									? 'Use one tag: letters, numbers, _, - or / (for example launch).'
+									: 'Adds #tag to the row. It stays in the Inbox until linked or deleted.'}
 							</p>
 						</div>
 					) : (
@@ -188,9 +203,11 @@ export default function InboxTriageDialog ({
 										<button
 											key={row.id}
 											type="button"
+											ref={index === selectedIndex ? activeRowRef : undefined}
 											onClick={() => chooseRow(row)}
 											onMouseEnter={() => setSelectedIndex(index)}
 											aria-label={`Link to ${row.title}`}
+											aria-current={index === selectedIndex ? 'true' : undefined}
 											className={`flex w-full items-center gap-2 px-4 py-2 text-left premium-transition ${
 												index === selectedIndex
 													? 'bg-primary/10 text-on-surface'
@@ -222,7 +239,7 @@ export default function InboxTriageDialog ({
 							<button
 								type="button"
 								onClick={submitTag}
-								disabled={tag.trim().replace(/^#+/, '') === ''}
+								disabled={!tagValid}
 								className={`min-h-11 rounded-lg bg-primary px-4 text-sm font-bold text-on-primary hover:bg-primary/90 premium-transition disabled:opacity-60 ${FOCUS_RING}`}
 							>
 								Add tag

@@ -77,16 +77,18 @@ export default function InboxCard ({ workspaceId, ownerId, today }: InboxCardPro
 
 	// A capture lands in the page body immediately, but the graph index that
 	// this card reads updates on the hub's ~2s idle save. Refetch when the tab
-	// regains focus so a capture is not missing after switching back.
+	// regains focus, and when the capture palette reports a successful capture.
 	useEffect(() => {
 		const refresh = () => { void load(true) }
 		const onVisibility = () => {
 			if (document.visibilityState === 'visible') refresh()
 		}
 		window.addEventListener('focus', refresh)
+		window.addEventListener('lekhan:inbox-changed', refresh)
 		document.addEventListener('visibilitychange', onVisibility)
 		return () => {
 			window.removeEventListener('focus', refresh)
+			window.removeEventListener('lekhan:inbox-changed', refresh)
 			document.removeEventListener('visibilitychange', onVisibility)
 		}
 	}, [load])
@@ -122,6 +124,7 @@ export default function InboxCard ({ workspaceId, ownerId, today }: InboxCardPro
 					<h2 id="inbox-card-heading" className="font-semibold text-on-surface">Inbox</h2>
 					<span
 						aria-live="polite"
+						aria-label={`${items.length} pending captures`}
 						className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary"
 					>
 						{loading ? '…' : items.length}
@@ -161,7 +164,7 @@ export default function InboxCard ({ workspaceId, ownerId, today }: InboxCardPro
 				) : items.length === 0 ? (
 					<div className="rounded-lg border border-dashed border-black/10 dark:border-white/10 px-3 py-4 text-sm text-on-surface-variant">
 						<p className="font-medium text-on-surface">Inbox zero</p>
-						<p>Captures land here until you link, tag, or delete them.</p>
+						<p>Captures land here until you link or delete them. Tags organise them without clearing the inbox.</p>
 					</div>
 				) : (
 					<>

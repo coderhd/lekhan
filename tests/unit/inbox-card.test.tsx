@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom'
 import React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import InboxCard from '@/components/inbox-card'
 
@@ -91,6 +91,22 @@ describe('InboxCard', () => {
 
 		await waitFor(() => expect(screen.getByText(/Capture 0 #inbox/)).toBeInTheDocument())
 		expect(fetchInboxItems).toHaveBeenCalledTimes(2)
+	})
+
+	it('refetches when the capture palette reports a new capture', async () => {
+		fetchInboxItems.mockResolvedValueOnce([])
+		fetchInboxItems.mockResolvedValueOnce([item(0)])
+
+		renderCard()
+
+		expect(await screen.findByText(/inbox zero/i)).toBeInTheDocument()
+
+		act(() => {
+			window.dispatchEvent(new Event('lekhan:inbox-changed'))
+		})
+
+		await waitFor(() => expect(fetchInboxItems).toHaveBeenCalledTimes(2))
+		expect(await screen.findByText(/Capture 0 #inbox/)).toBeInTheDocument()
 	})
 
 	it('opens today\'s daily page scrolled to the Inbox section', async () => {

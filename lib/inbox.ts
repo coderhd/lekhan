@@ -26,14 +26,15 @@ export interface InboxItem {
 	text: string
 }
 
-type InboxRow = Page & {
+type InboxPageRow = Page & {
 	searchable_text?: string | null
 	page_tags?: Array<{ tag?: string | null }> | null
 }
 
 const BULLET_PREFIX_RE = /^\s*(?:[-*+]|\d+[.)])\s+/
-// Same boundary as the graph index: `#inboxing` is a different tag.
-const INBOX_TAG_RE = /(?:^|\s)#inbox(?=\s|$|[.,;:!?)\]])/i
+// Match the graph index's tag boundary exactly: `#inboxing` and `#inbox_notes`
+// are different tags; punctuation after `#inbox` is fine.
+const INBOX_TAG_RE = /(?:^|\s)#inbox(?![a-zA-Z0-9_\-/])/i
 
 /**
  * The daily dates in the inbox window, newest first. Local calendar days only:
@@ -91,7 +92,7 @@ export async function fetchInboxItems (
 		throw error
 	}
 
-	const pages = ((data ?? []) as InboxRow[])
+	const pages = ((data ?? []) as InboxPageRow[])
 		.filter(isDailyPage)
 		.sort((a, b) => b.title.localeCompare(a.title))
 

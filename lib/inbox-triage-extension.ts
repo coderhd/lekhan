@@ -47,6 +47,9 @@ export const InboxTriage = Extension.create<InboxTriageOptions>({
 						if (!row) return false
 
 						if (event.key === 'Delete') {
+							// Shift+Delete is the browser's cut gesture; never turn
+							// it into a destructive row delete.
+							if (event.shiftKey) return false
 							return deleteInboxRow(view, row)
 						}
 

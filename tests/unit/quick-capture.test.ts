@@ -172,6 +172,24 @@ describe('appendBulletToSectionToYDoc', () => {
 		expect(appendBulletToSectionToYDoc(ydoc, { section: 'Related actions', text: '   ' })).toBe(false)
 		expect(ydoc.getXmlFragment('default').length).toBe(0)
 	})
+
+	it('does not treat a deeper H3 section as the H2 target', () => {
+		const ydoc = new Y.Doc()
+		seed(ydoc, [
+			{ type: 'heading', attrs: { level: 1 } },
+			{ type: 'heading', attrs: { level: 3 }, content: [{ type: 'text', text: 'Inbox' }] },
+		])
+
+		expect(appendBulletToSectionToYDoc(ydoc, { section: 'Inbox', text: '09:41 New #inbox' })).toBe(true)
+
+		const json = readYDoc(ydoc)
+		const inboxHeadings = json.content.filter(
+			(node: any) => node.type === 'heading' && node.content?.[0]?.text === 'Inbox',
+		)
+		expect(inboxHeadings).toHaveLength(2)
+		expect(inboxHeadings[1].attrs.level).toBe(2)
+		expect(inboxBullets(json)).toEqual(['09:41 New #inbox'])
+	})
 })
 
 describe('appendCaptureBlockToYDoc', () => {

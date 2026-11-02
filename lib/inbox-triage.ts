@@ -1,4 +1,3 @@
-import type { Node as PMNode } from '@tiptap/pm/model'
 import type { EditorState } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
 
@@ -27,8 +26,13 @@ const TAG_NAME_RE = /^[a-zA-Z0-9_][a-zA-Z0-9_\-/]*$/
 export function stripInboxTag (text: string): string {
 	return text
 		.replace(/(?:^|\s)#inbox\b/gi, ' ')
-		.replace(/\s+/g, ' ')
+		.replace(/[ \t]{2,}/g, ' ')
 		.trim()
+}
+
+/** True when `tag` fits the graph index's `#tag` grammar. */
+export function isValidInboxTag (tag: string): boolean {
+	return TAG_NAME_RE.test(String(tag ?? '').trim().replace(/^#+/, ''))
 }
 
 /** The target page section that receives a linked capture. */
@@ -63,30 +67,12 @@ function escapeRegExp (value: string): string {
 }
 
 /**
- * True when `pos` (a list-item position) sits between an `Inbox` heading
- * (level ≤ 2) and the next heading that starts a sibling section.
+ * The focused inbox row for the current selection, or `null`.
+ *
+ * Section-agnostic: any `listItem` tagged `#inbox` is a capture, whether it
+ * lives under the daily page's Inbox heading or was sent to another page.
+ * This matches the count, which is line-based over the indexed page text.
  */
-export function isInboxRowPosition (doc: PMNode, pos: number): boolean {
-	let inInboxSection = false
-	let inside = false
-
-	doc.forEach((node, offset) => {
-		if (inside) return
-		if (node.type.name === 'heading') {
-			inInboxSection =
-				node.textContent.trim().toLowerCase() === 'inbox' &&
-				Number(node.attrs.level ?? 1) <= 2
-			return
-		}
-		if (inInboxSection && pos > offset && pos < offset + node.nodeSize) {
-			inside = true
-		}
-	})
-
-	return inside
-}
-
-/** The focused inbox row for the current selection, or `null`. */
 export function findInboxRowAtSelection (state: EditorState): InboxRow | null {
 	const { $from } = state.selection
 
@@ -94,10 +80,7 @@ export function findInboxRowAtSelection (state: EditorState): InboxRow | null {
 		const node = $from.node(depth)
 		if (node.type.name !== 'listItem') continue
 		if (!INBOX_TAG_RE.test(node.textContent)) continue
-
-		const pos = $from.before(depth)
-		if (!isInboxRowPosition(state.doc, pos)) continue
-		return { pos, text: node.textContent }
+		return { pos: $from.before(depth), text: node.textContent }
 	}
 
 	return null
@@ -110,6 +93,9 @@ export function findInboxRowAtSelection (state: EditorState): InboxRow | null {
 export function deleteInboxRow (view: EditorView, row: InboxRow): boolean {
 	const item = view.state.doc.nodeAt(row.pos)
 	if (!item || item.type.name !== 'listItem') return false
+	// Pos alone is not identity: a collaborator may have inserted above this
+	// row while the triage dialog was open. Never delete a different capture.
+	if (item.textContent !== row.text) return false
 
 	const $pos = view.state.doc.resolve(row.pos)
 	const parent = $pos.parent
@@ -126,6 +112,22 @@ export function deleteInboxRow (view: EditorView, row: InboxRow): boolean {
 export function replaceInboxRowText (view: EditorView, row: InboxRow, text: string): boolean {
 	const item = view.state.doc.nodeAt(row.pos)
 	if (!item || item.type.name !== 'listItem') return false
+	// The dialog can stay open across collaborator edits; only rewrite the
+	// row if it is still the same capture we captured on keypress.
+	if (item.textContent !== row.text) return false
+
+	// A capture is one paragraph. If the row gained extra blocks, replace its
+	// whole content so no stale fragment is left behind.
+	if (item.childCount !== 1) {
+		const paragraph = view.state.schema.nodes.paragraph.create(
+			null,
+			text ? view.state.schema.text(text) : null,
+		)
+		view.dispatch(
+			view.state.tr.replaceWith(row.pos + 1, row.pos + item.nodeSize - 1, paragraph).scrollIntoView(),
+		)
+		return true
+	}
 
 	const paragraph = item.firstChild
 	if (!paragraph || paragraph.type.name !== 'paragraph') return false

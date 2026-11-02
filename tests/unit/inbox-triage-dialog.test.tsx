@@ -5,6 +5,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import InboxTriageDialog from '@/components/inbox-triage-dialog'
 import type { SearchResult } from '@/types'
 
+// `services/search` (the default search prop) creates a Supabase client at
+// module load; CI has no NEXT_PUBLIC_SUPABASE_* env, so stub the client.
+vi.mock('@/lib/supabase', () => ({ supabase: { from: vi.fn() } }))
+
 const results: SearchResult[] = [
 	{ id: 'p-1', title: 'Project Alpha', icon: 'description', workspace_id: 'ws-1', updated_at: '', surface: 'title', context: null },
 	{ id: 'p-2', title: 'Alice Chen', icon: null, workspace_id: 'ws-1', updated_at: '', surface: 'title', context: null },
@@ -84,5 +88,16 @@ describe('InboxTriageDialog', () => {
 		renderDialog({ mode: 'tag' })
 
 		expect(await screen.findByRole('button', { name: /add tag/i })).toBeDisabled()
+	})
+
+	it('validates the tag grammar before submitting', async () => {
+		renderDialog({ mode: 'tag' })
+
+		const input = await screen.findByLabelText('Tag')
+		fireEvent.change(input, { target: { value: 'two words' } })
+
+		expect(screen.getByRole('button', { name: /add tag/i })).toBeDisabled()
+		expect(input).toHaveAttribute('aria-invalid', 'true')
+		expect(screen.getByText(/use one tag/i)).toBeInTheDocument()
 	})
 })
