@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { Schema } from '@tiptap/pm/model'
+import type { EditorState } from '@tiptap/pm/state'
 import { Editor } from '@tiptap/core'
 import { StarterKit } from '@tiptap/starter-kit'
 import {
 	parseWikilinksInText,
 	normalizeWikilinkTarget,
 	createWikilinkDecorations,
+	buildWikilinkSuggestions,
 	Wikilink,
 	wikilinkPluginKey,
 } from '@/lib/wikilink'
@@ -181,6 +183,188 @@ describe('wikilink parsing and normalization', () => {
 		const handledAfter = (wikilinkPlugin as any)?.props.handleClick?.(editor.view, 1, mockEvent)
 		expect(handledAfter).toBe(true)
 		expect(createdTitle).toBe('ws-456:New Topic')
+
+		editor.destroy()
+	})
+})
+
+describe('buildWikilinkSuggestions ([[ popup items, SIL-159 #142])', () => {
+	const pages = [
+		{ id: 'p1', title: 'Meeting Notes' },
+		{ id: 'p2', title: 'meeting follow-ups' },
+		{ id: 'p3', title: 'Research: Obsidian' },
+		{ id: 'p4', title: 'Daily Note' },
+		{ id: 'p5', title: 'Daily Note 2' },
+		{ id: 'p6', title: 'Daily Note 3' },
+		{ id: 'p7', title: 'Daily Note 4' },
+		{ id: 'p8', title: 'Daily Note 5' },
+		{ id: 'p9', title: 'Daily Note 6' },
+	]
+
+	it('lists case-insensitive matches for a query', () => {
+		const items = buildWikilinkSuggestions(pages, 'MEET')
+		const titles = items.filter(i => i.kind === 'page').map(i => i.title)
+		expect(titles).toContain('Meeting Notes')
+		expect(titles).toContain('meeting follow-ups')
+	})
+
+	it('is whitespace-insensitive via the same normalize used to resolve links', () => {
+		const items = buildWikilinkSuggestions(pages, 'research:  obsidian')
+		expect(items.some(i => i.kind === 'page' && i.title === 'Research: Obsidian')).toBe(true)
+	})
+
+	it('caps page results at 8 and still appends the create affordance', () => {
+		const nine = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => ({ id: `d${n}`, title: `Daily Note ${n}` }))
+		const items = buildWikilinkSuggestions(nine, 'daily note')
+		expect(items.filter(i => i.kind === 'page')).toHaveLength(8)
+		const createItem = items.find(i => i.kind === 'create')
+		expect(createItem).toBeDefined()
+		expect(createItem?.title).toBe('daily note')
+	})
+
+	it('offers create when no page matches, keeping the typed name', () => {
+		const items = buildWikilinkSuggestions(pages, 'Project F')
+		expect(items).toHaveLength(1)
+		expect(items[0].kind).toBe('create')
+		expect(items[0].title).toBe('Project F')
+	})
+
+	it('does not offer create when an exact (normalized) page match exists', () => {
+		const items = buildWikilinkSuggestions(pages, 'meeting notes')
+		expect(items.some(i => i.kind === 'create')).toBe(false)
+		expect(items.some(i => i.kind === 'page' && i.title === 'Meeting Notes')).toBe(true)
+	})
+
+	it('shows pages for an empty query in a populated workspace (no create, no hint)', () => {
+		const items = buildWikilinkSuggestions(pages, '')
+		expect(items.some(i => i.kind === 'create')).toBe(false)
+		expect(items.some(i => i.kind === 'hint')).toBe(false)
+		expect(items.filter(i => i.kind === 'page')).toHaveLength(8)
+	})
+
+	it('shows a hint instead of a create affordance for an empty query in an empty workspace', () => {
+		const items = buildWikilinkSuggestions([], '')
+		expect(items).toHaveLength(1)
+		expect(items[0].kind).toBe('hint')
+	})
+
+	it('excludes pages whose titles cannot round-trip through the wikilink grammar', () => {
+		const weird = [
+			{ id: 'w1', title: 'Team Notes | Weekly' },
+			{ id: 'w2', title: 'my [page' },
+			{ id: 'w3', title: 'Plain Page' },
+		]
+		// Affected by the exclusion even on a broad match: only w3
+		// ("Plain Page") survives, w1/w2 are grammar-unlinkable.
+		const broad = buildWikilinkSuggestions(weird, 'e')
+		expect(broad.filter(i => i.kind === 'page').map(i => i.id)).toEqual(['w3'])
+		// …and grammar-only titles are never offered as the exact "existing" match.
+		expect(buildWikilinkSuggestions(weird, 'team notes | weekly')).toEqual([
+			{ id: '__wikilink_create__', title: 'team notes  weekly', kind: 'create' },
+		])
+	})
+
+	it('sanitizes grammar characters out of the create affordance target', () => {
+		const items = buildWikilinkSuggestions(pages, 'my [page | drafts]]')
+		expect(items.filter(i => i.kind === 'page')).toHaveLength(0)
+		const createItem = items.find(i => i.kind === 'create')
+		expect(createItem?.title).toBe('my page  drafts')
+	})
+})
+
+describe('`[[` suggestion popup lifecycle (SIL-159 #142)', () => {
+	// The suggestion plugin registers its state under `<name>$` (first
+	// PluginKey instance for that name); resolving via the raw key lets the
+	// tests assert popup state headlessly without importing internals.
+	const suggestionState = (state: EditorState) =>
+		(state as unknown as Record<string, any>)['wikilinkSuggestion$']
+
+	const PAGES = [{ id: 'p1', title: 'Meeting Notes' }]
+
+	const makeEditor = () => {
+		let committed: { title: string; kind: string; query?: string } | null = null
+		const editor = new Editor({
+			extensions: [
+				StarterKit,
+				Wikilink.configure({
+					workspacePages: PAGES,
+					suggestion: {
+						char: '[[',
+						allowedPrefixes: null,
+						items: ({ query }: { query: string }) => buildWikilinkSuggestions(PAGES, query),
+						command: (args: any) => { committed = args.props },
+					},
+				}),
+			],
+			content: '<p>Hello quick</p>',
+		})
+		return { editor, getCommitted: () => committed }
+	}
+
+	it('activates mid-sentence while typing `[[` + query (criterion 1)', () => {
+		const { editor } = makeEditor()
+		editor.commands.insertContentAt(6, ' [[New')
+		// insertContentAt leaves the cursor right after the inserted text.
+
+		// Mid-sentence activation (criterion 1): space prefix satisfied even
+		// before any allowPrefixes config, and allowedPrefixes null also
+		// permits after-any-character.
+		expect(suggestionState(editor.state).active).toBe(true)
+		expect(suggestionState(editor.state).query).toBe('New')
+		// Range must cover the open `[[` through the cursor so commit replaces it
+		expect(suggestionState(editor.state).range).toEqual({ from: 7, to: 12 })
+
+		editor.destroy()
+	})
+
+	it('stays down after committing a single-word link closed with ]] (criterion 4)', () => {
+		const { editor } = makeEditor()
+		editor.commands.insertContentAt(6, ' [[Mtg')
+		const state = suggestionState(editor.state)
+		expect(state.active).toBe(true)
+
+		// Reproduce the live popup commit: replace the suggestion range with
+		// the complete link text. With a one-word title there is no space to
+		// break the matcher, so a naive matcher re-fires on "[[Mtg]]".
+		editor.chain()
+			.focus()
+			.insertContentAt(state.range, { type: 'text', text: '[[Mtg]]' })
+			.run()
+
+		const after = suggestionState(editor.state)
+		expect(after.active).toBe(false)
+		expect(editor.getText()).toContain('Hello [[Mtg]] quick')
+
+		editor.destroy()
+	})
+
+	it('stays down while typing after a committed link (criterion 4)', () => {
+		const { editor } = makeEditor()
+		editor.commands.insertContentAt(6, ' [[Mtg')
+		const state = suggestionState(editor.state)
+		editor.chain().focus().insertContentAt(state.range, { type: 'text', text: '[[Mtg]]' }).run()
+
+		editor.commands.insertContent(' again')
+
+		const after = suggestionState(editor.state)
+		expect(after.active).toBe(false)
+
+		editor.destroy()
+	})
+
+	it('dismisses via the Suggestion exit meta (Esc, criterion 2) and stays down while typing', () => {
+		const { editor } = makeEditor()
+		editor.commands.insertContentAt(6, ' [[New')
+
+		expect(suggestionState(editor.state).active).toBe(true)
+
+		// The Escape branch of Suggestion's props.handleKeyDown dispatches this.
+		editor.view.dispatch(editor.state.tr.setMeta('wikilinkSuggestion$' as any, { exit: true }))
+		expect(suggestionState(editor.state).active).toBe(false)
+
+		// Typing more characters at the same range stays dismissed.
+		editor.commands.insertContent('x')
+		expect(suggestionState(editor.state).active).toBe(false)
 
 		editor.destroy()
 	})
