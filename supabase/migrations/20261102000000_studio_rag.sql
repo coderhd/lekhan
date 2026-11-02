@@ -12,10 +12,28 @@
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
+-- pages.id is already unique; the composite key lets chunk/summary rows pin
+-- (page_id, workspace_id) to the page's own workspace. Without it a service
+-- write could pair page A with workspace B, and workspace-scoped retrieval
+-- would surface A's chunks under B (and deleting B would silently drop them).
+-- IF NOT EXISTS is not available for table constraints, so guard by name.
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint
+		WHERE conrelid = 'public.pages'::regclass
+		  AND conname = 'pages_id_workspace_id_key'
+	) THEN
+		ALTER TABLE public.pages
+			ADD CONSTRAINT pages_id_workspace_id_key UNIQUE (id, workspace_id);
+	END IF;
+END;
+$$;
+
 -- One row per retrievable block-run. Re-indexed only when content_hash changes.
 CREATE TABLE public.page_chunks (
 	id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-	page_id uuid NOT NULL REFERENCES public.pages(id) ON DELETE CASCADE,
+	page_id uuid NOT NULL,
 	workspace_id uuid NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
 	chunk_ordinal integer NOT NULL,
 	block_id text NOT NULL, -- stable within a page: ordinal + content hash
@@ -28,7 +46,9 @@ CREATE TABLE public.page_chunks (
 	tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', content)) STORED,
 	created_at timestamptz NOT NULL DEFAULT now(),
 	updated_at timestamptz NOT NULL DEFAULT now(),
-	UNIQUE (page_id, chunk_ordinal)
+	UNIQUE (page_id, chunk_ordinal),
+	FOREIGN KEY (page_id, workspace_id)
+		REFERENCES public.pages (id, workspace_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 CREATE INDEX page_chunks_workspace_idx ON public.page_chunks (workspace_id, page_id);
@@ -38,13 +58,15 @@ CREATE INDEX page_chunks_embedding_idx ON public.page_chunks
 
 -- One summary embedding per page: narrows candidates before chunk scoring.
 CREATE TABLE public.page_summaries (
-	page_id uuid PRIMARY KEY REFERENCES public.pages(id) ON DELETE CASCADE,
+	page_id uuid PRIMARY KEY,
 	workspace_id uuid NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
 	summary text NOT NULL,
 	content_hash text NOT NULL,
 	embedding halfvec(1536),
 	embedding_model text,
-	updated_at timestamptz NOT NULL DEFAULT now()
+	updated_at timestamptz NOT NULL DEFAULT now(),
+	FOREIGN KEY (page_id, workspace_id)
+		REFERENCES public.pages (id, workspace_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 CREATE INDEX page_summaries_embedding_idx ON public.page_summaries
