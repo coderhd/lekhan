@@ -23,6 +23,7 @@ BEGIN
 		SELECT 1 FROM pg_constraint
 		WHERE conrelid = 'public.pages'::regclass
 		  AND conname = 'pages_id_workspace_id_key'
+		  AND contype = 'u'
 	) THEN
 		ALTER TABLE public.pages
 			ADD CONSTRAINT pages_id_workspace_id_key UNIQUE (id, workspace_id);
