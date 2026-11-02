@@ -2,7 +2,7 @@ import '@testing-library/jest-dom'
 import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import GraphView from '@/components/graph-view'
+import GraphView, { GraphViewSkeleton } from '@/components/graph-view'
 import type { PositionedGraph } from '@/lib/graph-view/layout'
 import type { WorkspaceGraphData } from '@/lib/graph-view/types'
 
@@ -25,6 +25,34 @@ const data: WorkspaceGraphData = {
 	unresolvedLinks: 1,
 }
 
+const tagged: WorkspaceGraphData = {
+	...data,
+	nodes: [
+		{ id: 'p-1', kind: 'page', title: 'Alpha', tags: ['research'], isPublic: false, updatedAt: null },
+		{ id: 'p-2', kind: 'page', title: 'Beta', tags: ['journal'], isPublic: false, updatedAt: null },
+	],
+	tags: [
+		{ tag: 'research', count: 1 },
+		{ tag: 'journal', count: 1 },
+	],
+	totalPages: 2,
+	totalLinks: 1,
+	unresolvedLinks: 0,
+	edges: [{ id: 'l-1', source: 'p-1', target: 'p-2', unresolved: false }],
+}
+
+const noLinks: WorkspaceGraphData = {
+	nodes: [
+		{ id: 'p-1', kind: 'page', title: 'Alpha', tags: [], isPublic: false, updatedAt: null },
+		{ id: 'p-2', kind: 'page', title: 'Beta', tags: [], isPublic: false, updatedAt: null },
+	],
+	edges: [],
+	tags: [],
+	totalPages: 2,
+	totalLinks: 0,
+	unresolvedLinks: 0,
+}
+
 const layout = (node: PositionedGraph['nodes'][number]): PositionedGraph => ({
 	nodes: [node],
 	edges: [],
@@ -35,10 +63,11 @@ const layout = (node: PositionedGraph['nodes'][number]): PositionedGraph => ({
 const positioned = (
 	id: string,
 	kind: 'page' | 'unresolved' = 'page',
+	title = id === 'ghost:later' ? 'Later' : 'Alpha',
 ): PositionedGraph['nodes'][number] => ({
 	id,
 	kind,
-	title: id === 'ghost:later' ? 'Later' : 'Alpha',
+	title,
 	tags: [],
 	isPublic: false,
 	updatedAt: null,
@@ -151,10 +180,112 @@ describe('GraphView', () => {
 		expect(push).not.toHaveBeenCalled()
 	})
 
+	it('highlights a hovered node and its incident links', () => {
+		const hoverLayout: PositionedGraph = {
+			nodes: [positioned('p-1', 'page', 'Alpha'), positioned('p-2', 'page', 'Beta')],
+			edges: [{ id: 'l-1', source: 'p-1', target: 'p-2', unresolved: false }],
+			bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 },
+			iterations: 1,
+		}
+		render(<GraphView data={data} layout={hoverLayout} />)
+
+		fireEvent.pointerMove(screen.getByRole('img'), { clientX: 400, clientY: 300 })
+
+		const card = screen.getByTestId('graph-hover-card')
+		expect(card).toHaveTextContent('Alpha')
+		expect(card).toHaveTextContent(/beta/i)
+		expect(card).toHaveTextContent(/1 link/i)
+		expect(document.querySelector('[data-highlighted-node="p-1"]')).not.toBeNull()
+	})
+
+	it('highlights a node from the keyboard page list', () => {
+		render(<GraphView data={data} layout={layout(positioned('p-1'))} />)
+
+		fireEvent.focus(screen.getByRole('link', { name: 'Alpha' }))
+
+		expect(document.querySelector('[data-highlighted-node="p-1"]')).not.toBeNull()
+	})
+
+	it('filters nodes by title before laying the graph out', () => {
+		render(<GraphView data={tagged} />)
+
+		fireEvent.change(screen.getByRole('searchbox', { name: /filter pages by title/i }), { target: { value: 'beta' } })
+
+		expect(screen.getByRole('link', { name: 'Beta' })).toBeInTheDocument()
+		expect(screen.queryByRole('link', { name: 'Alpha' })).not.toBeInTheDocument()
+		expect(screen.getByRole('status')).toHaveTextContent('1 of 2 pages')
+	})
+
+	it('filters nodes by tag facet', () => {
+		render(<GraphView data={tagged} />)
+
+		fireEvent.click(screen.getByRole('checkbox', { name: /#research/i }))
+
+		expect(screen.getByRole('link', { name: 'Alpha' })).toBeInTheDocument()
+		expect(screen.queryByRole('link', { name: 'Beta' })).not.toBeInTheDocument()
+	})
+
+	it('explains that no pages match the filters and lets the user clear them', () => {
+		render(<GraphView data={tagged} />)
+
+		fireEvent.change(screen.getByRole('searchbox', { name: /filter pages by title/i }), { target: { value: 'zzz' } })
+
+		expect(screen.queryByRole('img')).not.toBeInTheDocument()
+		expect(screen.getByText(/no pages match these filters/i)).toBeInTheDocument()
+
+		fireEvent.click(screen.getByRole('button', { name: /clear filters/i }))
+
+		expect(screen.getByRole('img')).toBeInTheDocument()
+		expect(screen.getByRole('link', { name: 'Alpha' })).toBeInTheDocument()
+	})
+
 	it('shows an empty state instead of a canvas when the workspace has no pages', () => {
 		render(<GraphView data={{ nodes: [], edges: [], tags: [], totalPages: 0, totalLinks: 0, unresolvedLinks: 0 }} />)
 
 		expect(screen.queryByRole('img')).not.toBeInTheDocument()
 		expect(screen.getByText(/no pages to graph yet/i)).toBeInTheDocument()
+		expect(screen.queryByRole('searchbox', { name: /filter pages by title/i })).not.toBeInTheDocument()
+	})
+
+	it('explains the no-links state while still showing the pages', () => {
+		render(<GraphView data={noLinks} />)
+
+		expect(screen.getByRole('img')).toBeInTheDocument()
+		expect(screen.getByText(/no page links yet/i)).toBeInTheDocument()
+		expect(screen.getByRole('link', { name: 'Alpha' })).toBeInTheDocument()
+	})
+
+	it('shows a "showing N of M links" badge when edges are sampled', () => {
+		const manyEdges = Array.from({ length: 1_001 }, (_, index) => ({
+			id: `e-${index}`,
+			source: 'p-1',
+			target: 'p-2',
+			unresolved: false,
+		}))
+		const sampled: WorkspaceGraphData = {
+			...data,
+			edges: manyEdges,
+			totalLinks: 1_001,
+			unresolvedLinks: 0,
+		}
+		const sampleLayout: PositionedGraph = {
+			nodes: [positioned('p-1'), positioned('p-2', 'page', 'Beta')],
+			edges: [],
+			bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 },
+			iterations: 1,
+		}
+
+		render(<GraphView data={sampled} layout={sampleLayout} />)
+
+		expect(screen.getByText('Showing 1,000 of 1,001 links')).toBeInTheDocument()
+	})
+})
+
+describe('GraphViewSkeleton', () => {
+	it('announces a busy, labelled loading state', () => {
+		render(<GraphViewSkeleton />)
+
+		const status = screen.getByRole('status', { name: /building your graph/i })
+		expect(status).toHaveAttribute('aria-busy', 'true')
 	})
 })
