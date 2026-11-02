@@ -1,10 +1,12 @@
 ---
 tags: [decision, h3-studio, open-question, roadmap]
-status: open
+status: superseded
 date: 2026-08-29
 ---
 
 # H3 Studio: ship a thin v1 before building the deep RAG layer — open, parked
+
+> **Superseded 2026-11-02** by [[08-deep-rag-first-embedder-and-eval-stack]]: the deep retrieval layer is now the primary path (server-side `pgvector`, pluggable embedder, Python evals). Thin v1 survives only as the degraded fallback. The product-risk argument below is kept for the record.
 
 **Current position (parked, not abandoned):** it's too early to know whether users actually want AI-generated documents from their knowledge base, and the full chunking/embedding/pgvector layer ([[04-retrieval-architecture-plan]]) is real, multi-week work competing with the rest of the roadmap. Before committing to it, ship a thin version that proves the value:
 
