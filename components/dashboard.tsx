@@ -18,6 +18,7 @@ import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { ImportDialog } from '@/components/import-dialog'
 import { VaultExportDialog } from '@/components/vault-export-dialog'
+import WorkspaceViewsNav from './workspace-views-nav'
 import { track } from '@/lib/analytics'
 
 interface DashboardProps {
@@ -347,6 +348,10 @@ export default function Dashboard({ user }: DashboardProps) {
 			{/* Main Content */}
 			<main className="pt-8 pb-xl px-6 md:px-10 flex justify-center">
 				<div className="max-w-7xl w-full flex flex-col gap-xl">
+
+					<div className="flex items-center justify-between gap-3">
+						<WorkspaceViewsNav active="pages" />
+					</div>
 
 					{loading ? (
 						<div className="flex justify-center items-center min-h-[calc(100vh-6rem)]">
