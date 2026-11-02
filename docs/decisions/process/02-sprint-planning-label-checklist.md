@@ -10,7 +10,11 @@ date: 2026-10-27
 [[01-weekly-retro-hygiene-rules]]) is part of the sprint planning runbook itself.
 Every Sprint Planning facilitator run executes this checklist; a planning issue
 may not close until step 5 is green. Source: [SIL-114](/SIL/issues/SIL-114),
-from the 2026-10-27 weekly retro.
+from the 2026-10-27 weekly retro. Extended 2026-11-02
+([SIL-173](/SIL/issues/SIL-173), per rule 2 of
+[[03-runtime-enforcement-for-retro-rules]]): the same checklist binds **every**
+commit path, not only the planning ritual (see below), and the executability
+check of rule 3 is folded into step 0.
 
 ## Background
 
@@ -46,6 +50,36 @@ sprint.
 5. **Close only when step 4 is green.** If any write is still failing, the
    planning issue stays `todo`/`in_progress` with a comment naming the exact
    pending write; it does not close with a "recorded in comments" note.
+
+## One checklist, every commit path (2026-11-02)
+
+Rule 2 ([[03-runtime-enforcement-for-retro-rules]]) binds **every write that
+commits work to a sprint** — top-up, courier pull, and manual label write
+included. The estimate→label→retry→verify loop is identical no matter who holds
+the pen; only the trigger differs:
+
+- **Sprint planning run** — the ritual itself; steps 1–5 above are its runbook.
+- **Sprint top-up run** (Observer tick or PO pulling backlog into the open
+  sprint): decide `est:*` *before* the top-up comment, apply `est:*` +
+  `sprint:<YYYY-Www>` in the same run, verify, and only then re-dispatch the
+  issue to `todo` for an executing agent. A bare `sprint:*` label is the
+  post-apply defect class; the run does not close while one is outstanding
+  ("labels land later" is not a landing).
+- **Courier-pulled commitment** (a run applying labels on behalf of a planning
+  or top-up decision, e.g. [SIL-171](/SIL/issues/SIL-171)): the applying run
+  verifies via PATCH receipts and reports them in its completion report before
+  closing. "Recorded in the plan comment" is not a landing.
+- **Manual label write** (board/user or any agent editing labels directly):
+  an `est:*` goes on in the same write as the `sprint:*` label. A bare
+  `sprint:*` label discovered later is reported as a **planning defect**
+  (Retro DoR below), not patched silently.
+
+**Step 0 — executability check (rule 3, same 2026-11-02 decision).** Before
+applying `sprint:<YYYY-Www>` to an *epic* on any commit path, confirm at least
+one child issue will carry the same sprint label in the same commitment. A
+committed set that is all-epics is itself a planning defect: pull child issues
+into the commitment instead of committing the epic alone (W44 committed 24 pts,
+all epics, delivered 3/24; [SIL-170](/SIL/issues/SIL-170)).
 
 ## Retro DoR
 
