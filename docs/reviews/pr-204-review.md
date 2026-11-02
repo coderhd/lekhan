@@ -94,6 +94,9 @@ environment; they are documented in the spec and are not part of `npm test`.
 - **Keyboard note:** Chrome honours the page's `preventDefault()` for `Ctrl+Shift+C`; Firefox
   reserves it for the node picker and may not allow the page to override it. The dashboard Capture
   button is the documented non-keyboard path; the shortcut itself is spec-locked.
+- **CodeRabbit nitpicks (fixed):** Playwright `ControlOrMeta+Shift+C` replaces the manual
+  `process.platform` branch; the palette shortcut now also matches `event.code === 'KeyC'` (non-Latin
+  layouts) and rejects `AltGr` (`altKey`) combinations, with a regression test.
 
 ## Residual risks (accepted)
 

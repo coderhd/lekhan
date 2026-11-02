@@ -91,7 +91,10 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 	useEffect(() => {
 		const handler = (event: globalThis.KeyboardEvent) => {
 			if (!userId || isLocked) return
-			if ((event.metaKey || event.ctrlKey) && event.shiftKey && (event.key === 'c' || event.key === 'C')) {
+			// Match the physical C key too: on non-Latin layouts `event.key` is
+			// not "c" for that key. AltGr combinations must not trigger it.
+			const isC = event.code === 'KeyC' || event.key.toLowerCase() === 'c'
+			if ((event.metaKey || event.ctrlKey) && event.shiftKey && !event.altKey && isC) {
 				event.preventDefault()
 				openPalette()
 			}

@@ -119,6 +119,39 @@ describe('QuickCapturePalette', () => {
 		expect(screen.getByRole('button', { name: /send to a page/i })).toBeTruthy()
 	})
 
+	it('opens on the physical C key for non-Latin layouts and ignores AltGr', async () => {
+		renderPalette()
+		await flushSession()
+
+		await act(async () => {
+			document.dispatchEvent(new KeyboardEvent('keydown', {
+				key: 'ц',
+				code: 'KeyC',
+				metaKey: true,
+				shiftKey: true,
+				cancelable: true,
+			}))
+		})
+		expect(screen.getByRole('dialog')).toBeTruthy()
+
+		await act(async () => {
+			fireEvent.keyDown(captureInput(), { key: 'Escape' })
+		})
+
+		// AltGr reports ctrl+alt on Windows; it must not open the palette.
+		await act(async () => {
+			document.dispatchEvent(new KeyboardEvent('keydown', {
+				key: 'c',
+				code: 'KeyC',
+				ctrlKey: true,
+				altKey: true,
+				shiftKey: true,
+				cancelable: true,
+			}))
+		})
+		expect(screen.queryByRole('dialog')).toBeNull()
+	})
+
 	it('does not open when signed out', async () => {
 		getSession.mockResolvedValue({ data: { session: null }, error: null })
 		renderPalette()

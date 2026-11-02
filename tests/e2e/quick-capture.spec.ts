@@ -14,7 +14,7 @@ import { test, expect, type Page } from '@playwright/test'
  */
 const EMAIL = process.env.E2E_EMAIL
 const PASSWORD = process.env.E2E_PASSWORD
-const SHORTCUT = process.platform === 'darwin' ? 'Meta+Shift+C' : 'Control+Shift+C'
+const SHORTCUT = 'ControlOrMeta+Shift+C'
 const CAPTURE_TIMEOUT = 20_000
 
 test.describe('Quick capture', () => {
