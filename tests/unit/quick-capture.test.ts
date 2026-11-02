@@ -227,6 +227,33 @@ describe('appendCaptureBlockToYDoc', () => {
 		ydoc.destroy()
 	})
 
+	it('positions a new Inbox list correctly when the fragment has non-element children', () => {
+		const ydoc = new Y.Doc()
+		seed(ydoc, [
+			{ type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: '2026-11-02' }] },
+			{ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Inbox' }] },
+			{ type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: 'Notes' }] },
+			{ type: 'paragraph', content: [{ type: 'text', text: 'notes body' }] },
+		])
+
+		// y-prosemirror never emits a top-level XmlText, but the fragment type
+		// allows it. Insert one so the element-index/raw-index spaces diverge.
+		const fragment = ydoc.getXmlFragment('default')
+		const stray = new Y.XmlText()
+		stray.insert(0, 'stray raw text')
+		const notesIndex = fragment.toArray().findIndex(
+			node => node instanceof Y.XmlElement && node.nodeName === 'heading' &&
+				node.toString().includes('Notes'),
+		)
+		fragment.insert(notesIndex, [stray])
+
+		capture(ydoc, 'landed below the stray text')
+
+		const shape = fragment.toArray().map(node => node instanceof Y.XmlElement ? node.nodeName : 'rawText')
+		expect(shape).toEqual(['heading', 'heading', 'rawText', 'bulletList', 'heading', 'paragraph'])
+		ydoc.destroy()
+	})
+
 	it('renders in a live collaborative editor bound to the same Y.Doc', () => {
 		const ydoc = new Y.Doc()
 		capture(ydoc, 'Buy milk')

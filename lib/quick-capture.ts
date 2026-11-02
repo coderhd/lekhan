@@ -209,8 +209,15 @@ export function appendCaptureBlockToYDoc (
 			return
 		}
 
-		const elements = children.filter(isElement)
-		const inboxIndex = elements.findIndex(isInboxHeading)
+		// Keep each element's raw fragment index alongside it: `fragment.insert`
+		// positions over all raw children, while section scanning skips
+		// non-element nodes (Y.XmlText/Y.XmlHook). y-prosemirror never emits
+		// those at the top level, but mixing the two index spaces silently
+		// shifts the Inbox list if it ever does.
+		const elements = children
+			.map((node, rawIndex) => ({ node, rawIndex }))
+			.filter((entry): entry is { node: Y.XmlElement; rawIndex: number } => isElement(entry.node))
+		const inboxIndex = elements.findIndex(({ node }) => isInboxHeading(node))
 
 		if (inboxIndex === -1) {
 			fragment.insert(fragment.length, [
@@ -223,7 +230,7 @@ export function appendCaptureBlockToYDoc (
 		// Section end = the next heading that starts a sibling section.
 		let sectionEnd = elements.length
 		for (let index = inboxIndex + 1; index < elements.length; index++) {
-			const node = elements[index]
+			const { node } = elements[index]
 			if (isHeading(node) && headingLevel(node) <= INBOX_SECTION_LEVEL) {
 				sectionEnd = index
 				break
@@ -233,14 +240,17 @@ export function appendCaptureBlockToYDoc (
 		// Append to the section's last top-level bullet list, if it has one.
 		let lastList: Y.XmlElement | null = null
 		for (let index = inboxIndex + 1; index < sectionEnd; index++) {
-			const node = elements[index]
+			const { node } = elements[index]
 			if (node.nodeName === 'bulletList') lastList = node
 		}
 
 		if (lastList) {
 			lastList.insert(lastList.length, [captureListItem(bulletText)])
 		} else {
-			fragment.insert(sectionEnd, [captureBulletList(bulletText)])
+			const sectionEndRaw = sectionEnd < elements.length
+				? elements[sectionEnd].rawIndex
+				: children.length
+			fragment.insert(sectionEndRaw, [captureBulletList(bulletText)])
 		}
 	})
 
