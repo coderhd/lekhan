@@ -91,8 +91,19 @@ const inFlight = new Map<string, Promise<Page>>()
  *
  * The created page carries `properties: { daily: true, tags: ['daily'] }` so
  * the graph index tags it `#daily` on its next save — no new write path and no
- * schema change. Existing pages are matched by exact title plus any daily
- * marker; a same-titled page that is not a daily page is left alone.
+ * schema change. `properties.daily` is the authoritative marker for reuse/dots
+ * (the graph tag index lags creation until the page is first saved).
+ *
+ * Existing pages are matched by exact title plus any daily marker, regardless
+ * of nesting: if a user (or an importer) already made `YYYY-MM-DD` a daily page
+ * under a parent, reusing it beats creating a second page with the same title
+ * (the locked "one page per date per workspace" invariant). New pages are
+ * always created top-level. A same-titled page that is not a daily page is
+ * left alone.
+ *
+ * `workspace.owner_id` is the page's creator and must be the acting user
+ * (`auth.uid()`), not merely the workspace owner — today H0 workspaces are
+ * owner-scoped, but team workspaces will need the caller's id here.
  */
 export function ensureDailyPage (workspace: DailyWorkspace, date: Date): Promise<Page> {
 	const title = dailyTitle(date)

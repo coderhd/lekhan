@@ -351,7 +351,7 @@ export default function Dashboard({ user }: DashboardProps) {
 			<main className="pt-8 pb-xl px-6 md:px-10 flex justify-center">
 				<div className="max-w-7xl w-full flex flex-col gap-xl">
 
-					{!loading && !fetchError && workspace && (
+					{!fetchError && workspace && (
 						<DailyStrip workspaceId={workspace.id} ownerId={user.id} />
 					)}
 

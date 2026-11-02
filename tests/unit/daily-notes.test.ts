@@ -130,6 +130,8 @@ describe('ensureDailyPage', () => {
 		const page = await ensureDailyPage(workspace, new Date(2026, 10, 2))
 
 		expect(page).toEqual(existing)
+		expect(mockBuilder.eq).toHaveBeenCalledWith('workspace_id', 'ws-1')
+		expect(mockBuilder.eq).toHaveBeenCalledWith('title', '2026-11-02')
 		expect(mockBuilder.insert).not.toHaveBeenCalled()
 	})
 
@@ -250,6 +252,7 @@ describe('fetchDailyPages', () => {
 		expect(pages.get('2026-11-01')?.id).toBe('p-1')
 		expect(pages.get('2026-11-03')?.id).toBe('p-2')
 		expect(pages.has('2026-11-04')).toBe(false)
+		expect(mockBuilder.eq).toHaveBeenCalledWith('workspace_id', 'ws-1')
 		expect(mockBuilder.in).toHaveBeenCalledWith('title', [
 			'2026-11-01',
 			'2026-11-02',

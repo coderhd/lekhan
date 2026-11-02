@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom'
 import React from 'react'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest'
 import DailyStrip from '@/components/daily-strip'
 import * as dailyNotes from '@/lib/daily-notes'
@@ -8,8 +8,10 @@ import * as dailyNotes from '@/lib/daily-notes'
 const push = vi.fn()
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }))
 
-const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
-vi.mock('sonner', () => ({ toast }))
+// The real module imports are exercised below (dailyTitle/shiftDailyDate), so
+// stub the Supabase client that `lib/supabase.ts` would otherwise create from
+// env vars. CI has no NEXT_PUBLIC_SUPABASE_* values.
+vi.mock('@/lib/supabase', () => ({ supabase: { from: vi.fn() } }))
 
 const ensureDailyPage = vi.fn()
 const fetchDailyPages = vi.fn()
@@ -43,6 +45,7 @@ describe('DailyStrip', () => {
 	})
 
 	afterEach(() => {
+		vi.useRealTimers()
 		vi.restoreAllMocks()
 	})
 
@@ -157,7 +160,6 @@ describe('DailyStrip', () => {
 		fireEvent.click(screen.getByRole('button', { name: /create daily page for/i }))
 
 		expect(await screen.findByRole('alert')).toHaveTextContent(/could not/i)
-		expect(toast.error).toHaveBeenCalled()
 		expect(push).not.toHaveBeenCalled()
 
 		fireEvent.click(screen.getByRole('button', { name: /retry/i }))
@@ -194,6 +196,35 @@ describe('DailyStrip', () => {
 			expect(button).not.toHaveAttribute('tabindex', '-1')
 		}
 		expect(screen.getByRole('navigation', { name: /daily notes/i })).toBeInTheDocument()
+
+		// WCAG 2.5.3: the visible "Today" must be part of the accessible name.
+		expect(screen.getByRole('button', { name: /^today, create daily page for/i })).toHaveAccessibleName(/today/i)
+		// Day changes are announced, and the visible date is a live region.
+		expect(screen.getByText(/monday, november 2, 2026/i)).toHaveAttribute('aria-live', 'polite')
+	})
+
+	it('re-anchors "today" after local midnight', async () => {
+		vi.useFakeTimers({ toFake: ['Date'] })
+		vi.setSystemTime(new Date(2026, 10, 2, 23, 59))
+
+		render(<DailyStrip workspaceId="ws-1" ownerId="user-1" />)
+
+		await waitFor(() => expect(fetchDailyPages).toHaveBeenCalledTimes(1))
+		expect(screen.getByRole('button', { name: /^today, /i })).toHaveAttribute(
+			'aria-label',
+			expect.stringContaining('November 2, 2026')
+		)
+
+		vi.setSystemTime(new Date(2026, 10, 3, 0, 1))
+		await act(async () => {
+			document.dispatchEvent(new Event('visibilitychange'))
+		})
+
+		expect(screen.getByRole('button', { name: /^today, /i })).toHaveAttribute(
+			'aria-label',
+			expect.stringContaining('November 3, 2026')
+		)
+		await waitFor(() => expect(fetchDailyPages).toHaveBeenCalledTimes(2))
 	})
 
 	it('does not load or create anything before the workspace is known', async () => {

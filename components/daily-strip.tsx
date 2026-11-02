@@ -1,9 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
-import { toast } from 'sonner'
 import { dailyTitle, ensureDailyPage, fetchDailyPages, shiftDailyDate } from '@/lib/daily-notes'
 import type { Page } from '@/types'
 
@@ -17,6 +16,7 @@ const weekdayFormatter = new Intl.DateTimeFormat('en', { weekday: 'short' })
 const shortDateFormatter = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' })
 
 const STRIP_DAYS = 7
+const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-container focus-visible:ring-offset-2'
 
 /** The visible week: STRIP_DAYS dates centred on `date`. */
 function visibleDaysAround (date: Date): Date[] {
@@ -42,7 +42,8 @@ export interface DailyStripProps {
  */
 export default function DailyStrip ({ workspaceId, ownerId, today }: DailyStripProps) {
 	const router = useRouter()
-	const [todayDate] = useState(() => shiftDailyDate(today ?? new Date(), 0))
+	const [todayDate, setTodayDate] = useState(() => shiftDailyDate(today ?? new Date(), 0))
+	const todayRef = useRef(todayDate)
 	const [selectedDate, setSelectedDate] = useState<Date>(todayDate)
 	const [pages, setPages] = useState<Map<string, Page>>(() => new Map())
 	const [busy, setBusy] = useState(false)
@@ -56,7 +57,41 @@ export default function DailyStrip ({ workspaceId, ownerId, today }: DailyStripP
 	// moves the window with the selection.
 	const days = useMemo(() => visibleDaysAround(selectedDate), [selectedDate])
 
+	// A dashboard tab can stay open across local midnight. Re-anchor "today"
+	// when the tab regains focus or the clock crosses midnight, and follow the
+	// rollover if the user was looking at the old today.
 	useEffect(() => {
+		if (today) return
+
+		const syncToday = () => {
+			const now = shiftDailyDate(new Date(), 0)
+			const previous = todayRef.current
+			if (dailyTitle(previous) === dailyTitle(now)) return
+
+			todayRef.current = now
+			setTodayDate(now)
+			setSelectedDate(current => (dailyTitle(current) === dailyTitle(previous) ? now : current))
+		}
+
+		const interval = window.setInterval(syncToday, 60_000)
+		document.addEventListener('visibilitychange', syncToday)
+		window.addEventListener('focus', syncToday)
+
+		return () => {
+			window.clearInterval(interval)
+			document.removeEventListener('visibilitychange', syncToday)
+			window.removeEventListener('focus', syncToday)
+		}
+	}, [today])
+
+	const workspaceRef = useRef(workspaceId)
+	useEffect(() => {
+		// Never show the previous workspace's dots while a new fetch is in flight.
+		if (workspaceRef.current !== workspaceId) {
+			workspaceRef.current = workspaceId
+			setPages(new Map())
+		}
+
 		if (!workspaceId) {
 			setPages(new Map())
 			return
@@ -93,7 +128,6 @@ export default function DailyStrip ({ workspaceId, ownerId, today }: DailyStripP
 			router.push(`/page/${page.id}`)
 		} catch (error) {
 			console.error('Failed to open daily page:', error)
-			toast.error('Could not open that daily page. Please try again.')
 			setFailedDate(date)
 		} finally {
 			setBusy(false)
@@ -101,7 +135,9 @@ export default function DailyStrip ({ workspaceId, ownerId, today }: DailyStripP
 	}, [busy, ownerId, pages, router, workspaceId])
 
 	const longSelected = longDateFormatter.format(selectedDate)
-	const actionLabel = `${selectedPage ? 'Open' : 'Create'} daily page for ${longSelected}`
+	// Keep the visible label ("Today", "Create daily page") inside the
+	// accessible name so voice-control matches (WCAG 2.5.3 Label in Name).
+	const actionLabel = `${isToday ? 'Today, ' : ''}${selectedPage ? 'Open' : 'Create'} daily page for ${longSelected}`
 
 	/** Move the selection and dismiss any stale failure from an earlier day. */
 	const moveSelection = (offset: number) => {
@@ -118,7 +154,8 @@ export default function DailyStrip ({ workspaceId, ownerId, today }: DailyStripP
 							type="button"
 							aria-label="Previous day"
 							onClick={() => moveSelection(-1)}
-							className="flex h-9 w-9 items-center justify-center rounded-lg text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/10 hover:text-on-surface premium-transition"
+							disabled={busy}
+							className={`flex h-11 w-11 items-center justify-center rounded-lg text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/10 hover:text-on-surface premium-transition disabled:opacity-60 ${FOCUS_RING}`}
 						>
 							<ChevronLeft aria-hidden className="h-4 w-4" />
 						</button>
@@ -128,7 +165,7 @@ export default function DailyStrip ({ workspaceId, ownerId, today }: DailyStripP
 							aria-label={actionLabel}
 							onClick={() => openDay(selectedDate)}
 							disabled={busy}
-							className="flex items-center gap-2 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-surface px-3 py-2 font-medium text-on-surface hover:bg-black/5 dark:hover:bg-white/5 premium-transition disabled:opacity-60"
+							className={`flex min-h-11 items-center gap-2 rounded-lg border border-black/10 dark:border-white/10 bg-white dark:bg-surface px-3 py-2 font-medium text-on-surface hover:bg-black/5 dark:hover:bg-white/5 premium-transition disabled:opacity-60 ${FOCUS_RING}`}
 						>
 							<CalendarDays aria-hidden className="h-4 w-4 text-primary" />
 							<span>{isToday ? 'Today' : shortDateFormatter.format(selectedDate)}</span>
@@ -141,18 +178,19 @@ export default function DailyStrip ({ workspaceId, ownerId, today }: DailyStripP
 							type="button"
 							aria-label="Next day"
 							onClick={() => moveSelection(1)}
-							className="flex h-9 w-9 items-center justify-center rounded-lg text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/10 hover:text-on-surface premium-transition"
+							disabled={busy}
+							className={`flex h-11 w-11 items-center justify-center rounded-lg text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/10 hover:text-on-surface premium-transition disabled:opacity-60 ${FOCUS_RING}`}
 						>
 							<ChevronRight aria-hidden className="h-4 w-4" />
 						</button>
 					</div>
 
-					<p className="text-xs text-on-surface-variant">
+					<p aria-live="polite" className="text-xs text-on-surface-variant">
 						{longSelected}
 					</p>
 				</div>
 
-				<div role="group" aria-label="Days in this week" className="flex items-center justify-between gap-1">
+				<div role="group" aria-label="Days around the selected date" className="flex items-center justify-between gap-1">
 					{days.map(day => {
 						const title = dailyTitle(day)
 						const hasPage = pages.has(title)
@@ -167,7 +205,7 @@ export default function DailyStrip ({ workspaceId, ownerId, today }: DailyStripP
 								aria-current={isSelected ? 'date' : undefined}
 								onClick={() => openDay(day)}
 								disabled={busy}
-								className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/10 premium-transition disabled:opacity-60 ${isSelected ? 'bg-black/5 dark:bg-white/10 text-on-surface' : ''}`}
+								className={`flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-2 text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/10 premium-transition disabled:opacity-60 ${isSelected ? 'bg-black/5 dark:bg-white/10 text-on-surface' : ''} ${FOCUS_RING}`}
 							>
 								<span aria-hidden className="text-[10px] uppercase tracking-wide">
 									{weekdayFormatter.format(day).slice(0, 2)}
@@ -185,14 +223,14 @@ export default function DailyStrip ({ workspaceId, ownerId, today }: DailyStripP
 			</nav>
 
 			{failedDate && (
-				<div role="alert" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-error/10 px-3 py-2 text-sm text-on-surface">
-					<span>Could not open that daily page. Check your connection and try again.</span>
+				<div role="alert" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-error/10 px-3 py-2 text-sm">
+					<span className="text-error">Could not open that daily page. Check your connection and try again.</span>
 					<button
 						type="button"
 						onClick={() => openDay(failedDate)}
-						className="rounded-md bg-primary px-3 py-1 text-xs font-bold text-on-primary hover:bg-primary/90 premium-transition"
+						className={`rounded-md bg-primary px-3 py-1 text-xs font-bold text-on-primary hover:bg-primary/90 premium-transition ${FOCUS_RING}`}
 					>
-						Retry
+						Retry opening {shortDateFormatter.format(failedDate)}
 					</button>
 				</div>
 			)}
