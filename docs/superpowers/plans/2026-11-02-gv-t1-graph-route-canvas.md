@@ -18,10 +18,11 @@ Branch: `feat/206-gv-t1-graph-canvas` (base: `origin/main`). Spec:
 `lib/graph-view/layout.ts`
 
 - `computeGraphLayout(nodes, edges, options?)` runs `d3-force` with `stop()` + explicit
-  `tick()` count (no animation loop, no `Math.random` seeding) and returns positioned
+  `tick()` count (no animation loop, no wall-clock dependence) and returns positioned
   nodes (with `degree`), the same edges, and world bounds.
-- Deterministic iteration count: 300 ticks ≤ 200 nodes, 220 ≤ 400, 140 above — the
-  500-page / 2,000-link budget in the spec's perf bar.
+- Deterministic iteration count: 300 ticks ≤ 200 nodes, 220 ≤ 400, 140 above. The
+  500-page / 2,000-link first-paint target is measured by `npm run test:perf` in an
+  isolated run (the parallel unit suite distorts wall-clock timings).
 
 `lib/graph-view/camera.ts`
 
@@ -39,20 +40,23 @@ Branch: `feat/206-gv-t1-graph-canvas` (base: `origin/main`). Spec:
 ## T2 — Layout + camera (RED first)
 
 1. `tests/unit/graph-view-layout.test.ts` — every node positioned, finite coords,
-   degree/bounds, determinism, seeded 500-page/2,000-link fixture under the 1 s
-   first-paint budget.
+   degree/bounds, determinism at the default tick count, single-node edge case.
 2. `lib/graph-view/layout.ts` + `lib/graph-view/camera.ts`.
 3. `tests/unit/graph-view-camera.test.ts` — fit/round-trip, zoom-at-cursor, nearest-node
    hit test with a screen-radius floor, misses.
+4. `tests/perf/graph-view.perf.test.ts` (`npm run test:perf`) — seeded 500-page /
+   2,020-link fixture: serialization + the full 140-tick layout < 1 s, with no
+   silent truncation.
 
 ## T3 — Surface (RED first)
 
 1. `tests/unit/graph-view.test.tsx` — canvas accessible name/summary, labelled
-   Zoom in / Zoom out / Reset view controls, node activation routes to `/page/<id>`,
-   ghost activation does not route, empty graph copy.
+   Zoom in / Zoom out / Reset view controls, keyboard/AT page list, node activation
+   routes to `/page/<id>`, ghost activation does not route, drag ≠ click, empty copy.
 2. `components/graph-view.tsx` — canvas 2D: edges (solid resolved, dashed unresolved),
    nodes (ghost dashed), labels, pointer pan, wheel zoom-at-cursor, click-through via
-   `useRouter().push`, DPR-aware resize, theme-aware palette.
+   `useRouter().push`, DPR-aware resize, theme-aware palette, focus-revealed page list
+   as the keyboard/AT path.
 3. `tests/unit/workspace-views-nav.test.tsx` — Pages/Graph links, `aria-current`, both
    keyboard reachable.
 4. `components/workspace-views-nav.tsx` + insert into `components/dashboard.tsx`.
@@ -70,7 +74,8 @@ Branch: `feat/206-gv-t1-graph-canvas` (base: `origin/main`). Spec:
 
 ## T5 — VERIFY → REVIEW → SHIP
 
-1. `npm run typecheck && npm run lint && npm test` (full suite for regressions).
+1. `npm run typecheck && npm run lint && npm test && npm run test:perf` (full suite for
+   regressions; perf in isolation for the budget proof).
 2. Clean-room adversarial review of `git diff origin/main...HEAD` (4 axes) →
    `docs/reviews/pr-206-review.md`; fix valid findings.
 3. Commit per slice; PR; wait for Pullfrog + CodeRabbit + CI green (merge gate).

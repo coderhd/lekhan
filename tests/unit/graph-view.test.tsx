@@ -109,6 +109,17 @@ describe('GraphView', () => {
 		}
 	})
 
+	it('exposes page nodes as keyboard-reachable links', () => {
+		render(<GraphView data={data} />)
+
+		const alpha = screen.getByRole('link', { name: 'Alpha' })
+		expect(alpha).toHaveAttribute('href', '/page/p-1')
+		expect(screen.getByRole('link', { name: 'Beta' })).toHaveAttribute('href', '/page/p-2')
+		// Ghost nodes are labelled for AT but are not navigable.
+		expect(screen.queryByRole('link', { name: 'Later' })).not.toBeInTheDocument()
+		expect(screen.getByText(/unresolved: later/i)).toBeInTheDocument()
+	})
+
 	it('opens a page node in the editor on click', () => {
 		render(<GraphView data={data} layout={layout(positioned('p-1'))} />)
 

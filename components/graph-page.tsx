@@ -89,7 +89,7 @@ export default function GraphPage () {
 						</div>
 						{status === 'ready' && data && (
 							<p className="text-xs font-medium text-on-surface-variant" aria-live="polite">
-								{data.totalPages} pages · {data.edges.length} links
+								{data.totalPages} pages · {linkSummary(data)}
 								{data.unresolvedLinks > 0 ? ` · ${data.unresolvedLinks} unresolved` : ''}
 							</p>
 						)}
@@ -145,4 +145,12 @@ export default function GraphPage () {
 			</main>
 		</div>
 	)
+}
+
+/** Never claim more links than were rendered when the serializer drops rows. */
+function linkSummary (data: WorkspaceGraphData): string {
+	if (data.edges.length === data.totalLinks) {
+		return `${data.edges.length} links`
+	}
+	return `${data.edges.length} of ${data.totalLinks} links shown`
 }

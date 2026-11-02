@@ -33,12 +33,6 @@ export interface PositionedGraph {
 export interface LayoutOptions {
 	/** Override the deterministic tick count (tests / very large graphs). */
 	iterations?: number
-	/**
-	 * Wall-clock ceiling for the synchronous tick loop when `iterations` is not
-	 * given. Keeps first paint inside the spec's 1 s budget even on a busy
-	 * machine: once the budget is spent the layout is delivered as-is.
-	 */
-	budgetMs?: number
 	linkDistance?: number
 	chargeStrength?: number
 	collideRadius?: number
@@ -101,8 +95,7 @@ export function computeGraphLayout (
 		source: edge.source,
 		target: edge.target,
 	}))
-	const maxIterations = options.iterations ?? defaultIterations(nodes.length)
-	const budgetMs = options.budgetMs ?? (nodes.length > 400 ? 220 : 500)
+	const iterations = options.iterations ?? defaultIterations(nodes.length)
 
 	const simulation = forceSimulation<SimNode>(simNodes)
 		.force(
@@ -117,16 +110,8 @@ export function computeGraphLayout (
 		.force('collide', forceCollide<SimNode>(options.collideRadius ?? 14))
 		.stop()
 
-	let iterations = 0
-	const started = performance.now()
-	for (; iterations < maxIterations; iterations += 1) {
+	for (let i = 0; i < iterations; i += 1) {
 		simulation.tick()
-		// Caller-pinned iteration counts stay deterministic; default layouts
-		// stop early when the wall-clock budget is spent (first-paint bar).
-		if (options.iterations === undefined && (iterations & 7) === 7 && performance.now() - started > budgetMs) {
-			iterations += 1
-			break
-		}
 	}
 	simulation.stop()
 

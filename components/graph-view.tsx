@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Minus, Plus, RotateCcw } from 'lucide-react'
 import {
@@ -61,6 +62,7 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 	const containerRef = useRef<HTMLDivElement>(null)
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const dragRef = useRef<DragState | null>(null)
+	const lastLayoutRef = useRef<PositionedGraph | null>(null)
 
 	const [size, setSize] = useState<Size>({ width: 0, height: 0 })
 	const [camera, setCamera] = useState<Camera | null>(null)
@@ -104,12 +106,16 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 		return () => observer.disconnect()
 	}, [])
 
-	// Re-fit whenever the graph or viewport changes (never on pan/zoom).
+	// Fit for a new graph or the first measurement. Plain resizes keep the
+	// user's pan/zoom (Reset view restores the fitted camera on demand).
 	useEffect(() => {
-		if (size.width > 0 && size.height > 0 && !empty) {
+		if (size.width === 0 || size.height === 0 || empty) return
+		const newLayout = lastLayoutRef.current !== positioned
+		lastLayoutRef.current = positioned
+		if (newLayout || camera === null) {
 			setCamera(fitCamera(positioned.bounds, size))
 		}
-	}, [positioned, size.width, size.height, empty])
+	}, [positioned, size.width, size.height, empty, camera])
 
 	const resetView = useCallback(() => {
 		if (!empty && size.width > 0 && size.height > 0) {
@@ -166,7 +172,9 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 			if (!source || !target) continue
 			const from = onScreen(source)
 			const to = onScreen(target)
-			if (!visible(from) && !visible(to)) continue
+			// Cull only when the whole segment is outside the same viewport
+			// edge; long edges crossing the view stay visible when zoomed in.
+			if (segmentOutside(from, to, size.width, size.height)) continue
 			context.beginPath()
 			context.setLineDash(edge.unresolved ? [4, 4] : [])
 			context.strokeStyle = edge.unresolved ? palette.ghostEdge : palette.edge
@@ -271,6 +279,11 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 		setCursor('grab')
 	}
 
+	const handlePointerCancel = () => {
+		dragRef.current = null
+		setCursor('grab')
+	}
+
 	if (empty) {
 		return (
 			<div className={`flex h-full min-h-[320px] flex-col items-center justify-center gap-3 text-center ${className ?? ''}`}>
@@ -290,7 +303,7 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 			? `${plural(data.unresolvedLinks, 'unresolved link')} shown as dashed ghost nodes.`
 			: '',
 		'Drag to pan, scroll or use the buttons to zoom.',
-		'Page nodes open in the editor when clicked.',
+		'Page nodes open in the editor when clicked, or from the Pages in this graph list.',
 	].filter(Boolean).join(' ')
 
 	return (
@@ -307,8 +320,33 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 				onPointerDown={handlePointerDown}
 				onPointerMove={handlePointerMove}
 				onPointerUp={handlePointerUp}
+				onPointerCancel={handlePointerCancel}
+				onLostPointerCapture={handlePointerCancel}
 				onPointerLeave={handlePointerLeave}
 			/>
+
+			{/* Keyboard/AT path: the canvas is a picture, so page navigation
+			    lives in this list. It becomes visible as soon as it is focused. */}
+			<div className="sr-only focus-within:not-sr-only focus-within:absolute focus-within:left-4 focus-within:top-4 focus-within:z-10 focus-within:max-h-72 focus-within:w-64 focus-within:overflow-auto focus-within:rounded-xl focus-within:border focus-within:border-black/10 focus-within:bg-surface-container focus-within:p-3 focus-within:shadow-xl dark:focus-within:border-white/10">
+				<h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-on-surface-variant">Pages in this graph</h2>
+				<ul className="flex flex-col gap-1 text-sm">
+					{nodes.filter(node => node.kind === 'page').map(node => (
+						<li key={node.id}>
+							<Link
+								href={`/page/${node.id}`}
+								className={`block truncate rounded px-1 py-0.5 text-on-surface hover:bg-black/5 dark:hover:bg-white/10 ${FOCUS_RING}`}
+							>
+								{node.title}
+							</Link>
+						</li>
+					))}
+				</ul>
+				{nodes.some(node => node.kind === 'unresolved') && (
+					<p className="mt-2 border-t border-black/10 pt-2 text-xs text-on-surface-variant dark:border-white/10">
+						Unresolved: {nodes.filter(node => node.kind === 'unresolved').map(node => node.title).join(', ')}
+					</p>
+				)}
+			</div>
 
 			<div
 				role="group"
@@ -353,6 +391,14 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 
 function truncate (title: string): string {
 	return title.length > MAX_LABEL_CHARS ? `${title.slice(0, MAX_LABEL_CHARS - 1)}…` : title
+}
+
+/** True when an edge segment cannot intersect the viewport. */
+function segmentOutside (from: Point, to: Point, width: number, height: number): boolean {
+	return (from.x < 0 && to.x < 0)
+		|| (from.x > width && to.x > width)
+		|| (from.y < 0 && to.y < 0)
+		|| (from.y > height && to.y > height)
 }
 
 function plural (count: number, noun: string): string {
