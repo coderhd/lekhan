@@ -55,6 +55,7 @@ export default [
         Buffer: true,
         setTimeout: true,
         setInterval: true,
+        clearInterval: true,
         clearTimeout: true,
         console: true,
         URL: true

@@ -25,6 +25,8 @@ export interface WorkspacePlanRow {
 	currency: Currency | null
 	is_founding: boolean
 	cancel_at_period_end?: boolean
+	checkout_pending_at?: string | null
+	checkout_pending_ref?: string | null
 }
 
 export interface OwnerBillingContext {

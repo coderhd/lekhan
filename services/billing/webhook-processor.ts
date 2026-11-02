@@ -615,23 +615,24 @@ export async function applyEntitlementFromReadBack(
 	if (existing.error) throw new EntitlementApplyError("plan-read", existing.error.message ?? "plan read failed")
 	const previous = (existing.data ?? null) as Record<string, unknown> | null
 
-	// Stale-generation guard (clean-room N-1): a TERMINAL read-back for a
-	// subscription ref that differs from the stored LIVE binding belongs to a
-	// previous generation (cancel → resubscribe; the old subscription's deleted
-	// event can arrive after the new one activated). Never clobber the live
-	// generation with stale terminal state — the fail direction would be
-	// over-restricting a paying workspace; residual divergence is left to
-	// reconciliation (spec §15). Non-terminal applies and same-ref applies pass
-	// through; a live detaching row awaiting its replacement rail's activation
-	// is only ever terminal-applied by its OWN ref (equal ⇒ not stale).
-	if (
-		terminal &&
-		previous &&
-		(previous.status === "active" || previous.status === "past_due") &&
-		previous.gateway_subscription_id &&
-		previous.gateway_subscription_id !== state.subscriptionRef
-	) {
-		return { workspaceId, terminal: true, staleGeneration: true, planChanged: false, mirrorPlan: null }
+	// Stale-generation guard (clean-room N-1, widened in review round 2): an event
+	// for a subscription ref that differs from the stored LIVE binding belongs to
+	// another generation (cancel → resubscribe). Only the live row's replacement is
+	// allowed to take over, and only when that row is detaching (its cancel was
+	// accepted) — otherwise a redelivered non-terminal event for the OLD generation
+	// would rewire the row back, and the old subscription's later `deleted` event
+	// would terminalize a workspace that is still paying on the new one.
+	//
+	// - stored live + not detaching + foreign ref  → stale (terminal OR not)
+	// - stored live + detaching + foreign terminal → stale (old gen's cancellation)
+	// - stored live + detaching + foreign non-term  → the replacement activating
+	// - stored terminal/none                       → any ref may (re)bind
+	const foreignRef =
+		!!previous?.gateway_subscription_id && previous.gateway_subscription_id !== state.subscriptionRef
+	const storedLive = previous?.status === "active" || previous?.status === "past_due"
+	const storedDetaching = previous?.cancel_at_period_end === true
+	if (foreignRef && storedLive && (!storedDetaching || terminal)) {
+		return { workspaceId, terminal, staleGeneration: true, planChanged: false, mirrorPlan: null }
 	}
 
 	// past_due clock (spec §6 step 4): set on the transition, never reset while
@@ -664,6 +665,9 @@ export async function applyEntitlementFromReadBack(
 					cancel_at_period_end: false,
 					past_due_since: null,
 					seats: state.seats,
+					// Activation applied: the checkout is no longer pending.
+					checkout_pending_at: null,
+					checkout_pending_ref: null,
 				}
 			: {
 					tier: state.tier as BillingTier,
@@ -678,6 +682,9 @@ export async function applyEntitlementFromReadBack(
 					current_period_end: state.currentPeriodEnd,
 					cancel_at_period_end: cancelAtPeriodEnd,
 					past_due_since: pastDueSince,
+					// Activation applied: the checkout is no longer pending.
+					checkout_pending_at: null,
+					checkout_pending_ref: null,
 				}
 	) as Record<string, unknown>
 

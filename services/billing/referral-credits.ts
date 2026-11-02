@@ -92,6 +92,10 @@ export interface StripeCreditClient {
 			},
 			options?: { idempotencyKey?: string },
 		): Promise<{ id: string }>
+		listBalanceTransactions(
+			customerId: string,
+			params?: { limit?: number },
+		): Promise<{ data: Array<{ id: string; metadata?: Record<string, string> | null }> }>
 	}
 }
 
@@ -605,22 +609,42 @@ export async function applyCreditsAtRenewal(
 	const rowIds = claimed.map((row) => row.id).sort()
 	// Stable across release/retry of the SAME row set; a later renewal with newly
 	// banked rows is a different set and therefore a different key.
-	const idempotencyKey = `referral-credit-${workspaceId}:${createHash("sha256").update(rowIds.join(",")).digest("hex").slice(0, 24)}`
+	const rowSetHash = createHash("sha256").update(rowIds.join(",")).digest("hex").slice(0, 24)
+	const idempotencyKey = `referral-credit-${workspaceId}:${rowSetHash}`
 
 	let balanceTransactionId: string
 	try {
-		const credit = await stripe.customers.createBalanceTransaction(
+		// Stripe expires idempotency keys after 24h, but this apply can run later
+		// than that (a crash between the provider call and the settle releases the
+		// claim, and the daily cron re-runs when it finds a confirming invoice).
+		// A durable marker on the balance transaction itself makes the settlement
+		// idempotent regardless of elapsed time: adopt our own prior credit instead
+		// of creating a second one for the same row set.
+		const existingTransactions = await stripe.customers.listBalanceTransactions(
 			plan.gateway_customer_id,
-			{
-				// Negative amount = credit applied by Stripe to future invoices (PDEC-3).
-				amount: -creditMinorUnits,
-				currency: "usd",
-				description: `Referral credit — ${months} banked month(s)`,
-				metadata: { workspace_id: workspaceId, referral_months: String(months) },
-			},
-			{ idempotencyKey },
+			{ limit: 100 },
 		)
-		balanceTransactionId = credit.id
+		const prior = existingTransactions.data.find((tx) => tx.metadata?.referral_row_set === rowSetHash)
+		if (prior) {
+			balanceTransactionId = prior.id
+		} else {
+			const credit = await stripe.customers.createBalanceTransaction(
+				plan.gateway_customer_id,
+				{
+					// Negative amount = credit applied by Stripe to future invoices (PDEC-3).
+					amount: -creditMinorUnits,
+					currency: "usd",
+					description: `Referral credit — ${months} banked month(s)`,
+					metadata: {
+						workspace_id: workspaceId,
+						referral_months: String(months),
+						referral_row_set: rowSetHash,
+					},
+				},
+				{ idempotencyKey },
+			)
+			balanceTransactionId = credit.id
+		}
 	} catch (err) {
 		// Release OUR claim so the next renewal retries. The claim stamp guards the
 		// release: a concurrent apply's fresh claim is never overwritten. Rows left

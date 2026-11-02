@@ -300,6 +300,54 @@ describe("billing webhook processor — core pipeline (T8)", () => {
 		expect(store.profiles[0].plan).toBe("free") // mirror untouched by the stale event
 	})
 
+	it("ignores a stale non-terminal event from the previous generation (review round 2)", async () => {
+		// A redelivered `customer.subscription.updated` for the OLD subscription must
+		// not rewire the row back while the NEW generation is live and not detaching —
+		// otherwise the old subscription's later `deleted` would terminalize a
+		// workspace that is still paying.
+		const { store, base } = setup({
+			store: seedStore({
+				plan: { gateway: "stripe", gateway_subscription_id: "sub_live_new", tier: "pro", status: "active", billing_cycle: "monthly", is_founding: true },
+			}),
+			readSubscription: readBackReturning({ subscriptionRef: "sub_old", status: "active", tier: "plus" }),
+		})
+		const result = await process(store, base, {
+			eventId: "evt_stale_nonterminal",
+			eventType: "customer.subscription.updated",
+			pointerRef: "sub_old",
+			pointerKind: "subscription",
+		})
+
+		expect(result.code).toBe("processed")
+		const plan = store.workspace_plans[0]
+		expect(plan.gateway_subscription_id).toBe("sub_live_new")
+		expect(plan.tier).toBe("pro")
+		expect(plan.status).toBe("active")
+	})
+
+	it("lets the replacement generation activate while the stored row is detaching", async () => {
+		// cancel_at_period_end = true means the user accepted the old cancellation, so
+		// a foreign non-terminal read-back is the successor activating — not stale.
+		const { store, base } = setup({
+			store: seedStore({
+				plan: { gateway: "stripe", gateway_subscription_id: "sub_detaching", tier: "plus", status: "active", billing_cycle: "monthly", cancel_at_period_end: true },
+			}),
+			readSubscription: readBackReturning({ subscriptionRef: "sub_successor", status: "active", tier: "pro" }),
+		})
+		const result = await process(store, base, {
+			eventId: "evt_successor",
+			eventType: "customer.subscription.updated",
+			pointerRef: "sub_successor",
+			pointerKind: "subscription",
+		})
+
+		expect(result.code).toBe("processed")
+		const plan = store.workspace_plans[0]
+		expect(plan.gateway_subscription_id).toBe("sub_successor")
+		expect(plan.tier).toBe("pro")
+		expect(plan.cancel_at_period_end).toBe(false)
+	})
+
 	it("terminal-cancels via the stored subscription binding when a deletion notice read-back is gone", async () => {
 		const { store, base } = setup({
 			store: seedStore({

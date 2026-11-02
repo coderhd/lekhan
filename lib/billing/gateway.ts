@@ -40,6 +40,35 @@ export interface CheckoutRequest {
 	currency: Currency
 	isFounding: boolean
 	seats?: number
+	/**
+	 * Stripe-only (US-6 AC2): the stored `gateway_customer_id` to reuse so a
+	 * resubscribe does not mint a second customer and strand residual credit.
+	 * Other rails ignore it — their customer identity is bound server-side.
+	 */
+	customerRef?: string | null
+}
+
+/**
+ * How long a created-but-not-yet-webhooked checkout blocks another one.
+ *
+ * The single-live-subscription invariant is read-back based, but the row only
+ * learns the new `gateway_subscription_id` when the activation webhook lands.
+ * Between checkout creation and that webhook (provider lag, a 502 retry, a
+ * redelivery) a second checkout would create a second live subscription whose
+ * ref then silently overwrites the first — a ghost subscription that keeps
+ * invoicing. A pending marker closes that window; it is cleared on apply.
+ */
+export const CHECKOUT_PENDING_WINDOW_MS = 30 * 60_000
+
+/** True when a checkout was started recently enough that it may still activate. */
+export function isCheckoutPending(
+	plan: { checkout_pending_at?: string | null } | null | undefined,
+	nowMs: number = Date.now(),
+): boolean {
+	const startedAt = plan?.checkout_pending_at ? Date.parse(plan.checkout_pending_at) : Number.NaN
+	if (!Number.isFinite(startedAt)) return false
+	const age = nowMs - startedAt
+	return age >= 0 && age < CHECKOUT_PENDING_WINDOW_MS
 }
 
 export interface CheckoutSession {

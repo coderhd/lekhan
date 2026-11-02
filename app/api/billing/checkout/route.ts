@@ -14,6 +14,7 @@ import {
 	TierUnavailableError,
 	isBillingCycle,
 	isBillingTier,
+	isCheckoutPending,
 	isCurrency,
 	isLiveNonDetaching,
 	withStoredCancelFlag,
@@ -69,6 +70,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 		throw err
 	}
 
+	// Checkout→activation gap (§13 Always): the row only learns the new
+	// `gateway_subscription_id` when the activation webhook applies, so a second
+	// checkout started while the first is still in flight would create a second
+	// live subscription whose ref then overwrites the first — ghost billing that
+	// reconciliation cannot see. Refuse while a checkout is pending.
+	if (isCheckoutPending(context.plan)) {
+		return NextResponse.json(
+			{
+				error: "A checkout is already in progress for this workspace. Finish it, or try again in a few minutes.",
+				code: "checkout_in_progress",
+			},
+			{ status: 409 },
+		)
+	}
+
 	// Single-live-subscription invariant (§13 Always). Read back provider state: a
 	// successor checkout is permitted only against a verified-detaching predecessor
 	// (PDEC-11), never by inferring that a subscription has stopped billing.
@@ -118,7 +134,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 			currency,
 			isFounding,
 			seats,
+			// US-6 AC2: reuse the stored customer so a resubscribe does not mint a
+			// second Stripe customer and strand any residual credit on it.
+			customerRef: context.plan?.gateway_customer_id ?? null,
 		})
+
+		// Record the attempt so the gap above is closed. Best-effort: the session
+		// already exists at the provider, and a write failure must not strand the
+		// user — the read-back guard still covers the settled cases.
+		const pending = await admin
+			.from("workspace_plans")
+			.update({
+				checkout_pending_at: new Date().toISOString(),
+				checkout_pending_ref: session.opaqueRef,
+			})
+			.eq("workspace_id", context.workspaceId)
+		if (pending.error) {
+			console.error("[billing/checkout] failed to record pending checkout:", pending.error)
+		}
+
 		return NextResponse.json({ checkoutUrl: session.checkoutUrl, opaqueRef: session.opaqueRef })
 	} catch (err) {
 		if (err instanceof TierUnavailableError) {

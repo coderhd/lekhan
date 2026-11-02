@@ -323,9 +323,13 @@ async function importService() {
 	return import("@/services/billing/referral-credits")
 }
 
-function creditStub(result: { id: string } = { id: "bt_credit_1" }) {
+function creditStub(
+	result: { id: string } = { id: "bt_credit_1" },
+	existing: Array<{ id: string; metadata?: Record<string, string> | null }> = [],
+) {
 	const create = vi.fn(async () => result)
-	return { client: { customers: { createBalanceTransaction: create } }, create }
+	const list = vi.fn(async () => ({ data: existing }))
+	return { client: { customers: { createBalanceTransaction: create, listBalanceTransactions: list } }, create, list }
 }
 
 /**
@@ -778,7 +782,7 @@ describe("applyCreditsAtRenewal (Stripe)", () => {
 		const failing = vi.fn(async () => {
 			throw Object.assign(new Error("stripe unavailable"), { type: "StripeAPIError" })
 		})
-		const client = { customers: { createBalanceTransaction: failing } }
+		const client = { customers: { createBalanceTransaction: failing, listBalanceTransactions: async () => ({ data: [] }) } }
 		const db = fakeDb(store)
 
 		const failed = await applyCreditsAtRenewal(db as never, WS_REFERRER, { stripe: client as never })
@@ -906,6 +910,36 @@ describe("applyCreditsAtRenewal (Stripe)", () => {
 		expect(store.workspace_plans[0].credited_months).toBe(2)
 	})
 
+	it("adopts its own prior credit by row-set marker past the provider idempotency TTL", async () => {
+		const { applyCreditsAtRenewal } = await importService()
+		const store = seedStore({
+			plan: stripePlan(),
+			ledger: [ledgerRow({ invitee_ref: "invitee-1", invitee_user_id: "invitee-1" })],
+		})
+
+		// First apply creates the credit and stamps the durable row-set marker.
+		const first = creditStub()
+		const r1 = await applyCreditsAtRenewal(fakeDb(store) as never, WS_REFERRER, { stripe: first.client as never })
+		expect(r1).toMatchObject({ applied: true, monthsApplied: 1 })
+		const [, createParams] = first.create.mock.calls[0] as unknown as [string, { metadata: Record<string, string> }]
+		const rowSet = createParams.metadata.referral_row_set
+		expect(rowSet).toBeTruthy()
+
+		// Crash recovery re-runs the same row set long after Stripe's 24h idempotency
+		// cache expired. The provider already holds our credit, so we adopt it and
+		// never create a second balance transaction.
+		store.referral_credit_ledger[0].applied_at = null
+		store.referral_credit_ledger[0].claimed_at = null
+		const second = creditStub({ id: "bt_credit_existing" }, [
+			{ id: "bt_credit_1", metadata: { referral_row_set: rowSet } },
+		])
+		const r2 = await applyCreditsAtRenewal(fakeDb(store) as never, WS_REFERRER, { stripe: second.client as never })
+
+		expect(r2).toMatchObject({ applied: true, monthsApplied: 1 })
+		expect(second.create).not.toHaveBeenCalled()
+		expect(second.list).toHaveBeenCalled()
+	})
+
 	it("logs (and never credits twice) when releasing the claim after a provider failure itself fails", async () => {
 		const { applyCreditsAtRenewal } = await importService()
 		const store = seedStore({
@@ -915,7 +949,7 @@ describe("applyCreditsAtRenewal (Stripe)", () => {
 		const failing = vi.fn(async () => {
 			throw new Error("stripe unavailable")
 		})
-		const client = { customers: { createBalanceTransaction: failing } }
+		const client = { customers: { createBalanceTransaction: failing, listBalanceTransactions: async () => ({ data: [] }) } }
 		const consoleErr = vi.spyOn(console, "error").mockImplementation(() => {})
 
 		const result = await applyCreditsAtRenewal(releaseFailureDb(store) as never, WS_REFERRER, { stripe: client as never })

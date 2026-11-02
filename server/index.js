@@ -90,6 +90,14 @@ let pendingUpgrades = 0
  * intact. Everything else (active, in-grace, free after a voluntary cancel)
  * keeps write access.
  */
+// How often a live socket re-reads the owner entitlement. Enforcement must follow
+// billing state, not connection age: a socket opened during the D9 grace window
+// would otherwise keep writing after the grace expires (or a terminal downgrade)
+// until the client happened to reconnect.
+const RELAY_ENTITLEMENT_RECHECK_MS = Number(process.env.RELAY_ENTITLEMENT_RECHECK_MS) > 0
+	? Number(process.env.RELAY_ENTITLEMENT_RECHECK_MS)
+	: 60_000
+
 function resolveRelayReadOnly (role, entitlement) {
 	if (role === 'viewer') return true
 	return entitlement ? entitlement.relayReadOnly === true : false
@@ -306,6 +314,10 @@ server.on('upgrade', async (request, socket, head) => {
 		wss.handleUpgrade(request, socket, head, (ws) => {
 			releaseUpgradeReservation()
 			ws.isViewer = resolveRelayReadOnly(role, ownerEntitlement)
+			// Identity for the live entitlement re-check; the role is page-scoped and
+			// does not change for the life of the connection.
+			ws.relayRole = role
+			ws.documentId = documentId
 			wss.emit('connection', ws, request)
 		})
 	} catch (err) {
@@ -349,6 +361,22 @@ wss.on('connection', (ws, request) => {
 	// Hand connection over to y-websocket setup
 	const url = new URL(request.url, `http://${request.headers.host}`)
 	const documentId = url.searchParams.get('documentId')
+
+	// Billing-state-durable enforcement: re-read the owner entitlement so a grace
+	// window expiring (or a terminal downgrade) blocks writes on THIS socket, not
+	// only after the next reconnect. One query per socket per interval.
+	if (documentId) {
+		const entitlementTimer = setInterval(async () => {
+			try {
+				const entitlement = await getDocumentOwnerEntitlement(supabaseAdmin, documentId)
+				ws.isViewer = resolveRelayReadOnly(ws.relayRole, entitlement)
+			} catch (err) {
+				console.error('[Relay] entitlement re-check failed:', err)
+			}
+		}, RELAY_ENTITLEMENT_RECHECK_MS)
+		entitlementTimer.unref?.()
+		ws.on('close', () => clearInterval(entitlementTimer))
+	}
 	
 	// Create request wrapper to supply docName
 	request.url = `/${documentId}`

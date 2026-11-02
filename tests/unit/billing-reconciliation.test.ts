@@ -603,7 +603,7 @@ describe("reconciliation cron — referral ledger settlement (T9)", () => {
 
 	function creditStub() {
 		const create = vi.fn(async () => ({ id: "bt_recon_1" }))
-		return { client: { customers: { createBalanceTransaction: create } }, create }
+		return { client: { customers: { createBalanceTransaction: create, listBalanceTransactions: async () => ({ data: [] }) } }, create }
 	}
 
 	it("does NOT settle banked months without a confirming paid invoice", async () => {
