@@ -13,6 +13,12 @@ import {
 interface ShortcutHelpDialogProps {
 	open: boolean
 	onOpenChange: (open: boolean) => void
+	/**
+	 * Where focus should return when the sheet closes. The palette handoff
+	 * unmounts the footer button that opened help, so the caller passes the
+	 * element that was focused before the palette opened.
+	 */
+	returnFocusTo?: HTMLElement | null
 }
 
 function KeyChips ({ item, platform }: { item: ShortcutItem, platform: 'mac' | 'other' }) {
@@ -51,7 +57,7 @@ function KeyChips ({ item, platform }: { item: ShortcutItem, platform: 'mac' | '
 	)
 }
 
-export default function ShortcutHelpDialog ({ open, onOpenChange }: ShortcutHelpDialogProps) {
+export default function ShortcutHelpDialog ({ open, onOpenChange, returnFocusTo = null }: ShortcutHelpDialogProps) {
 	const [platform, setPlatform] = useState<'mac' | 'other'>('other')
 	const openerRef = useRef<HTMLElement | null>(null)
 
@@ -61,15 +67,18 @@ export default function ShortcutHelpDialog ({ open, onOpenChange }: ShortcutHelp
 	// cannot do that on its own when the sheet is opened programmatically.
 	useEffect(() => {
 		if (open) {
-			openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+			openerRef.current = returnFocusTo ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null)
 			setPlatform(detectShortcutPlatform())
 			return
 		}
-		if (openerRef.current?.isConnected) {
+		// A palette/help handoff opens the replacement modal in the same commit;
+		// that modal owns focus, so do not steal it back here.
+		const anotherModalIsOpen = document.querySelector('[role="dialog"][data-state="open"]') !== null
+		if (!anotherModalIsOpen && openerRef.current?.isConnected) {
 			openerRef.current.focus()
 		}
 		openerRef.current = null
-	}, [open])
+	}, [open, returnFocusTo])
 
 	return (
 		<Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -77,6 +86,7 @@ export default function ShortcutHelpDialog ({ open, onOpenChange }: ShortcutHelp
 				<Dialog.Overlay className="fixed inset-0 z-[99999] bg-black/60 backdrop-blur-sm animate-in fade-in" />
 				<Dialog.Content
 					aria-modal="true"
+					data-modal="shortcut-help"
 					className="fixed top-1/2 left-1/2 z-[100000] w-[92vw] max-w-xl -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-black/10 bg-surface-container shadow-2xl animate-in zoom-in-95 dark:border-white/10"
 				>
 					<div className="flex items-start justify-between gap-sm border-b border-black/5 px-5 py-4 dark:border-white/5">
@@ -92,7 +102,7 @@ export default function ShortcutHelpDialog ({ open, onOpenChange }: ShortcutHelp
 							<button
 								type="button"
 								aria-label="Close keyboard shortcuts"
-								className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-black/5 hover:text-on-surface dark:hover:bg-white/10"
+								className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-black/5 hover:text-on-surface dark:hover:bg-white/10"
 							>
 								<span className="material-symbols-outlined text-lg" aria-hidden="true">close</span>
 							</button>

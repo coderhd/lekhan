@@ -395,6 +395,17 @@ export default function Dashboard({ user }: DashboardProps) {
 								<p className="text-on-surface-variant max-w-md mb-8">
 									No pages match this search or filter. Try a shorter word, or widen the date range.
 								</p>
+								<button
+									type="button"
+									onClick={() => {
+										setSearchQuery('')
+										setFilterDate('all')
+									}}
+									className="flex min-h-11 items-center gap-sm bg-primary text-on-primary font-bold px-xl py-2.5 rounded-lg hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 premium-transition"
+								>
+									<span className="material-symbols-outlined">filter_list_off</span>
+									Clear search and filters
+								</button>
 							</div>
 						)
 					) : (

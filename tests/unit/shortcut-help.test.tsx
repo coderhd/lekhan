@@ -138,6 +138,60 @@ describe('shortcut help', () => {
 		expect(screen.queryByRole('dialog', { name: /keyboard shortcuts/i })).toBeNull()
 	})
 
+	it('swaps help for the palette on Cmd/Ctrl+K instead of stacking', async () => {
+		renderPalette()
+		await flushSession()
+		await pressQuestionMark()
+		expect(screen.getByRole('dialog', { name: /keyboard shortcuts/i })).toBeTruthy()
+
+		await act(async () => {
+			document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, cancelable: true }))
+		})
+
+		expect(screen.queryByRole('dialog', { name: /keyboard shortcuts/i })).toBeNull()
+		expect(screen.getByPlaceholderText(/search pages/i)).toBeTruthy()
+		expect(screen.getAllByRole('dialog')).toHaveLength(1)
+		expect(screen.getByRole('dialog', { name: /search pages/i }).contains(document.activeElement)).toBe(true)
+	})
+
+	it('does not open the palette over an unrelated dialog', async () => {
+		renderPalette(
+			<div role="dialog" data-state="open" aria-label="other">
+				<button type="button">Inside</button>
+			</div>
+		)
+		await flushSession()
+
+		await act(async () => {
+			document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, cancelable: true }))
+		})
+
+		expect(screen.queryByPlaceholderText(/search pages/i)).toBeNull()
+	})
+
+	it('returns focus to the pre-palette element after opening help from the footer', async () => {
+		renderPalette(<button type="button">Before</button>)
+		await flushSession()
+		const before = screen.getByRole('button', { name: 'Before' })
+		before.focus()
+
+		await act(async () => {
+			document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, cancelable: true }))
+		})
+		expect(screen.getByPlaceholderText(/search pages/i)).toBeTruthy()
+
+		fireEvent.click(screen.getByRole('button', { name: /shortcuts/i }))
+		const dialog = screen.getByRole('dialog', { name: /keyboard shortcuts/i })
+		expect(dialog.contains(document.activeElement)).toBe(true)
+
+		await act(async () => {
+			fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+		})
+
+		expect(screen.queryByRole('dialog', { name: /keyboard shortcuts/i })).toBeNull()
+		expect(document.activeElement).toBe(before)
+	})
+
 	it('renders the real shortcut inventory, not a hand-written list', async () => {
 		renderPalette()
 		await flushSession()

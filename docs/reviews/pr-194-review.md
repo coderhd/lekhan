@@ -55,3 +55,18 @@ targeted `eslint` clean. Full suite: 1269 passed, 1 skipped, 3 pre-existing
 | Esc closes; focus-trapped modal | Radix dialog + explicit opener restoration; tests assert Esc close, focus return, and Tab containment. |
 | Wired to the real shortcut list; honest claims | Dialog maps `SHORTCUT_GROUPS`; exact-id and duplicate-key tests; formatting keys included; Share marked "No keyboard shortcut yet"; `⌘⇧S` collision removed. |
 | Empty-state pass, no lorem | Dashboard first-run/section/search, palette zero-results/no-recency/error, editor placeholder; tests for palette paths, source review for dashboard/editor. |
+
+## External review round 2 (Pullfrog + CodeRabbit, head `aee8ee6`)
+
+Four actionable minors were raised after the clean-room verdict. Dispositions:
+
+| # | Source | Finding | Disposition |
+|---|---|---|---|
+| 1 | Pullfrog | One-modal invariant was one-directional: `?` refused to stack, but Cmd/Ctrl+K could mount the palette over the help sheet. | **Fixed** — both content nodes are tagged (`data-modal="palette"` / `"shortcut-help"`) and both open paths consult the same `openDialog()` check. The pair may hand off to each other, but neither may stack over an unrelated dialog. Tests: Cmd+K swaps help→palette with focus on the palette, and Cmd+K is refused over an unrelated dialog. |
+| 2 | Pullfrog | New controls were below the #79 touch-target bar (close 32px, footer Shortcuts ~24px, Try again ~26px). | **Fixed** — close is `h-11 w-11`, footer Shortcuts and Try again are `min-h-11` (44px). Chose the documented 44px bar rather than the legacy sub-bar convention for new controls. |
+| 3 | CodeRabbit | Dashboard no-results state hid the toolbar, so a date filter that removed everything left no recovery. | **Fixed** — added a `Clear search and filters` action (`h-11`-safe) that resets `searchQuery` and `filterDate`; test covers typing a non-matching query, recovering, and clearing the input. |
+| 4 | CodeRabbit | Palette→help handoff saved a focus target that was about to unmount (the footer button), so Esc landed on `document.body`. | **Fixed** — the pre-palette opener is captured in `rememberOpener()` before the first modal opens, threaded to `ShortcutHelpDialog` as `returnFocusTo`, and restored only when no replacement modal owns focus. Test asserts focus returns to the pre-palette element after Esc. |
+
+Verification after round 2: targeted suites `shortcut-help` (13), `global-search-palette`
+(15), `shortcuts` (12), `dashboard-refetch-on-auth` (6) — 46/46 pass; `tsc --noEmit`
+clean; `eslint` clean on all touched files.

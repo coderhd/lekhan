@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom'
 import React from 'react'
-import { render, screen, act, waitFor } from '@testing-library/react'
+import { render, screen, act, waitFor, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import Dashboard from '@/components/dashboard'
 import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
@@ -213,5 +213,24 @@ describe('Dashboard refetch on auth', () => {
 		// The newer two-doc result must remain, not the stale single-doc one.
 		await waitFor(() => expect(screen.getAllByText('Owned').length).toBe(2))
 		expect(screen.queryByText(/stale doc/i)).not.toBeInTheDocument()
+	})
+
+	it('recovers from the no-results state by clearing search and filters', async () => {
+		fetchWorkspacePages.mockResolvedValue([
+			{ id: 'doc-1', title: 'My Doc', owner_id: 'user-1', updated_at: new Date().toISOString() },
+		])
+
+		renderDashboard()
+		await waitFor(() => expect(screen.getAllByText('Owned').length).toBe(1))
+
+		fireEvent.change(screen.getByPlaceholderText('Search...'), { target: { value: 'definitely-no-match' } })
+		expect(screen.getByText(/no results found/i)).toBeInTheDocument()
+		expect(screen.queryAllByText('Owned')).toHaveLength(0)
+
+		fireEvent.click(screen.getByRole('button', { name: /clear search and filters/i }))
+
+		expect(screen.queryByText(/no results found/i)).not.toBeInTheDocument()
+		await waitFor(() => expect(screen.getAllByText('Owned').length).toBe(1))
+		expect((screen.getByPlaceholderText('Search...') as HTMLInputElement).value).toBe('')
 	})
 })
