@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import {
 	assertSellableCheckout,
+	CHECKOUT_PENDING_WINDOW_MS,
 	TEAM_REQUIRED_CURRENCY,
 	TierUnavailableError,
 	isBillingCycle,
@@ -126,6 +127,65 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 	// Founding cohort is locked to persisted server state, never the request body (§15).
 	const isFounding = context.plan?.is_founding === true
 
+	// Reserve the slot atomically BEFORE the provider call. Without this, two
+	// requests racing within the same second both pass the pending gate above and
+	// both reach `createCheckout` — a sub-second version of the double-subscription
+	// window. The conditional update only claims a row whose marker is absent or
+	// expired; zero claimed rows means another request holds the slot.
+	const reservedAt = new Date().toISOString()
+	const expiredBefore = new Date(Date.now() - CHECKOUT_PENDING_WINDOW_MS).toISOString()
+	const reservation = await admin
+		.from("workspace_plans")
+		.update({ checkout_pending_at: reservedAt, checkout_pending_ref: "reserved" })
+		.eq("workspace_id", context.workspaceId)
+		.or(`checkout_pending_at.is.null,checkout_pending_at.lt.${expiredBefore}`)
+		.select("workspace_id")
+
+	if (reservation.error) {
+		console.error("[billing/checkout] failed to reserve the checkout slot:", reservation.error)
+		return NextResponse.json(
+			{ error: "Could not start checkout. Please try again.", code: "checkout_failed" },
+			{ status: 503 },
+		)
+	}
+
+	if (!reservation.data || reservation.data.length === 0) {
+		const existingRow = await admin
+			.from("workspace_plans")
+			.select("workspace_id")
+			.eq("workspace_id", context.workspaceId)
+			.maybeSingle()
+		// Row exists ⇒ a fresh marker belongs to a concurrent request. No row ⇒ first
+		// purchase: create it with the reservation already held; a unique violation
+		// means the concurrent request won the create.
+		if (existingRow.data) {
+			return NextResponse.json(
+				{
+					error: "A checkout is already in progress for this workspace. Finish it, or try again in a few minutes.",
+					code: "checkout_in_progress",
+				},
+				{ status: 409 },
+			)
+		}
+		const inserted = await admin
+			.from("workspace_plans")
+			.insert({
+				workspace_id: context.workspaceId,
+				checkout_pending_at: reservedAt,
+				checkout_pending_ref: "reserved",
+			})
+			.select("workspace_id")
+		if (inserted.error || !inserted.data || inserted.data.length === 0) {
+			return NextResponse.json(
+				{
+					error: "A checkout is already in progress for this workspace. Finish it, or try again in a few minutes.",
+					code: "checkout_in_progress",
+				},
+				{ status: 409 },
+			)
+		}
+	}
+
 	try {
 		const session = await gatewayForCurrency(currency).createCheckout({
 			workspaceId: context.workspaceId,
@@ -155,6 +215,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
 		return NextResponse.json({ checkoutUrl: session.checkoutUrl, opaqueRef: session.opaqueRef })
 	} catch (err) {
+		// Release the reservation so the user can retry immediately instead of
+		// waiting out the pending window for a session that was never created.
+		const released = await admin
+			.from("workspace_plans")
+			.update({ checkout_pending_at: null, checkout_pending_ref: null })
+			.eq("workspace_id", context.workspaceId)
+		if (released.error) {
+			console.error("[billing/checkout] failed to release the checkout reservation:", released.error)
+		}
 		if (err instanceof TierUnavailableError) {
 			return NextResponse.json(
 				{ error: err.message, code: "tier_unavailable", requiredCurrency: TEAM_REQUIRED_CURRENCY },
