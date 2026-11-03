@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-	metadataBase: new URL(process.env.NEXT_PUBLIC_DOCS_URL ?? "https://docs.lekhan.app"),
+	metadataBase: new URL(process.env.NEXT_PUBLIC_DOCS_URL ?? "https://docs.lekhan.online"),
 	title: {
 		default: "Lekhan Docs",
 		template: "%s · Lekhan Docs",

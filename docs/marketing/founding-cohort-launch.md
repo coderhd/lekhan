@@ -78,7 +78,7 @@ Obsidian vault as-is. Collaborate in real time. Run AI on your own keys.
 > So: markdown files on your disk. Real-time multiplayer anyway.
 > AI on YOUR api key — we never touch inference.
 >
-> 500 founding spots open: https://lekhan.app/early
+> 500 founding spots open: https://lekhan.online/early
 
 ### LinkedIn — story hook
 > Two years ago I watched a teammate lose three months of research notes
@@ -95,7 +95,7 @@ Obsidian vault as-is. Collaborate in real time. Run AI on your own keys.
 >
 > This week we opened 500 founding spots. If you live in your notes and
 > want your team inside them without moving them to someone's cloud:
-> https://lekhan.app/early
+> https://lekhan.online/early
 
 ### Instagram caption — visual brief first
 Visual brief: 15s screen capture — drag an Obsidian vault folder onto

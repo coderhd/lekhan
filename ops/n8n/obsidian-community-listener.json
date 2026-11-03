@@ -77,7 +77,7 @@
     },
     {
       "parameters": {
-        "fromEmail": "digest@lekhan.app",
+        "fromEmail": "digest@lekhan.online",
         "toEmail": "=YOUR_EMAIL",
         "subject": "=Lekhan growth: {{ $items().length }} qualified community posts",
         "html": "<p>{{ $items().length }} new qualified posts.</p>{{ $items().map(i => `<li><a href=\"${i.json.link}\">${i.json.title}</a> — ${i.json.pubDate || ''}</li>`).join('') }}",
