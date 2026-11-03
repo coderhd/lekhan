@@ -1321,7 +1321,12 @@ export default function EditorWorkspace({	pageId,
 						)}
 						{!anonVisitor && (
 							<div className="hidden md:flex items-center gap-xs ml-2 text-on-surface-variant/60 font-label-sm text-label-sm">
-								<SyncIndicator connectionState={connectionState} isSynced={isSynced} />
+								<SyncIndicator
+									connectionState={connectionState}
+									isSynced={isSynced}
+									hasUnsyncedChanges={hasUnsyncedChanges}
+									isLocalSynced={isLocalSynced}
+								/>
 							</div>
 						)}
 					</div>
@@ -1422,6 +1427,8 @@ export default function EditorWorkspace({	pageId,
 								activeUsers={activeUsers}
 								connectionState={connectionState}
 								isSynced={isSynced}
+								hasUnsyncedChanges={hasUnsyncedChanges}
+								isLocalSynced={isLocalSynced}
 							/>
 						)}
 

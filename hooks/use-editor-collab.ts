@@ -4,6 +4,7 @@ import type { WebsocketProvider } from 'y-websocket'
 import type { IndexeddbPersistence } from 'y-indexeddb'
 
 import { CollabUser } from '@/types'
+import { hasPendingLocalEdits, setPendingLocalEdits } from '@/lib/local-edits-marker'
 
 export type ConnectionState = 'connected' | 'connecting' | 'offline'
 
@@ -56,6 +57,23 @@ export function useEditorCollab (
 		let doc: Y.Doc | null = null
 		let wsProvider: WebsocketProvider | null = null
 		let indexeddbProvider: IndexeddbPersistence | null = null
+
+		// A reload must not hide edits that are still only on this device.
+		setIsDirty(hasPendingLocalEdits(documentId))
+		// The persisted marker can only be cleared once BOTH the local replica
+		// has restored its stored edits and the hub handshake has completed.
+		// Clearing on hub sync alone could drop the marker before IndexedDB
+		// applies the pending edits, briefly showing "Offline" for work that
+		// is still waiting to sync.
+		let isLocalRestored = false
+		let isHubSynced = false
+		const clearPendingMarkerIfRestored = () => {
+			if (!isLocalRestored || !isHubSynced) {
+				return
+			}
+			setIsDirty(false)
+			setPendingLocalEdits(documentId, false)
+		}
 		let graceTimer: ReturnType<typeof setTimeout> | null = null
 		let browserOnline = navigator.onLine
 		let lastWsStatus: WsStatus = 'connecting'
@@ -144,6 +162,8 @@ export function useEditorCollab (
 			indexeddbProvider = new IndexeddbPersistence(documentId, doc)
 			indexeddbProvider.on('synced', () => {
 				setIsLocalSynced(true)
+				isLocalRestored = true
+				clearPendingMarkerIfRestored()
 			})
 
 			// 2. Initialize WebSocket remote provider
@@ -162,6 +182,7 @@ export function useEditorCollab (
 				const connected = status === 'connected'
 				setIsConnected(connected)
 				if (!connected) {
+					isHubSynced = false
 					setIsSynced(false)
 				}
 				evaluateConnectionState()
@@ -169,9 +190,8 @@ export function useEditorCollab (
 
 			wsProvider.on('sync', (isSyncedState: boolean) => {
 				setIsSynced(isSyncedState)
-				if (isSyncedState) {
-					setIsDirty(false)
-				}
+				isHubSynced = isSyncedState
+				clearPendingMarkerIfRestored()
 			})
 
 			// 4. Configure awareness (presence)
@@ -201,7 +221,12 @@ export function useEditorCollab (
 			doc.on('update', (_update, origin) => {
 				// If change was made by the local user, set dirty flag
 				if (origin !== wsProvider && origin !== indexeddbProvider) {
-					setIsDirty(true)
+					// y-websocket flushes local updates synchronously over an
+					// open, synced socket. Only call an update "local only"
+					// when it could not have reached the hub.
+					const reachedHub = Boolean(wsProvider?.wsconnected && wsProvider?.synced)
+					setIsDirty(!reachedHub)
+					setPendingLocalEdits(documentId, !reachedHub)
 				}
 			})
 		})
@@ -221,6 +246,7 @@ export function useEditorCollab (
 			setIsConnected(false)
 			setIsSynced(false)
 			setIsLocalSynced(false)
+			setIsDirty(false)
 			setConnectionState('connecting')
 		}
 	}, [documentId, token, user.name, user.color])
