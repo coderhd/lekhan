@@ -8,7 +8,7 @@ format (first pass filed GAP-1…GAP-10 as #137–#146). This file is the verbat
 
 ---
 
-## GAP-11 (P2) → [#209] — Orphaned settings surfaces diverge from /settings post-cutover
+## GAP-11 (P2) → [#203](https://github.com/coderhd/lekhan/issues/203) — Orphaned settings surfaces diverge from /settings post-cutover
 
 **Title:** `[Polish] Remove or wire orphaned settings components: UnifiedSettingsModal + ModelLibrary are dead code with stale "Coming Soon" tabs`
 
@@ -25,7 +25,7 @@ settings entry reusing live tab content. Evidence: `grep -rn "UnifiedSettingsMod
 
 ---
 
-## GAP-12 (P2) → [#210] — Two divergent BYOK/AI-settings affordances on the settings surface
+## GAP-12 (P2) → [#204](https://github.com/coderhd/lekhan/issues/204) — Two divergent BYOK/AI-settings affordances on the settings surface
 
 **Title:** `[Polish] Settings has two contradictory AI/BYOK stories: Sarvam-only card vs 10-provider registry`
 
@@ -42,7 +42,7 @@ same `/settings` route (usage + AI tabs).
 
 ---
 
-## GAP-13 (P2) → [#211] — CustomSelect is not an accessible select
+## GAP-13 (P2) → [#205](https://github.com/coderhd/lekhan/issues/205) — CustomSelect is not an accessible select
 
 **Title:** `[A11y] CustomSelect trigger has no accessible name / state relationship to its label`
 
@@ -61,7 +61,7 @@ Related settings-tablist deviations sampled by the SIL-232 audit (fix together):
 
 ---
 
-## GAP-16 (P2) → [#214] — Razorpay checkout has no return landing / feedback on /settings
+## GAP-16 (P2) → [#208](https://github.com/coderhd/lekhan/issues/208) — Razorpay checkout has no return landing / feedback on /settings
 
 **Title:** `[Billing] After a Razorpay (INR-rail) checkout there is no return state or feedback on /settings`
 
@@ -78,7 +78,7 @@ GAP-14's copy sweep so the INR copy matches the honest no-claim toast pattern.
 
 ---
 
-## GAP-14 (P2) → [#212] — Billing copy uses "plan" workflow-wide while Context vocabulary pins "tier"
+## GAP-14 (P2) → [#206](https://github.com/coderhd/lekhan/issues/206) — Billing copy uses "plan" workflow-wide while Context vocabulary pins "tier"
 
 **Title:** `[Polish] Billing surface copy says "plan" everywhere; CONTEXT.md Tier row says avoid "plan (code legacy)"`
 
@@ -92,7 +92,7 @@ the billing surface needs a coordinated copy pass.
 
 ---
 
-## GAP-15 (P2) → [#213] — Mobile settings tab rail has no scroll affordance
+## GAP-15 (P2) → [#207](https://github.com/coderhd/lekhan/issues/207) — Mobile settings tab rail has no scroll affordance
 
 **Title:** `[Polish] 390px settings: horizontal tab rail overflows with no visual scroll indicator; last tab off-screen`
 
