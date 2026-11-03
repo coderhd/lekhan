@@ -202,6 +202,9 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 
 			setOpen(false)
 			reset()
+			// The dashboard Inbox card reads the indexed page text; tell it a
+			// capture landed so its count/top-5 refresh without a tab switch.
+			window.dispatchEvent(new CustomEvent('lekhan:inbox-changed'))
 			toast.success(`Captured to ${destination.title}`, {
 				description: bulletText,
 				action: { label: 'Open', onClick: () => router.push(`/page/${destination!.id}`) },
