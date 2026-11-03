@@ -102,8 +102,9 @@ full suite (103 files / 967 tests), and build are green.
     (44px), matching the `Open Inbox` control; the component test asserts it.
 21. **`?section=inbox` scroll no-oped when the section arrived from the hub after local sync.**
     **Fixed:** the scroll retries on editor updates and the hub `isSynced` flip (60s bounded
-    fallback), then stops; it also cancels if the user focuses the editor first, so the page
-    never yanks them away mid-write.
+    fallback), then stops; it also cancels if the user focuses the editor first, and that
+    cancellation persists across effect re-runs so a later hub-sync flip cannot yank them
+    away mid-write.
 
 ## Verification (final)
 

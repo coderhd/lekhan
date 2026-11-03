@@ -148,6 +148,7 @@ export default function EditorWorkspace({	pageId,
 	const [inboxBusy, setInboxBusy] = useState(false)
 	const inboxBusyRef = useRef(false)
 	const inboxScrollDoneRef = useRef(false)
+	const inboxScrollCancelledRef = useRef(false)
 	// The editor is created with the extension configured once; keep the
 	// callbacks stable and read the latest state through this ref.
 	const inboxCallbacksRef = useRef<{
@@ -1132,7 +1133,7 @@ export default function EditorWorkspace({	pageId,
 	// document updates and the hub `isSynced` flip, and stop if the user starts
 	// editing before the section lands so we never yank them mid-write.
 	useEffect(() => {
-		if (!editor || inboxScrollDoneRef.current) return
+		if (!editor || inboxScrollDoneRef.current || inboxScrollCancelledRef.current) return
 		if (typeof window === 'undefined') return
 		const params = new URLSearchParams(window.location.search)
 		if (params.get('section') !== 'inbox') return
@@ -1158,7 +1159,12 @@ export default function EditorWorkspace({	pageId,
 			inbox.scrollIntoView({ block: 'start', behavior: 'smooth' })
 		}
 
-		const onFocus = () => stop()
+		const onFocus = () => {
+			// Persist the interruption across effect re-runs; a later hub-sync
+			// flag flip must not re-arm the scroll after the user started writing.
+			inboxScrollCancelledRef.current = true
+			stop()
+		}
 
 		editor.on('focus', onFocus)
 		editor.on('update', tryScroll)
