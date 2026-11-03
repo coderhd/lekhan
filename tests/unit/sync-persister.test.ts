@@ -202,4 +202,33 @@ describe('Hub Page Persister (server/persister.js)', () => {
 		expect(indexedText).toContain('Inbox')
 		expect(indexedText).toContain('Call [[Alice]] about #launch #inbox')
 	})
+
+	it('TC07: keeps each bullet on its own line so inbox counting sees every capture', async () => {
+		// DN-T3 counts pending captures line by line. If list items are
+		// concatenated, two captures read as one line and the count under-reports.
+		const collabDoc = new Y.Doc()
+		const fragment = collabDoc.getXmlFragment('default')
+
+		const list = new Y.XmlElement('bulletList')
+		for (const text of ['09:41 Buy milk #inbox', '10:15 Call Alice #inbox']) {
+			const item = new Y.XmlElement('listItem')
+			const paragraph = new Y.XmlElement('paragraph')
+			const content = new Y.XmlText()
+			content.insert(0, text)
+			paragraph.insert(0, [content])
+			item.insert(0, [paragraph])
+			list.insert(list.length, [item])
+		}
+		fragment.insert(0, [list])
+
+		const persister = createTestPersister()
+		const result = await persister.persist('doc-123', collabDoc)
+
+		expect(result.success).toBe(true)
+		const indexedText = indexPageMock.mock.calls.at(-1)[2]
+		expect(indexedText.split('\n').filter((line: string) => line.includes('#inbox'))).toEqual([
+			'09:41 Buy milk #inbox',
+			'10:15 Call Alice #inbox',
+		])
+	})
 })

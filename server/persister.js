@@ -33,6 +33,9 @@ function extractDocumentText (ydoc) {
 	}
 
 	const fragment = ydoc.getXmlFragment('default')
+	// List containers keep one entry per line: inbox counting (DN-T3) reads the
+	// indexed text line by line, and concatenated bullets would under-count.
+	const BLOCK_CONTAINERS = new Set(['bulletList', 'orderedList', 'listItem', 'taskList', 'taskItem'])
 	// Structural checks instead of `instanceof`: server (CJS) and client (ESM)
 	// builds of yjs can hand back different constructors for the same classes.
 	const collect = (type) => {
@@ -40,7 +43,13 @@ function extractDocumentText (ydoc) {
 			return ''
 		}
 		if (typeof type.toArray === 'function') {
-			return type.toArray().map(child => collect(child)).join('')
+			const separator = typeof type.nodeName === 'string' && BLOCK_CONTAINERS.has(type.nodeName)
+				? '\n'
+				: ''
+			return type.toArray()
+				.map(child => collect(child))
+				.filter(Boolean)
+				.join(separator)
 		}
 		return typeof type.toString === 'function' ? type.toString() : ''
 	}

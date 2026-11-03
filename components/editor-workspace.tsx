@@ -40,6 +40,11 @@ import MentionList, { type MentionItem } from './mention-list'
 import WikilinkList from './wikilink-list'
 import { fetchPageDetails, fetchPageMemberRole, updatePageTitle, updatePageProperties, fetchMentionablePageCollaborators, fetchPageTags, fetchWorkspacePages, createPage } from '@/services/graph'
 import { Wikilink, buildWikilinkSuggestions, exitWikilinkSuggestion, type WorkspacePageSummary, normalizeWikilinkTarget } from '@/lib/wikilink'
+import { InboxTriage } from '@/lib/inbox-triage-extension'
+import { type InboxRow } from '@/lib/inbox-triage'
+import { InboxTriageError, linkInboxRow, tagInboxRow } from '@/lib/inbox-triage-actions'
+import InboxTriageDialog, { type InboxTriageMode } from './inbox-triage-dialog'
+import type { SearchResult } from '@/types'
 
 import { TableToolbar } from './table-toolbar'
 import { CodeBlockLanguageSelect } from './code-block-language-select'
@@ -139,6 +144,24 @@ export default function EditorWorkspace({	pageId,
 }: EditorWorkspaceProps) {
 	const router = useRouter()
 	const [title, setTitle] = useState(initialTitle)
+	const [inboxTriage, setInboxTriage] = useState<{ mode: InboxTriageMode; row: InboxRow } | null>(null)
+	const [inboxBusy, setInboxBusy] = useState(false)
+	const inboxBusyRef = useRef(false)
+	const inboxScrollDoneRef = useRef(false)
+	const inboxScrollCancelledRef = useRef(false)
+	// The editor is created with the extension configured once; keep the
+	// callbacks stable and read the latest state through this ref.
+	const inboxCallbacksRef = useRef<{
+		onLink: (row: InboxRow) => void
+		onTag: (row: InboxRow) => void
+	}>({ onLink: () => {}, onTag: () => {} })
+
+	useEffect(() => {
+		inboxCallbacksRef.current = {
+			onLink: row => setInboxTriage({ mode: 'link', row }),
+			onTag: row => setInboxTriage({ mode: 'tag', row }),
+		}
+	}, [])
 	const [userColor] = useState(() => CURSOR_COLORS[Math.floor(Math.random() * CURSOR_COLORS.length)])
 	const [isShareOpen, setIsShareOpen] = useState(false)
 	const [isHistoryOpen, setIsHistoryOpen] = useState(false)
@@ -759,6 +782,10 @@ export default function EditorWorkspace({	pageId,
 					},
 				},
 			}),
+			InboxTriage.configure({
+				onLink: row => inboxCallbacksRef.current.onLink(row),
+				onTag: row => inboxCallbacksRef.current.onTag(row),
+			}),
 		],
 
 		editorProps: {
@@ -1022,6 +1049,137 @@ export default function EditorWorkspace({	pageId,
 			},
 		})
 	}, [editor])
+
+	// Inbox triage (DN-T3). `o` appends a back-reference to the chosen page's
+	// Related-actions section over that page's CRDT channel, then marks the
+	// daily row processed by dropping `#inbox`. `t` keeps the row pending.
+	const handleInboxLink = useCallback(async (target: SearchResult) => {
+		if (!editor || !inboxTriage || inboxBusyRef.current) return
+
+		inboxBusyRef.current = true
+		setInboxBusy(true)
+		try {
+			await linkInboxRow({
+				view: editor.view,
+				row: inboxTriage.row,
+				target,
+				dailyPageTitle: title,
+				token,
+				ensureCanEdit: async (pageId) => {
+					// The picker surfaces shared read-only pages; the sync hub
+					// drops viewer writes without an error, so refuse first.
+					const targetPage = await fetchPageDetails(pageId)
+					if (targetPage.owner_id === currentUser.id) return true
+					const role = await fetchPageMemberRole(pageId, currentUser.id)
+					return role === 'owner' || role === 'editor'
+				},
+			})
+
+			toast.success(`Linked to ${target.title}`)
+			setInboxTriage(null)
+			window.dispatchEvent(new CustomEvent('lekhan:inbox-changed'))
+		} catch (error) {
+			if (error instanceof InboxTriageError) {
+				if (error.code === 'forbidden') {
+					toast.error('You do not have edit access to that page.')
+				} else if (error.code === 'stale') {
+					toast.error('That capture moved. Focus it again and retry.')
+					setInboxTriage(null)
+				} else {
+					toast.error('Could not link that capture.')
+				}
+			} else {
+				console.error('Failed to link inbox capture:', error)
+				toast.error('Could not link that capture. Check your connection and try again.')
+			}
+		} finally {
+			inboxBusyRef.current = false
+			setInboxBusy(false)
+		}
+	}, [currentUser.id, editor, inboxTriage, title, token])
+
+	const handleInboxTag = useCallback((tag: string) => {
+		if (!editor || !inboxTriage) return
+
+		try {
+			const { changed } = tagInboxRow({
+				view: editor.view,
+				row: inboxTriage.row,
+				tag,
+			})
+			const label = tag.trim().replace(/^#+/, '').toLowerCase()
+			toast.success(changed ? `Tagged #${label}` : `Already tagged #${label}`)
+			setInboxTriage(null)
+			window.dispatchEvent(new CustomEvent('lekhan:inbox-changed'))
+		} catch (error) {
+			if (error instanceof InboxTriageError && error.code === 'stale') {
+				toast.error('That capture moved. Focus it again and retry.')
+				setInboxTriage(null)
+			} else if (error instanceof InboxTriageError && error.code === 'invalid-tag') {
+				toast.error('Use one tag word, for example "launch".')
+			} else {
+				console.error('Failed to tag inbox capture:', error)
+				toast.error('Could not tag that capture. Try again.')
+			}
+		}
+	}, [editor, inboxTriage])
+
+	// Deep link from the dashboard Inbox card: `/page/<id>?section=inbox`
+	// scrolls to the Inbox heading once the section actually exists.
+	//
+	// `isLocalSynced` only covers the IndexedDB copy; the capture connector
+	// deliberately does not open y-indexeddb, so a freshly captured page can
+	// arrive from the hub later (cold starts can take ~50s). Retry on remote
+	// document updates and the hub `isSynced` flip, and stop if the user starts
+	// editing before the section lands so we never yank them mid-write.
+	useEffect(() => {
+		if (!editor || inboxScrollDoneRef.current || inboxScrollCancelledRef.current) return
+		if (typeof window === 'undefined') return
+		const params = new URLSearchParams(window.location.search)
+		if (params.get('section') !== 'inbox') return
+
+		let timer: number | undefined = undefined
+		let cancelled = false
+
+		const stop = () => {
+			cancelled = true
+			editor.off('focus', onFocus)
+			editor.off('update', tryScroll)
+			if (timer !== undefined) window.clearTimeout(timer)
+		}
+
+		const tryScroll = () => {
+			if (cancelled || inboxScrollDoneRef.current) return
+			const headings = Array.from(editor.view.dom.querySelectorAll('h1, h2, h3'))
+			const inbox = headings.find(heading => heading.textContent?.trim().toLowerCase() === 'inbox')
+			if (!inbox) return
+
+			inboxScrollDoneRef.current = true
+			stop()
+			inbox.scrollIntoView({ block: 'start', behavior: 'smooth' })
+		}
+
+		const onFocus = () => {
+			// Persist the interruption across effect re-runs; a later hub-sync
+			// flag flip must not re-arm the scroll after the user started writing.
+			inboxScrollCancelledRef.current = true
+			stop()
+		}
+
+		editor.on('focus', onFocus)
+		editor.on('update', tryScroll)
+		tryScroll()
+
+		// Bounded fallback for a transport that applies Yjs state without
+		// emitting a ProseMirror update; hub sync itself also re-runs this effect.
+		timer = window.setTimeout(() => { tryScroll(); stop() }, 60_000)
+
+		return () => {
+			editor.off('focus', onFocus)
+			editor.off('update', tryScroll)
+			if (timer !== undefined) window.clearTimeout(timer)
+		}
+	}, [editor, isLocalSynced, isSynced])
 
 	// Document-level language detection (debounced on content change)
 	useEffect(() => {
@@ -1537,6 +1695,15 @@ export default function EditorWorkspace({	pageId,
 					/>
 				)}
 			</div>
+
+			<InboxTriageDialog
+				mode={inboxTriage?.mode ?? null}
+				rowText={inboxTriage?.row.text ?? null}
+				busy={inboxBusy}
+				onOpenChange={open => { if (!open) setInboxTriage(null) }}
+				onSelectPage={target => { void handleInboxLink(target) }}
+				onTag={handleInboxTag}
+			/>
 
 			<ShareModal
 				isOpen={isShareOpen}
