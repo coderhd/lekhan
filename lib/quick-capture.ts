@@ -1,4 +1,5 @@
 import * as Y from 'yjs'
+import { hasInboxMarker, INBOX_TAG } from './inbox-marker'
 
 /**
  * Quick capture (epic #39, DN-T2).
@@ -14,13 +15,12 @@ import * as Y from 'yjs'
  * See `docs/superpowers/specs/2026-11-02-h1-daily-notes-quick-capture-inbox-design.md`.
  */
 
-export const CAPTURE_INBOX_TAG = 'inbox'
+export const CAPTURE_INBOX_TAG = INBOX_TAG
 export const CAPTURE_INBOX_HEADING = 'Inbox'
 
 /** The Tiptap Collaboration extension's default fragment field. */
 export const CAPTURE_FRAGMENT_FIELD = 'default'
 
-const INBOX_TAG_RE = /(?:^|\s)#inbox\b/i
 const INBOX_SECTION_LEVEL = 2
 // The sync hub runs on Render's free tier, which documents ~50s cold starts;
 // `useEditorCollab` grants the same 60s grace before calling a connection dead.
@@ -59,7 +59,7 @@ export function buildCaptureText (text: string, now: Date): string | null {
 	const body = String(text ?? '').replace(/\s+/g, ' ').trim()
 	if (!body) return null
 
-	const withTag = INBOX_TAG_RE.test(body) ? body : `${body} #${CAPTURE_INBOX_TAG}`
+	const withTag = hasInboxMarker(body) ? body : `${body} #${CAPTURE_INBOX_TAG}`
 	return `${captureTimeLabel(now)} ${withTag}`
 }
 
@@ -84,8 +84,12 @@ function headingLevel (node: Y.XmlElement): number {
 	return Number.isFinite(level) ? level : 1
 }
 
-function isInboxHeading (node: Y.XmlElement): boolean {
-	return isHeading(node) && elementText(node).trim().toLowerCase() === CAPTURE_INBOX_HEADING.toLowerCase()
+function isSectionHeading (node: Y.XmlElement, section: string): boolean {
+	return (
+		isHeading(node) &&
+		headingLevel(node) <= INBOX_SECTION_LEVEL &&
+		elementText(node).trim().toLowerCase() === section.trim().toLowerCase()
+	)
 }
 
 function textType (text: string): Y.XmlText {
@@ -124,6 +128,23 @@ function topLevelElements (fragment: Y.XmlFragment): Array<Y.XmlElement | Y.XmlT
 
 function isElement (node: unknown): node is Y.XmlElement {
 	return node instanceof Y.XmlElement
+}
+
+/** True when the section already has a bullet with exactly this text. */
+function sectionHasBullet (
+	elements: Array<Y.XmlElement | Y.XmlText | Y.XmlHook>,
+	sectionIndex: number,
+	sectionEnd: number,
+	text: string,
+): boolean {
+	for (let index = sectionIndex + 1; index < sectionEnd; index++) {
+		const node = elements[index]
+		if (!isElement(node) || node.nodeName !== 'bulletList') continue
+		for (const item of node.toArray()) {
+			if (isElement(item) && elementText(item).trim() === text) return true
+		}
+	}
+	return false
 }
 
 export interface AppendCaptureOptions {
@@ -166,25 +187,33 @@ export interface AppendCaptureToDocOptions {
 	now: Date
 }
 
+export interface AppendBulletToSectionDocOptions {
+	/** Heading text of the target section (case-insensitive exact match). */
+	section: string
+	/** One bullet line. Empty/whitespace text is rejected. */
+	text: string
+}
+
 /**
- * Append the capture bullet to a page's Yjs document.
+ * Append one plain bullet to a named H2 section of a page's Yjs document.
  *
- * The Inbox section is the last top-level bullet list between the `Inbox`
- * heading and the next heading of level ≤ 2. When the section is missing it is
- * created at the end of the page; when the page is empty (a freshly created
- * daily page) an empty leading heading is seeded first, matching
+ * Shared by capture (Inbox) and inbox triage (`o` → the target page's
+ * "Related actions" section). The first matching heading wins; the bullet goes
+ * into the section's last top-level bullet list, or a new list at the section
+ * end. An empty page seeds an empty leading heading first, matching
  * `EMPTY_PAGE_DOC` and the export engine's "title lives in frontmatter, not a
- * duplicated body heading" convention. Everything happens in one Yjs
- * transaction, so collaborators receive a single atomic update.
+ * duplicated body heading" convention. One Yjs transaction, so collaborators
+ * receive a single atomic update.
  *
- * Returns the bullet line that was written, or `null` for an empty capture.
+ * Returns `false` for empty text (nothing is written).
  */
-export function appendCaptureBlockToYDoc (
+export function appendBulletToSectionToYDoc (
 	ydoc: Y.Doc,
-	options: AppendCaptureToDocOptions,
-): string | null {
-	const bulletText = buildCaptureText(options.text, options.now)
-	if (!bulletText) return null
+	options: AppendBulletToSectionDocOptions,
+): boolean {
+	const bulletText = String(options.text ?? '').replace(/\s+/g, ' ').trim()
+	const section = String(options.section ?? '').trim()
+	if (!bulletText || !section) return false
 
 	const fragment = ydoc.getXmlFragment(CAPTURE_FRAGMENT_FIELD)
 
@@ -203,7 +232,7 @@ export function appendCaptureBlockToYDoc (
 			}
 			fragment.insert(0, [
 				headingElement(1, ''),
-				headingElement(INBOX_SECTION_LEVEL, CAPTURE_INBOX_HEADING),
+				headingElement(INBOX_SECTION_LEVEL, section),
 				captureBulletList(bulletText),
 			])
 			return
@@ -217,11 +246,12 @@ export function appendCaptureBlockToYDoc (
 		const elements = children
 			.map((node, rawIndex) => ({ node, rawIndex }))
 			.filter((entry): entry is { node: Y.XmlElement; rawIndex: number } => isElement(entry.node))
-		const inboxIndex = elements.findIndex(({ node }) => isInboxHeading(node))
+		const elementNodes = elements.map(entry => entry.node)
+		const sectionIndex = elements.findIndex(({ node }) => isSectionHeading(node, section))
 
-		if (inboxIndex === -1) {
+		if (sectionIndex === -1) {
 			fragment.insert(fragment.length, [
-				headingElement(INBOX_SECTION_LEVEL, CAPTURE_INBOX_HEADING),
+				headingElement(INBOX_SECTION_LEVEL, section),
 				captureBulletList(bulletText),
 			])
 			return
@@ -229,7 +259,7 @@ export function appendCaptureBlockToYDoc (
 
 		// Section end = the next heading that starts a sibling section.
 		let sectionEnd = elements.length
-		for (let index = inboxIndex + 1; index < elements.length; index++) {
+		for (let index = sectionIndex + 1; index < elements.length; index++) {
 			const { node } = elements[index]
 			if (isHeading(node) && headingLevel(node) <= INBOX_SECTION_LEVEL) {
 				sectionEnd = index
@@ -237,9 +267,15 @@ export function appendCaptureBlockToYDoc (
 			}
 		}
 
+		// Retrying `o` after a failed/ambiguous append must not duplicate the
+		// back-reference; the bullet text is the idempotency key.
+		if (sectionHasBullet(elementNodes, sectionIndex, sectionEnd, bulletText)) {
+			return
+		}
+
 		// Append to the section's last top-level bullet list, if it has one.
 		let lastList: Y.XmlElement | null = null
-		for (let index = inboxIndex + 1; index < sectionEnd; index++) {
+		for (let index = sectionIndex + 1; index < sectionEnd; index++) {
 			const { node } = elements[index]
 			if (node.nodeName === 'bulletList') lastList = node
 		}
@@ -252,6 +288,26 @@ export function appendCaptureBlockToYDoc (
 				: children.length
 			fragment.insert(sectionEndRaw, [captureBulletList(bulletText)])
 		}
+	})
+
+	return true
+}
+
+/**
+ * Append the capture bullet to a page's Yjs document.
+ *
+ * Returns the bullet line that was written, or `null` for an empty capture.
+ */
+export function appendCaptureBlockToYDoc (
+	ydoc: Y.Doc,
+	options: AppendCaptureToDocOptions,
+): string | null {
+	const bulletText = buildCaptureText(options.text, options.now)
+	if (!bulletText) return null
+
+	appendBulletToSectionToYDoc(ydoc, {
+		section: CAPTURE_INBOX_HEADING,
+		text: bulletText,
 	})
 
 	return bulletText
@@ -316,18 +372,30 @@ const websocketConnector: CaptureConnector = async (doc, { pageId, token, wsUrl 
 }
 
 /**
- * Append one capture into a Page's Inbox section via the page's CRDT channel.
+ * Append one bullet into a named section of a Page via the page's CRDT channel.
  *
  * The Y.Doc is created here, synced with the server, mutated, flushed, and torn
- * down. No page body is ever written through the database.
+ * down. No page body is ever written through the database. Shared by capture
+ * (Inbox) and inbox triage (`o` → the target page's "Related actions").
  */
-export async function appendCaptureBlock (
-	options: AppendCaptureOptions,
+export interface AppendBulletOptions {
+	pageId: string
+	token: string
+	section: string
+	text: string
+	/** Sync-server URL override (tests / non-default deployments). */
+	wsUrl?: string
+	syncTimeoutMs?: number
+	/** Injection seam for tests; production uses the y-websocket provider. */
+	connect?: CaptureConnector
+}
+
+export async function appendBulletToPageSection (
+	options: AppendBulletOptions,
 ): Promise<AppendCaptureResult> {
-	const now = options.now ?? new Date()
-	const bulletText = buildCaptureText(options.text, now)
+	const bulletText = String(options.text ?? '').replace(/\s+/g, ' ').trim()
 	if (!bulletText) {
-		throw new CaptureError('empty', 'Type something to capture first.')
+		throw new CaptureError('empty', 'Nothing to add.')
 	}
 
 	const ydoc = new Y.Doc()
@@ -340,9 +408,9 @@ export async function appendCaptureBlock (
 		connection = await connect(ydoc, { pageId: options.pageId, token: options.token, wsUrl })
 		await withTimeout(connection.synced, options.syncTimeoutMs ?? DEFAULT_SYNC_TIMEOUT_MS)
 
-		appendCaptureBlockToYDoc(ydoc, {
-			text: options.text,
-			now,
+		appendBulletToSectionToYDoc(ydoc, {
+			section: options.section,
+			text: bulletText,
 		})
 
 		await connection.flush()
@@ -351,4 +419,29 @@ export async function appendCaptureBlock (
 		if (connection) connection.destroy()
 		ydoc.destroy()
 	}
+}
+
+/**
+ * Append one capture into a Page's Inbox section via the page's CRDT channel.
+ */
+export async function appendCaptureBlock (
+	options: AppendCaptureOptions,
+): Promise<AppendCaptureResult> {
+	const now = options.now ?? new Date()
+	const bulletText = buildCaptureText(options.text, now)
+	if (!bulletText) {
+		throw new CaptureError('empty', 'Type something to capture first.')
+	}
+
+	await appendBulletToPageSection({
+		pageId: options.pageId,
+		token: options.token,
+		section: CAPTURE_INBOX_HEADING,
+		text: bulletText,
+		wsUrl: options.wsUrl,
+		syncTimeoutMs: options.syncTimeoutMs,
+		connect: options.connect,
+	})
+
+	return { bulletText }
 }
