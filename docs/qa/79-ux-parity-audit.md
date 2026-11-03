@@ -89,7 +89,7 @@ unit layer and static analysis. Findings below are evidence-anchored to source l
 |---|---|---|---|---|---|
 | `/page` shell (auth gate) | `GlobalLoader` "Loading Settings..." | — | `catch` → silent `/login` redirect | — | OK (silent console-only error on failure is by-design guard) |
 | Billing tab | `billingLoading` → "Loading your workspace billing state…" | null entitlement → "no billing record yet — everything stays on Free" | `billingError` → `role="alert"` card | found/past-due/grace/canceled/cancel-at-period-end via T12 states | **OK** — honest post-cutover |
-| Stripe round-trip returns (`?billing=checkout_success\|checkout_cancelled\|portal_return\|plan_change_return`, from `lib/billing/stripe.ts:166-207`) | n/a | n/a | ****No consumer existed** — landing after checkout gave zero feedback; a cancelled checkout looked identical to success | — | **FIXED this pass — Stripe rail only**: honest toasts (success only on `checkout_success`; portal returns acknowledge without claiming a change) + param scrub + one late refetch for the webhook window (`settings-client.tsx`), tested. **The Razorpay rail (`subscription.short_url`) has no return landing at all — GAP-16 → GAP-arrow-pair-214-208-PLACEHOLDER-ANYWAY.** |
+| Stripe round-trip returns (`?billing=checkout_success\|checkout_cancelled\|portal_return\|plan_change_return`, from `lib/billing/stripe.ts:166-207`) | n/a | n/a | ****No consumer existed** — landing after checkout gave zero feedback; a cancelled checkout looked identical to success | — | **FIXED this pass — Stripe rail only**: honest toasts (success only on `checkout_success`; portal returns acknowledge without claiming a change) + param scrub + one late refetch for the webhook window (`settings-client.tsx`), tested. **The Razorpay rail (`subscription.short_url`) has no return landing at all — GAP-16 → [#208](https://github.com/coderhd/lekhan/issues/208).** |
 | AI Usage tab tier badge | showed `entitlement?.tier ?? 'free' plan` → **fabricated "free plan" during load** | — | — | — | **FIXED**: `…` while unresolved, `{tier} tier` after (also removes "plan" vocabulary), tested |
 | Collaborators tab | — | "You don't own any pages yet." / "No collaborators added yet." inside per-page card | toasts on remove/role failure | role picker, owner badge, pagination | OK; empty-state copy matches vocabulary |
 | Ownership transfer | busy states `Preparing/Accepting`, unique-candidate guard | "Invite someone to a page first" empty state | toast + button stays honest | accept-link token mode, detaching notice | OK |
@@ -104,8 +104,8 @@ unit layer and static analysis. Findings below are evidence-anchored to source l
 | Grace card "your **notes** are never deleted" — pages, not notes | cheap | **FIXED** → "pages" |
 | AI panel "**Document** Primary Language / multilingual documents / in your document" — avoid *document* | cheap | **FIXED** → "Page …" |
 | Sarvam BYOK card "custom key for **unlimited** AI features" — metering framing contradicts the de-metered contract | framing | **FIXED** → "Run AI on your own key… provider bills you directly." |
-| Billing tab speaks "plan" throughout ("Subscription & Plan", "Plans", "plan changes") while pricing matrix mixes both — broad sweep touches pinned tests | P2 | **Filed — GAP-14 → GAP-arrow-pair-212-206-PLACEHOLDER-ANYWAY** |
-| `ai-settings-panel` reproduces its own "Settings" header + shortcut list; duplicates the surface contract rather than the shared vocabulary | P2 | **Filed — GAP-12 → GAP-arrow-pair-210-204-PLACEHOLDER-ANYWAY** (dual AI-settings affordances) |
+| Billing tab speaks "plan" throughout ("Subscription & Plan", "Plans", "plan changes") while pricing matrix mixes both — broad sweep touches pinned tests | P2 | **Filed — GAP-14 → [#206](https://github.com/coderhd/lekhan/issues/206)** |
+| `ai-settings-panel` reproduces its own "Settings" header + shortcut list; duplicates the surface contract rather than the shared vocabulary | P2 | **Filed — GAP-12 → [#204](https://github.com/coderhd/lekhan/issues/204)** (dual AI-settings affordances) |
 
 ### Keyboard reachability
 
@@ -114,7 +114,7 @@ unit layer and static analysis. Findings below are evidence-anchored to source l
 | Tablist attaches arrow-key selection to `activeTab`, but **focus never moved** and unselected tabs stayed in the tab order (5 tab stops, selection not following focus — WAI-ARIA tabs violation) | cheap | **FIXED**: roving `tabIndex`, selection-follows-focus, Home/End added (`settings-client.tsx` + tests) |
 | `/settings` header/close affordances were reachable | — | OK |
 | Tablist deviates from full WAI-ARIA tabs on two counts (pre-existing, sampled by this audit): the physical rail is horizontal on mobile / vertical on `lg:` but `aria-orientation` is unset; and inactive panels are unmounted while `aria-controls` references them | swept with GAP-13 or a settings-side a11y fix | **recorded** |
-| `CustomSelect` (collaborator role picker, AI panel selects) is an unlabeled button whose accessible name is just the current value — no field context for AT users | P2 | **Filed — GAP-13 → GAP-arrow-pair-211-205-PLACEHOLDER-ANYWAY** |
+| `CustomSelect` (collaborator role picker, AI panel selects) is an unlabeled button whose accessible name is just the current value — no field context for AT users | P2 | **Filed — GAP-13 → [#205](https://github.com/coderhd/lekhan/issues/205)** |
 | Escape does not navigate away from `/settings` (no-op is fine for a route surface, unlike the dead modal which implements it) | note | n/a |
 
 ### 390 px mobile reflow
@@ -126,13 +126,13 @@ off-screen until swiped. Content grids (`max-w` cards, `flex-col sm:flex-row` ro
 `grid-cols-2 md:grid-cols-4` billing dl) collapse correctly at 390 px. Touch targets measure
 ~36-40 px (`py-2.5` buttons, `py-3` tabs with text-xs line height) — **passes WCAG 2.5.8
 (24 px) but below the 44 px HIG bar**; noted for GAP-15. Findings: rail affordance **P2 →
-GAP-15 → GAP-arrow-pair-213-207-PLACEHOLDER-ANYWAY**; everything else passes reflow.
+GAP-15 → [#207](https://github.com/coderhd/lekhan/issues/207)**; everything else passes reflow.
 
 ### Orphaned / divergent surfaces (filed rather than deleted)
 
 - `UnifiedSettingsModal` + `ModelLibrary` are imported **only by their own unit tests** — the
   modal advertises "Plan & Usage" and three "Coming Soon" tabs that already exist as real tabs
-  on `/settings` (stale post-T12). **Filed — GAP-11 → GAP-arrow-pair-209-203-PLACEHOLDER-ANYWAY** (remove or wire).
+  on `/settings` (stale post-T12). **Filed — GAP-11 → [#203](https://github.com/coderhd/lekhan/issues/203)** (remove or wire).
 - Usage tab carries the Sarvam-only BYOK card (`sk_` gate, `/api/ai` validate) while the AI tab
   carries the 10-provider registry with its own encrypted vault — two contradictory BYOK stories
   on one page. **Filed — GAP-12**.
