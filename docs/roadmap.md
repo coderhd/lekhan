@@ -140,7 +140,7 @@ unblocks H2 agents. The Tauri desktop shell (#88) delivers the files-on-disk pro
 |---|---|---|---|
 | H1 — Graph view + backlink pane | #38 | → H2 Databases #47 (blocker) | §4 · **GV-T1 shipped** (graph route + d3-force canvas, PR #184, `docs/reviews/pr-206-review.md`) · **GV-T2 shipped** (title/facet filters, hover highlight, sampled-edge badge, PR #186, `docs/reviews/pr-207-review.md`) · **GV-T3 shipped** (lazy backlink drawer, focus-trapped, click-through, PR #191, `docs/reviews/pr-208-review.md`; real-DB fixture evidence follow-up #192) |
 | H1 — Dual-Dialect Interop Bridge (Obsidian-native files + Notion-compatible content) | #78 | ← #27; subsumes the import half of #45 | `docs/superpowers/specs/…` (spec in issue body) · **S1 clipboard paste-in shipped Oct 8** (Obsidian-markdown + Notion-HTML paste, gap-2 retroactive link resolution; PR #134, `docs/reviews/pr-57-review.md`) · **S3 clipboard copy-out shipped** (Obsidian markdown + Notion HTML payloads, target-aware; PR #154, `docs/reviews/pr-59-review.md`) |
-| H1 — Daily notes / quick capture / inbox | #39 | — | §4 |
+| H1 — Daily notes / quick capture / inbox | #39 | — | §4 · **DN-T1 shipped** (daily pages + DailyStrip, PR #182, `docs/reviews/pr-182-review.md`) · **DN-T2 shipped** (quick-capture palette + CRDT capture, PR #185, `docs/reviews/pr-204-review.md`) · **DN-T3 shipped** (InboxCard + focused-row triage, PR #190, `docs/reviews/pr-205-review.md`) |
 | H1 — Public pages + publish | #40 | ← #30 | §4 |
 | H1 — Comments + page mentions | #41 | — | §4 |
 | H1 — Templates | #42 | — | §4 |
