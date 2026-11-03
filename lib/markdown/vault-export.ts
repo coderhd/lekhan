@@ -32,6 +32,12 @@ export interface VaultPage {
 	doc?: JSONContent
 	/** Import folder-pages carry no note; they only contribute a directory. */
 	isFolder?: boolean
+	/**
+	 * Metadata evidence that this Page has a body (indexed `searchable_text`).
+	 * An empty content read for such a Page is *unknown*, not success — the
+	 * export must warn instead of claiming a clean run (SIL-214).
+	 */
+	hasStoredContent?: boolean
 }
 
 export interface VaultExportFile {

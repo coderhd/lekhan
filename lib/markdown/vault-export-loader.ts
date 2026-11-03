@@ -14,8 +14,25 @@ import type { VaultPage } from '@/lib/markdown/vault-export'
  * browser/network glue in `lib/markdown/vault-export-source.ts`.
  */
 
-/** Resolve one Page's Tiptap doc, or `null` when it is not available. */
-export type LoadPageDoc = (pageId: string, signal?: AbortSignal) => Promise<JSONContent | null>
+/**
+ * How a Page's content read ended.
+ *
+ * - `ok` — a non-empty body was read.
+ * - `empty` — the read completed but produced no blocks. This is only a
+ *   genuine empty Page when the Page has no evidence of content; otherwise it
+ *   is *unknown* (a failed/early hydration) and the loader warns (SIL-214 B1).
+ * - `unavailable` — no read completed (timeout, aborted, network/provider
+ *   error), distinct from a completed empty read.
+ */
+export type PageDocReadStatus = 'ok' | 'empty' | 'unavailable'
+
+export interface PageDocReadResult {
+	doc: JSONContent | null
+	status: PageDocReadStatus
+}
+
+/** Resolve one Page's Tiptap doc plus whether the read can be trusted. */
+export type LoadPageDoc = (pageId: string, signal?: AbortSignal) => Promise<PageDocReadResult>
 
 export interface LoadVaultPageDocsOptions {
 	loadDoc: LoadPageDoc
@@ -46,7 +63,14 @@ const DEFAULT_CONCURRENCY = 4
  * rules; everything else emits a note.
  */
 export function toVaultPage(
-	input: { id: string; parentId: string | null; title: string; properties?: Record<string, unknown> },
+	input: {
+		id: string
+		parentId: string | null
+		title: string
+		properties?: Record<string, unknown>
+		/** `pages.searchable_text`: evidence that the Page has a body. */
+		searchableText?: string | null
+	},
 	tags: string[] = [],
 ): VaultPage {
 	const properties = input.properties ?? {}
@@ -57,6 +81,7 @@ export function toVaultPage(
 		properties,
 		tags: tags.filter((tag) => tag.trim() !== ''),
 		isFolder: properties.importFolder === true,
+		hasStoredContent: typeof input.searchableText === 'string' && input.searchableText.trim() !== '',
 	}
 }
 
@@ -85,11 +110,25 @@ export async function loadVaultPageDocs(
 			if (index >= targets.length) return
 			const page = targets[index]
 			try {
-				const doc = await options.loadDoc(page.id, options.signal)
+				const result = await options.loadDoc(page.id, options.signal)
 				// A read that resolved after cancellation must not be reported.
 				if (options.signal?.aborted) return
-				if (doc) docs.set(page.id, doc)
-				else warnings.push({ title: page.title, stage: 'content', error: 'page content was not available' })
+				if (result.status === 'ok' && result.doc) {
+					docs.set(page.id, result.doc)
+				} else if (result.status === 'empty') {
+					// A completed read with no blocks is only trustworthy when the
+					// Page has no evidence of content. Otherwise the content is
+					// unknown: name it instead of reporting a clean export (SIL-214 B1).
+					if (page.hasStoredContent) {
+						warnings.push({
+							title: page.title,
+							stage: 'content-unverified',
+							error: 'the stored page has content, but the exported body was empty',
+						})
+					}
+				} else {
+					warnings.push({ title: page.title, stage: 'content', error: 'page content was not available' })
+				}
 			} catch (err) {
 				// A read stopped by cancellation is not a Page failure.
 				if (options.signal?.aborted) return

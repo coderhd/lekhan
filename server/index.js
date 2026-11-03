@@ -1,7 +1,7 @@
 const http = require('http')
+const v8 = require('v8')
 const WebSocket = require('ws')
-const Y = require('yjs')
-const { setupWSConnection, docs } = require('y-websocket/bin/utils')
+const { setupWSConnection, setPersistence, docs } = require('y-websocket/bin/utils')
 const { createClient } = require('@supabase/supabase-js')
 const { getSupabaseClient, verifyUserRole, getDocumentOwnerPlan, getDocumentOwnerEntitlement } = require('./auth')
 const { getPlanLimits } = require('../lib/tier-limits.ts')
@@ -9,10 +9,32 @@ const { pruneExpiredDocumentVersions } = require('./retention.js')
 const { admitCollaborator } = require('./ledger.js')
 const { decryptSnapshot } = require('./crypto')
 const { createPagePersister } = require('./persister')
+const { createCollabPersistence, markWritable, openHydratedDoc } = require('./collab-persistence')
+const { isBlockedWriteFrame } = require('./connection-guard')
 
 const port = process.env.PORT || 8080
 const MAX_CONNECTIONS = 1500
 const MAX_PAYLOAD_BYTES = 10 * 1024 * 1024 // 10 MB payload guard
+
+/** Parse an env number without letting a typo become NaN. */
+function positiveNumber (value, fallback) {
+	const parsed = Number(value)
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function nonNegativeNumber (value, fallback) {
+	const parsed = Number(value)
+	return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
+}
+
+// Load-shed against the V8 heap **limit**, not `heapTotal` (which starts near
+// ~20 MB and made a healthy idle process look 85% full) — SIL-214 F3. A minimum
+// absolute usage keeps a tiny heap from shedding on a ratio that is meaningful
+// only at scale; SYNC_MEMORY_LIMIT_MB lets a container measure RSS instead.
+const HEAP_SHED_RATIO = Math.min(0.99, Math.max(0.5, positiveNumber(process.env.SYNC_HEAP_SHED_RATIO, 0.9)))
+const HEAP_SHED_MIN_MB = nonNegativeNumber(process.env.SYNC_HEAP_SHED_MIN_MB, 128)
+const MEMORY_LIMIT_MB = nonNegativeNumber(process.env.SYNC_MEMORY_LIMIT_MB, 0)
+const HYDRATION_TIMEOUT_MS = positiveNumber(process.env.SYNC_HYDRATION_TIMEOUT_MS, 15000)
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
 const supabaseKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-key'
@@ -29,7 +51,15 @@ const supabaseAdmin = createClient(
 	}
 )
 
-const pagePersister = createPagePersister({ supabaseAdmin })
+let pagePersister = createPagePersister({ supabaseAdmin })
+
+/**
+ * Test seam: replace the persistence sink so timing/serialization tests do not
+ * need a live Supabase instance. Production never calls this.
+ */
+function setPagePersister (persister) {
+	pagePersister = persister
+}
 
 const wss = new WebSocket.Server({
 	noServer: true,
@@ -103,13 +133,47 @@ function resolveRelayReadOnly (role, entitlement) {
 	return entitlement ? entitlement.relayReadOnly === true : false
 }
 
+/**
+ * Heap pressure against the V8 heap limit. `heapUsed / heapTotal` is not a
+ * memory-pressure signal: `heapTotal` is the lazily-grown committed heap, so an
+ * almost-idle process (e.g. ~20 MB used of a ~4 GB limit) can read as >85% and
+ * shed healthy connections (SIL-214 F3). The limit is the ceiling V8 will
+ * actually let us reach before an OOM, and the absolute floor keeps a tiny
+ * heap from tripping the ratio at trivial sizes.
+ *
+ * When `SYNC_MEMORY_LIMIT_MB` is set (the container's real budget), RSS is the
+ * authoritative signal because Buffers and WebSocket payloads live off-heap.
+ */
+function readHeapPressure () {
+	const mem = process.memoryUsage()
+	const heapLimit = v8.getHeapStatistics().heap_size_limit || mem.heapTotal || 1
+	const heapUsed = mem.heapUsed || 0
+	const heapUsedMb = heapUsed / (1024 * 1024)
+	const heapLimitUtilization = heapLimit > 0 ? heapUsed / heapLimit : 0
+	const rssLimitBytes = MEMORY_LIMIT_MB * 1024 * 1024
+	const rssExhausted = rssLimitBytes > 0 && mem.rss > rssLimitBytes
+	const heapExhausted =
+		heapLimit > 0 && heapLimitUtilization > HEAP_SHED_RATIO && heapUsedMb >= HEAP_SHED_MIN_MB
+	return {
+		mem,
+		heapLimit,
+		heapUsed,
+		heapUsedMb,
+		heapLimitUtilization,
+		rssLimitBytes,
+		isMemoryExhausted: rssExhausted || heapExhausted,
+	}
+}
+
 // Health and metrics helper
 function getServerMetrics () {
-	const mem = process.memoryUsage()
+	const { mem, heapLimit, heapUsed, heapLimitUtilization, isMemoryExhausted } = readHeapPressure()
 	const heapTotal = mem.heapTotal || 1
-	const heapUsed = mem.heapUsed || 0
+	// Preserve the historical `heapUtilizationPct` meaning (share of committed
+	// heap) and expose the limit-based pressure metric separately, so external
+	// dashboards do not silently change denominator.
 	const heapUtilizationPct = Math.round((heapUsed / heapTotal) * 100)
-	const isMemoryExhausted = mem.heapTotal > 0 && (heapUsed / heapTotal) > 0.85
+	const heapLimitUtilizationPct = Math.round(heapLimitUtilization * 100)
 	const totalConnections = wss.clients.size + pendingUpgrades
 	const isShedding = totalConnections >= MAX_CONNECTIONS || isMemoryExhausted
 
@@ -123,10 +187,16 @@ function getServerMetrics () {
 			rssMb: Math.round((mem.rss / (1024 * 1024)) * 10) / 10,
 			heapUsedMb: Math.round((heapUsed / (1024 * 1024)) * 10) / 10,
 			heapTotalMb: Math.round((heapTotal / (1024 * 1024)) * 10) / 10,
+			heapLimitMb: Math.round((heapLimit / (1024 * 1024)) * 10) / 10,
+			limitMb: MEMORY_LIMIT_MB,
 		},
 		limits: {
 			maxConnections: MAX_CONNECTIONS,
+			heapShedRatio: HEAP_SHED_RATIO,
+			heapShedMinMb: HEAP_SHED_MIN_MB,
+			memoryLimitMb: MEMORY_LIMIT_MB,
 			heapUtilizationPct,
+			heapLimitUtilizationPct,
 			isShedding,
 		},
 	}
@@ -157,9 +227,6 @@ async function saveDocumentState (documentId, ydoc) {
 	}
 }
 
-// Hook into Yjs document initialization
-const { setPersistence } = require('y-websocket/bin/utils')
-
 function scheduleDebouncedSave (documentId, ydoc) {
 	// Clear previous idle debounce timer
 	if (saveDebounceTimers.has(documentId)) {
@@ -188,46 +255,34 @@ function scheduleDebouncedSave (documentId, ydoc) {
 	saveDebounceTimers.set(documentId, debounceTimer)
 }
 
-setPersistence({
-	bindState: async (documentId, ydoc) => {
-		try {
-			console.log(`[Persist] Loading document ${documentId}...`)
+// Fetch the stored snapshot and decrypt at rest (ADR 0001). `null` means the
+// Page has no snapshot yet (a new Page) — not a failure.
+async function loadStoredState (documentId) {
+	const { data, error } = await supabaseAdmin.storage
+		.from('documents')
+		.download(`${documentId}/main_state.bin`)
 
-			// 1. Fetch base Yjs state from Supabase Storage and decrypt at rest (ADR 0001)
-			const { data, error } = await supabaseAdmin.storage
-				.from('documents')
-				.download(`${documentId}/main_state.bin`)
+	if (data) {
+		const arrayBuffer = await data.arrayBuffer()
+		const decrypted = decryptSnapshot(Buffer.from(arrayBuffer))
+		return new Uint8Array(decrypted.buffer, decrypted.byteOffset, decrypted.byteLength)
+	}
+	if (error && error.status !== 404) {
+		throw error
+	}
+	return null
+}
 
-			if (data) {
-				const arrayBuffer = await data.arrayBuffer()
-				const decrypted = decryptSnapshot(Buffer.from(arrayBuffer))
-				const uint8Array = new Uint8Array(decrypted.buffer, decrypted.byteOffset, decrypted.byteLength)
-				Y.applyUpdate(ydoc, uint8Array, 'supabase-load')
-				console.log(`[Persist] Base state applied for ${documentId}`)
-			} else if (error && error.status !== 404) {
-				// Log errors other than file not found (new document)
-				console.error(`[Persist Error] Download failed for ${documentId}:`, error)
-			}
-
-			console.log(`[Persist] Document ${documentId} fully loaded.`)
-		} catch (err) {
-			console.error(`[Persist Error] Failed to bind state for ${documentId}:`, err)
-		}
-
-		// 2. Attach change listener to trigger capped debounced serialized saves
-		ydoc.on('update', (update, origin) => {
-			// Skip saving if the update originated from the server loading base state
-			if (origin === 'supabase-load') {
-				return
-			}
-			scheduleDebouncedSave(documentId, ydoc)
-		})
-	},
-	writeState: async (documentId, ydoc) => {
-		clearSaveTimers(documentId)
-		await triggerSerializedSave(documentId, ydoc)
-	},
+const collabPersistence = createCollabPersistence({
+	loadState: loadStoredState,
+	persistState: (documentId, ydoc) => triggerSerializedSave(documentId, ydoc),
+	scheduleSave: scheduleDebouncedSave,
+	clearSave: clearSaveTimers,
 })
+
+// Hydration-gated, read-only-aware persistence (SIL-214): see
+// `server/collab-persistence.js`.
+setPersistence(collabPersistence)
 
 server.on('upgrade', async (request, socket, head) => {
 	// Synchronous pending-upgrade reservation
@@ -244,8 +299,7 @@ server.on('upgrade', async (request, socket, head) => {
 	socket.once('error', releaseUpgradeReservation)
 
 	// 1. Concurrency & Load-Shedding Protection
-	const mem = process.memoryUsage()
-	const isMemoryExhausted = mem.heapTotal > 0 && (mem.heapUsed / mem.heapTotal) > 0.85
+	const { isMemoryExhausted } = readHeapPressure()
 	const totalLoad = wss.clients.size + pendingUpgrades
 
 	if (totalLoad > MAX_CONNECTIONS || isMemoryExhausted) {
@@ -260,6 +314,9 @@ server.on('upgrade', async (request, socket, head) => {
 	const url = new URL(request.url, `http://${request.headers.host}`)
 	const token = url.searchParams.get('token')
 	const documentId = url.searchParams.get('documentId')
+	// Vault-export gap syncs pass `readOnly=1`: they may receive state but can
+	// never write it, and closing them never persists the room (SIL-214).
+	const readOnly = url.searchParams.get('readOnly') === '1'
 
 	if (!token || !documentId) {
 		releaseUpgradeReservation()
@@ -311,6 +368,22 @@ server.on('upgrade', async (request, socket, head) => {
 
 		console.log(`[Connection] User role: ${role} on doc ${documentId} (${userId})`)
 
+		// Wait for the stored snapshot before letting y-websocket send sync
+		// step 1. Without this gate a cold room answers with an empty doc and
+		// the last close would overwrite the real snapshot (SIL-214 B1/B2).
+		let doc
+		try {
+			doc = await openHydratedDoc(documentId, { timeoutMs: HYDRATION_TIMEOUT_MS })
+		} catch {
+			releaseUpgradeReservation()
+			socket.write('HTTP/1.1 503 Service Unavailable\r\nRetry-After: 2\r\n\r\n')
+			socket.destroy()
+			return
+		}
+
+		// The client may have gone away while we hydrated.
+		if (socket.destroyed) return
+
 		wss.handleUpgrade(request, socket, head, (ws) => {
 			releaseUpgradeReservation()
 			ws.isViewer = resolveRelayReadOnly(role, ownerEntitlement)
@@ -318,6 +391,14 @@ server.on('upgrade', async (request, socket, head) => {
 			// does not change for the life of the connection.
 			ws.relayRole = role
 			ws.documentId = documentId
+			// Export gap-syncs are read-only even for an otherwise writable owner.
+			ws.isReadOnly = readOnly
+			// Only an actually established writable connection makes the room
+			// eligible for a save on close. Marking before the socket is live
+			// would make a dead upgrade look writable, and a later export could
+			// then persist a room it never wrote to. Viewers, billing-limited
+			// relays, and export reads are all excluded.
+			if (!readOnly && !resolveRelayReadOnly(role, ownerEntitlement)) markWritable(doc)
 			wss.emit('connection', ws, request)
 		})
 	} catch (err) {
@@ -342,14 +423,12 @@ wss.on('connection', (ws, request) => {
 					return
 				}
 
-				// 2. Block Viewer writes
-				if (ws.isViewer && isBinary && data && data.length >= 2) {
-					const messageType = data[0]
-					const syncType = data[1]
-					if (messageType === 0 && (syncType === 1 || syncType === 2)) {
-						console.log('[Security] Rejected Viewer edit message payload')
-						return
-					}
+				// 2. Block Viewer and read-only writes. Sync step 1 must still
+				// pass: it carries the client's state vector. Step 2 / update
+				// frames are writes and are rejected.
+				if (isBlockedWriteFrame(ws, data, isBinary)) {
+					console.log('[Security] Rejected read-only edit message payload')
+					return
 				}
 				listener.call(this, data, isBinary)
 			}
@@ -377,7 +456,11 @@ wss.on('connection', (ws, request) => {
 		entitlementTimer.unref?.()
 		ws.on('close', () => clearInterval(entitlementTimer))
 	}
-	
+
+	// Defensive: the upgrade path already set this, but re-derive read-only from
+	// the URL so a missed flag can never grant write access to an export read.
+	ws.isReadOnly = ws.isReadOnly === true || url.searchParams.get('readOnly') === '1'
+
 	// Create request wrapper to supply docName
 	request.url = `/${documentId}`
 	setupWSConnection(ws, request)
@@ -386,7 +469,12 @@ wss.on('connection', (ws, request) => {
 // LRU Eviction: periodically check for idle documents (no active clients) and evict them from memory
 setInterval(() => {
 	for (const [docName, doc] of docs.entries()) {
-		if (doc.conns.size === 0) {
+		// Never evict a room with an upgrade waiting on hydration: dropping it
+		// mid-read would strip the hydrated state from the connection that is
+		// about to use it. A hydration with no waiter is safe to drop (e.g. its
+		// upgrade timed out), so it cannot leak memory forever.
+		const pending = (doc.__pendingConnections || 0) > 0
+		if (doc.conns.size === 0 && !pending) {
 			console.log(`[LRU] Evicting idle document ${docName} from server memory`)
 			docs.delete(docName)
 		}
@@ -446,13 +534,15 @@ async function gracefulShutdown () {
 	console.log('\n[Shutdown] Flushing all active documents to Supabase...')
 	const promises = []
 	for (const [docName, doc] of docs.entries()) {
-		clearSaveTimers(docName)
-		promises.push(triggerSerializedSave(docName, doc))
+		// Go through the gated write path: an un-hydrated/failed room or one
+		// that only ever had read-only connections must not be flushed over
+		// its stored snapshot.
+		promises.push(collabPersistence.writeState(docName, doc))
 	}
-	const results = await Promise.allSettled(promises)
-	const rejected = results.filter((r) => r.status === 'rejected')
-	if (rejected.length > 0) {
-		console.error(`[Shutdown] Warning: ${rejected.length} document saves failed during shutdown flush.`)
+	const results = await Promise.all(promises)
+	const failed = results.filter((result) => result && result.ok === false && !result.skipped)
+	if (failed.length > 0) {
+		console.error(`[Shutdown] Warning: ${failed.length} document saves failed during shutdown flush.`)
 	}
 	console.log('[Shutdown] All states flushed. Exiting.')
 	process.exit(0)
@@ -471,6 +561,7 @@ module.exports = {
 	server,
 	wss,
 	saveDocumentState,
+	setPagePersister,
 	triggerSerializedSave,
 	scheduleDebouncedSave,
 	saveDebounceTimers,
@@ -478,6 +569,11 @@ module.exports = {
 	clearSaveTimers,
 	getServerMetrics,
 	resolveRelayReadOnly,
+	readHeapPressure,
+	collabPersistence,
+	loadStoredState,
 	MAX_CONNECTIONS,
 	MAX_PAYLOAD_BYTES,
+	HEAP_SHED_RATIO,
+	HYDRATION_TIMEOUT_MS,
 }

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
+import * as Y from 'yjs'
 import { createClientPageDocSource, hasLocalDatabase } from '@/lib/markdown/vault-export-source'
 
 // ---------------------------------------------------------------------------
@@ -16,25 +17,41 @@ let persistences: FakePersistence[] = []
 class FakeProvider {
 	listeners: Record<string, Listener[]> = {}
 	destroyed = false
-	constructor(public url: string, public room: string, public doc: unknown, public opts: unknown) {
+	constructor(public url: string, public room: string, public doc: Y.Doc, public opts: unknown) {
 		providers.push(this)
 	}
 	once(event: string, cb: Listener) {
 		;(this.listeners[event] ||= []).push(cb)
+	}
+	emit(event: string) {
+		for (const cb of this.listeners[event] || []) cb()
 	}
 	destroy() {
 		this.destroyed = true
 	}
 }
 
+/** Add one paragraph to the provider's Yjs doc so `hasContent` is true. */
+function addBody(doc: Y.Doc, text: string) {
+	const fragment = doc.getXmlFragment('default')
+	const paragraph = new Y.XmlElement('paragraph')
+	const content = new Y.XmlText()
+	content.insert(0, text)
+	paragraph.insert(0, [content])
+	fragment.insert(0, [paragraph])
+}
+
 class FakePersistence {
 	listeners: Record<string, Listener[]> = {}
 	destroyed = false
-	constructor(public name: string, public doc: unknown) {
+	constructor(public name: string, public doc: Y.Doc) {
 		persistences.push(this)
 	}
 	once(event: string, cb: Listener) {
 		;(this.listeners[event] ||= []).push(cb)
+	}
+	emit(event: string) {
+		for (const cb of this.listeners[event] || []) cb()
 	}
 	destroy() {
 		this.destroyed = true
@@ -148,11 +165,11 @@ describe('hasLocalDatabase', () => {
 })
 
 describe('createClientPageDocSource cancellation', () => {
-	it('resolves null without opening a provider when already aborted', async () => {
+	it('resolves unavailable without opening a provider when already aborted', async () => {
 		const controller = new AbortController()
 		controller.abort()
 		const source = createClientPageDocSource({ token: 't', wsUrl: 'ws://x', timeoutMs: 1000 })
-		await expect(source('p1', controller.signal)).resolves.toBeNull()
+		await expect(source('p1', controller.signal)).resolves.toEqual({ doc: null, status: 'unavailable' })
 		expect(providers).toHaveLength(0)
 		expect(persistences).toHaveLength(0)
 	})
@@ -163,7 +180,7 @@ describe('createClientPageDocSource cancellation', () => {
 		const pending = source('p1', controller.signal)
 		await vi.waitFor(() => expect(providers).toHaveLength(1))
 		controller.abort()
-		await expect(pending).resolves.toBeNull()
+		await expect(pending).resolves.toEqual({ doc: null, status: 'unavailable' })
 		expect(providers[0].destroyed).toBe(true)
 	})
 
@@ -178,7 +195,7 @@ describe('createClientPageDocSource cancellation', () => {
 			const pending = source('p1', controller.signal)
 			await vi.waitFor(() => expect(persistences).toHaveLength(1))
 			controller.abort()
-			await expect(pending).resolves.toBeNull()
+			await expect(pending).resolves.toEqual({ doc: null, status: 'unavailable' })
 			expect(persistences[0].destroyed).toBe(true)
 			expect(providers).toHaveLength(0)
 		} finally {
@@ -202,10 +219,50 @@ describe('createClientPageDocSource cancellation', () => {
 			// export still includes the cached body rather than a title-only note.
 			expect(providers).toHaveLength(0)
 			controller.abort()
-			await expect(pending).resolves.toBeNull()
+			await expect(pending).resolves.toEqual({ doc: null, status: 'unavailable' })
 			expect(persistences[0].destroyed).toBe(true)
 		} finally {
 			;(globalThis as { indexedDB?: IDBFactory }).indexedDB = original
 		}
+	})
+})
+
+describe('createClientPageDocSource remote read (SIL-214)', () => {
+	it('opens the collab room read-only and classifies a non-empty sync as ok', async () => {
+		const source = createClientPageDocSource({ token: 't', wsUrl: 'ws://x', timeoutMs: 5000 })
+		const pending = source('p1')
+		await vi.waitFor(() => expect(providers).toHaveLength(1))
+
+		// The export must never connect with a writable room.
+		expect((providers[0].opts as { params: Record<string, string> }).params).toMatchObject({
+			token: 't',
+			documentId: 'p1',
+			readOnly: '1',
+		})
+
+		addBody(providers[0].doc, 'Hello from the cold room')
+		providers[0].emit('sync')
+		const result = await pending
+
+		expect(result.status).toBe('ok')
+		expect(result.doc?.content?.[0]?.content?.[0]?.text).toBe('Hello from the cold room')
+		expect(providers[0].destroyed).toBe(true)
+	})
+
+	it('reports a completed empty sync as empty, not success', async () => {
+		const source = createClientPageDocSource({ token: 't', wsUrl: 'ws://x', timeoutMs: 5000 })
+		const pending = source('p1')
+		await vi.waitFor(() => expect(providers).toHaveLength(1))
+
+		providers[0].emit('sync')
+		await expect(pending).resolves.toEqual({ doc: null, status: 'empty' })
+		expect(providers[0].destroyed).toBe(true)
+	})
+
+	it('reports a remote timeout as unavailable', async () => {
+		const source = createClientPageDocSource({ token: 't', wsUrl: 'ws://x', timeoutMs: 10 })
+		await expect(source('p1')).resolves.toEqual({ doc: null, status: 'unavailable' })
+		expect(providers).toHaveLength(1)
+		expect(providers[0].destroyed).toBe(true)
 	})
 })
