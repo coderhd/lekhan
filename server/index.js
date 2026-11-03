@@ -3,7 +3,7 @@ const WebSocket = require('ws')
 const Y = require('yjs')
 const { setupWSConnection, docs } = require('y-websocket/bin/utils')
 const { createClient } = require('@supabase/supabase-js')
-const { getSupabaseClient, verifyUserRole, getDocumentOwnerPlan } = require('./auth')
+const { getSupabaseClient, verifyUserRole, getDocumentOwnerPlan, getDocumentOwnerEntitlement } = require('./auth')
 const { getPlanLimits } = require('../lib/tier-limits.ts')
 const { pruneExpiredDocumentVersions } = require('./retention.js')
 const { admitCollaborator } = require('./ledger.js')
@@ -83,6 +83,25 @@ function triggerSerializedSave (documentId, ydoc) {
 
 // Track pending asynchronous WebSocket upgrade reservations
 let pendingUpgrades = 0
+
+/**
+ * Relay write gate (T11 / D9). Viewers never write; a workspace whose past-due
+ * grace window has expired is read-only on the relay while its content stays
+ * intact. Everything else (active, in-grace, free after a voluntary cancel)
+ * keeps write access.
+ */
+// How often a live socket re-reads the owner entitlement. Enforcement must follow
+// billing state, not connection age: a socket opened during the D9 grace window
+// would otherwise keep writing after the grace expires (or a terminal downgrade)
+// until the client happened to reconnect.
+const RELAY_ENTITLEMENT_RECHECK_MS = Number(process.env.RELAY_ENTITLEMENT_RECHECK_MS) > 0
+	? Number(process.env.RELAY_ENTITLEMENT_RECHECK_MS)
+	: 60_000
+
+function resolveRelayReadOnly (role, entitlement) {
+	if (role === 'viewer') return true
+	return entitlement ? entitlement.relayReadOnly === true : false
+}
 
 // Health and metrics helper
 function getServerMetrics () {
@@ -262,9 +281,14 @@ server.on('upgrade', async (request, socket, head) => {
 			return
 		}
 
-		// Enforce distinct collaborator limit atomically via Postgres ledger
-		const ownerPlan = await getDocumentOwnerPlan(supabaseAdmin, documentId)
-		const limits = getPlanLimits(ownerPlan)
+		// Enforce distinct collaborator limit atomically via Postgres ledger.
+		// Entitlement source is the owner's workspace row (T11); the relay gate
+		// keeps `getPlanLimits` unchanged. D9: a past_due workspace stays fully
+		// entitled through grace; after expiry the relay is read-only.
+		const ownerEntitlement = await getDocumentOwnerEntitlement(supabaseAdmin, documentId)
+		const ownerPlan = ownerEntitlement ? ownerEntitlement.tier : 'free'
+		const relayReadOnly = ownerEntitlement ? ownerEntitlement.relayReadOnly === true : false
+		const limits = getPlanLimits(ownerPlan, ownerEntitlement ? ownerEntitlement.seats : undefined)
 
 		const { allowed } = await admitCollaborator(
 			supabaseAdmin,
@@ -281,11 +305,19 @@ server.on('upgrade', async (request, socket, head) => {
 			return
 		}
 
+		if (relayReadOnly) {
+			console.log(`[Connection] Read-only relay: past-due grace expired for document ${documentId} (owner plan ${ownerPlan})`)
+		}
+
 		console.log(`[Connection] User role: ${role} on doc ${documentId} (${userId})`)
 
 		wss.handleUpgrade(request, socket, head, (ws) => {
 			releaseUpgradeReservation()
-			ws.isViewer = role === 'viewer'
+			ws.isViewer = resolveRelayReadOnly(role, ownerEntitlement)
+			// Identity for the live entitlement re-check; the role is page-scoped and
+			// does not change for the life of the connection.
+			ws.relayRole = role
+			ws.documentId = documentId
 			wss.emit('connection', ws, request)
 		})
 	} catch (err) {
@@ -329,6 +361,22 @@ wss.on('connection', (ws, request) => {
 	// Hand connection over to y-websocket setup
 	const url = new URL(request.url, `http://${request.headers.host}`)
 	const documentId = url.searchParams.get('documentId')
+
+	// Billing-state-durable enforcement: re-read the owner entitlement so a grace
+	// window expiring (or a terminal downgrade) blocks writes on THIS socket, not
+	// only after the next reconnect. One query per socket per interval.
+	if (documentId) {
+		const entitlementTimer = setInterval(async () => {
+			try {
+				const entitlement = await getDocumentOwnerEntitlement(supabaseAdmin, documentId)
+				ws.isViewer = resolveRelayReadOnly(ws.relayRole, entitlement)
+			} catch (err) {
+				console.error('[Relay] entitlement re-check failed:', err)
+			}
+		}, RELAY_ENTITLEMENT_RECHECK_MS)
+		entitlementTimer.unref?.()
+		ws.on('close', () => clearInterval(entitlementTimer))
+	}
 	
 	// Create request wrapper to supply docName
 	request.url = `/${documentId}`
@@ -429,6 +477,7 @@ module.exports = {
 	saveMaxThrottleTimers,
 	clearSaveTimers,
 	getServerMetrics,
+	resolveRelayReadOnly,
 	MAX_CONNECTIONS,
 	MAX_PAYLOAD_BYTES,
 }

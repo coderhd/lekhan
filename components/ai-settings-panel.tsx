@@ -67,7 +67,6 @@ export default function AISettingsPanel({
 					<div>
 						<div className="flex items-center gap-2">
 							<h3 className="font-title-lg text-title-lg text-on-surface">Settings</h3>
-							<span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">85 Credits left</span>
 						</div>
 						<p className="text-[10px] text-primary-container/80 uppercase tracking-widest font-bold">AI Preferences</p>
 					</div>

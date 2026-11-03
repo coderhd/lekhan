@@ -3,10 +3,14 @@ import * as Y from 'yjs'
 
 describe('Sync Server Hardened Capped-Debounce Timing & Serialization', () => {
 	beforeEach(() => {
+		// The persister hits Supabase on save; stub fetch so tests are
+		// deterministic and never depend on DNS/network timing (SIL-108).
+		vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'no network' }), { status: 500 })))
 		vi.useFakeTimers()
 	})
 
 	afterEach(() => {
+		vi.unstubAllGlobals()
 		vi.restoreAllMocks()
 		vi.useRealTimers()
 	})
@@ -19,6 +23,10 @@ describe('Sync Server Hardened Capped-Debounce Timing & Serialization', () => {
 		// Trigger two saves in rapid succession
 		const p1 = triggerSerializedSave('doc-serialize-1', ydoc)
 		const p2 = triggerSerializedSave('doc-serialize-1', ydoc)
+		// Rejection is expected (stubbed no-network persist); acknowledge it
+		// immediately so it never lands as an unhandled rejection, letting
+		// allSettled below still observe the settled state.
+		p1.catch(() => {})
 
 		// P2 should return the existing in-flight promise
 		expect(p2).toBe(p1)

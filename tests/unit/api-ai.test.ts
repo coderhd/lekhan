@@ -5,18 +5,12 @@ import { POST } from '../../app/api/ai/route'
 // Mock the global fetch
 global.fetch = vi.fn()
 
-// Mock Supabase client
+// Mock Supabase client (auth only — T12 removed every profile/credit read)
 vi.mock('@supabase/supabase-js', () => ({
 	createClient: vi.fn(() => ({
 		auth: {
 			getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'test-user', email: 'test@example.com' } }, error: null }),
 		},
-		from: vi.fn(() => ({
-			select: vi.fn().mockReturnThis(),
-			eq: vi.fn().mockReturnThis(),
-			single: vi.fn().mockResolvedValue({ data: { plan: 'free', used_credits: 0 }, error: null }),
-			update: vi.fn().mockReturnThis(),
-		})),
 	})),
 }))
 
@@ -34,7 +28,7 @@ describe('API Route: /api/ai', () => {
 		expect(data.error).toBe('Missing authorization header')
 	})
 
-	it('should return translation if action is translate', async () => {
+	it('returns translation if action is translate', async () => {
 		const mockTranslateResponse = { translated_text: 'नमस्ते' }
 		;(global.fetch as any).mockResolvedValueOnce({
 			ok: true,
@@ -55,6 +49,28 @@ describe('API Route: /api/ai', () => {
 		
 		const data = await response.json()
 		expect(data.translatedText).toBe('नमस्ते')
+	})
+
+	it('never meters AI: a depleted credit balance still gets a 200 (no 402 gate)', async () => {
+		// T12 (US-4 AC1): the profiles credit reader is gone entirely. Even a profile
+		// that used to read "0 remaining" must not block a chat call.
+		;(global.fetch as any).mockResolvedValueOnce({
+			ok: true,
+			json: async () => ({ choices: [{ message: { content: 'hello' } }] }),
+		})
+
+		const req = new NextRequest('http://localhost:3000/api/ai', {
+			method: 'POST',
+			headers: {
+				'Authorization': 'Bearer fake-token',
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({ action: 'chat', prompt: 'Hello' }),
+		})
+
+		const response = await POST(req)
+		expect(response.status).toBe(200)
+		expect((await response.json()).text).toBe('hello')
 	})
 
 	it('should return error if Sarvam API fails', async () => {

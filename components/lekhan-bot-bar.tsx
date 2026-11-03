@@ -11,8 +11,8 @@ import {
 } from '@/lib/ai-constants'
 import { BotBarModelPicker } from './editor/bot-bar-model-picker'
 import { AIClient } from '@/lib/ai/client'
+import { usePlanTier } from '@/components/billing/use-plan-tier'
 
-import { getUserAICredits } from '@/services/db'
 import { supabase } from '@/lib/supabase'
 import { track } from '@/lib/analytics'
 import { AIProviderConfig, AIProviderType } from '@/lib/ai/types'
@@ -24,7 +24,6 @@ interface LekhanBotBarProps {
 	onClose: () => void
 	onResult: (actionId: string, result: string, originalText: string) => void
 	detectedLanguage?: { code: string; name: string; script: string } | null
-	creditsRemaining?: number
 	onOpenSettings?: () => void
 }
 
@@ -51,7 +50,6 @@ export default function LekhanBotBar({
 	isVisible,
 	onClose,
 	onResult,
-	creditsRemaining,
 	onOpenSettings,
 }: LekhanBotBarProps) {
 	const [prompt, setPrompt] = useState('')
@@ -60,7 +58,7 @@ export default function LekhanBotBar({
 	const [showTranslatePicker, setShowTranslatePicker] = useState(false)
 	const [showTransliteratePicker, setShowTransliteratePicker] = useState(false)
 	const [mounted, setMounted] = useState(false)
-	const [fetchedCredits, setFetchedCredits] = useState<number | null>(null)
+	const [userId, setUserId] = useState<string | undefined>(undefined)
 	
 	const [activeModelId, setActiveModelId] = useState('gpt-4o')
 	const [activeProvider, setActiveProvider] = useState('OpenAI')
@@ -86,22 +84,19 @@ export default function LekhanBotBar({
 			setShowTransliteratePicker(false)
 			setTimeout(() => inputRef.current?.focus(), 100)
 
-			const loadCredits = async () => {
+			const loadUser = async () => {
 				try {
 					const { data: { user } } = await supabase.auth.getUser()
-					if (user?.id) {
-						const creds = await getUserAICredits(user.id)
-						setFetchedCredits(creds.remainingCredits)
-					}
+					if (user?.id) setUserId(user.id)
 				} catch {
-					// Fallback
+					// Display-only badge; a failed read simply stays on the default tier.
 				}
 			}
-			loadCredits()
+			loadUser()
 		}
 	}, [isVisible])
 
-	const displayCredits = creditsRemaining ?? fetchedCredits ?? 50
+	const { tier: planTier } = usePlanTier(userId)
 
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
@@ -430,7 +425,7 @@ export default function LekhanBotBar({
 						<span className="animate-spin h-5 w-5 border-2 border-primary-container border-t-transparent rounded-full" />
 					) : (
 						<>
-							<span className="hidden sm:inline-flex text-[10px] font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full border border-primary/20 shrink-0 whitespace-nowrap">{displayCredits} Credits left</span>
+							<span className="hidden sm:inline-flex text-[10px] font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-full border border-primary/20 shrink-0 whitespace-nowrap capitalize">{planTier} plan</span>
 							<button
 								type="button"
 								onClick={onClose}

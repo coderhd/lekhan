@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js')
+const { resolveOwnerWorkspaceEntitlement } = require('../lib/billing/entitlements.ts')
 
 function getSupabaseClient(token) {
 	const apiKey =
@@ -100,7 +101,7 @@ async function verifyUserRole(supabase, entityId, token) {
 	return { role: member ? member.role : null, userId: user.id }
 }
 
-async function getDocumentOwnerPlan(supabaseAdmin, entityId) {
+async function getEntityOwnerId(supabaseAdmin, entityId) {
 	const { data: page, error: pageError } = await supabaseAdmin
 		.from('pages')
 		.select('owner_id')
@@ -111,38 +112,46 @@ async function getDocumentOwnerPlan(supabaseAdmin, entityId) {
 		throw pageError
 	}
 
-	let ownerId = null
 	if (page && page.owner_id) {
-		ownerId = page.owner_id
-	} else {
-		const { data: doc, error: docError } = await supabaseAdmin
-			.from('documents')
-			.select('owner_id')
-			.eq('id', entityId)
-			.maybeSingle()
-
-		if (docError && docError.code !== 'PGRST116') {
-			throw docError
-		}
-		ownerId = doc ? doc.owner_id : null
+		return page.owner_id
 	}
 
-	if (!ownerId) return 'free'
+	const { data: doc, error: docError } = await supabaseAdmin
+		.from('documents')
+		.select('owner_id')
+		.eq('id', entityId)
+		.maybeSingle()
 
-	const query = supabaseAdmin
-		.from('profiles')
-		.select('plan')
-		.eq('id', ownerId)
-
-	const { data: profile, error: profileError } = typeof query.maybeSingle === 'function'
-		? await query.maybeSingle()
-		: await query.single()
-
-	if (profileError && profileError.code !== 'PGRST116') {
-		throw profileError
+	if (docError && docError.code !== 'PGRST116') {
+		throw docError
 	}
 
-	return (profile && profile.plan) ? profile.plan.toLowerCase() : 'free'
+	return doc ? doc.owner_id : null
 }
 
-module.exports = { getSupabaseClient, getEntityOwner, verifyUserRole, getDocumentOwnerPlan }
+/**
+ * T11 — entitlement source for the entity's OWNER.
+ *
+ * Owner → workspace → `workspace_plans` row. The deprecated `profiles.plan`
+ * mirror is deliberately NOT read here; the billing root is the workspace.
+ * Returns `null` when the owner (or its workspace row) does not exist yet.
+ */
+async function getDocumentOwnerEntitlement(supabaseAdmin, entityId) {
+	const ownerId = await getEntityOwnerId(supabaseAdmin, entityId)
+	if (!ownerId) return null
+	return resolveOwnerWorkspaceEntitlement(ownerId, supabaseAdmin)
+}
+
+async function getDocumentOwnerPlan(supabaseAdmin, entityId) {
+	const entitlement = await getDocumentOwnerEntitlement(supabaseAdmin, entityId)
+	return entitlement ? entitlement.tier : 'free'
+}
+
+module.exports = {
+	getSupabaseClient,
+	getEntityOwner,
+	verifyUserRole,
+	getEntityOwnerId,
+	getDocumentOwnerEntitlement,
+	getDocumentOwnerPlan,
+}

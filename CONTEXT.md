@@ -83,6 +83,12 @@ fidelity. _Avoid_: export/import used loosely for this guarantee
 A subscription level attached to a Workspace (Free, Plus, Pro, Team), unlocking seats, history,
 sync, and privacy features. _Avoid_: plan (code legacy), subscription level
 
+**Founding member**:
+A person holding one of the first 500 waitlist spots who signed up through a referral link. A
+person-level status: founding pricing follows the founder into every Workspace they own, locked at
+each subscription's creation (ADR 0005). _Avoid_: founding user, founding workspace (the perk
+follows the person, not one Workspace)
+
 **Encrypt at rest**:
 Default protection level: content encrypted on hub storage with server-held keys.
 _Avoid_: E2E (reserved for the stronger level)
@@ -103,3 +109,14 @@ Bring your own model — local inference endpoints (Ollama, LM Studio) on the us
 **On-ramp**:
 Guided first-AI-use flow connecting non-technical users to free-tier provider presets.
 _Avoid_: free trial, credits
+
+**Referral credit**:
+A banked billing month on a Workspace, earned when a referred account activates (one month) or
+converts to paid (one more); applied provider-side at the next renewal. Never cash, never
+transferable.
+_Avoid_: AI credits, points, discount
+
+**AI credit**:
+A retired term from the pre-billing AI ledger (#29). AI use is never metered by Lekhan: users run on
+the free-key on-ramp, BYOK, or BYOL.
+_Avoid_: using for referral credits or quotas

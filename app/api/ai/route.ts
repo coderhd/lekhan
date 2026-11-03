@@ -46,7 +46,6 @@ export async function POST(request: NextRequest) {
 		if (!user) {
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 		}
-		const userId = user.id
 
 		let action: string, text: string | undefined, targetLanguage: string | undefined,
 			speaker: string | undefined, prompt: string | undefined, sourceLanguage: string | undefined,
@@ -110,63 +109,9 @@ export async function POST(request: NextRequest) {
 			return NextResponse.json({ error: 'Sarvam AI API key is not configured' }, { status: 500 })
 		}
 
-		const isCreditConsumingAction = ['chat', 'translate', 'tts', 'transliterate'].includes(action)
-
-		// Compute required credits based on Settings Page Credit Consumption Table:
-		// - Sarvam Chat: 1 Credit / req
-		// - Text to Speech: 1 Credit / 1K chars
-		// - Translate & Transliterate: 1 Credit / 10K chars
-		let requiredCredits = 1
-		if (action === 'chat') {
-			requiredCredits = 1
-		} else if (action === 'tts') {
-			const len = typeof text === 'string' ? text.length : 0
-			requiredCredits = Math.max(1, Math.ceil(len / 1000))
-		} else if (action === 'translate' || action === 'transliterate') {
-			const len = typeof text === 'string' ? text.length : 0
-			requiredCredits = Math.max(1, Math.ceil(len / 10000))
-		}
-
-		const serviceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || supabaseKey
-		const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
-			auth: { persistSession: false, autoRefreshToken: false },
-			global: { headers: { apikey: serviceKey } },
-		})
-
-		let currentUsedCredits = 0
-
-		if (isCreditConsumingAction) {
-			const { data: profile } = await supabaseAdmin
-				.from('profiles')
-				.select('plan, used_credits')
-				.eq('id', userId)
-				.single()
-
-			const plan = (profile?.plan || 'free').toLowerCase()
-			currentUsedCredits = profile?.used_credits ?? 0
-			const totalCredits = plan === 'go' ? 500 : plan === 'pro' ? 2500 : plan === 'team' ? 3500 : 50
-			const remainingCredits = Math.max(0, totalCredits - currentUsedCredits)
-
-			if (remainingCredits < requiredCredits && !hasValidByokKey) {
-				return NextResponse.json(
-					{ error: `AI credit limit reached (${remainingCredits} remaining, ${requiredCredits} required). Please add your own Sarvam API key in settings or upgrade your plan to continue.` },
-					{ status: 402 }
-				)
-			}
-		}
-
-		async function deductCreditIfPlatformQuota(cost: number = 1) {
-			if (isCreditConsumingAction && !hasValidByokKey) {
-				try {
-					await supabaseAdmin
-						.from('profiles')
-						.update({ used_credits: currentUsedCredits + cost })
-						.eq('id', userId)
-				} catch (err) {
-					console.error('[Credit Deduction Error]', err)
-				}
-			}
-		}
+		// T12 (US-4 AC1): AI is never metered by Lekhan. There is no credit ledger,
+		// no 402 gate, and no deduction — BYOK/on-ramp selection above is the only
+		// provider-key logic. Platform-key usage stays unmetered by design.
 
 		if (action === 'translate') {
 			if (!text || !targetLanguage) {
@@ -191,7 +136,6 @@ export async function POST(request: NextRequest) {
 				throw new Error(`Sarvam Translation error: ${errorText}`)
 			}
 
-			await deductCreditIfPlatformQuota(requiredCredits)
 			const data = await response.json()
 			return NextResponse.json({ translatedText: data.translated_text })
 		}
@@ -222,7 +166,6 @@ export async function POST(request: NextRequest) {
 				throw new Error(`Sarvam TTS error: ${errorText}`)
 			}
 
-			await deductCreditIfPlatformQuota(requiredCredits)
 			const data = await response.json()
 			return NextResponse.json({ base64Audio: data.audios?.[0] || data.base64_audio || data.audio })
 		}
@@ -255,7 +198,6 @@ export async function POST(request: NextRequest) {
 				throw new Error(`Sarvam LLM Chat error: ${errorText}`)
 			}
 
-			await deductCreditIfPlatformQuota(requiredCredits)
 			const data = await response.json()
 			const reply = data.choices?.[0]?.message?.content || ''
 			return NextResponse.json({ text: reply })
@@ -284,7 +226,6 @@ export async function POST(request: NextRequest) {
 				throw new Error(`Sarvam Transliteration error: ${errorText}`)
 			}
 
-			await deductCreditIfPlatformQuota(requiredCredits)
 			const data = await response.json()
 			return NextResponse.json({ transliteratedText: data.transliterated_text })
 		}
