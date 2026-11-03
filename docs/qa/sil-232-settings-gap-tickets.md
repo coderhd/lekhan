@@ -96,11 +96,13 @@ the billing surface needs a coordinated copy pass.
 **Title:** `[Polish] 390px settings: horizontal tab rail overflows with no visual scroll indicator; last tab off-screen`
 
 At 390 px the settings `role=tablist` renders as a horizontally scrollable rail of five
-`whitespace-nowrap` tabs (~640-700 px combined width vs 390 px viewport, `aside` of
+`whitespace-nowrap` tabs (~780-820 px combined width vs 390 px viewport, `aside` of
 `settings-client.tsx`, `overflow-x-auto` without any fade/chevron). "Billing & Subscription"
 is fully off-screen until the user discovers scrolling. Add an affordance (edge fade +
-chevron, or collapsed/shortened labels ≤ 390 px) per the mobile-reflow bar in #79. All touch
-targets measured ≥ 44 px — this is affordance, not size, work.
+chevron, or collapsed/shortened labels ≤ 390 px) per the mobile-reflow bar in #79. Touch
+targets measure ~36-40 px (`py-2.5` buttons, `py-3` tabs with text-xs line height) — they
+pass WCAG 2.5.8 but sit below the 44 px HIG bar; bring them to ≥ 44 px while touching the
+rail (affordance + sizing pass).
 
 ---
 
