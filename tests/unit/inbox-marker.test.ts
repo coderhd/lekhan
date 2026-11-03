@@ -23,4 +23,9 @@ describe('inbox marker matcher', () => {
 		expect(stripInboxMarker('09:41 #inbox-2026 task')).toBe('09:41 #inbox-2026 task')
 		expect(stripInboxMarker('09:41 #inbox/foo task')).toBe('09:41 #inbox/foo task')
 	})
+
+	it('removes a parenthesized marker without leaving an empty pair', () => {
+		expect(stripInboxMarker('(#inbox) buy stamps')).toBe('buy stamps')
+		expect(stripInboxMarker('09:41 ( #inbox ) buy stamps')).toBe('09:41 buy stamps')
+	})
 })

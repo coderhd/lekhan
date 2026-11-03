@@ -96,7 +96,8 @@ full suite (103 files / 967 tests), and build are green.
     **Fixed:** one shared matcher in `lib/inbox-marker.ts` now drives counting, triage, and
     capture. It mirrors the graph index boundary (`(^|[\s(])#inbox(?![a-zA-Z0-9_\-/])`), so
     `#inbox`, `#inbox.`, and `(#inbox)` match while longer names do not. Tests cover the
-    marker directly, the count, the strip helper, and capture text.
+    marker directly, the count, the strip helper, and capture text. Stripping also removes a
+    parenthesized marker as a whole, so `(#inbox) buy stamps` becomes `buy stamps`, not `()`.
 20. **Retry button was ~24px tall.** **Fixed:** the card's retry button now uses `min-h-11`
     (44px), matching the `Open Inbox` control; the component test asserts it.
 
