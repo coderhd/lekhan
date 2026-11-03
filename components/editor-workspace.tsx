@@ -173,7 +173,14 @@ export default function EditorWorkspace({	pageId,
 	// Suggestion closure; ref keeps suggestions current without recreating
 	// the editor on every page fetch.
 	const workspacePagesRef = useRef<WorkspacePageSummary[]>([])
-	workspacePagesRef.current = workspacePages
+	// Sync via layout effect, not render (CodeRabbit #187 finding): a
+	// discarded render would otherwise leave the ref pointing at data that
+	// never committed. The `items` callback only runs from editor events
+	// after commit, so this is safe. (Same hazard the repo documents for
+	// pageIdRef below.)
+	useLayoutEffect(() => {
+		workspacePagesRef.current = workspacePages
+	}, [workspacePages])
 
 	// Live Page metadata for clipboard copy-out (S3). The copy handler is
 	// synchronous, so title/tags/properties are mirrored into a ref rather than
