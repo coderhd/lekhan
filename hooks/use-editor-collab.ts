@@ -18,6 +18,21 @@ type WsStatus = 'connecting' | 'connected' | 'disconnected'
 // grace period before it treats this as a genuine disconnect.
 const RECONNECT_GRACE_PERIOD_MS = 60_000
 
+/**
+ * Presence lists are tiny (a handful of collaborators), so an explicit
+ * field-by-field comparison is cheaper than serialising, and it keeps the
+ * `activeUsers` reference stable when only cursor positions changed.
+ */
+function sameCollabUsers (a: CollabUser[], b: CollabUser[]) {
+	if (a.length !== b.length) return false
+	for (let i = 0; i < a.length; i++) {
+		if (a[i].id !== b[i].id || a[i].name !== b[i].name || a[i].color !== b[i].color) {
+			return false
+		}
+	}
+	return true
+}
+
 export function useEditorCollab (
 	documentId: string,
 	token: string,
@@ -166,12 +181,20 @@ export function useEditorCollab (
 				color: user.color,
 			})
 
+			// Awareness fires on *every* local cursor move — `yCursorPlugin`
+			// rewrites the local `cursor` field on each view update, which
+			// during typing is once per keystroke. Rebuilding the
+			// `activeUsers` array unconditionally therefore re-rendered the
+			// entire editor workspace (header + toolbar + every dropdown) on
+			// every character typed (SIL-230 / #144: 7,285 React renders over
+			// a 38-char burst). Only publish a new array when the presence
+			// list actually differs; cursor-only churn is not presence.
 			awareness.on('change', () => {
 				const states = Array.from(awareness.getStates().values())
 				const users = states
 					.map((state: { user?: CollabUser }) => state.user)
 					.filter(Boolean) as CollabUser[]
-				setActiveUsers(users)
+				setActiveUsers(prev => sameCollabUsers(prev, users) ? prev : users)
 			})
 
 			// 5. Track local changes (dirty flag)

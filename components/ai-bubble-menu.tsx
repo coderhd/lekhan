@@ -20,7 +20,7 @@ export default function AIBubbleMenu({ editor, onOpenLekhanBot }: AIBubbleMenuPr
 			const { selection } = state
 
 			if (selection.empty) {
-				setPos(null)
+				setPos(prev => (prev === null ? prev : null))
 				return
 			}
 
@@ -31,10 +31,15 @@ export default function AIBubbleMenu({ editor, onOpenLekhanBot }: AIBubbleMenuPr
 
 			if (editorCanvas) {
 				const canvasRect = editorCanvas.getBoundingClientRect()
-				setPos({
+				const next = {
 					top: start.top - canvasRect.top - 45,
 					left: Math.max(10, (start.left + end.left) / 2 - canvasRect.left - 80),
-				})
+				}
+				// Transactions fire on every keystroke; only publish a new
+				// position when it actually moved (SIL-230 / #144).
+				setPos(prev => (
+					prev && prev.top === next.top && prev.left === next.left ? prev : next
+				))
 			}
 		}
 

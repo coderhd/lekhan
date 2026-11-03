@@ -35,7 +35,7 @@ export function CodeBlockLanguageSelect({ editor }: CodeBlockLanguageSelectProps
 
 		const updatePosition = () => {
 			if (!editor.isActive('codeBlock')) {
-				setPos(null)
+				setPos(prev => (prev === null ? prev : null))
 				return
 			}
 
@@ -55,7 +55,7 @@ export function CodeBlockLanguageSelect({ editor }: CodeBlockLanguageSelectProps
 			}
 
 			if (!preElement) {
-				setPos(null)
+				setPos(prev => (prev === null ? prev : null))
 				return
 			}
 
@@ -64,11 +64,15 @@ export function CodeBlockLanguageSelect({ editor }: CodeBlockLanguageSelectProps
 
 			const preRect = preElement.getBoundingClientRect()
 			const canvasRect = editorCanvas.getBoundingClientRect()
-
-			setPos({
+			const next = {
 				top: preRect.top - canvasRect.top + 6,
 				right: canvasRect.right - preRect.right + 10,
-			})
+			}
+			// Every keystroke inside a code block fires a transaction; avoid a
+			// re-render when the decoration did not actually move.
+			setPos(prev => (
+				prev && prev.top === next.top && prev.right === next.right ? prev : next
+			))
 		}
 
 		updatePosition()
