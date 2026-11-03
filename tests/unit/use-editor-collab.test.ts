@@ -8,13 +8,20 @@ let createdProviders: FakeWebsocketProvider[] = []
 
 class FakeAwareness {
 	listeners: Record<string, Listener[]> = {}
+	states = new Map<string, unknown>()
 	setLocalStateField = vi.fn()
 	getStates() {
-		return new Map()
+		return this.states
 	}
 	on(event: string, cb: Listener) {
 		this.listeners[event] = this.listeners[event] || []
 		this.listeners[event].push(cb)
+	}
+	off(event: string, cb: Listener) {
+		this.listeners[event] = (this.listeners[event] || []).filter((fn) => fn !== cb)
+	}
+	emit(event: string, ...args: unknown[]) {
+		;(this.listeners[event] || []).forEach((cb) => cb(...args))
 	}
 }
 
@@ -163,5 +170,53 @@ describe('useEditorCollab optimistic connection state', () => {
 			window.dispatchEvent(new Event('online'))
 		})
 		expect(result.current.connectionState).toBe('connecting')
+	})
+
+	// SIL-230 / #144. `yCursorPlugin` rewrites the local awareness `cursor`
+	// field on every view update — i.e. once per keystroke. That fires
+	// awareness `change` events even though the *presence list* is unchanged.
+	// Publishing a fresh `activeUsers` array for those re-rendered the whole
+	// editor workspace per character; the reference must stay stable.
+	it('keeps the activeUsers reference stable when only cursor awareness changes', async () => {
+		const { result } = await setup()
+		const awareness = createdProviders[0].awareness
+
+		awareness.states.set('1', { user: { id: 'u1', name: 'User', color: '#ffffff' } })
+		act(() => {
+			awareness.emit('change')
+		})
+		const first = result.current.activeUsers
+		expect(first).toEqual([{ id: 'u1', name: 'User', color: '#ffffff' }])
+
+		// Simulate 38 per-keystroke awareness events with the same presence.
+		act(() => {
+			for (let i = 0; i < 38; i++) awareness.emit('change')
+		})
+		expect(result.current.activeUsers).toBe(first)
+
+		// A real presence change still publishes.
+		awareness.states.set('2', { user: { id: 'u2', name: 'Other', color: '#000000' } })
+		act(() => {
+			awareness.emit('change')
+		})
+		expect(result.current.activeUsers).not.toBe(first)
+		expect(result.current.activeUsers).toHaveLength(2)
+
+		// Rename / recolour is a presence change too.
+		awareness.states.set('2', { user: { id: 'u2', name: 'Renamed', color: '#111111' } })
+		act(() => {
+			awareness.emit('change')
+		})
+		expect(result.current.activeUsers).toEqual([
+			{ id: 'u1', name: 'User', color: '#ffffff' },
+			{ id: 'u2', name: 'Renamed', color: '#111111' },
+		])
+
+		// Leave removes the entry.
+		awareness.states.delete('2')
+		act(() => {
+			awareness.emit('change')
+		})
+		expect(result.current.activeUsers).toEqual([{ id: 'u1', name: 'User', color: '#ffffff' }])
 	})
 })
