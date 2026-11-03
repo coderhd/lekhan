@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { dailyTitle, isDailyPage, shiftDailyDate } from '@/lib/daily-notes'
+import { hasInboxMarker, INBOX_TAG as INBOX_MARKER_TAG } from '@/lib/inbox-marker'
 import type { Page } from '@/types'
 
 /**
@@ -14,7 +15,7 @@ import type { Page } from '@/types'
  * no per-page CRDT connection on the dashboard.
  */
 
-export const INBOX_TAG = 'inbox'
+export const INBOX_TAG = INBOX_MARKER_TAG
 export const INBOX_WINDOW_DAYS = 14
 
 export interface InboxItem {
@@ -32,9 +33,6 @@ type InboxPageRow = Page & {
 }
 
 const BULLET_PREFIX_RE = /^\s*(?:[-*+]|\d+[.)])\s+/
-// Match the graph index's tag boundary exactly: `#inboxing` and `#inbox_notes`
-// are different tags; punctuation after `#inbox` is fine.
-const INBOX_TAG_RE = /(?:^|\s)#inbox(?![a-zA-Z0-9_\-/])/i
 
 /**
  * The daily dates in the inbox window, newest first. Local calendar days only:
@@ -57,7 +55,7 @@ export function pendingInboxLines (text: string | null | undefined): string[] {
 		.split(/\r?\n/)
 		.map(line => line.replace(BULLET_PREFIX_RE, '').trim())
 		.filter(Boolean)
-		.filter(line => INBOX_TAG_RE.test(line))
+		.filter(line => hasInboxMarker(line))
 }
 
 export interface FetchInboxOptions {

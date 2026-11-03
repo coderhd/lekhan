@@ -104,6 +104,11 @@ describe('buildCaptureText', () => {
 		expect(buildCaptureText('#Inbox quick thought', NOW)).toBe('09:41 #Inbox quick thought')
 	})
 
+	it('treats a longer #inbox-prefixed tag as a different tag', () => {
+		expect(buildCaptureText('Fix #inbox-2026', NOW)).toBe('09:41 Fix #inbox-2026 #inbox')
+		expect(buildCaptureText('Fix #inbox/foo', NOW)).toBe('09:41 Fix #inbox/foo #inbox')
+	})
+
 	it('collapses newlines and runs of whitespace into one bullet', () => {
 		expect(buildCaptureText('  first line\n\n second\tline  ', NOW)).toBe('09:41 first line second line #inbox')
 	})

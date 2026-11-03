@@ -90,12 +90,22 @@ full suite (103 files / 967 tests), and build are green.
 18. **LOW — `ensureCanEdit` defaulted to permissive.**
     **Fixed:** it is now a required option.
 
+## External review round (Pullfrog on PR #190)
+
+19. **Triage matched `#inbox-2026` / `#inbox/foo` while the count did not.**
+    **Fixed:** one shared matcher in `lib/inbox-marker.ts` now drives counting, triage, and
+    capture. It mirrors the graph index boundary (`(^|[\s(])#inbox(?![a-zA-Z0-9_\-/])`), so
+    `#inbox`, `#inbox.`, and `(#inbox)` match while longer names do not. Tests cover the
+    marker directly, the count, the strip helper, and capture text.
+20. **Retry button was ~24px tall.** **Fixed:** the card's retry button now uses `min-h-11`
+    (44px), matching the `Open Inbox` control; the component test asserts it.
+
 ## Verification (final)
 
 ```text
 npm run typecheck   ✅
 npm run lint        ✅
-npm test            ✅ 103 files, 967 tests
+npm test            ✅ 104 files, 974 tests
 npm run build       ✅
 ```
 

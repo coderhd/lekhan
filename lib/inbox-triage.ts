@@ -1,6 +1,7 @@
 import type { Node as PMNode } from '@tiptap/pm/model'
 import type { EditorState } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
+import { hasInboxMarker, stripInboxMarker } from './inbox-marker'
 
 /**
  * Inbox triage helpers (epic #39, DN-T3).
@@ -20,7 +21,6 @@ export interface InboxRow {
 	text: string
 }
 
-const INBOX_TAG_RE = /(?:^|\s)#inbox\b/i
 const TAG_NAME_RE = /^[a-zA-Z0-9_][a-zA-Z0-9_\-/]*$/
 const ROW_NODE_TYPES = new Set(['listItem', 'taskItem'])
 
@@ -40,10 +40,7 @@ function isRowNode (node: PMNode): boolean {
 
 /** Remove the `#inbox` marker, preserving the rest of the row text. */
 export function stripInboxTag (text: string): string {
-	return text
-		.replace(/(?:^|\s)#inbox\b/gi, ' ')
-		.replace(/[ \t]{2,}/g, ' ')
-		.trim()
+	return stripInboxMarker(text)
 }
 
 /** True when `tag` fits the graph index's `#tag` grammar. */
@@ -96,7 +93,7 @@ export function findInboxRowAtSelection (state: EditorState): InboxRow | null {
 		const node = $from.node(depth)
 		if (!isRowNode(node)) continue
 		const text = rowText(node)
-		if (!INBOX_TAG_RE.test(text)) continue
+		if (!hasInboxMarker(text)) continue
 		return { pos: $from.before(depth), text }
 	}
 

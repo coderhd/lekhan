@@ -86,6 +86,7 @@ describe('InboxCard', () => {
 		renderCard()
 
 		expect(await screen.findByRole('alert')).toHaveTextContent(/couldn't load your inbox/i)
+		expect(screen.getByRole('button', { name: /try again/i })).toHaveClass('min-h-11')
 
 		fireEvent.click(screen.getByRole('button', { name: /try again/i }))
 

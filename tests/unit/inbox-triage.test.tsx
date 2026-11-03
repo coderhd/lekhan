@@ -81,6 +81,11 @@ describe('inbox triage helpers', () => {
 		expect(stripInboxTag('09:41 already linked [[Page]]')).toBe('09:41 already linked [[Page]]')
 	})
 
+	it('does not strip longer tags that merely start with #inbox', () => {
+		expect(stripInboxTag('09:41 #inbox-2026 task')).toBe('09:41 #inbox-2026 task')
+		expect(stripInboxTag('09:41 #inbox/foo task')).toBe('09:41 #inbox/foo task')
+	})
+
 	it('appends one valid tag and keeps #inbox', () => {
 		expect(appendInboxTag('09:41 Call Alice #inbox', 'launch')).toBe(
 			'09:41 Call Alice #inbox #launch',

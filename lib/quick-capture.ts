@@ -1,4 +1,5 @@
 import * as Y from 'yjs'
+import { hasInboxMarker, INBOX_TAG } from './inbox-marker'
 
 /**
  * Quick capture (epic #39, DN-T2).
@@ -14,13 +15,12 @@ import * as Y from 'yjs'
  * See `docs/superpowers/specs/2026-11-02-h1-daily-notes-quick-capture-inbox-design.md`.
  */
 
-export const CAPTURE_INBOX_TAG = 'inbox'
+export const CAPTURE_INBOX_TAG = INBOX_TAG
 export const CAPTURE_INBOX_HEADING = 'Inbox'
 
 /** The Tiptap Collaboration extension's default fragment field. */
 export const CAPTURE_FRAGMENT_FIELD = 'default'
 
-const INBOX_TAG_RE = /(?:^|\s)#inbox\b/i
 const INBOX_SECTION_LEVEL = 2
 // The sync hub runs on Render's free tier, which documents ~50s cold starts;
 // `useEditorCollab` grants the same 60s grace before calling a connection dead.
@@ -59,7 +59,7 @@ export function buildCaptureText (text: string, now: Date): string | null {
 	const body = String(text ?? '').replace(/\s+/g, ' ').trim()
 	if (!body) return null
 
-	const withTag = INBOX_TAG_RE.test(body) ? body : `${body} #${CAPTURE_INBOX_TAG}`
+	const withTag = hasInboxMarker(body) ? body : `${body} #${CAPTURE_INBOX_TAG}`
 	return `${captureTimeLabel(now)} ${withTag}`
 }
 

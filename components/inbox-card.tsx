@@ -192,7 +192,7 @@ export default function InboxCard ({ workspaceId, ownerId, today }: InboxCardPro
 						<button
 							type="button"
 							onClick={() => { void load() }}
-							className={`rounded-md bg-primary px-3 py-1 text-xs font-bold text-on-primary hover:bg-primary/90 premium-transition ${FOCUS_RING}`}
+							className={`flex min-h-11 items-center rounded-lg bg-primary px-4 text-sm font-bold text-on-primary hover:bg-primary/90 premium-transition ${FOCUS_RING}`}
 						>
 							Try again
 						</button>
