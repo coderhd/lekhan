@@ -15,6 +15,7 @@ import { Color } from '@tiptap/extension-color'
 import { Highlight } from '@tiptap/extension-highlight'
 import { TextAlign } from '@tiptap/extension-text-align'
 import { Underline } from '@tiptap/extension-underline'
+import { Strike } from '@tiptap/extension-strike'
 import { TaskList } from '@tiptap/extension-task-list'
 import { TaskItem } from '@tiptap/extension-task-item'
 import { Image } from '@tiptap/extension-image'
@@ -24,6 +25,23 @@ import { Callout } from '@/lib/callout'
 import { Wikilink } from '@/lib/wikilink'
 
 const lowlight = createLowlight(common)
+
+/**
+ * Strike's default binding is Mod-Shift-s, which is also the app-wide
+ * version-history shortcut. Keep strike available but move it to Mod-Shift-x
+ * so naming ⌘⇧S in the help dialog does not silently mutate the document.
+ */
+export const STRIKE_SHORTCUT = 'Mod-Shift-x'
+
+const StrikeWithHistorySafeKeybinding = Strike.extend({
+	addKeyboardShortcuts () {
+		return {
+			[STRIKE_SHORTCUT]: () => this.editor.commands.toggleStrike(),
+		}
+	},
+})
+
+export { StrikeWithHistorySafeKeybinding }
 
 const CustomDocument = Document.extend({
 	content: 'heading block*',
@@ -49,8 +67,10 @@ export const getSharedExtensions = (options?: { document?: AnyExtension }): AnyE
 		codeBlock: false,
 		link: false,
 		underline: false,
+		strike: false,
 		undoRedo: false,
 	}),
+	StrikeWithHistorySafeKeybinding,
 	CodeBlockLowlight.configure({
 		lowlight,
 	}),

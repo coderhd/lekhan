@@ -1,12 +1,21 @@
 import { describe, it, expect } from 'vitest'
-import { SHORTCUT_GROUPS, BROWSER_RESERVED_NOTE, formatShortcut, isTypingTarget } from '@/lib/shortcuts'
+import {
+	SHORTCUT_GROUPS,
+	BROWSER_RESERVED_NOTE,
+	browserReservedNote,
+	formatShortcut,
+	isTypingTarget,
+} from '@/lib/shortcuts'
+import { STRIKE_SHORTCUT, StrikeWithHistorySafeKeybinding } from '@/lib/editor-extensions'
+
+const allItems = SHORTCUT_GROUPS.flatMap(group => group.items)
+const allIds = allItems.map(item => item.id)
 
 describe('shortcut inventory', () => {
 	it('has unique ids per item and group', () => {
 		const groupIds = SHORTCUT_GROUPS.map(group => group.id)
 		expect(new Set(groupIds).size).toBe(groupIds.length)
-		const itemIds = SHORTCUT_GROUPS.flatMap(group => group.items.map(item => item.id))
-		expect(new Set(itemIds).size).toBe(itemIds.length)
+		expect(new Set(allIds).size).toBe(allIds.length)
 	})
 
 	it('describes every item with a label and a description', () => {
@@ -21,16 +30,39 @@ describe('shortcut inventory', () => {
 		}
 	})
 
-	it('only lists shortcuts the app implements', () => {
-		const ids = SHORTCUT_GROUPS.flatMap(group => group.items.map(item => item.id))
-		expect(ids).toEqual(
-			expect.arrayContaining(['palette', 'help', 'slash', 'wikilink', 'bot', 'history', 'copy', 'paste', 'escape', 'share']),
-		)
+	it('lists exactly the shortcuts the app implements', () => {
+		// Exact list on purpose: an omission or an invented shortcut must fail CI.
+		expect(allIds).toEqual([
+			'palette', 'help',
+			'slash', 'wikilink', 'bot', 'history', 'copy', 'paste',
+			'bold', 'italic', 'underline', 'strike', 'code', 'quote', 'bullet-list', 'ordered-list', 'heading',
+			'escape', 'share',
+		])
 	})
 
 	it('calls out browser-owned keys instead of claiming them', () => {
 		expect(BROWSER_RESERVED_NOTE).toMatch(/browser/i)
 		expect(BROWSER_RESERVED_NOTE).toMatch(/⌘W/)
+		expect(browserReservedNote('other')).toMatch(/Ctrl\+W/)
+		expect(browserReservedNote('other')).toMatch(/browser/i)
+	})
+
+	it('has no duplicate key combinations within a platform', () => {
+		for (const platform of ['mac', 'other'] as const) {
+			const combos = allItems
+				.filter(item => item.keys?.length)
+				.map(item => formatShortcut(item.keys!, platform))
+			expect(new Set(combos).size).toBe(combos.length)
+		}
+	})
+
+	it('keeps strikethrough off the version-history shortcut', () => {
+		// @tiptap/extension-strike defaults to Mod-Shift-s; version history owns that.
+		const addKeyboardShortcuts = StrikeWithHistorySafeKeybinding.config
+			.addKeyboardShortcuts as unknown as () => Record<string, unknown>
+		const shortcuts = addKeyboardShortcuts()
+		expect(Object.keys(shortcuts)).toEqual([STRIKE_SHORTCUT])
+		expect(STRIKE_SHORTCUT).toBe('Mod-Shift-x')
 	})
 })
 

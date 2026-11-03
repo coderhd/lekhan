@@ -30,7 +30,7 @@ vi.mock('@/components/session-reauth-provider', () => ({
 }))
 
 import GlobalSearchPalette from '@/components/global-search-palette'
-import { SHORTCUT_GROUPS, BROWSER_RESERVED_NOTE } from '@/lib/shortcuts'
+import { SHORTCUT_GROUPS, browserReservedNote } from '@/lib/shortcuts'
 
 const flushSession = async () => { await act(async () => {}) }
 
@@ -40,10 +40,13 @@ const renderPalette = (children: React.ReactNode = null) => render(
 	</GlobalSearchPalette>
 )
 
-const pressQuestionMark = async () => {
+const pressQuestionMark = async (target: EventTarget = document) => {
+	let event!: KeyboardEvent
 	await act(async () => {
-		document.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true, cancelable: true }))
+		event = new KeyboardEvent('keydown', { key: '?', bubbles: true, cancelable: true })
+		target.dispatchEvent(event)
 	})
+	return event
 }
 
 describe('shortcut help', () => {
@@ -70,32 +73,48 @@ describe('shortcut help', () => {
 	it('does not open on ? while typing in an input', async () => {
 		renderPalette(<input aria-label="note" />)
 		await flushSession()
-		screen.getByLabelText('note').focus()
-		await pressQuestionMark()
+		const input = screen.getByLabelText('note')
+		input.focus()
+		const event = await pressQuestionMark(input)
+		expect(event.defaultPrevented).toBe(false)
+		expect(document.activeElement).toBe(input)
 		expect(screen.queryByRole('dialog', { name: /keyboard shortcuts/i })).toBeNull()
 	})
 
 	it('does not open on ? while typing in the editor (contenteditable)', async () => {
 		renderPalette(<div contentEditable suppressContentEditableWarning aria-label="editor" />)
 		await flushSession()
-		screen.getByLabelText('editor').focus()
+		const editor = screen.getByLabelText('editor')
+		editor.focus()
+		const event = await pressQuestionMark(editor)
+		expect(event.defaultPrevented).toBe(false)
+		expect(screen.queryByRole('dialog', { name: /keyboard shortcuts/i })).toBeNull()
+	})
+
+	it('does not open on ? when signed out', async () => {
+		getSession.mockResolvedValue({ data: { session: null }, error: null })
+		renderPalette()
+		await flushSession()
 		await pressQuestionMark()
 		expect(screen.queryByRole('dialog', { name: /keyboard shortcuts/i })).toBeNull()
 	})
 
-	it('closes on Escape and restores focus', async () => {
-		renderPalette()
+	it('closes on Escape and restores focus to the opener', async () => {
+		renderPalette(<button type="button">Before</button>)
 		await flushSession()
-		await pressQuestionMark()
+		const before = screen.getByRole('button', { name: 'Before' })
+		before.focus()
+		await pressQuestionMark(before)
 		const dialog = screen.getByRole('dialog', { name: /keyboard shortcuts/i })
 		expect(dialog.contains(document.activeElement)).toBe(true)
 		await act(async () => {
 			fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
 		})
 		expect(screen.queryByRole('dialog', { name: /keyboard shortcuts/i })).toBeNull()
+		expect(document.activeElement).toBe(before)
 	})
 
-	it('opens from the palette footer hint and closes the palette', async () => {
+	it('opens from the palette footer hint, closes the palette, and takes focus', async () => {
 		renderPalette()
 		await flushSession()
 		await act(async () => {
@@ -103,21 +122,35 @@ describe('shortcut help', () => {
 		})
 		fireEvent.click(screen.getByRole('button', { name: /shortcuts/i }))
 		expect(screen.queryByPlaceholderText(/search pages/i)).toBeNull()
-		expect(screen.getByRole('dialog', { name: /keyboard shortcuts/i })).toBeTruthy()
+		const dialog = screen.getByRole('dialog', { name: /keyboard shortcuts/i })
+		expect(dialog).toBeTruthy()
+		expect(dialog.contains(document.activeElement)).toBe(true)
+	})
+
+	it('does not stack help on top of another open dialog', async () => {
+		renderPalette(
+			<div role="dialog" data-state="open" aria-label="other">
+				<button type="button">Inside</button>
+			</div>
+		)
+		await flushSession()
+		await pressQuestionMark()
+		expect(screen.queryByRole('dialog', { name: /keyboard shortcuts/i })).toBeNull()
 	})
 
 	it('renders the real shortcut inventory, not a hand-written list', async () => {
 		renderPalette()
 		await flushSession()
 		await pressQuestionMark()
-		const text = screen.getByRole('dialog', { name: /keyboard shortcuts/i }).textContent ?? ''
+		const dialog = screen.getByRole('dialog', { name: /keyboard shortcuts/i })
+		const text = dialog.textContent ?? ''
 		for (const group of SHORTCUT_GROUPS) {
 			for (const item of group.items) {
 				expect(text).toContain(item.label)
 			}
 		}
 		expect(text).toContain('K')
-		expect(text).toContain(BROWSER_RESERVED_NOTE)
+		expect(text).toContain(browserReservedNote('other'))
 	})
 
 	it('is a modal dialog that traps focus inside', async () => {
@@ -126,8 +159,14 @@ describe('shortcut help', () => {
 		await pressQuestionMark()
 		const dialog = screen.getByRole('dialog', { name: /keyboard shortcuts/i })
 		expect(dialog.getAttribute('aria-modal')).toBe('true')
-		const focusable = dialog.querySelectorAll('button, [href], input, [tabindex]:not([tabindex="-1"])')
+		const focusable = dialog.querySelectorAll<HTMLElement>('button, [href], input, [tabindex]:not([tabindex="-1"])')
 		expect(focusable.length).toBeGreaterThan(0)
+		const last = focusable[focusable.length - 1]
+		last.focus()
+		await act(async () => {
+			fireEvent.keyDown(last, { key: 'Tab' })
+		})
+		expect(dialog.contains(document.activeElement)).toBe(true)
 	})
 
 	it('does not open while the session is locked', async () => {

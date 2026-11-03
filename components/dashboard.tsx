@@ -375,7 +375,7 @@ export default function Dashboard({ user }: DashboardProps) {
 								<img src="/undraw_team-assignment_lzot.svg" alt="No pages" className="w-80 h-80 md:w-96 md:h-96 mb-8 opacity-90 drop-shadow-sm" />
 								<h3 className="text-2xl font-bold text-on-surface mb-2">Welcome to Lekhan!</h3>
 								<p className="text-on-surface-variant max-w-md mb-8">
-									Create your first page, or import the Markdown and Notion notes you already have.
+									Create your first page, or import the Markdown and Notion pages you already have.
 								</p>
 								<div className="flex items-center gap-sm">
 									<button onClick={handleCreatePage} className="flex items-center gap-sm bg-primary text-on-primary font-bold px-xl py-3 rounded-lg hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 premium-transition">
@@ -393,7 +393,7 @@ export default function Dashboard({ user }: DashboardProps) {
 								<img src="/undraw_no-data_ig65.svg" alt="No results" className="w-64 h-64 mb-8 opacity-90 drop-shadow-sm -ml-8" />
 								<h3 className="text-2xl font-bold text-on-surface mb-2">No results found</h3>
 								<p className="text-on-surface-variant max-w-md mb-8">
-									No pages match your current search or filter criteria.
+									No pages match this search or filter. Try a shorter word, or widen the date range.
 								</p>
 							</div>
 						)
@@ -493,7 +493,7 @@ export default function Dashboard({ user }: DashboardProps) {
 										<h3 className="text-lg font-bold text-on-surface mb-2">No pages yet</h3>
 										<p className="text-sm text-on-surface-variant max-w-md">
 											{myPages.length === 0
-												? 'No pages yet — use New to create one, or Import to bring your notes over.'
+												? 'No pages yet — use New to create one, or Import to bring your pages over.'
 												: 'No pages match this search. Try a shorter word or clear the filter.'}
 										</p>
 									</div>

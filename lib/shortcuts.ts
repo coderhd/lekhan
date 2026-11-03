@@ -34,8 +34,15 @@ export interface ShortcutGroup {
 	items: ShortcutItem[]
 }
 
-export const BROWSER_RESERVED_NOTE =
-	'⌘W, ⌘T, ⌘N and ⌘⇧T belong to the browser — Lekhan does not override them.'
+/** Browser-owned combinations, phrased for the platform the dialog is showing. */
+export function browserReservedNote (platform: 'mac' | 'other'): string {
+	const cmd = platform === 'mac' ? '⌘' : 'Ctrl+'
+	const shift = platform === 'mac' ? '⇧' : 'Shift+'
+	return `${cmd}W, ${cmd}T, ${cmd}N and ${cmd}${shift}T belong to the browser — Lekhan does not override them.`
+}
+
+/** macOS wording; kept as a constant for copy that is not platform-aware. */
+export const BROWSER_RESERVED_NOTE = browserReservedNote('mac')
 
 export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 	{
@@ -66,7 +73,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 			{
 				id: 'slash',
 				label: 'Insert a block',
-				description: 'Type / at the start of a line for headings, lists, tables and callouts.',
+				description: 'Type / to open the block menu — headings, lists, tables and callouts.',
 				gesture: '/',
 			},
 			{
@@ -110,6 +117,98 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
 				keys: [
 					{ mac: '⌘', other: 'Ctrl' },
 					{ mac: 'V', other: 'V' },
+				],
+			},
+		],
+	},
+	{
+		id: 'formatting',
+		title: 'Formatting',
+		items: [
+			{
+				id: 'bold',
+				label: 'Bold',
+				description: 'Toggle bold on the selection.',
+				keys: [
+					{ mac: '⌘', other: 'Ctrl' },
+					{ mac: 'B', other: 'B' },
+				],
+			},
+			{
+				id: 'italic',
+				label: 'Italic',
+				description: 'Toggle italics on the selection.',
+				keys: [
+					{ mac: '⌘', other: 'Ctrl' },
+					{ mac: 'I', other: 'I' },
+				],
+			},
+			{
+				id: 'underline',
+				label: 'Underline',
+				description: 'Toggle underline on the selection.',
+				keys: [
+					{ mac: '⌘', other: 'Ctrl' },
+					{ mac: 'U', other: 'U' },
+				],
+			},
+			{
+				id: 'strike',
+				label: 'Strikethrough',
+				description: 'Toggle strikethrough. Version history keeps ⌘⇧S.',
+				keys: [
+					{ mac: '⌘', other: 'Ctrl' },
+					{ mac: '⇧', other: 'Shift' },
+					{ mac: 'X', other: 'X' },
+				],
+			},
+			{
+				id: 'code',
+				label: 'Inline code',
+				description: 'Wrap the selection as inline code.',
+				keys: [
+					{ mac: '⌘', other: 'Ctrl' },
+					{ mac: 'E', other: 'E' },
+				],
+			},
+			{
+				id: 'quote',
+				label: 'Blockquote',
+				description: 'Turn the current block into a quote.',
+				keys: [
+					{ mac: '⌘', other: 'Ctrl' },
+					{ mac: '⇧', other: 'Shift' },
+					{ mac: 'B', other: 'B' },
+				],
+			},
+			{
+				id: 'bullet-list',
+				label: 'Bullet list',
+				description: 'Toggle a bulleted list.',
+				keys: [
+					{ mac: '⌘', other: 'Ctrl' },
+					{ mac: '⇧', other: 'Shift' },
+					{ mac: '8', other: '8' },
+				],
+			},
+			{
+				id: 'ordered-list',
+				label: 'Numbered list',
+				description: 'Toggle a numbered list.',
+				keys: [
+					{ mac: '⌘', other: 'Ctrl' },
+					{ mac: '⇧', other: 'Shift' },
+					{ mac: '7', other: '7' },
+				],
+			},
+			{
+				id: 'heading',
+				label: 'Heading 1–6',
+				description: 'Turn the current block into a heading of that level.',
+				keys: [
+					{ mac: '⌘', other: 'Ctrl' },
+					{ mac: '⌥', other: 'Alt' },
+					{ mac: '1–6', other: '1–6' },
 				],
 			},
 		],

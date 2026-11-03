@@ -40,6 +40,8 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 	const [userId, setUserId] = useState<string | null>(null)
 	const [query, setQuery] = useState('')
 	const [rows, setRows] = useState<SearchRow[]>([])
+	const [loadError, setLoadError] = useState(false)
+	const [reloadKey, setReloadKey] = useState(0)
 	const [loading, setLoading] = useState(false)
 	const [selectedIndex, setSelectedIndex] = useState(0)
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -74,6 +76,8 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 			}
 			if (e.metaKey || e.ctrlKey || e.altKey) return
 			if (e.key === '?' && !isTypingTarget(e.target) && !isTypingTarget(document.activeElement)) {
+				// Do not stack a second sheet on top of an open modal.
+				if (document.querySelector('[role="dialog"][data-state="open"]')) return
 				e.preventDefault()
 				openHelp()
 			}
@@ -116,6 +120,7 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 		if (!userId || !open || isLocked) return
 		const requestId = ++requestIdRef.current
 		setLoading(true)
+		setLoadError(false)
 		if (debounceRef.current) clearTimeout(debounceRef.current)
 		debounceRef.current = setTimeout(async () => {
 			try {
@@ -137,6 +142,7 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 				console.error('Global search failed:', err)
 				toast.error('Search failed. Please try again.')
 				setRows([])
+				setLoadError(true)
 			} finally {
 				if (requestId === requestIdRef.current) setLoading(false)
 			}
@@ -144,7 +150,7 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 		return () => {
 			if (debounceRef.current) clearTimeout(debounceRef.current)
 		}
-	}, [query, userId, open, isLocked])
+	}, [query, userId, open, isLocked, reloadKey])
 
 	const handleSelect = useCallback((row: SearchRow) => {
 		setOpen(false)
@@ -164,6 +170,8 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 			if (row) handleSelect(row)
 		}
 	}
+
+	const echoedQuery = query.trim().length > 40 ? `${query.trim().slice(0, 40)}…` : query.trim()
 
 	return (
 		<GlobalSearchContext.Provider value={{ open: openPalette }}>
@@ -190,11 +198,25 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 							<div className="max-h-[50vh] overflow-y-auto py-2">
 								{loading ? (
 									<div className="px-4 py-3 text-sm text-on-surface-variant">Searching…</div>
+								) : loadError ? (
+									<div className="px-4 py-3 text-sm text-on-surface-variant">
+										<span className="block font-medium text-on-surface">
+											{query.trim() ? 'Couldn’t search right now.' : 'Couldn’t load recent pages.'}
+										</span>
+										<span className="mt-1 block">Check your connection and try again.</span>
+										<button
+											type="button"
+											onClick={() => setReloadKey(key => key + 1)}
+											className="mt-2 rounded-md px-2 py-1 font-medium text-primary transition-colors hover:bg-primary/10"
+										>
+											Try again
+										</button>
+									</div>
 								) : rows.length === 0 ? (
 									<div className="px-4 py-3 text-sm text-on-surface-variant">
 										{query.trim() ? (
 											<>
-												<span className="block font-medium text-on-surface">No pages match “{query.trim()}”.</span>
+												<span className="block font-medium text-on-surface">No pages match “{echoedQuery}”.</span>
 												<span className="mt-1 block">Try a shorter word, or search for a page title instead.</span>
 											</>
 										) : (

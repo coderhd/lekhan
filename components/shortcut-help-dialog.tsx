@@ -1,10 +1,10 @@
 'use client'
 
 import * as Dialog from '@radix-ui/react-dialog'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
-	BROWSER_RESERVED_NOTE,
 	SHORTCUT_GROUPS,
+	browserReservedNote,
 	detectShortcutPlatform,
 	formatShortcut,
 	type ShortcutItem,
@@ -43,17 +43,33 @@ function KeyChips ({ item, platform }: { item: ShortcutItem, platform: 'mac' | '
 		)
 	}
 
-	return <span className="justify-self-end text-xs text-on-surface-variant">—</span>
+	return (
+		<span className="justify-self-end text-xs text-on-surface-variant">
+			<span className="sr-only">No shortcut</span>
+			<span aria-hidden="true">—</span>
+		</span>
+	)
 }
 
 export default function ShortcutHelpDialog ({ open, onOpenChange }: ShortcutHelpDialogProps) {
 	const [platform, setPlatform] = useState<'mac' | 'other'>('other')
+	const openerRef = useRef<HTMLElement | null>(null)
 
 	// Platform only changes the key labels, so resolve it after mount instead of
-	// risking a server/client mismatch in the first paint.
+	// risking a server/client mismatch in the first paint. Also remember what
+	// had focus so closing the sheet returns the user where they were — Radix
+	// cannot do that on its own when the sheet is opened programmatically.
 	useEffect(() => {
-		setPlatform(detectShortcutPlatform())
-	}, [])
+		if (open) {
+			openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+			setPlatform(detectShortcutPlatform())
+			return
+		}
+		if (openerRef.current?.isConnected) {
+			openerRef.current.focus()
+		}
+		openerRef.current = null
+	}, [open])
 
 	return (
 		<Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -69,7 +85,7 @@ export default function ShortcutHelpDialog ({ open, onOpenChange }: ShortcutHelp
 								Keyboard shortcuts
 							</Dialog.Title>
 							<Dialog.Description className="mt-1 text-sm text-on-surface-variant">
-								Every shortcut Lekhan actually has. Nothing hidden, nothing promised.
+								The gestures this build actually implements — nothing hidden, nothing promised.
 							</Dialog.Description>
 						</div>
 						<Dialog.Close asChild>
@@ -122,7 +138,7 @@ export default function ShortcutHelpDialog ({ open, onOpenChange }: ShortcutHelp
 					</div>
 
 					<p className="border-t border-black/5 px-5 py-3 text-xs text-on-surface-variant dark:border-white/5">
-						{BROWSER_RESERVED_NOTE}
+						{browserReservedNote(platform)}
 					</p>
 				</Dialog.Content>
 			</Dialog.Portal>
