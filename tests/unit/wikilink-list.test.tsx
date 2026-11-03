@@ -81,7 +81,32 @@ describe('WikilinkList keyboard navigation (clean-room review round 2)', () => {
 		expect(command).not.toHaveBeenCalled()
 	})
 
-	it('listbox semantics: container role=listbox, options carry aria-selected (a11y)', () => {
+	it('arrow navigation skips hint rows (a11y: hints are not selectable options)', () => {
+		const items: WikilinkSuggestionItem[] = [
+			{ id: 'p1', title: 'Alpha', kind: 'page' },
+			{ id: '__wikilink_hint__', title: '', kind: 'hint' },
+			{ id: 'p2', title: 'Beta', kind: 'page' },
+		]
+		const command = vi.fn()
+		const ref = createRef<WikilinkListRef>()
+
+		const Host = forwardRef<WikilinkListRef, ComponentProps<typeof WikilinkList>>((props, fwd) => (
+			<WikilinkList {...props} ref={fwd} />
+		))
+
+		render(<Host {...hostProps(items, command)} ref={ref} />)
+
+		act(() => {
+			ref.current?.onKeyDown(keydown('ArrowDown'))
+		})
+		act(() => {
+			ref.current?.onKeyDown(keydown('Enter'))
+		})
+		// Landed on Beta (index 2), not on the hint row.
+		expect(command).toHaveBeenLastCalledWith(items[2])
+	})
+
+	it('listbox semantics: header outside listbox, options carry aria-selected, hint hidden (a11y)', () => {
 		const items: WikilinkSuggestionItem[] = [
 			{ id: 'p1', title: 'Alpha', kind: 'page' },
 			{ id: 'p2', title: 'Beta', kind: 'page' },
@@ -96,8 +121,21 @@ describe('WikilinkList keyboard navigation (clean-room review round 2)', () => {
 		expect(options[0].getAttribute('aria-selected')).toBe('true')
 		expect(options[1].getAttribute('aria-selected')).toBe('false')
 		expect(listbox.getAttribute('aria-label')).toBe('Page suggestions')
+		// The "Pages" header must not be a child of the listbox.
+		expect(listbox.textContent).not.toContain('Pages')
 
 		fireEvent.click(screen.getAllByTestId('wikilink-page-item')[0])
 		expect(command).toHaveBeenCalledWith(items[0])
+	})
+
+	it('hint row is hidden from assistive tech while shown visually', () => {
+		const items: WikilinkSuggestionItem[] = [{ id: '__wikilink_hint__', title: '', kind: 'hint' }]
+		const command = vi.fn()
+
+		render(<WikilinkList items={items} command={command} />)
+
+		const hint = screen.getByText('Type a name to create a page').closest('[data-hint-row]')
+		expect(hint?.getAttribute('aria-hidden')).toBe('true')
+		expect(screen.queryAllByRole('option')).toHaveLength(0)
 	})
 })

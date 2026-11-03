@@ -497,12 +497,15 @@ export default function EditorWorkspace({	pageId,
 						// `[[` autocomplete popup (SIL-159 / #142): Obsidian-style
 						// mid-block page suggest + "Create page" empty state.
 						// allowedPrefixes null = `[[` fires after any character
-						// (Obsidian parity); pages come from the live ref. Space
-						// still closes the popup (allowSpaces default) — page
-						// titles remain reachable via the list.
+						// (Obsidian parity); pages come from the live ref.
+						// allowSpaces true keeps the popup alive across spaces so
+						// a multi-word title can be typed end-to-end (CodeRabbit
+						// #187 Major); the closed-]] grammar guard composed in
+						// lib/wikilink's default shouldShow still applies.
 						suggestion: {
 							char: '[[',
 							allowedPrefixes: null,
+							allowSpaces: true,
 							items: ({ query }: { query: string }) =>
 								buildWikilinkSuggestions(workspacePagesRef.current, query),
 							command: ({ editor: ed, range, props }: any) => {

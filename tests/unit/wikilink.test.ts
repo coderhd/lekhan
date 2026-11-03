@@ -545,3 +545,56 @@ describe('`[[` popup — pullfrog review follow-up (SIL-159)', () => {
 		}
 	})
 })
+
+describe('`[[` popup — round 4: allowSpaces live query (CodeRabbit #187 Major)', () => {
+	const suggestionState4 = (state: EditorState) =>
+		(state as unknown as Record<string, any>)['wikilinkSuggestion$']
+
+	const makeEditor4 = () => {
+		const editor = new Editor({
+			extensions: [
+				StarterKit,
+				Wikilink.configure({
+					workspacePages: [{ id: 't1', title: 'Temporal Retrieval' }],
+					suggestion: {
+						char: '[[',
+						allowedPrefixes: null,
+						allowSpaces: true,
+						items: ({ query }: { query: string }) => buildWikilinkSuggestions([{ id: 't1', title: 'Temporal Retrieval' }], query),
+						command: () => {},
+					},
+				}),
+			],
+			content: '<p>Hello</p>',
+		})
+		return editor
+	}
+
+	it('keeps the popup alive across spaces while typing a multi-word title', () => {
+		const editor = makeEditor4()
+		editor.commands.insertContentAt(6, ' [[Meeting')
+		expect(suggestionState4(editor.state).active).toBe(true)
+		expect(suggestionState4(editor.state).query).toBe('Meeting')
+
+		// Typing " Temporal" (space first) must not close the popup: the live
+		// query becomes the full multi-word title.
+		editor.commands.insertContent(' Retriev')
+		const state = suggestionState4(editor.state)
+		expect(state.active).toBe(true)
+		expect(state.query).toBe('Meeting Retriev')
+
+		// …and the query still matches by normalized whitespace.
+		editor.commands.insertContent('e')
+		expect(suggestionState4(editor.state).query).toBe('Meeting Retrieve')
+
+		editor.destroy()
+	})
+
+	it('closed-link guard still holds with allowSpaces enabled', () => {
+		const editor = makeEditor4()
+		editor.commands.setContent('<p>[[te st|al]] done</p>')
+		editor.commands.setTextSelection(7)
+		expect(suggestionState4(editor.state).active).toBe(false)
+		editor.destroy()
+	})
+})

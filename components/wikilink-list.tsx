@@ -41,12 +41,22 @@ const WikilinkList = forwardRef<WikilinkListRef, WikilinkListProps>(({ items, co
 	useImperativeHandle(ref, () => ({
 		onKeyDown: ({ event }: { event: KeyboardEvent }) => {
 			if (items.length === 0) return false
+			// Hint rows are guides, not selectable options (a11y/pullfrog #187
+			// thread): navigation skips them entirely.
+			const stepTo = (dir: 1 | -1) => {
+				let next = selectedIndex
+				for (let step = 0; step < items.length; step++) {
+					next = (next + dir + items.length) % items.length
+					if (items[next].kind !== 'hint') return next
+				}
+				return selectedIndex
+			}
 			if (event.key === 'ArrowUp') {
-				setSelectedIndex((selectedIndex + items.length - 1) % items.length)
+				setSelectedIndex(stepTo(-1))
 				return true
 			}
 			if (event.key === 'ArrowDown') {
-				setSelectedIndex((selectedIndex + 1) % items.length)
+				setSelectedIndex(stepTo(1))
 				return true
 			}
 			if (event.key === 'Enter' || event.key === 'Tab') {
@@ -72,63 +82,64 @@ const WikilinkList = forwardRef<WikilinkListRef, WikilinkListProps>(({ items, co
 	}
 
 	return (
-		<div
-			ref={containerRef}
-			role="listbox"
-			aria-label="Page suggestions"
-			className="bg-surface-container/95 dark:bg-surface-container border border-outline/20 rounded-xl p-1.5 shadow-2xl backdrop-blur-md w-64 max-h-60 overflow-y-auto space-y-1 z-50"
-		>
+		<div className="bg-surface-container/95 dark:bg-surface-container border border-outline/20 rounded-xl p-1.5 shadow-2xl backdrop-blur-md w-64 max-h-60 overflow-y-auto space-y-1 z-50">
+			{/* Header sits outside the listbox: a listbox may only contain
+			    options (pullfrog #187 a11y thread). */}
 			<div className="px-2 py-1 text-[10px] font-label-sm uppercase tracking-wider text-on-surface-variant/70">
 				Pages
 			</div>
-			{items.map((item, index) => {
-				if (item.kind === 'hint') {
+			<div ref={containerRef} role="listbox" aria-label="Page suggestions">
+				{items.map((item, index) => {
+					if (item.kind === 'hint') {
+						return (
+							<div
+								key={item.id}
+								data-index={index}
+								data-hint-row="true"
+								aria-hidden="true"
+								className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-on-surface-variant/70"
+							>
+								<FileText className="h-3.5 w-3.5 shrink-0" />
+								<span>Type a name to create a page</span>
+							</div>
+						)
+					}
+
+					const isCreate = item.kind === 'create'
+					const Icon = isCreate ? Plus : FileText
+
 					return (
-						<div
+						<button
 							key={item.id}
+							type="button"
 							data-index={index}
-							className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-on-surface-variant/70"
+							data-testid={isCreate ? 'wikilink-create-item' : 'wikilink-page-item'}
+							onClick={() => command(item)}
+							role="option"
+							aria-selected={index === selectedIndex}
+							className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-xs transition-colors ${
+								index === selectedIndex
+									? 'bg-primary-container text-on-primary-container font-medium'
+									: 'text-on-surface hover:bg-surface-variant/50'
+							}`}
 						>
-							<FileText className="h-3.5 w-3.5 shrink-0" />
-							<span>Type a name to create a page</span>
-						</div>
-					)
-				}
-
-				const isCreate = item.kind === 'create'
-				const Icon = isCreate ? Plus : FileText
-
-				return (
-					<button
-						key={item.id}
-						type="button"
-						data-index={index}
-						data-testid={isCreate ? 'wikilink-create-item' : 'wikilink-page-item'}
-						onClick={() => command(item)}
-						role="option"
-						aria-selected={index === selectedIndex}
-						className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-xs transition-colors ${
-							index === selectedIndex
-								? 'bg-primary-container text-on-primary-container font-medium'
-								: 'text-on-surface hover:bg-surface-variant/50'
-						}`}
-					>
-						<Icon
-							className={`h-3.5 w-3.5 shrink-0 ${isCreate ? 'text-primary' : 'text-on-surface-variant/60'}`}
-						/>
-						<div className="flex flex-col min-w-0">
-							<span className="truncate font-medium">
-								{isCreate ? `Create “${item.title}” page` : item.title}
-							</span>
-							{isCreate && (
-								<span className="text-[10px] text-on-surface-variant/70 truncate">
-									New page linked here
+							<Icon
+								className={`h-3.5 w-3.5 shrink-0 ${isCreate ? 'text-primary' : 'text-on-surface-variant/60'}`}
+							/>
+							<div className="flex flex-col min-w-0">
+								<span className="truncate font-medium">
+									{isCreate ? `Create “${item.title}” page` : item.title}
 								</span>
-							)}
-						</div>
-					</button>
-				)
-			})}
+								{isCreate && (
+									<span className="text-[10px] text-on-surface-variant/70 truncate">
+										New page linked here
+									</span>
+								)}
+							</div>
+						</button>
+					)
+				})}
+			</div>
 		</div>
 	)
 })
