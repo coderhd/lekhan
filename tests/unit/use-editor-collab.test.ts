@@ -201,5 +201,22 @@ describe('useEditorCollab optimistic connection state', () => {
 		})
 		expect(result.current.activeUsers).not.toBe(first)
 		expect(result.current.activeUsers).toHaveLength(2)
+
+		// Rename / recolour is a presence change too.
+		awareness.states.set('2', { user: { id: 'u2', name: 'Renamed', color: '#111111' } })
+		act(() => {
+			awareness.emit('change')
+		})
+		expect(result.current.activeUsers).toEqual([
+			{ id: 'u1', name: 'User', color: '#ffffff' },
+			{ id: 'u2', name: 'Renamed', color: '#111111' },
+		])
+
+		// Leave removes the entry.
+		awareness.states.delete('2')
+		act(() => {
+			awareness.emit('change')
+		})
+		expect(result.current.activeUsers).toEqual([{ id: 'u1', name: 'User', color: '#ffffff' }])
 	})
 })

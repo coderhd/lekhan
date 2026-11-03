@@ -125,9 +125,33 @@ background `Presence`/dropdown activity that predates this ticket.
 
 ## 6. Verification
 
+Run on `feat/sil-230-typing-frame-budget` (this worktree uses a symlinked
+`node_modules`, so the default Turbopack build rejects the symlink; CI and a normal
+checkout use `npm run build`):
+
 ```
-npm run typecheck   # exit 0
-npm run lint        # exit 0
-npm test            # full unit suite
-npm run build       # next build (webpack) exit 0
+npm run typecheck                      # exit 0
+npm run lint                           # exit 0
+npm test                               # 141/142 files pass, 1435 tests pass
+npx next build --webpack               # exit 0, route table emitted
 ```
+
+`npm test` has **three pre-existing failures** in `tests/unit/billing-gateway.test.ts`
+(`admin.from(...).update(...).eq(...).or is not a function`). The same three tests fail
+identically on a clean `origin/main` worktree (`git worktree add … origin/main`), so they are
+not caused by this change. The new regression tests pass:
+
+```
+npx vitest run tests/unit/editor-typing-renders.test.tsx \
+  tests/unit/editor-toolbar-renders.test.tsx tests/unit/use-editor-collab.test.ts
+# 3 files / 13 tests passed
+```
+
+### Reproducibility note
+
+The browser profile numbers above come from `agent-browser open --enable react-devtools`
+followed by `react renders start` / `react renders stop --json`; the raw JSON artifacts were
+run-scoped scratch files and are not committed. The deterministic §3 numbers are reproducible
+by running the committed tests. The production-build harness is documented here rather than
+checked in because it needs an authenticated session, a seeded page and a running collaboration
+server.

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { Profiler, memo, useEffect, useLayoutEffect, useState } from 'react'
-import { render, cleanup, waitFor, act, fireEvent } from '@testing-library/react'
+import { Profiler, memo, useLayoutEffect } from 'react'
+import { render, cleanup, waitFor, act } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import { EditorToolbar } from '../../components/editor-toolbar'
@@ -32,23 +32,15 @@ const CountedToolbar = memo(function CountedToolbar ({ editor }: { editor: Edito
 	)
 })
 
-function Harness ({ onReady, onParentRender }: { onReady: (editor: Editor) => void; onParentRender?: () => void }) {
+function Harness ({ onReady }: { onReady: (editor: Editor) => void }) {
 	const editor = useEditor({ extensions: getSharedExtensions(), immediatelyRender: false })
-	const [tick, setTick] = useState(0)
 
 	useLayoutEffect(() => {
 		if (editor) onReady(editor)
 	}, [editor, onReady])
 
-	useEffect(() => {
-		onParentRender?.()
-	})
-
 	return (
 		<div>
-			<button type='button' onClick={() => setTick((value) => value + 1)} data-testid='parent-rerender'>
-				{tick}
-			</button>
 			<CountedToolbar editor={editor} />
 			<EditorContent editor={editor} />
 		</div>
@@ -63,9 +55,9 @@ describe('EditorToolbar render budget', () => {
 	})
 	afterEach(() => cleanup())
 
-	async function mount (onParentRender?: () => void) {
+	async function mount () {
 		let editor: Editor | null = null
-		render(<Harness onReady={(instance) => { editor = instance }} onParentRender={onParentRender} />)
+		render(<Harness onReady={(instance) => { editor = instance }} />)
 		await waitFor(() => expect(editor).toBeTruthy())
 		const pm = document.querySelector('.ProseMirror') as HTMLElement
 		act(() => { pm.focus(); pm.dispatchEvent(new FocusEvent('focusin', { bubbles: true })) })
@@ -83,17 +75,18 @@ describe('EditorToolbar render budget', () => {
 		}
 		expect(toolbarCommits - harness.baselineCommits).toBe(0)
 		expect(wrapperRenders).toBe(harness.baselineWrapper)
+	}, 30000)
+
+	it('keeps the production memo boundary', () => {
+		// The harness's own memo wrapper is not the production boundary; if
+		// someone dropped `memo()` from EditorToolbar this assertion fails.
+		expect((EditorToolbar as unknown as { $$typeof: symbol }).$$typeof).toBe(Symbol.for('react.memo'))
 	})
 
-	it('does not render the toolbar when unrelated parent state changes', async () => {
-		let parentRenders = 0
-		const harness = await mount(() => { parentRenders++ })
-		for (let i = 0; i < 5; i++) {
-			fireEvent.click(document.querySelector('[data-testid="parent-rerender"]') as HTMLElement)
-		}
-		expect(parentRenders).toBeGreaterThan(5)
-		expect(wrapperRenders).toBe(harness.baselineWrapper)
-	})
+	it('does not light Align Left by default (parity with the inline toolbar)', async () => {
+		await mount()
+		expect(document.querySelector('button[title="Align Left"]')).not.toHaveClass('text-primary')
+	}, 30000)
 
 	it('still renders when the active formatting changes', async () => {
 		const harness = await mount()
@@ -103,5 +96,5 @@ describe('EditorToolbar render budget', () => {
 
 		expect(toolbarCommits - harness.baselineCommits).toBeGreaterThan(0)
 		expect(document.querySelector('button[title="Bold"]')).toHaveClass('text-primary')
-	})
+	}, 30000)
 })

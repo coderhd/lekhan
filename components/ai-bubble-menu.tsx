@@ -20,7 +20,7 @@ export default function AIBubbleMenu({ editor, onOpenLekhanBot }: AIBubbleMenuPr
 			const { selection } = state
 
 			if (selection.empty) {
-				setPos(prev => (prev === null ? prev : null))
+				setPos(null)
 				return
 			}
 

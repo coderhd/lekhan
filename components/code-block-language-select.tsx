@@ -35,7 +35,7 @@ export function CodeBlockLanguageSelect({ editor }: CodeBlockLanguageSelectProps
 
 		const updatePosition = () => {
 			if (!editor.isActive('codeBlock')) {
-				setPos(prev => (prev === null ? prev : null))
+				setPos(null)
 				return
 			}
 
@@ -55,7 +55,7 @@ export function CodeBlockLanguageSelect({ editor }: CodeBlockLanguageSelectProps
 			}
 
 			if (!preElement) {
-				setPos(prev => (prev === null ? prev : null))
+				setPos(null)
 				return
 			}
 

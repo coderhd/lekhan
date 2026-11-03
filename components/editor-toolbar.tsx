@@ -43,7 +43,7 @@ interface ToolbarState {
 	italic: boolean
 	underline: boolean
 	strike: boolean
-	align: string
+	align: '' | 'left' | 'center' | 'right'
 	bulletList: boolean
 	orderedList: boolean
 	taskList: boolean
@@ -60,7 +60,7 @@ const EMPTY_STATE: ToolbarState = {
 	italic: false,
 	underline: false,
 	strike: false,
-	align: 'left',
+	align: '',
 	bulletList: false,
 	orderedList: false,
 	taskList: false,
@@ -82,7 +82,12 @@ function selectToolbarState(editor: Editor | null): ToolbarState {
 		underline: editor.isActive('underline'),
 		strike: editor.isActive('strike'),
 		align: editor.isActive({ textAlign: 'center' }) ? 'center'
-			: editor.isActive({ textAlign: 'right' }) ? 'right' : 'left',
+			: editor.isActive({ textAlign: 'right' }) ? 'right'
+				// TextAlign defaults to null on unstyled paragraphs, so "no
+				// alignment" is its own state — matching the old inline
+				// toolbar, which never lit Align Left by default (SIL-230
+				// review F2 / #79 parity).
+				: editor.isActive({ textAlign: 'left' }) ? 'left' : '',
 		bulletList: editor.isActive('bulletList'),
 		orderedList: editor.isActive('orderedList'),
 		taskList: editor.isActive('taskList'),

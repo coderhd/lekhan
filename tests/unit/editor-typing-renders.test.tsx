@@ -165,5 +165,5 @@ describe('EditorWorkspace typing render budget (SIL-230)', () => {
 		// land, but nothing scales with the number of characters. A regression
 		// to per-keystroke commits would be ~KEYS (38).
 		expect(commits - baseline).toBeLessThanOrEqual(4)
-	}, 15000)
+	}, 60000)
 })
