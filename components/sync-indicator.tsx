@@ -1,6 +1,6 @@
 'use client'
 
-import { Cloud, CloudOff, HardDrive, Loader2 } from 'lucide-react'
+import { Cloud, CloudOff, HardDrive } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { ConnectionState } from '@/hooks/use-editor-collab'
 
@@ -58,10 +58,10 @@ const APPEARANCE: Record<SyncIndicatorState, SyncIndicatorAppearance> = {
 	connecting: {
 		label: 'Connecting to hub...',
 		// The ~50s Render cold start is a *known* state. Name it rather than
-		// hiding it behind an open-ended spinner.
+		// hiding it behind a spinner: #141 forbids a spinner where the state
+		// is known, so the copy carries the meaning and the icon stays static.
 		description: 'Connecting to the hub. It can take up to a minute to wake from idle; your edits stay on this device meanwhile.',
-		icon: Loader2,
-		iconClassName: 'animate-spin',
+		icon: Cloud,
 		chipClassName: `${BASE_CHIP_CLASS} bg-slate-500/10 dark:bg-slate-400/10 border-slate-500/20 text-slate-700 dark:text-slate-300`,
 	},
 	offline: {

@@ -43,6 +43,10 @@ Run `npx vitest run tests/unit/sync-indicator.test.tsx` → must fail.
 - **MINOR-1 / NIT-1 / NIT-2:** offline tooltip no longer asserts the user is offline; saving/synced
   copy describes the handshake honestly.
 - **NIT-3:** `isDirty` reset on cleanup.
+- **CodeRabbit round 2:** removed the connecting-state spinner entirely (static icon; #141
+  forbids a spinner where the state is known) and made the pending marker clear only after
+  IndexedDB has restored **and** the hub handshake has completed, closing the window where a
+  drop between the two showed "Offline" for work still waiting locally.
 
 ## T5 — Verification
 

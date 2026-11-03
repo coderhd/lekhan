@@ -40,9 +40,10 @@ only" outranks "Offline"/"Connecting" because it answers the user's real questio
 
 ### Copy and accessibility
 
-- **Connecting** carries a `title` explaining the known cold start: the hub can take up
-  to a minute to wake from idle, and edits stay on this device meanwhile. The spinner is
-  now backed by a specific, known state rather than masking it.
+- **Connecting** uses a static icon rather than a spinner — #141 forbids a spinner where
+  the state is known — and carries a `title`/screen-reader explanation of the known cold
+  start: the hub can take up to a minute to wake from idle, and edits stay on this device
+  meanwhile.
 - **Local edits only** carries a `title` stating the edits are kept on this device and
   will sync when the hub reconnects.
 - The chip exposes `role="status"` + `aria-live="polite"` and a visually hidden explanation,

@@ -45,6 +45,20 @@ export function useEditorCollab (
 
 		// A reload must not hide edits that are still only on this device.
 		setIsDirty(hasPendingLocalEdits(documentId))
+		// The persisted marker can only be cleared once BOTH the local replica
+		// has restored its stored edits and the hub handshake has completed.
+		// Clearing on hub sync alone could drop the marker before IndexedDB
+		// applies the pending edits, briefly showing "Offline" for work that
+		// is still waiting to sync.
+		let isLocalRestored = false
+		let isHubSynced = false
+		const clearPendingMarkerIfRestored = () => {
+			if (!isLocalRestored || !isHubSynced) {
+				return
+			}
+			setIsDirty(false)
+			setPendingLocalEdits(documentId, false)
+		}
 		let graceTimer: ReturnType<typeof setTimeout> | null = null
 		let browserOnline = navigator.onLine
 		let lastWsStatus: WsStatus = 'connecting'
@@ -133,6 +147,8 @@ export function useEditorCollab (
 			indexeddbProvider = new IndexeddbPersistence(documentId, doc)
 			indexeddbProvider.on('synced', () => {
 				setIsLocalSynced(true)
+				isLocalRestored = true
+				clearPendingMarkerIfRestored()
 			})
 
 			// 2. Initialize WebSocket remote provider
@@ -151,6 +167,7 @@ export function useEditorCollab (
 				const connected = status === 'connected'
 				setIsConnected(connected)
 				if (!connected) {
+					isHubSynced = false
 					setIsSynced(false)
 				}
 				evaluateConnectionState()
@@ -158,12 +175,8 @@ export function useEditorCollab (
 
 			wsProvider.on('sync', (isSyncedState: boolean) => {
 				setIsSynced(isSyncedState)
-				if (isSyncedState) {
-					// The hub now has everything this replica sent, so nothing
-					// is local-only anymore.
-					setIsDirty(false)
-					setPendingLocalEdits(documentId, false)
-				}
+				isHubSynced = isSyncedState
+				clearPendingMarkerIfRestored()
 			})
 
 			// 4. Configure awareness (presence)

@@ -49,12 +49,18 @@ describe('SyncIndicator', () => {
 		// Render cold start: the browser is online, the hub is not up yet.
 		// Must not read as an error state, and must not pretend to know less
 		// than it does — the copy names the hub and the known cold start.
+		render(<SyncIndicator connectionState="connecting" isSynced={false} />)
+		expect(screen.getByText('Connecting to hub...')).toBeDefined()
+		expect(screen.queryByText('Offline')).toBeNull()
+	})
+
+	it('never shows a spinner while connecting to the known cold-start state', () => {
+		// #141: never a spinner where the state is known. The cold start is
+		// known, so the copy carries the meaning and the icon stays static.
 		const { container } = render(
 			<SyncIndicator connectionState="connecting" isSynced={false} />
 		)
-		expect(screen.getByText('Connecting to hub...')).toBeDefined()
-		expect(screen.queryByText('Offline')).toBeNull()
-		expect(container.querySelector('.animate-spin')).not.toBeNull()
+		expect(container.querySelector('.animate-spin')).toBeNull()
 	})
 
 	it('explains the known cold-start window in the connecting tooltip', () => {
