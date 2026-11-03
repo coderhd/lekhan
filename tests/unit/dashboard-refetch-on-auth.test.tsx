@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import Dashboard from '@/components/dashboard'
 import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
 import GlobalSearchPalette from '@/components/global-search-palette'
+import QuickCapturePalette from '@/components/quick-capture-palette'
 
 vi.mock('@/components/session-reauth-provider', () => ({
 	useSessionReauth: () => ({ isLocked: false, lockSession: vi.fn(), unlockSession: vi.fn() }),
@@ -16,17 +17,29 @@ vi.mock('next/navigation', () => ({
 	useRouter: () => ({ push: vi.fn() }),
 }))
 
-vi.mock('@/lib/supabase', () => ({
-	supabase: {
-		auth: {
-			onAuthStateChange: vi.fn((cb: (event: string, session: any) => void) => {
-				authCallbacks.push(cb)
-				return { data: { subscription: { unsubscribe: vi.fn() } } }
-			}),
-			getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
+vi.mock('@/lib/supabase', () => {
+	// The dashboard now mounts DailyStrip, which reads daily-page dots through
+	// the Supabase client. Keep the fixture chainable and empty by default.
+	const pagesBuilder: any = {
+		select: vi.fn(() => pagesBuilder),
+		eq: vi.fn(() => pagesBuilder),
+		in: vi.fn(() => pagesBuilder),
+		order: vi.fn(() => pagesBuilder),
+		then: vi.fn((cb: any) => Promise.resolve({ data: [], error: null }).then(cb)),
+	}
+	return {
+		supabase: {
+			from: vi.fn(() => pagesBuilder),
+			auth: {
+				onAuthStateChange: vi.fn((cb: (event: string, session: any) => void) => {
+					authCallbacks.push(cb)
+					return { data: { subscription: { unsubscribe: vi.fn() } } }
+				}),
+				getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
+			},
 		},
-	},
-}))
+	}
+})
 
 const ensureWorkspace = vi.fn()
 const fetchWorkspacePages = vi.fn()
@@ -71,11 +84,13 @@ function fireAuth(event: string, session: any) {
 
 function renderDashboard() {
 	return render(
-		<GlobalSearchPalette>
-			<GlobalHeaderProvider>
-				<Dashboard user={user} />
-			</GlobalHeaderProvider>
-		</GlobalSearchPalette>
+		<QuickCapturePalette>
+			<GlobalSearchPalette>
+				<GlobalHeaderProvider>
+					<Dashboard user={user} />
+				</GlobalHeaderProvider>
+			</GlobalSearchPalette>
+		</QuickCapturePalette>
 	)
 }
 

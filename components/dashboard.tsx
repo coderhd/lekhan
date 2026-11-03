@@ -2,14 +2,16 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { MemberPageItem, Page } from '@/types'
+import { MemberPageItem, Page, Workspace } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { ensureWorkspace, fetchWorkspacePages, fetchSharedPages, createPage, deletePage, updatePageTitle, fetchPendingPageInvitations } from '@/services/graph'
 import { importMarkdownFile } from '@/services/import'
 import Invitations from './invitations'
 import ProfileMenu from './profile-menu'
 import ThemeToggle from './theme-toggle'
+import DailyStrip from './daily-strip'
 import { useGlobalSearch } from '@/components/global-search-palette'
+import { useQuickCapture } from '@/components/quick-capture-palette'
 import GlobalLoader from './global-loader'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check } from 'lucide-react'
@@ -34,8 +36,10 @@ import { GlobalHeaderSlot } from './layout/global-header-context'
 export default function Dashboard({ user }: DashboardProps) {
 	const router = useRouter()
 	const { open: openGlobalSearch } = useGlobalSearch()
+	const { open: openQuickCapture } = useQuickCapture()
 	const [myPages, setMyPages] = useState<Page[]>([])
 	const [sharedPages, setSharedPages] = useState<MemberPageItem[]>([])
+	const [workspace, setWorkspace] = useState<Workspace | null>(null)
 	const [pendingInvitesCount, setPendingInvitesCount] = useState(0)
 	const [loading, setLoading] = useState(true)
 	const [fetchError, setFetchError] = useState(false)
@@ -118,6 +122,7 @@ export default function Dashboard({ user }: DashboardProps) {
 				fetchPendingPageInvitations(user.email)
 			])
 			if (requestId !== fetchRequestIdRef.current) return
+			setWorkspace(workspace)
 			setMyPages(owned)
 			setSharedPages(shared)
 			setPendingInvitesCount(invites.length)
@@ -296,6 +301,15 @@ export default function Dashboard({ user }: DashboardProps) {
 			<GlobalHeaderSlot slot="right">
 				<div className="flex items-center gap-md">
 					<button
+						onClick={openQuickCapture}
+						className="flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 py-2 premium-transition text-on-surface-variant hover:text-on-surface hover:bg-black/5 dark:hover:bg-white/10"
+						title="Quick capture (⌘/Ctrl+Shift+C)"
+						aria-label="Quick capture"
+					>
+						<span aria-hidden className="material-symbols-outlined leading-none">bolt</span>
+						<span className="hidden text-sm font-medium sm:inline">Capture</span>
+					</button>
+					<button
 						onClick={openGlobalSearch}
 						className="p-2 flex items-center justify-center rounded-lg hover:bg-black/5 dark:hover:bg-white/10 premium-transition text-on-surface-variant hover:text-on-surface relative hover:scale-110 active:scale-90"
 						title="Search (Cmd+K)"
@@ -352,6 +366,10 @@ export default function Dashboard({ user }: DashboardProps) {
 					<div className="flex items-center justify-between gap-3">
 						<WorkspaceViewsNav active="pages" />
 					</div>
+
+					{!fetchError && workspace && (
+						<DailyStrip workspaceId={workspace.id} ownerId={user.id} />
+					)}
 
 					{loading ? (
 						<div className="flex justify-center items-center min-h-[calc(100vh-6rem)]">
