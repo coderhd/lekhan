@@ -81,8 +81,9 @@ Rules for whoever edits these files:
 - Never leave `[INVITE LINK]` in an email. The tag is `{{contact.INVITE_URL}}`.
 - Do not add `{{contact.FOUNDING_POSITION}}` or `{{contact.CONFIRMED_AT}}` —
   neither is a Brevo attribute today (§2 P2 and P1 of the sequence doc).
-- Brevo's own tag picker is the final authority on syntax; if a tag does not
-  turn orange/chip in the editor, it will not resolve at send time.
+- Brevo's own tag picker is the final authority on syntax. In the editor a
+  valid tag may show either as a yellow chip or as plain text, so the chip is
+  not proof by itself — the step-7 test send is.
 
 ## 4. Field map to Brevo
 
@@ -168,10 +169,10 @@ or an automation.
 1. [ ] Confirm the sequence copy on `main` still matches these files. PR #199
        may have changed wording after these templates were built:
        `git diff main -- docs/marketing/brevo-welcome-sequence.md docs/marketing/brevo/templates/`
-2. [ ] Brevo → **Campaigns → Templates → New template → Start designing →
-       Start from scratch**, then open the **HTML custom code** editor (the
-       `</>` source view). Brevo's menu labels change between releases; the
-       editor is the one that accepts a full HTML document.
+2. [ ] Brevo → **Marketing → Templates → Create template → Start from
+       scratch**, then open the **HTML custom code** editor (the `</>` source
+       view). Brevo moves these labels between releases; the editor is the one
+       that accepts a full HTML document.
 3. [ ] Template 1: name `FC-01-confirm`, paste `01-confirm.html`, set subject
        and preview text from §2, save.
 4. [ ] Plain text: in the campaign editor open

@@ -40,9 +40,24 @@ items and the accuracy-relevant nits were fixed in the same commit.
 | N7 | nit | Preheader comment described a figure space as zero-width | Removed with N4 |
 | N8 | nit | Brevo's docs write `{{ unsubscribe }}` with spaces | Noted in the merge-tag table; test send is the proof |
 
+## External review — pullfrog
+
+pullfrog reviewed the full diff against the copy doc, Brevo's docs and a live
+render: **no critical issues**, two minor inline notes, both about doc
+references rather than the templates.
+
+| Finding | Resolution |
+|---|---|
+| "Brevo → Campaigns → Templates → New template" is the wrong top-level path; current docs use Marketing → Templates → Create template | Step 2 of the checklist now uses `Marketing → Templates → Create template → Start from scratch`, keeping the "labels move between releases" hedge |
+| "If a tag does not turn orange/chip it will not resolve" asserts an editor invariant Brevo does not document | Reworded: a valid tag may render as a chip or plain text, and the test send is the authoritative check |
+
+CodeRabbit: auto-review skipped on a non-default base branch, then the manual
+trigger hit the free OSS review limit. Explicit waiver posted on the PR with the
+reason and the internal-review coverage.
+
 ## Re-check after fixes
 
-- `node scripts/render-brevo-previews.mjs` — 8 previews, globals passed.
+- `node scripts/render-brevo-previews.mjs` — 8 previews, guards passed.
 - `npx eslint scripts/render-brevo-previews.mjs` — clean.
 - `git status` after re-render — previews byte-identical.
 - Copy verification (HTML body ≡ `.txt`, `.txt` ≡ copy-doc block) — all pass.
