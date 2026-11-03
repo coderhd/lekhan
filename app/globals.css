@@ -146,6 +146,17 @@
 @layer utilities {
 	.material-symbols-outlined {
 		font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+		/* SIL-231: the icon webfont loads after first paint; before it lands the
+		   ligature word ("upload_file") is ~1–4× wider than the final 1em glyph,
+		   and the width jump shifts neighbours (0.017 CLS on the mobile
+		   dashboard). Pinning the box to the glyph's natural 1em width makes the
+		   pre-load box identical to the post-load one — genuine reserved space,
+		   not a mask. Glyphs are square in Material Symbols, so 1em is exact. */
+		display: inline-block;
+		width: 1em;
+		overflow: hidden;
+		white-space: nowrap;
+		text-align: center;
 	}
 
 	.glass-panel {

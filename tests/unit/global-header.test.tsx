@@ -94,4 +94,24 @@ describe('GlobalHeader', () => {
 		act(() => window.dispatchEvent(new Event('scroll')))
 		expect(header).toHaveAttribute('data-header-visible', 'true')
 	})
+
+	// SIL-231: measuring 0.204 CLS on the dashboard — the header's left/right
+	// action rows were 28px tall before a route registered its slots and grew to
+	// 44px (min-h-11 slot controls) once the dashboard hydrated, pushing the
+	// whole page down 5px. Both rows must reserve the load-bearing slot height
+	// upfront so late slot registration cannot change header metrics.
+	it('reserves fixed action-row heights before any route slot registers', async () => {
+		pathname = '/'
+
+		render(<GlobalHeaderProvider><GlobalHeader /><p>Dashboard</p></GlobalHeaderProvider>)
+
+		const header = await screen.findByRole('banner')
+		const reservedRows = header.querySelectorAll('div.min-h-11')
+		expect(reservedRows).toHaveLength(2) // left flex-1 row + right (or right-fallback) row
+		for (const row of reservedRows) {
+			expect(row.className).toMatch(/min-h-11/)
+			expect(row.className).toMatch(/items-center/)
+		}
+		expect(header.querySelector('div.min-h-11')?.className).toMatch(/flex-1/)
+	})
 })

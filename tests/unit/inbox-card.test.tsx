@@ -76,7 +76,7 @@ describe('InboxCard', () => {
 
 		renderCard()
 
-		expect(await screen.findByRole('status')).toHaveTextContent(/loading inbox/i)
+		expect(await screen.findByRole('status')).toHaveTextContent(/loading captures/i)
 	})
 
 	it('shows an error with a retry that recovers', async () => {

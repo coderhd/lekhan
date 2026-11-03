@@ -86,7 +86,7 @@ export function GlobalHeader({ children, rightActions }: GlobalHeaderProps) {
 			className={`sticky top-0 z-50 flex min-h-[4rem] items-center justify-between border-b border-border/40 bg-background/80 px-6 py-3 backdrop-blur-md transition-[transform,opacity] duration-300 motion-reduce:transition-none ${isVisible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'}`}
 			data-header-visible={isVisible}
 		>
-			<div className="flex items-center gap-4 flex-1">
+			<div className="flex min-h-11 items-center gap-4 flex-1">
 				{/* <Link href="/" className="flex items-center gap-2.5 transition-opacity hover:opacity-80">
 					<img 
 						src="/logo.png" 
@@ -105,7 +105,14 @@ export function GlobalHeader({ children, rightActions }: GlobalHeaderProps) {
 				{mainContent && <div className="hidden md:flex items-center gap-6">{mainContent}</div>}
 			</div>
 
-			<div className="flex items-center gap-4">
+			{/* SIL-231: min-h/min-w reserve the action row's final metrics before the
+			dashboard's slots register — the slot controls (Capture/search/theme/
+			notifications/profile) are taller and wider than the fallback, and an
+			unreserved row growing 28→44px tall / 48→335px wide on hydration pushed
+			the entire page (0.204 CLS). justify-end pins narrow fallback states
+			(landing/login) to the right edge so slot registration cannot reflow
+			the landing header either. */}
+			<div className="flex min-h-11 items-center justify-end gap-4 min-w-[300px] sm:min-w-[346px] md:min-w-[335px]">
 				{mainContent && (
 					<button
 						type="button"

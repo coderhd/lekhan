@@ -185,7 +185,17 @@ export default function InboxCard ({ workspaceId, ownerId, today }: InboxCardPro
 
 			<div className="mt-3">
 				{loading ? (
-					<p role="status" className="text-sm text-on-surface-variant">Loading inbox…</p>
+					/* SIL-231: while captures load, render the zero state's exact box
+					   (same container, same static description) with the first line
+					   swapped for the loading status. Identical structure means the
+					   box height matches the settled empty state at every viewport
+					   width, so data landing never moves the dashboard below. The
+					   count badge's aria-label already announces the loading state
+					   for screen readers. */
+					<div role="status" className="rounded-lg border border-dashed border-black/10 dark:border-white/10 px-3 py-4 text-sm">
+						<p className="font-medium text-on-surface">Loading captures…</p>
+						<p className="text-on-surface-variant">Captures land here until you link or delete them. Tags organise them without clearing the inbox.</p>
+					</div>
 				) : error ? (
 					<div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-error/10 px-3 py-2 text-sm">
 						<span className="text-error">Couldn't load your inbox. Check your connection and try again.</span>
