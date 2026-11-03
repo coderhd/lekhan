@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Editor } from '@tiptap/react'
+import { Editor, useEditorState } from '@tiptap/react'
 import { Bold, Italic, Underline } from 'lucide-react'
 
 interface AIBubbleMenuProps {
@@ -9,8 +9,32 @@ interface AIBubbleMenuProps {
 	onOpenLekhanBot: () => void
 }
 
+const EMPTY_ACTIVE = { bold: false, italic: false, underline: false }
+
+function sameActive (
+	a: { bold: boolean; italic: boolean; underline: boolean } | null,
+	b: { bold: boolean; italic: boolean; underline: boolean } | null,
+) {
+	if (a === b) return true
+	if (!a || !b) return false
+	return a.bold === b.bold && a.italic === b.italic && a.underline === b.underline
+}
+
 export default function AIBubbleMenu({ editor, onOpenLekhanBot }: AIBubbleMenuProps) {
 	const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+
+	// Active marks are read live, not from `pos`: a keyboard shortcut can
+	// toggle bold while the selection coordinates (and therefore `pos`) stay
+	// identical, and the buttons must still repaint (CodeRabbit #202 finding).
+	const active = useEditorState({
+		editor,
+		selector: ({ editor: current }) => current ? {
+			bold: current.isActive('bold'),
+			italic: current.isActive('italic'),
+			underline: current.isActive('underline'),
+		} : EMPTY_ACTIVE,
+		equalityFn: sameActive,
+	}) ?? EMPTY_ACTIVE
 
 	useEffect(() => {
 		if (!editor) return
@@ -61,7 +85,7 @@ export default function AIBubbleMenu({ editor, onOpenLekhanBot }: AIBubbleMenuPr
 			<button
 				type="button"
 				onClick={() => editor.chain().focus().toggleBold().run()}
-				className={`p-1.5 transition rounded-md ${editor.isActive('bold') ? 'bg-primary/20 text-primary' : 'hover:bg-black/5 dark:hover:bg-white/10 text-on-surface'}`}
+				className={`p-1.5 transition rounded-md ${active.bold ? 'bg-primary/20 text-primary' : 'hover:bg-black/5 dark:hover:bg-white/10 text-on-surface'}`}
 				title="Bold"
 			>
 				<Bold className="h-4 w-4" />
@@ -69,7 +93,7 @@ export default function AIBubbleMenu({ editor, onOpenLekhanBot }: AIBubbleMenuPr
 			<button
 				type="button"
 				onClick={() => editor.chain().focus().toggleItalic().run()}
-				className={`p-1.5 transition rounded-md ${editor.isActive('italic') ? 'bg-primary/20 text-primary' : 'hover:bg-black/5 dark:hover:bg-white/10 text-on-surface'}`}
+				className={`p-1.5 transition rounded-md ${active.italic ? 'bg-primary/20 text-primary' : 'hover:bg-black/5 dark:hover:bg-white/10 text-on-surface'}`}
 				title="Italic"
 			>
 				<Italic className="h-4 w-4" />
@@ -77,7 +101,7 @@ export default function AIBubbleMenu({ editor, onOpenLekhanBot }: AIBubbleMenuPr
 			<button
 				type="button"
 				onClick={() => editor.chain().focus().toggleUnderline().run()}
-				className={`p-1.5 transition rounded-md ${editor.isActive('underline') ? 'bg-primary/20 text-primary' : 'hover:bg-black/5 dark:hover:bg-white/10 text-on-surface'}`}
+				className={`p-1.5 transition rounded-md ${active.underline ? 'bg-primary/20 text-primary' : 'hover:bg-black/5 dark:hover:bg-white/10 text-on-surface'}`}
 				title="Underline"
 			>
 				<Underline className="h-4 w-4" />

@@ -52,8 +52,10 @@ publish. They do not scale with characters. Guarded by
 `tests/unit/editor-typing-renders.test.tsx`.
 
 `tests/unit/editor-toolbar-renders.test.tsx` additionally proves the extracted toolbar makes
-**0 commits** for a 38-character burst, **0 commits** for five unrelated parent re-renders, and
-still re-renders when formatting actually changes (Bold toggled → active class updates).
+**0 commits** for a 38-character burst and still re-renders when formatting actually changes
+(Bold toggled → active class updates). It also guards the production memo boundary
+(`EditorToolbar.$$typeof === react.memo`) and verifies default paragraphs do not light
+Align Left, matching the old inline toolbar.
 
 ## 4. Production-build browser measurement
 
@@ -81,9 +83,9 @@ still re-renders when formatting actually changes (Bold toggled → active class
 
 A second fixed 60-burst run measured 1,844 renders, min 7 fps, 2 drops — the isolated
 single-frame outliers vary run to run; the render count does not. The fixed per-character
-figure is an upper bound: roughly three quarters of the 2,020 renders are the page's
-pre-existing periodic Radix/`Presence` churn (~9.5 renders/s, independent of typing), not
-keystroke work.
+figure is an upper bound: the 2,020 total includes page-level mount/periodic Radix
+`Presence`/dropdown renders that are not keyed to keystrokes. This run did not instrument the
+exact split, so 0.86 renders/char is conservative rather than a typing-only measurement.
 
 ### 20-burst stress run (780 characters) — closest to the audit's shape
 
@@ -110,16 +112,20 @@ background `Presence`/dropdown activity that predates this ticket.
 
 ## 5. Honest limits
 
-- **The 16 ms ideal is reachable for the React layer** at this document size: the fixed
-  20-burst profile ran at 60 fps with no sub-30 fps frames. The React commit budget is no
-  longer the bottleneck.
+- **Frame cadence is not keystroke latency.** The fixed 20-burst profile ran at 60 fps with
+  no sub-30 fps frames, which shows the per-keystroke React cascade that produced the audit's
+  20 fps dips is gone. The profiler reports frame cadence and commit counts, not
+  input-to-paint handler time, so this evidence does **not** prove a sub-16 ms per-keystroke
+  handler budget. The audit had the same limitation (CDP key events are not surfaceable as an
+  INP sample); the render-count and frame-cadence proxies are what this instrument provides.
 - **Isolated long frames still happen.** Longer stress runs occasionally show one or two
   single-frame drops (min 5–20 fps) in ~700 frames. They are not correlated with characters
   (the 20-burst run has none) and appear in both builds; they look like GC / profiler flush,
   not typing stutter. There is no sustained sub-30 fps segment.
 - **The measurement itself has overhead.** `react renders` hooks every commit; typing is
   dispatched by CDP at ~200 chars/s in the stress run, far faster than a human.
-- **Not measured here:** remote collaborators' cursors (single-user bench), very large
+- **Not measured here:** input-to-paint typing latency (INP), remote collaborators' cursors
+  (single-user bench), very large
   documents (>100k chars), low-end hardware. #79's 10k-page workspace concerns page-open
   paths (#137/#139), not typing.
 

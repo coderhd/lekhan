@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Editor } from '@tiptap/react'
+import { Editor, useEditorState } from '@tiptap/react'
 import { Code2 } from 'lucide-react'
 
 const LANGUAGES = [
@@ -29,6 +29,14 @@ interface CodeBlockLanguageSelectProps {
 
 export function CodeBlockLanguageSelect({ editor }: CodeBlockLanguageSelectProps) {
 	const [pos, setPos] = useState<{ top: number; right: number } | null>(null)
+
+	// The language is read live, not from `pos`: undoing a language change
+	// updates the doc without moving the block, and the controlled select
+	// must still refresh (CodeRabbit #202 finding).
+	const language = useEditorState({
+		editor,
+		selector: ({ editor: current }) => current?.getAttributes('codeBlock').language || '',
+	}) ?? ''
 
 	useEffect(() => {
 		if (!editor) return
@@ -96,7 +104,7 @@ export function CodeBlockLanguageSelect({ editor }: CodeBlockLanguageSelectProps
 		return null
 	}
 
-	const currentLanguage = editor.getAttributes('codeBlock').language || ''
+	const currentLanguage = language
 
 	return (
 		<div

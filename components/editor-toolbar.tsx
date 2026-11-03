@@ -167,8 +167,8 @@ function EditorToolbarImpl ({ editor, onOpenLinkPrompt, disabled = false }: Edit
 			</div>
 
 			<div className='flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6'>
-				<button onClick={() => editor?.chain().focus().undo().run()} className={buttonClass(false)} title='Undo'><span className='material-symbols-outlined text-[18px]'>undo</span></button>
-				<button onClick={() => editor?.chain().focus().redo().run()} className={buttonClass(false)} title='Redo'><span className='material-symbols-outlined text-[18px]'>redo</span></button>
+				<button onClick={() => editor?.chain().focus().undo().run()} className='p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded transition-colors text-on-surface-variant hover:text-on-surface flex items-center justify-center' title='Undo'><span className='material-symbols-outlined text-[18px]'>undo</span></button>
+				<button onClick={() => editor?.chain().focus().redo().run()} className='p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded transition-colors text-on-surface-variant hover:text-on-surface flex items-center justify-center' title='Redo'><span className='material-symbols-outlined text-[18px]'>redo</span></button>
 			</div>
 			<div className='flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6'>
 				<button onClick={() => editor?.chain().focus().toggleBold().run()} className={buttonClass(state.bold)} title='Bold'><span className='material-symbols-outlined text-[18px]'>format_bold</span></button>

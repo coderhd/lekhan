@@ -109,3 +109,18 @@ verification commands and re-submit.
 
 Re-verification after the disposition: `npm run typecheck` exit 0, `npm run lint` exit 0,
 `npx vitest run` on the three focused files 13/13 passed, `npx next build --webpack` exit 0.
+
+## Second-round external review (PR #202)
+
+Pullfrog: **pass**, "No critical issues — one minor parity suggestion inline". CodeRabbit: six
+minor findings. All addressed:
+
+| Reviewer finding | Disposition |
+|---|---|
+| Pullfrog: Undo/Redo lost `text-on-surface-variant hover:text-on-surface` | **Fixed** — restored the old classes instead of the generic idle button style. |
+| CodeRabbit: `AIBubbleMenu` mark buttons can go stale because `setPos` dedupes on coordinates | **Fixed** — active marks now come from a separate `useEditorState` subscription; a mark toggle repaints even when the selection (and position) is unchanged. Regression test: `tests/unit/editor-decoration-refresh.test.tsx`. |
+| CodeRabbit: `CodeBlockLanguageSelect` controlled value can go stale after undo | **Fixed** — language now comes from `useEditorState` instead of a render-time `getAttributes` read. Not unit-tested: jsdom's selection/DOM timing makes the decoration mount nondeterministic; the reactive subscription is the same mechanism proven in the bubble-menu test. |
+| CodeRabbit: render-rate arithmetic ("three quarters", "9.5/s") | **Fixed** — removed the unsupported split; 0.86 renders/char is stated as a conservative upper bound because the total includes page-level mount/periodic renders. |
+| CodeRabbit: test-coverage statement claimed five parent re-renders | **Fixed** — doc now describes the memo-boundary and default-alignment guards that actually exist. |
+| CodeRabbit: do not infer a 16 ms budget from 60 FPS | **Fixed** — §5 now says frame cadence is a proxy, not an input-to-paint timing proof. |
+| CodeRabbit: report typing latency in production results | **Addressed as a stated limitation** — the instrument reports frame cadence/commit counts, not INP; the audit had the same limitation. Documented in §5 instead of inventing a number. |
