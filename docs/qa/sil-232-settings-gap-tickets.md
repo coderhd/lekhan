@@ -1,9 +1,10 @@
 # GAP tickets — settings-surface audit extension (SIL-232)
 
-Status: **drafted, pending GitHub filing** — the managed GitHub capability was unavailable in
-this run (launcher reports `capability_missing` after the controller restart). File verbatim
-when access is restored; numbering continues the SIL-8 GAP format (GAP-11+; first pass filed
-GAP-1…GAP-10 as #137–#146). Bodies below are copy-paste ready. Six tickets: GAP-11…GAP-16.
+Status: **filed on GitHub 2026-11-03** — GAP-11 → [#203](https://github.com/coderhd/lekhan/issues/203),
+GAP-12 → [#204](https://github.com/coderhd/lekhan/issues/204), GAP-13 → [#205](https://github.com/coderhd/lekhan/issues/205),
+GAP-14 → [#206](https://github.com/coderhd/lekhan/issues/206), GAP-15 → [#207](https://github.com/coderhd/lekhan/issues/207),
+GAP-16 → [#208](https://github.com/coderhd/lekhan/issues/208). Numbering continues the SIL-8 GAP
+format (first pass filed GAP-1…GAP-10 as #137–#146). This file is the verbatim copy of record.
 
 ---
 

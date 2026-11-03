@@ -148,5 +148,5 @@ No P1 findings left open at close. Clean-room review verdict **APPROVE** after t
 set (dishonest portal-return success toast; undisclosed Razorpay coverage) was addressed:
 portal/plan-change returns now acknowledge without claiming a change, success-adjacent returns
 schedule one late refetch for the webhook window, the tier badge stays silent on summary
-failure, and GAP-16 records the Razorpay return-state hole. P2/P3 items filed as
-GAP-11…GAP-16 (see tickets).
+failure, and GAP-16 records the Razorpay return-state hole. P2 items filed as
+GAP-11...GAP-16 → [#203](https://github.com/coderhd/lekhan/issues/203), [#204](https://github.com/coderhd/lekhan/issues/204), [#205](https://github.com/coderhd/lekhan/issues/205), [#206](https://github.com/coderhd/lekhan/issues/206), [#207](https://github.com/coderhd/lekhan/issues/207), [#208](https://github.com/coderhd/lekhan/issues/208) (verbatim copy: `docs/qa/sil-232-settings-gap-tickets.md`).
