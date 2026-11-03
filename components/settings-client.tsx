@@ -101,6 +101,17 @@ export default function SettingsClient({
 	const [billingAction, setBillingAction] = useState<'portal' | 'cancel' | 'resubscribe' | 'refresh' | null>(null)
 	const [defaultCurrency, setDefaultCurrency] = useState<'USD' | 'INR' | undefined>(undefined)
 	const referralTracked = useRef<number | null>(null)
+	// Latest loadBilling, callable from the mount-only round-trip effect below.
+	const loadBillingRef = useRef<((action?: 'refresh' | null) => Promise<void>) | undefined>(undefined)
+
+	const authHeaders = async (): Promise<Record<string, string>> => {
+		const { data } = await supabase.auth.getSession()
+		const token = data.session?.access_token
+		return {
+			'Content-Type': 'application/json',
+			...(token ? { Authorization: `Bearer ${token}` } : {}),
+		}
+	}
 
 	// D3: the edge geo header seeds the explicit picker; the browser never guesses.
 	useEffect(() => {
@@ -120,15 +131,6 @@ export default function SettingsClient({
 		}
 	}, [])
 
-	const authHeaders = async (): Promise<Record<string, string>> => {
-		const { data } = await supabase.auth.getSession()
-		const token = data.session?.access_token
-		return {
-			'Content-Type': 'application/json',
-			...(token ? { Authorization: `Bearer ${token}` } : {}),
-		}
-	}
-
 	// T13 — an emailed/pasted accept link must land on the card that consumes it.
 	useEffect(() => {
 		if (typeof window === 'undefined') return
@@ -138,8 +140,10 @@ export default function SettingsClient({
 	}, [])
 
 	// Stripe round-trip returns land on /settings?billing=<state> (T11). The summary
-	// is re-fetched on mount anyway; here we only give the user honest feedback and
-	// scrub the transient param so reloads don't re-toast.
+	// refetches on mount; here we give honest feedback (never claiming what the
+	// webhook hasn't confirmed) and scrub the transient param so reloads don't
+	// re-toast. Returns that may follow a just-applied change schedule one late
+	// refetch because the entitlement webhook can land after the gateway redirect.
 	useEffect(() => {
 		if (typeof window === 'undefined') return
 		const returnUrl = new URLSearchParams(window.location.search)
@@ -148,20 +152,25 @@ export default function SettingsClient({
 		returnUrl.delete('billing')
 		const query = returnUrl.toString()
 		window.history.replaceState(null, '', query ? `${window.location.pathname}?${query}` : window.location.pathname)
+		let lateRefresh: ReturnType<typeof setTimeout> | undefined
 		switch (billingState) {
 			case 'checkout_success':
-				toast.success('Checkout complete — your subscription is active.')
-				break
-			case 'plan_change_return':
-				toast.success('Plan change processed — your subscription is up to date.')
+				toast.success('Checkout confirmed — your tier summary below will update.')
 				break
 			case 'checkout_cancelled':
 				toast.info('Checkout was cancelled — nothing has changed.')
 				break
+			case 'plan_change_return':
 			case 'portal_return':
-				toast.info('Returned from the billing portal.')
+				// The portal return fires even when the user backed out, so never
+				// claim a change happened; just acknowledge + refetch the truth.
+				toast.info('Returned from the payment portal.')
 				break
 		}
+		if (billingState === 'checkout_success' || billingState === 'plan_change_return' || billingState === 'portal_return') {
+			lateRefresh = setTimeout(() => { void loadBillingRef.current?.() }, 4000)
+		}
+		return () => { if (lateRefresh) clearTimeout(lateRefresh) }
 	}, [])
 
 	const loadBilling = async (action: 'refresh' | null = null) => {
@@ -194,6 +203,11 @@ export default function SettingsClient({
 	useEffect(() => {
 		void loadBilling()
 	}, [user?.id])
+
+	// Keep the round-trip effect's late refetch pointed at the live loader.
+	useEffect(() => {
+		loadBillingRef.current = loadBilling
+	})
 
 	const handleManageBilling = async () => {
 		setBillingAction('portal')
@@ -335,6 +349,7 @@ export default function SettingsClient({
 
 	// WAI-ARIA tabs: arrow keys move focus *and* select; roving keeps one tab stop.
 	const handleTabKeyDown = (e: React.KeyboardEvent) => {
+		if (e.metaKey || e.ctrlKey || e.altKey) return
 		const currentIndex = TAB_ORDER.indexOf(activeTab)
 		let nextIndex = -1
 		if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
@@ -593,7 +608,7 @@ export default function SettingsClient({
 											</p>
 										</div>
 										<span className="px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold capitalize shrink-0">
-											{billingLoading ? '…' : `${entitlement?.tier ?? 'free'} tier`}
+											{billingLoading || billingError ? '…' : `${entitlement?.tier ?? 'free'} tier`}
 										</span>
 									</div>
 									<ul className="text-xs text-on-surface-variant space-y-2">

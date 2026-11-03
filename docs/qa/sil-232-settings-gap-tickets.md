@@ -3,7 +3,7 @@
 Status: **drafted, pending GitHub filing** — the managed GitHub capability was unavailable in
 this run (launcher reports `capability_missing` after the controller restart). File verbatim
 when access is restored; numbering continues the SIL-8 GAP format (GAP-11+; first pass filed
-GAP-1…GAP-10 as #137–#146). Bodies below are copy-paste ready.
+GAP-1…GAP-10 as #137–#146). Bodies below are copy-paste ready. Six tickets: GAP-11…GAP-16.
 
 ---
 
@@ -52,6 +52,28 @@ only content is the current value (plus chevron). Screen-reader users hear "Edit
 Menu basis also announces "menu" rather than a combobox. Fix direction: offer a labelled
 `role=combo` trigger (`aria-labelledby` pairing with visible labels, selection announcements)
 or migrate role pickers to `native select`. WCAG 4.1.2.
+
+Related settings-tablist deviations sampled by the SIL-232 audit (fix together):
+- `aria-orientation` is unset on the `role=tablist` aside — physical rail is horizontal at
+  390 px, vertical at `lg:`; AT announces the wrong arrow semantics either way.
+- Inactive tab panels are unmounted while every tab carries `aria-controls="settings-panel-*"`.
+
+---
+
+## GAP-16 (P2) — Razorpay checkout has no return landing / feedback on /settings
+
+**Title:** `[Billing] After a Razorpay (INR-rail) checkout there is no return state or feedback on /settings`
+
+Stripe returns land on `/settings?billing=<state>` (`lib/billing/stripe.ts:166-207`) and are
+consumed as of SIL-232. The Razorpay rail opens `subscription.short_url`
+(`lib/billing/razorpay.ts:363-372`) — a hosted payment page with **no return URL handling**
+anywhere, so INR-rail users come back to settings with zero acknowledgment and the known
+webhook-application lag is undisguised. Inside Razorpay-a11y there is usually no auto
+redirect-back; when available, wire `options.callback_url`/`return_url` to
+`/settings?billing=razorpay_return` (distinct per portal/checkout) and consume it beside the
+Stripe states; otherwise show a "payment pending — we'll confirm when the provider reports
+back" state after returning from the Razorpay sheet. Post-cutover parity work; pairs with
+GAP-14's copy sweep so the INR copy matches the honest no-claim toast pattern.
 
 ---
 

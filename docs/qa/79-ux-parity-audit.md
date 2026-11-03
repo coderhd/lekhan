@@ -89,7 +89,7 @@ unit layer and static analysis. Findings below are evidence-anchored to source l
 |---|---|---|---|---|---|
 | `/page` shell (auth gate) | `GlobalLoader` "Loading Settings..." | — | `catch` → silent `/login` redirect | — | OK (silent console-only error on failure is by-design guard) |
 | Billing tab | `billingLoading` → "Loading your workspace billing state…" | null entitlement → "no billing record yet — everything stays on Free" | `billingError` → `role="alert"` card | found/past-due/grace/canceled/cancel-at-period-end via T12 states | **OK** — honest post-cutover |
-| Stripe round-trip returns (`?billing=checkout_success\|checkout_cancelled\|portal_return\|plan_change_return`, from `lib/billing/stripe.ts:166-207`) | n/a | n/a | ****No consumer existed** — landing after checkout gave zero feedback; a cancelled checkout looked identical to success | — | **FIXED this pass**: toast per return state + param scrubbed (`settings-client.tsx`), tested |
+| Stripe round-trip returns (`?billing=checkout_success\|checkout_cancelled\|portal_return\|plan_change_return`, from `lib/billing/stripe.ts:166-207`) | n/a | n/a | ****No consumer existed** — landing after checkout gave zero feedback; a cancelled checkout looked identical to success | — | **FIXED this pass — Stripe rail only**: honest toasts (success only on `checkout_success`; portal returns acknowledge without claiming a change) + param scrub + one late refetch for the webhook window (`settings-client.tsx`), tested. **The Razorpay rail (`subscription.short_url`) has no return landing at all — GAP-16.** |
 | AI Usage tab tier badge | showed `entitlement?.tier ?? 'free' plan` → **fabricated "free plan" during load** | — | — | — | **FIXED**: `…` while unresolved, `{tier} tier` after (also removes "plan" vocabulary), tested |
 | Collaborators tab | — | "You don't own any pages yet." / "No collaborators added yet." inside per-page card | toasts on remove/role failure | role picker, owner badge, pagination | OK; empty-state copy matches vocabulary |
 | Ownership transfer | busy states `Preparing/Accepting`, unique-candidate guard | "Invite someone to a page first" empty state | toast + button stays honest | accept-link token mode, detaching notice | OK |
@@ -113,18 +113,20 @@ unit layer and static analysis. Findings below are evidence-anchored to source l
 |---|---|---|
 | Tablist attaches arrow-key selection to `activeTab`, but **focus never moved** and unselected tabs stayed in the tab order (5 tab stops, selection not following focus — WAI-ARIA tabs violation) | cheap | **FIXED**: roving `tabIndex`, selection-follows-focus, Home/End added (`settings-client.tsx` + tests) |
 | `/settings` header/close affordances were reachable | — | OK |
+| Tablist deviates from full WAI-ARIA tabs on two counts (pre-existing, sampled by this audit): the physical rail is horizontal on mobile / vertical on `lg:` but `aria-orientation` is unset; and inactive panels are unmounted while `aria-controls` references them | swept with GAP-13 or a settings-side a11y fix | **recorded** |
 | `CustomSelect` (collaborator role picker, AI panel selects) is an unlabeled button whose accessible name is just the current value — no field context for AT users | P2 | **Filed — GAP-13** |
 | Escape does not navigate away from `/settings` (no-op is fine for a route surface, unlike the dead modal which implements it) | note | n/a |
 
 ### 390 px mobile reflow
 
 Measured from breakpoint math (source-verified): the horizontal tab rail (5 tabs × ~4-6 px-4
-labels, `whitespace-nowrap`, `overflow-x-auto`) is ~640-700 px wide — **~63-80 px beyond the
+labels, `whitespace-nowrap`, `overflow-x-auto`) is ~780-820 px wide — **about twice the
 390 px viewport with no scroll affordance** (no fade/edge indicator); Billing & Subscription is
 off-screen until swiped. Content grids (`max-w` cards, `flex-col sm:flex-row` rows,
-`grid-cols-2 md:grid-cols-4` billing dl) collapse correctly at 390 px. All touch targets
-≥ 44 px (`py-3` tabs, `py-2.5` buttons). Findings: rail affordance **P2 → GAP-15**; everything
-else passes reflow.
+`grid-cols-2 md:grid-cols-4` billing dl) collapse correctly at 390 px. Touch targets measure
+~36-40 px (`py-2.5` buttons, `py-3` tabs with text-xs line height) — **passes WCAG 2.5.8
+(24 px) but below the 44 px HIG bar**; noted for GAP-15. Findings: rail affordance **P2 →
+GAP-15**; everything else passes reflow.
 
 ### Orphaned / divergent surfaces (filed rather than deleted)
 
@@ -142,4 +144,9 @@ else passes reflow.
 3. Roving tabindex + selection-follows-focus + Home/End on the settings tablist (tested).
 4. Vocabulary fixes: notes→pages, document→page, AI-tab subtitle de-billing; Sarvam card copy.
 
-No P1 findings left open at close. P2/P3 items filed as GAP-11…GAP-15 (see tickets).
+No P1 findings left open at close. Clean-room review verdict **APPROVE** after the blocking
+set (dishonest portal-return success toast; undisclosed Razorpay coverage) was addressed:
+portal/plan-change returns now acknowledge without claiming a change, success-adjacent returns
+schedule one late refetch for the webhook window, the tier badge stays silent on summary
+failure, and GAP-16 records the Razorpay return-state hole. P2/P3 items filed as
+GAP-11…GAP-16 (see tickets).
