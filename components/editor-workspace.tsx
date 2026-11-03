@@ -147,6 +147,7 @@ export default function EditorWorkspace({	pageId,
 	const [inboxTriage, setInboxTriage] = useState<{ mode: InboxTriageMode; row: InboxRow } | null>(null)
 	const [inboxBusy, setInboxBusy] = useState(false)
 	const inboxBusyRef = useRef(false)
+	const inboxScrollDoneRef = useRef(false)
 	// The editor is created with the extension configured once; keep the
 	// callbacks stable and read the latest state through this ref.
 	const inboxCallbacksRef = useRef<{
@@ -1123,17 +1124,56 @@ export default function EditorWorkspace({	pageId,
 	}, [editor, inboxTriage])
 
 	// Deep link from the dashboard Inbox card: `/page/<id>?section=inbox`
-	// scrolls the editor to the Inbox heading once the live doc is ready.
+	// scrolls to the Inbox heading once the section actually exists.
+	//
+	// `isLocalSynced` only covers the IndexedDB copy; the capture connector
+	// deliberately does not open y-indexeddb, so a freshly captured page can
+	// arrive from the hub later (cold starts can take ~50s). Retry on remote
+	// document updates and the hub `isSynced` flip, and stop if the user starts
+	// editing before the section lands so we never yank them mid-write.
 	useEffect(() => {
-		if (!editor || !isLocalSynced) return
+		if (!editor || inboxScrollDoneRef.current) return
 		if (typeof window === 'undefined') return
 		const params = new URLSearchParams(window.location.search)
 		if (params.get('section') !== 'inbox') return
 
-		const headings = Array.from(editor.view.dom.querySelectorAll('h1, h2, h3'))
-		const inbox = headings.find(heading => heading.textContent?.trim().toLowerCase() === 'inbox')
-		inbox?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-	}, [editor, isLocalSynced])
+		let timer: number | undefined = undefined
+		let cancelled = false
+
+		const stop = () => {
+			cancelled = true
+			editor.off('focus', onFocus)
+			editor.off('update', tryScroll)
+			if (timer !== undefined) window.clearTimeout(timer)
+		}
+
+		const tryScroll = () => {
+			if (cancelled || inboxScrollDoneRef.current) return
+			const headings = Array.from(editor.view.dom.querySelectorAll('h1, h2, h3'))
+			const inbox = headings.find(heading => heading.textContent?.trim().toLowerCase() === 'inbox')
+			if (!inbox) return
+
+			inboxScrollDoneRef.current = true
+			stop()
+			inbox.scrollIntoView({ block: 'start', behavior: 'smooth' })
+		}
+
+		const onFocus = () => stop()
+
+		editor.on('focus', onFocus)
+		editor.on('update', tryScroll)
+		tryScroll()
+
+		// Bounded fallback for a transport that applies Yjs state without
+		// emitting a ProseMirror update; hub sync itself also re-runs this effect.
+		timer = window.setTimeout(() => { tryScroll(); stop() }, 60_000)
+
+		return () => {
+			editor.off('focus', onFocus)
+			editor.off('update', tryScroll)
+			if (timer !== undefined) window.clearTimeout(timer)
+		}
+	}, [editor, isLocalSynced, isSynced])
 
 	// Document-level language detection (debounced on content change)
 	useEffect(() => {
