@@ -117,6 +117,22 @@ npm run build       ✅
 
 Targeted clean-room reruns also pass with `NEXT_PUBLIC_SUPABASE_*` unset.
 
+## Round 3 — re-application onto main (internal clean-room, PR #195)
+
+22. **BLOCKING — the retry could consume its single shot on a detached editor DOM.**
+    **Fixed:** the effect now waits for the same render gate as the editor
+    (`isViewer !== null && isLocalSynced`), `tryScroll` refuses a disconnected
+    `editor.view.dom`, and `isViewer`/`isLocalSynced` are deps so the effect re-arms when the
+    editor actually mounts. Covered by the reviewer's reload trace; no dedicated mount test
+    (the deep-link effect has no unit harness today).
+23. **MEDIUM — the scroll yanked users who had moved on.** **Fixed:** cancellation is widened
+    beyond editor focus to any outside `focusin` (title rename, dialogs) and manual
+    wheel/touch scrolling, and it persists across effect re-runs.
+24. **MEDIUM — explicit `behavior: 'smooth'` bypassed `prefers-reduced-motion`.** **Fixed:**
+    the scroll uses `auto` under reduced motion.
+25. **LOW — the 60 s fallback timer was armed after the first synchronous scan could stop it.**
+    **Fixed:** arm the timer first, then run the initial scan.
+
 ## Residual risks (accepted / documented)
 
 - The CRDT append has no application-level acknowledgement; a flushed-but-lost target write

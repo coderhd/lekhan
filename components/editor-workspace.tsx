@@ -1133,7 +1133,11 @@ export default function EditorWorkspace({	pageId,
 	// document updates and the hub `isSynced` flip, and stop if the user starts
 	// editing before the section lands so we never yank them mid-write.
 	useEffect(() => {
-		if (!editor || inboxScrollDoneRef.current || inboxScrollCancelledRef.current) return
+		// Wait for the editor to be mounted in the real DOM (the loader replaces it
+		// until the viewer check and local sync settle): scrollIntoView on a
+		// detached view is a no-op but would consume the single shot.
+		if (!editor || isViewer === null || !isLocalSynced) return
+		if (inboxScrollDoneRef.current || inboxScrollCancelledRef.current) return
 		if (typeof window === 'undefined') return
 		const params = new URLSearchParams(window.location.search)
 		if (params.get('section') !== 'inbox') return
@@ -1145,41 +1149,61 @@ export default function EditorWorkspace({	pageId,
 			cancelled = true
 			editor.off('focus', onFocus)
 			editor.off('update', tryScroll)
+			document.removeEventListener('focusin', onOutsideFocus)
+			window.removeEventListener('wheel', onUserScroll)
+			window.removeEventListener('touchstart', onUserScroll)
 			if (timer !== undefined) window.clearTimeout(timer)
+		}
+
+		const cancel = () => {
+			// Persist the interruption across effect re-runs; a later hub-sync
+			// flag flip must not re-arm the scroll after the user moved on.
+			inboxScrollCancelledRef.current = true
+			stop()
 		}
 
 		const tryScroll = () => {
 			if (cancelled || inboxScrollDoneRef.current) return
+			if (!editor.view.dom.isConnected) return
 			const headings = Array.from(editor.view.dom.querySelectorAll('h1, h2, h3'))
 			const inbox = headings.find(heading => heading.textContent?.trim().toLowerCase() === 'inbox')
 			if (!inbox) return
 
 			inboxScrollDoneRef.current = true
 			stop()
-			inbox.scrollIntoView({ block: 'start', behavior: 'smooth' })
+			const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+			inbox.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' })
 		}
 
-		const onFocus = () => {
-			// Persist the interruption across effect re-runs; a later hub-sync
-			// flag flip must not re-arm the scroll after the user started writing.
-			inboxScrollCancelledRef.current = true
-			stop()
+		const onFocus = () => cancel()
+
+		const onOutsideFocus = (event: FocusEvent) => {
+			const target = event.target as Node | null
+			if (!target || !editor.view.dom.contains(target)) cancel()
 		}
+
+		const onUserScroll = () => cancel()
 
 		editor.on('focus', onFocus)
 		editor.on('update', tryScroll)
-		tryScroll()
+		document.addEventListener('focusin', onOutsideFocus)
+		window.addEventListener('wheel', onUserScroll, { passive: true })
+		window.addEventListener('touchstart', onUserScroll, { passive: true })
 
 		// Bounded fallback for a transport that applies Yjs state without
 		// emitting a ProseMirror update; hub sync itself also re-runs this effect.
 		timer = window.setTimeout(() => { tryScroll(); stop() }, 60_000)
+		tryScroll()
 
 		return () => {
 			editor.off('focus', onFocus)
 			editor.off('update', tryScroll)
+			document.removeEventListener('focusin', onOutsideFocus)
+			window.removeEventListener('wheel', onUserScroll)
+			window.removeEventListener('touchstart', onUserScroll)
 			if (timer !== undefined) window.clearTimeout(timer)
 		}
-	}, [editor, isLocalSynced, isSynced])
+	}, [editor, isViewer, isLocalSynced, isSynced])
 
 	// Document-level language detection (debounced on content change)
 	useEffect(() => {
