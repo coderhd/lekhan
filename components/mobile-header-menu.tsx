@@ -19,6 +19,7 @@ interface MobileHeaderMenuProps {
 	connectionState: ConnectionState
 	isSynced: boolean
 	hasUnsyncedChanges?: boolean
+	isLocalSynced?: boolean
 }
 
 function getInitials(nameOrEmail: string) {
@@ -45,6 +46,7 @@ export default function MobileHeaderMenu({
 	connectionState,
 	isSynced,
 	hasUnsyncedChanges = false,
+	isLocalSynced = true,
 }: MobileHeaderMenuProps) {
 	const [isOpen, setIsOpen] = useState(false)
 	const menuRef = useRef<HTMLDivElement>(null)
@@ -81,6 +83,7 @@ export default function MobileHeaderMenu({
 								connectionState={connectionState}
 								isSynced={isSynced}
 								hasUnsyncedChanges={hasUnsyncedChanges}
+								isLocalSynced={isLocalSynced}
 							/>
 						</div>
 						

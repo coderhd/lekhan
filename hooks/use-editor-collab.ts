@@ -4,6 +4,7 @@ import type { WebsocketProvider } from 'y-websocket'
 import type { IndexeddbPersistence } from 'y-indexeddb'
 
 import { CollabUser } from '@/types'
+import { hasPendingLocalEdits, setPendingLocalEdits } from '@/lib/local-edits-marker'
 
 export type ConnectionState = 'connected' | 'connecting' | 'offline'
 
@@ -41,6 +42,9 @@ export function useEditorCollab (
 		let doc: Y.Doc | null = null
 		let wsProvider: WebsocketProvider | null = null
 		let indexeddbProvider: IndexeddbPersistence | null = null
+
+		// A reload must not hide edits that are still only on this device.
+		setIsDirty(hasPendingLocalEdits(documentId))
 		let graceTimer: ReturnType<typeof setTimeout> | null = null
 		let browserOnline = navigator.onLine
 		let lastWsStatus: WsStatus = 'connecting'
@@ -155,7 +159,10 @@ export function useEditorCollab (
 			wsProvider.on('sync', (isSyncedState: boolean) => {
 				setIsSynced(isSyncedState)
 				if (isSyncedState) {
+					// The hub now has everything this replica sent, so nothing
+					// is local-only anymore.
 					setIsDirty(false)
+					setPendingLocalEdits(documentId, false)
 				}
 			})
 
@@ -178,7 +185,12 @@ export function useEditorCollab (
 			doc.on('update', (_update, origin) => {
 				// If change was made by the local user, set dirty flag
 				if (origin !== wsProvider && origin !== indexeddbProvider) {
-					setIsDirty(true)
+					// y-websocket flushes local updates synchronously over an
+					// open, synced socket. Only call an update "local only"
+					// when it could not have reached the hub.
+					const reachedHub = Boolean(wsProvider?.wsconnected && wsProvider?.synced)
+					setIsDirty(!reachedHub)
+					setPendingLocalEdits(documentId, !reachedHub)
 				}
 			})
 		})
@@ -198,6 +210,7 @@ export function useEditorCollab (
 			setIsConnected(false)
 			setIsSynced(false)
 			setIsLocalSynced(false)
+			setIsDirty(false)
 			setConnectionState('connecting')
 		}
 	}, [documentId, token, user.name, user.color])

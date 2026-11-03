@@ -22,6 +22,18 @@ describe('SyncIndicator', () => {
 		expect(screen.queryByText('Offline')).toBeNull()
 	})
 
+	it('never shows a spinner for the known local-edits-only state', () => {
+		// The ticket's headline rule: no spinner where the state is known.
+		const { container } = render(
+			<SyncIndicator
+				connectionState="offline"
+				isSynced={false}
+				hasUnsyncedChanges={true}
+			/>
+		)
+		expect(container.querySelector('.animate-spin')).toBeNull()
+	})
+
 	it('shows "Local edits only" during the hub cold start when edits are pending', () => {
 		render(
 			<SyncIndicator
@@ -37,9 +49,12 @@ describe('SyncIndicator', () => {
 		// Render cold start: the browser is online, the hub is not up yet.
 		// Must not read as an error state, and must not pretend to know less
 		// than it does — the copy names the hub and the known cold start.
-		render(<SyncIndicator connectionState="connecting" isSynced={false} />)
+		const { container } = render(
+			<SyncIndicator connectionState="connecting" isSynced={false} />
+		)
 		expect(screen.getByText('Connecting to hub...')).toBeDefined()
 		expect(screen.queryByText('Offline')).toBeNull()
+		expect(container.querySelector('.animate-spin')).not.toBeNull()
 	})
 
 	it('explains the known cold-start window in the connecting tooltip', () => {
@@ -72,7 +87,7 @@ describe('SyncIndicator', () => {
 		expect(status.getAttribute('aria-live')).toBe('polite')
 	})
 
-	it('explains that pending edits are kept on this device', () => {
+	it('exposes the explanation to assistive technology, not only via title', () => {
 		render(
 			<SyncIndicator
 				connectionState="offline"
@@ -80,6 +95,24 @@ describe('SyncIndicator', () => {
 				hasUnsyncedChanges={true}
 			/>
 		)
-		expect(screen.getByTitle(/this device/i)).toBeDefined()
+		expect(screen.getByText(/saved on this device/i)).toBeDefined()
+	})
+
+	it('only promises durability once local storage is ready', () => {
+		render(
+			<SyncIndicator
+				connectionState="offline"
+				isSynced={false}
+				hasUnsyncedChanges={true}
+				isLocalSynced={false}
+			/>
+		)
+		expect(screen.getByTitle(/still in this tab/i)).toBeDefined()
+		expect(screen.queryByTitle(/saved on this device/i)).toBeNull()
+	})
+
+	it('does not claim the user is offline when only the hub is unreachable', () => {
+		render(<SyncIndicator connectionState="offline" isSynced={false} />)
+		expect(screen.getByTitle(/can't reach the hub/i)).toBeDefined()
 	})
 })

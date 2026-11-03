@@ -1323,6 +1323,7 @@ export default function EditorWorkspace({	pageId,
 									connectionState={connectionState}
 									isSynced={isSynced}
 									hasUnsyncedChanges={hasUnsyncedChanges}
+									isLocalSynced={isLocalSynced}
 								/>
 							</div>
 						)}
@@ -1425,6 +1426,7 @@ export default function EditorWorkspace({	pageId,
 								connectionState={connectionState}
 								isSynced={isSynced}
 								hasUnsyncedChanges={hasUnsyncedChanges}
+								isLocalSynced={isLocalSynced}
 							/>
 						)}
 
