@@ -1,0 +1,24 @@
+Your email is confirmed, and your spot on the founding list is held.
+
+Three things founding status means:
+
+- The founding price, locked for life if you upgrade. Plus is $4/month; it
+  becomes $6 at general availability.
+- A direct line to the person building this. Reply to any of these emails and
+  I read it.
+- Beta access in spot order. Invites go out in waves, not all at once.
+
+What happens next: about one email a week until your wave is called. No
+countdown timers, no daily nudges. When your invite is ready it comes from
+this address, with a link that belongs to you.
+
+One request. If your vault has plugins, deep folder nesting, or callouts other
+importers mangle, reply and tell me. We test imports against real vaults
+before each wave, and the strange ones are the useful ones.
+
+- Harsh, Lekhan
+
+Check what survives import:
+https://lekhan.online/faq?utm_source=brevo&utm_medium=email&utm_campaign=founding_welcome&utm_content=email-1-position
+
+Unsubscribe: {{unsubscribe}}
