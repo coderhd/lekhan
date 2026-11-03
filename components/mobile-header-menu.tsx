@@ -18,6 +18,7 @@ interface MobileHeaderMenuProps {
 	activeUsers: { name: string; color: string; id: string }[]
 	connectionState: ConnectionState
 	isSynced: boolean
+	hasUnsyncedChanges?: boolean
 }
 
 function getInitials(nameOrEmail: string) {
@@ -43,6 +44,7 @@ export default function MobileHeaderMenu({
 	activeUsers,
 	connectionState,
 	isSynced,
+	hasUnsyncedChanges = false,
 }: MobileHeaderMenuProps) {
 	const [isOpen, setIsOpen] = useState(false)
 	const menuRef = useRef<HTMLDivElement>(null)
@@ -75,7 +77,11 @@ export default function MobileHeaderMenu({
 					<div className="px-4 py-3 flex flex-col gap-4 border-b border-black/5 dark:border-white/5">
 						<div>
 							<h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-2">Status</h3>
-							<SyncIndicator connectionState={connectionState} isSynced={isSynced} />
+							<SyncIndicator
+								connectionState={connectionState}
+								isSynced={isSynced}
+								hasUnsyncedChanges={hasUnsyncedChanges}
+							/>
 						</div>
 						
 						{activeUsers.length > 0 && (
