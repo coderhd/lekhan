@@ -5,6 +5,17 @@ const { pruneExpiredDocumentVersions } = require('./retention.js')
 const { getDocumentOwnerPlan } = require('./auth.js')
 
 /**
+ * Creates a configured PagePersister instance.
+ *
+ * @param {Object} config
+ * @param {import('@supabase/supabase-js').SupabaseClient} config.supabaseAdmin
+ * @param {boolean} [config.isE2EEnabled=false] - If true, skips server-side indexing
+ * @param {Object} [config.indexer] - Optional graph indexer service
+ * @param {Object} [config.retentionEngine] - Optional retention pruner service
+ * @param {Object} [config.authService] - Optional plan lookup service
+ * @returns {{ persist: (documentId: string, ydoc: import('yjs').Doc, options?: { isE2EEnabled?: boolean }) => Promise<{ success: boolean, documentId: string, nonCriticalResults: { indexingSuccess: boolean, retentionSuccess: boolean } }> }}
+ */
+/**
  * Extract searchable text from a page's Yjs document.
  *
  * The live editor (Tiptap Collaboration) stores the document as an
@@ -49,17 +60,6 @@ function extractDocumentText (ydoc) {
 		.join('\n')
 }
 
-/**
- * Creates a configured PagePersister instance.
- *
- * @param {Object} config
- * @param {import('@supabase/supabase-js').SupabaseClient} config.supabaseAdmin
- * @param {boolean} [config.isE2EEnabled=false] - If true, skips server-side indexing
- * @param {Object} [config.indexer] - Optional graph indexer service
- * @param {Object} [config.retentionEngine] - Optional retention pruner service
- * @param {Object} [config.authService] - Optional plan lookup service
- * @returns {{ persist: (documentId: string, ydoc: import('yjs').Doc, options?: { isE2EEnabled?: boolean }) => Promise<{ success: boolean, documentId: string, nonCriticalResults: { indexingSuccess: boolean, retentionSuccess: boolean } }> }}
- */
 function createPagePersister({
 	supabaseAdmin,
 	isE2EEnabled: defaultE2EEnabled = false,

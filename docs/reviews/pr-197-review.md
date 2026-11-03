@@ -14,11 +14,12 @@
 ## Actionable findings and disposition
 
 1. **HIGH — `searchable_text` evidence never populated (AC3 inert).**
-   `server/persister.js` called `ydoc.getText('default')` on the live editor's
-   `XmlFragment`, which throws after the snapshot upload. **Fixed** by porting
-   `extractDocumentText` (try Y.Text, fall back to walking the fragment) and
-   adding TC06/TC07 to `tests/unit/sync-persister.test.ts`. `searchable_text`
-   is now real evidence for editor-authored pages.
+   At review time `server/persister.js` called `ydoc.getText('default')` on the
+   live editor's `XmlFragment`, which throws after the snapshot upload.
+   **Resolved on main**: rebasing onto `cc91932` picked up PR #195's
+   `extractDocumentText` fix and its TC06/TC07 tests, so `searchable_text` is
+   now real evidence for editor-authored pages. This PR keeps `persister.js`
+   identical to main and does not re-ship that fix.
 2. **HIGH — cold-room test was not timing-sensitive.**
    The in-memory `loadState` resolved in a microtask, so the pre-fix ordering
    could still pass. **Fixed**: the harness now adds a deterministic 120 ms
@@ -64,7 +65,8 @@
     read-only export returns real bodies and leaves stored bytes unchanged;
     writable rooms still persist; un-hydratable rooms are refused.
   - `tests/unit/sync-connection-guard.test.ts` — read-only/viewer frame rule.
-  - `tests/unit/sync-persister.test.ts` TC06/TC07 — XmlFragment indexing.
+  - `tests/unit/sync-persister.test.ts` TC06/TC07 — XmlFragment indexing
+    (already on main via PR #195; relied on, not re-added).
 
 ## Post-rebase re-verification (2026-11-02, resumed run)
 
