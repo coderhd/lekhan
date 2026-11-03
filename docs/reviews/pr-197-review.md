@@ -68,6 +68,17 @@
   - `tests/unit/sync-persister.test.ts` TC06/TC07 — XmlFragment indexing
     (already on main via PR #195; relied on, not re-added).
 
+## External review disposition
+
+- **Pullfrog**: approved. Its residual finding — `searchable_text` can be stale
+  for Pages last saved before PR #195's `XmlFragment` extraction fix, so the
+  `content-unverified` warning does not fire for them until their next save —
+  is documented as a known limitation in ADR 0006 and tracked in
+  [#198](https://github.com/coderhd/lekhan/issues/198). It does not affect the
+  B1/B2 guarantees (hydration + read-only persistence), which do not depend on
+  the flag.
+- **CodeRabbit**: see PR thread.
+
 ## Post-rebase re-verification (2026-11-03, resumed run)
 
 The branch was rebased onto current `origin/main` (`d65161a`, after the DN-T3

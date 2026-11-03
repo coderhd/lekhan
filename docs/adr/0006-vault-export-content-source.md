@@ -100,3 +100,14 @@ Decision:
 The local-first ordering in the Decision section is unchanged: a local
 `y-indexeddb` copy is still preferred, and only gaps open a remote room (now
 read-only).
+
+### Known limitation — stale `searchable_text`
+
+The empty-vs-unknown heuristic relies on `pages.searchable_text`. Pages whose
+last hub save predates the `XmlFragment` extraction fix (merged in PR #195) can
+have an intact stored snapshot but empty/stale indexed text, so an anomalous
+empty read is exported as a title-only note without a `content-unverified`
+warning until their next save re-indexes them. This is bounded and self-healing;
+the hydration and read-only guarantees do not depend on the flag. A one-off
+backfill (or a snapshot-derived evidence signal) is tracked in
+[#198](https://github.com/coderhd/lekhan/issues/198).
