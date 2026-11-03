@@ -70,7 +70,7 @@ export const getSharedExtensions = (options?: { document?: AnyExtension }): AnyE
 			if (node.type.name === 'heading') {
 				return 'Untitled Document'
 			}
-			return 'Type / to choose a block, or start typing...'
+			return 'Type / for blocks, [[ to link a page, or just start typing…'
 		},
 	}),
 	TextStyle,

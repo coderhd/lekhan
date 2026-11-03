@@ -375,7 +375,7 @@ export default function Dashboard({ user }: DashboardProps) {
 								<img src="/undraw_team-assignment_lzot.svg" alt="No pages" className="w-80 h-80 md:w-96 md:h-96 mb-8 opacity-90 drop-shadow-sm" />
 								<h3 className="text-2xl font-bold text-on-surface mb-2">Welcome to Lekhan!</h3>
 								<p className="text-on-surface-variant max-w-md mb-8">
-									You haven't created any pages yet. Create your first page to start collaborating with your team!
+									Create your first page, or import the Markdown and Notion notes you already have.
 								</p>
 								<div className="flex items-center gap-sm">
 									<button onClick={handleCreatePage} className="flex items-center gap-sm bg-primary text-on-primary font-bold px-xl py-3 rounded-lg hover:bg-primary/90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 premium-transition">
@@ -493,8 +493,8 @@ export default function Dashboard({ user }: DashboardProps) {
 										<h3 className="text-lg font-bold text-on-surface mb-2">No pages yet</h3>
 										<p className="text-sm text-on-surface-variant max-w-md">
 											{myPages.length === 0
-												? "You haven't created any pages. Use the New button to start collaborating!"
-												: "No pages match your search query."}
+												? 'No pages yet — use New to create one, or Import to bring your notes over.'
+												: 'No pages match this search. Try a shorter word or clear the filter.'}
 										</p>
 									</div>
 								) : (

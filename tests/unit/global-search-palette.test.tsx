@@ -185,4 +185,23 @@ describe('GlobalSearchPalette', () => {
 		expect(toast.error).toHaveBeenCalledWith('Search failed. Please try again.')
 		expect(screen.getByText(/no pages match/i)).toBeTruthy()
 	})
+
+	it('names the typed query and suggests a next step on zero results', async () => {
+		searchPages.mockResolvedValue([])
+		renderPalette()
+		await openViaKey()
+		fireEvent.change(screen.getByPlaceholderText(/search pages/i), { target: { value: 'quarterly' } })
+		await act(async () => { await vi.advanceTimersByTimeAsync(210) })
+		expect(screen.getByText(/no pages match “quarterly”/i)).toBeTruthy()
+		expect(screen.getByText(/try a shorter word/i)).toBeTruthy()
+	})
+
+	it('gives guidance instead of a dead end when there is nothing to quick-switch', async () => {
+		fetchRecentPages.mockResolvedValue([])
+		renderPalette()
+		await openViaKey()
+		await act(async () => { await vi.advanceTimersByTimeAsync(210) })
+		expect(screen.getByText(/nothing to quick-switch yet/i)).toBeTruthy()
+		expect(screen.getByText(/open or create a page/i)).toBeTruthy()
+	})
 })

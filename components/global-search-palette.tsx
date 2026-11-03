@@ -6,6 +6,8 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { supabase } from '@/lib/supabase'
 import { fetchRecentPages, searchPages } from '@/services/search'
 import { useSessionReauth } from '@/components/session-reauth-provider'
+import ShortcutHelpDialog from '@/components/shortcut-help-dialog'
+import { isTypingTarget } from '@/lib/shortcuts'
 import { toast } from 'sonner'
 
 const DEBOUNCE_MS = 200
@@ -34,6 +36,7 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 	const router = useRouter()
 	const { isLocked } = useSessionReauth()
 	const [open, setOpen] = useState(false)
+	const [helpOpen, setHelpOpen] = useState(false)
 	const [userId, setUserId] = useState<string | null>(null)
 	const [query, setQuery] = useState('')
 	const [rows, setRows] = useState<SearchRow[]>([])
@@ -47,21 +50,37 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 		setQuery('')
 		setRows([])
 		setSelectedIndex(0)
+		setHelpOpen(false)
 		setOpen(true)
 	}, [userId, isLocked])
 
-	// Cmd/Ctrl+K opens the palette anywhere on authenticated, unlocked pages.
+	// Opening help from the palette closes the palette: one modal at a time,
+	// and Radix returns focus to the trigger when the last one closes.
+	const openHelp = useCallback(() => {
+		setOpen(false)
+		setHelpOpen(true)
+	}, [])
+
+	// Cmd/Ctrl+K opens the palette anywhere on authenticated, unlocked pages;
+	// `?` opens the shortcut list. Single-key shortcuts must not steal a
+	// character from a text field — `?` while typing stays a question mark.
 	useEffect(() => {
 		const handler = (e: globalThis.KeyboardEvent) => {
 			if (!userId || isLocked) return
 			if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
 				e.preventDefault()
 				openPalette()
+				return
+			}
+			if (e.metaKey || e.ctrlKey || e.altKey) return
+			if (e.key === '?' && !isTypingTarget(e.target) && !isTypingTarget(document.activeElement)) {
+				e.preventDefault()
+				openHelp()
 			}
 		}
 		document.addEventListener('keydown', handler)
 		return () => document.removeEventListener('keydown', handler)
-	}, [openPalette])
+	}, [openPalette, openHelp, userId, isLocked])
 
 	// Track the authenticated user; render nothing (and never open) when signed out.
 	useEffect(() => {
@@ -72,7 +91,10 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 		const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
 			if (mounted) {
 				setUserId(session?.user?.id ?? null)
-				if (!session) setOpen(false)
+				if (!session) {
+					setOpen(false)
+					setHelpOpen(false)
+				}
 			}
 		})
 		return () => {
@@ -81,9 +103,12 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 		}
 	}, [])
 
-	// Close the palette if the reauth lock engages while it is open.
+	// Close the palette and help if the reauth lock engages while they are open.
 	useEffect(() => {
-		if (isLocked) setOpen(false)
+		if (isLocked) {
+			setOpen(false)
+			setHelpOpen(false)
+		}
 	}, [isLocked])
 
 	// Debounced fetch: recent pages when the query is empty, ranked results when querying.
@@ -167,7 +192,17 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 									<div className="px-4 py-3 text-sm text-on-surface-variant">Searching…</div>
 								) : rows.length === 0 ? (
 									<div className="px-4 py-3 text-sm text-on-surface-variant">
-										{query.trim() ? 'No pages match your search.' : 'No recent pages.'}
+										{query.trim() ? (
+											<>
+												<span className="block font-medium text-on-surface">No pages match “{query.trim()}”.</span>
+												<span className="mt-1 block">Try a shorter word, or search for a page title instead.</span>
+											</>
+										) : (
+											<>
+												<span className="block font-medium text-on-surface">Nothing to quick-switch yet.</span>
+												<span className="mt-1 block">Open or create a page and it will show up here.</span>
+											</>
+										)}
 									</div>
 								) : (
 									rows.map((row, idx) => (
@@ -190,12 +225,23 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 									))
 								)}
 							</div>
-							<div className="px-4 py-2 border-t border-black/5 dark:border-white/5 text-xs text-on-surface-variant">
-								↑↓ navigate · Enter open · Esc close
+							<div className="px-4 py-2 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-sm text-xs text-on-surface-variant">
+								<span>↑↓ navigate · Enter open · Esc close</span>
+								<button
+									type="button"
+									onClick={openHelp}
+									className="flex items-center gap-1.5 rounded-md px-1.5 py-0.5 font-medium transition-colors hover:bg-black/5 hover:text-on-surface dark:hover:bg-white/10"
+								>
+									<kbd className="inline-flex min-w-[1.4rem] items-center justify-center rounded border border-black/10 bg-surface-container-high px-1 font-mono text-[11px] font-semibold dark:border-white/15">?</kbd>
+									Shortcuts
+								</button>
 							</div>
 						</Dialog.Content>
 					</Dialog.Portal>
 				</Dialog.Root>
+			)}
+			{userId && !isLocked && (
+				<ShortcutHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
 			)}
 		</GlobalSearchContext.Provider>
 	)
