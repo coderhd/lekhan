@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>Your founding invite is ready</title>
+<!-- Email 4 of 4 · founding_invite. Copy: docs/marketing/brevo-welcome-sequence.md §6. Import map: README.md
+     BLOCKED ON P3: {{contact.INVITE_URL}} is not a Brevo attribute yet. Do not send until the invite URL is
+     written to the contact, or paste the link per recipient manually (README.md "Known gaps"). -->
+</head>
+<body style="margin:0;padding:0;background-color:#f9f8f4;">
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f9f8f4;">
+  <tr>
+    <td align="center" style="padding:24px 12px;">
+
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;margin:0 auto;background-color:#ffffff;border:1px solid #e7e2d7;border-radius:10px;">
+
+        <tr>
+          <td style="padding:22px 24px;border-bottom:1px solid #f0ece2;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="padding:0 10px 0 0;vertical-align:middle;">
+                  <img src="https://lekhan.online/logo.png" width="28" height="28" alt="" style="display:block;width:28px;height:28px;border:0;">
+                </td>
+                <td style="vertical-align:middle;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:18px;line-height:24px;font-weight:600;letter-spacing:-0.01em;color:#191713;">Lekhan</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:28px 24px 24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;line-height:26px;color:#191713;">
+
+            <p style="margin:0 0 22px;font-size:19px;line-height:29px;color:#191713;">Your wave is up. Here is your invite: <a href="{{contact.INVITE_URL}}" style="color:#9a5a0b;text-decoration:underline;word-break:break-all;">{{contact.INVITE_URL}}</a></p>
+
+            <p style="margin:0 0 12px;">Three things to do first, in this order:</p>
+
+            <ol style="margin:0 0 22px;padding:0 0 0 20px;font-size:16px;line-height:26px;">
+              <li style="margin:0 0 10px;padding-left:2px;">Import your vault. If it's large, start with one folder — the fidelity report tells you what mapped.</li>
+              <li style="margin:0 0 10px;padding-left:2px;">Share one page and invite one person. Collaboration is the part that's hard to describe and easy to feel.</li>
+              <li style="margin:0;padding-left:2px;">Break something. Reply with what happened. Founding-cohort reports go ahead of the public backlog.</li>
+            </ol>
+
+            <p style="margin:0 0 20px;">Your founding price stays locked for as long as your workspace exists. No card is needed during the beta.</p>
+
+            <p style="margin:0 0 20px;">If the link doesn't work, reply and I'll send a fresh one.</p>
+
+            <p style="margin:0 0 28px;color:#5d5850;">— Harsh, Lekhan</p>
+
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 4px;">
+              <tr>
+                <td style="background-color:#191713;border-radius:6px;">
+                  <a href="{{contact.INVITE_URL}}?utm_source=brevo&amp;utm_medium=email&amp;utm_campaign=founding_invite&amp;utm_content=email-4-invite" style="display:inline-block;padding:14px 22px;mso-padding-alt:14px 22px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:20px;font-weight:600;color:#f9f8f4;text-decoration:none;border-radius:6px;">Open my workspace</a>
+                </td>
+              </tr>
+            </table>
+
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:22px 24px 24px;border-top:1px solid #f0ece2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:21px;color:#6b655c;">
+            <p style="margin:0 0 8px;">You are receiving this because you confirmed your spot on the Lekhan founding list.</p>
+            <p style="margin:0 0 8px;"><a href="{{unsubscribe}}" style="color:#6b655c;text-decoration:underline;">Unsubscribe</a> &nbsp;·&nbsp; <a href="https://lekhan.online" style="color:#6b655c;text-decoration:underline;">lekhan.online</a></p>
+            <!-- If this tag ships literally in a test send, replace it with the postal address (README §3). -->
+            <p style="margin:0;color:#6b655c;">{{senderAddress}}</p>
+          </td>
+        </tr>
+
+      </table>
+
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>
