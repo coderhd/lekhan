@@ -176,13 +176,43 @@ describe('GlobalSearchPalette', () => {
 		expect(screen.queryByPlaceholderText(/search pages/i)).toBeNull()
 	})
 
-	it('shows a toast and empty state when search fails', async () => {
+	it('shows a toast and an honest error state when search fails', async () => {
 		searchPages.mockRejectedValue(new Error('boom'))
 		renderPalette()
 		await openViaKey()
 		fireEvent.change(screen.getByPlaceholderText(/search pages/i), { target: { value: 'x' } })
 		await act(async () => { await vi.advanceTimersByTimeAsync(210) })
 		expect(toast.error).toHaveBeenCalledWith('Search failed. Please try again.')
-		expect(screen.getByText(/no pages match/i)).toBeTruthy()
+		expect(screen.getByText(/couldn’t search right now/i)).toBeTruthy()
+		expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy()
+		expect(screen.queryByText(/no pages match/i)).toBeNull()
+	})
+
+	it('does not diagnose an empty recent list when the fetch failed', async () => {
+		fetchRecentPages.mockRejectedValue(new Error('offline'))
+		renderPalette()
+		await openViaKey()
+		await act(async () => { await vi.advanceTimersByTimeAsync(210) })
+		expect(screen.getByText(/couldn’t load recent pages/i)).toBeTruthy()
+		expect(screen.queryByText(/nothing to quick-switch yet/i)).toBeNull()
+	})
+
+	it('names the typed query and suggests a next step on zero results', async () => {
+		searchPages.mockResolvedValue([])
+		renderPalette()
+		await openViaKey()
+		fireEvent.change(screen.getByPlaceholderText(/search pages/i), { target: { value: 'quarterly' } })
+		await act(async () => { await vi.advanceTimersByTimeAsync(210) })
+		expect(screen.getByText(/no pages match “quarterly”/i)).toBeTruthy()
+		expect(screen.getByText(/try a shorter word/i)).toBeTruthy()
+	})
+
+	it('gives guidance instead of a dead end when there is nothing to quick-switch', async () => {
+		fetchRecentPages.mockResolvedValue([])
+		renderPalette()
+		await openViaKey()
+		await act(async () => { await vi.advanceTimersByTimeAsync(210) })
+		expect(screen.getByText(/nothing to quick-switch yet/i)).toBeTruthy()
+		expect(screen.getByText(/open or create a page/i)).toBeTruthy()
 	})
 })
