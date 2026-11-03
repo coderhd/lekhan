@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import EditorWorkspace from '../../components/editor-workspace'
 import GlobalSearchPalette from '../../components/global-search-palette'
+import { fetchPageBacklinks } from '../../services/graph'
 import * as Y from 'yjs'
 
 // ---------------------------------------------------------------------------
@@ -55,6 +56,7 @@ vi.mock('@/services/graph', () => ({
 	fetchMentionablePageCollaborators: vi.fn().mockResolvedValue([]),
 	fetchPageTags: vi.fn().mockResolvedValue([]),
 	fetchWorkspacePages: vi.fn().mockResolvedValue([]),
+	fetchPageBacklinks: vi.fn().mockResolvedValue([{ from_page_id: 'page-9', from_title: 'Alpha source' }]),
 	createPage: vi.fn(),
 }))
 
@@ -121,6 +123,7 @@ describe('EditorWorkspace public reading chrome (#30 T2)', () => {
 
 		expect(screen.queryByTitle('Search (Cmd+K)')).toBeNull()
 		expect(screen.queryByTitle('Version History')).toBeNull()
+		expect(screen.queryByTitle('Backlinks')).toBeNull()
 		expect(screen.queryByTitle('Settings')).toBeNull()
 		expect(screen.queryByLabelText(/Account menu/)).toBeNull()
 		expect(screen.queryByText('Share')).toBeNull()
@@ -134,6 +137,21 @@ describe('EditorWorkspace public reading chrome (#30 T2)', () => {
 		expect(screen.getByTitle('Search (Cmd+K)')).toBeInTheDocument()
 		expect(screen.getByLabelText(/Account menu/)).toBeInTheDocument()
 		expect(screen.queryByRole('link', { name: /create your own workspace/i })).toBeNull()
+	})
+
+	it('member viewer opens the lazily mounted backlink drawer for this page', async () => {
+		const backlinks = fetchPageBacklinks as unknown as ReturnType<typeof vi.fn>
+		await renderEditor({ anonVisitor: false, role: 'viewer', userId: 'member-5678' })
+
+		// Not mounted before the toggle: the pane (and its query) is lazy.
+		expect(screen.queryByRole('dialog', { name: 'Backlinks' })).toBeNull()
+		expect(backlinks).not.toHaveBeenCalled()
+
+		fireEvent.click(screen.getByTitle('Backlinks'))
+
+		expect(await screen.findByRole('dialog', { name: 'Backlinks' })).toBeInTheDocument()
+		expect(backlinks).toHaveBeenCalledWith('page-1')
+		expect(await screen.findByText('Alpha source')).toBeInTheDocument()
 	})
 
 	it('editor gets the full workspace without the reading chrome', async () => {

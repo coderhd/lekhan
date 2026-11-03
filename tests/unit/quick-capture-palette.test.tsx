@@ -278,6 +278,27 @@ describe('QuickCapturePalette', () => {
 		expect(screen.getByRole('dialog')).toBeTruthy()
 	})
 
+	it('tells the user to sign in again when the session token vanished, not that they lack edit rights', async () => {
+		renderPalette()
+		await openViaKey()
+
+		// The mount read found a user; the submit-time read no longer carries a
+		// usable access token (expired session).
+		getSession.mockResolvedValue({
+			data: { session: { access_token: null, user: { id: 'user-1' } } },
+			error: null,
+		})
+
+		fireEvent.change(captureInput(), { target: { value: 'Buy milk' } })
+		await act(async () => {
+			fireEvent.keyDown(captureInput(), { key: 'Enter' })
+		})
+
+		expect(appendCaptureBlock).not.toHaveBeenCalled()
+		expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/sign in again/i))
+		expect(toast.error).not.toHaveBeenCalledWith(expect.stringMatching(/edit access/i))
+	})
+
 	it('surfaces a failure and keeps the palette open for a retry', async () => {
 		appendCaptureBlock.mockRejectedValueOnce(new Error('socket closed'))
 		renderPalette()

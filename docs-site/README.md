@@ -1,7 +1,7 @@
 # Lekhan docs site
 
-The public documentation site for [Lekhan](https://lekhan.app), served at
-`https://docs.lekhan.app`. Self-contained Next.js + [Fumadocs](https://fumadocs.dev) app so docs
+The public documentation site for [Lekhan](https://lekhan.online), served at
+`https://docs.lekhan.online`. Self-contained Next.js + [Fumadocs](https://fumadocs.dev) app so docs
 ship from this repo as markdown/MDX, versioned with the product.
 
 ## Requirements
@@ -35,7 +35,7 @@ it is **not** a static export).
 - Start command: `npm run start`
 - Output directory: `.next`
 - Env vars: none required. Optional `NEXT_PUBLIC_DOCS_URL` sets the canonical metadata base
-  (defaults to `https://docs.lekhan.app`).
+  (defaults to `https://docs.lekhan.online`).
 
 ## Content
 
@@ -77,7 +77,7 @@ Do not add this app to the root workspace or root scripts.
 ## Deploy hand-off
 
 DevOps deploys this directory as its own Vercel project (root directory `docs-site`) and points
-`docs.lekhan.app` at it. Search is served by `/api/search` inside this app.
+`docs.lekhan.online` at it. Search is served by `/api/search` inside this app.
 
 ## Verification
 

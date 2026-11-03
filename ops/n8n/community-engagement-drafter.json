@@ -74,7 +74,7 @@
     },
     {
       "parameters": {
-        "fromEmail": "digest@lekhan.app",
+        "fromEmail": "digest@lekhan.online",
         "toEmail": "=YOUR_EMAIL",
         "subject": "=HITL review: {{ $items().length }} drafted engagements awaiting approval",
         "html": "=<p>Review in <a href=\"YOUR_SHEET_URL\">the sheet</a> (filter status=draft_review). Set status to <b>approved_reply</b> for replies you will post yourself (Reddit is ALWAYS manual), <b>approved_campaign</b> to fold into the next Brevo campaign, or <b>rejected</b>.</p>{{ $items().map(i => `<hr><p><a href=\"${i.json.link}\">${i.json.title}</a><br>score: ${i.json.ai_score} · intent: ${i.json.ai_intent}<br><blockquote>${i.json.ai_draft_reply}</blockquote></p>`).join('') }}",

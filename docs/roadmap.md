@@ -138,7 +138,7 @@ unblocks H2 agents. The Tauri desktop shell (#88) delivers the files-on-disk pro
 
 | Epic | Issue | Blocker edges | Spec ref |
 |---|---|---|---|
-| H1 — Graph view + backlink pane | #38 | → H2 Databases #47 (blocker) | §4 |
+| H1 — Graph view + backlink pane | #38 | → H2 Databases #47 (blocker) | §4 · **GV-T1 shipped** (graph route + d3-force canvas, PR #184, `docs/reviews/pr-206-review.md`) · **GV-T2 shipped** (title/facet filters, hover highlight, sampled-edge badge, PR #186, `docs/reviews/pr-207-review.md`) · **GV-T3 shipped** (lazy backlink drawer, focus-trapped, click-through, PR #191, `docs/reviews/pr-208-review.md`; real-DB fixture evidence follow-up #192) |
 | H1 — Dual-Dialect Interop Bridge (Obsidian-native files + Notion-compatible content) | #78 | ← #27; subsumes the import half of #45 | `docs/superpowers/specs/…` (spec in issue body) · **S1 clipboard paste-in shipped Oct 8** (Obsidian-markdown + Notion-HTML paste, gap-2 retroactive link resolution; PR #134, `docs/reviews/pr-57-review.md`) · **S3 clipboard copy-out shipped** (Obsidian markdown + Notion HTML payloads, target-aware; PR #154, `docs/reviews/pr-59-review.md`) |
 | H1 — Daily notes / quick capture / inbox | #39 | — | §4 |
 | H1 — Public pages + publish | #40 | ← #30 | §4 |

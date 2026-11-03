@@ -85,6 +85,43 @@ never inflate it. Nothing silently disappears.
 Frontier / Tier S work (unspec'd design, ADR-governed systems, clean-room review) escalates to
 `opencode-go/mimo-v2.6-pro` via per-issue override.
 
+## Agent wake contract
+
+Agents are **run-scoped**: they act only while a heartbeat run is active, and return to `idle` when it
+ends. Wakes that the platform provides natively (verified 2026-11-02 with a throwaway issue):
+
+| Event | Wake? | Notes |
+|---|---|---|
+| Issue **assigned** to an idle agent (status `todo`/`in_progress`) | ✅ native | run starts within seconds |
+| Issue transitioned **`blocked` → `todo`** (unblocked) | ✅ native | status transition is the trigger |
+| Run ends while the agent still holds `in_progress` work | ❌ **not** native | the gap the bridge closes |
+| Agent stuck in `error` when work arrives | ❌ | bridge recovers it first |
+
+**Wake bridge** (`scripts/paperclip/wake-bridge.mjs`) closes those two gaps:
+
+- polls the local API every 15s — local HTTP only, **no model tokens** unless it actually wakes someone;
+- wakes an agent that has an actionable assigned issue and **no live run**, passing `issueId` in the
+  payload so the run gets a real project workspace (a bare wake can land in a fallback workspace);
+- recovers agents in `error` before waking them;
+- safety net for blocker edges that clear without a status transition;
+- guards: 10-minute cooldown per (agent, issue), max 6 wakes per tick, never double-wakes a running agent.
+
+Operate it with `scripts/paperclip/install-wake-bridge.sh` (macOS LaunchAgent, `RunAtLoad` + `KeepAlive`;
+`--uninstall` to remove). Manual inspection:
+
+```bash
+node scripts/paperclip/wake-bridge.mjs --once --dry-run   # what would be woken, no writes
+node scripts/paperclip/wake-bridge.mjs --once             # single real pass
+tail -f ~/.paperclip-onboarding/wake-bridge.log
+```
+
+Tuning: `WAKE_BRIDGE_POLL_MS` (default 15000) and `WAKE_BRIDGE_COOLDOWN_MS` (default 600000) — set them in
+`~/.paperclip-onboarding/paperclip.env` or export them before running the installer, which copies them into
+the LaunchAgent.
+
+**Rule for agents:** when you hand work to another agent, assign the issue — the assignment itself is
+the wake. Do not rely on a coordinator to notice it later.
+
 ## PR merge gate (external review)
 
 A PR is merged only after **both** reviews are complete — ours and the external one:

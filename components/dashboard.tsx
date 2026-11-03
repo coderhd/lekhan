@@ -20,6 +20,7 @@ import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { ImportDialog } from '@/components/import-dialog'
 import { VaultExportDialog } from '@/components/vault-export-dialog'
+import WorkspaceViewsNav from './workspace-views-nav'
 import { track } from '@/lib/analytics'
 
 interface DashboardProps {
@@ -302,7 +303,7 @@ export default function Dashboard({ user }: DashboardProps) {
 					<button
 						onClick={openQuickCapture}
 						className="flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 py-2 premium-transition text-on-surface-variant hover:text-on-surface hover:bg-black/5 dark:hover:bg-white/10"
-						title="Quick capture (Cmd+Shift+C)"
+						title="Quick capture (⌘/Ctrl+Shift+C)"
 						aria-label="Quick capture"
 					>
 						<span aria-hidden className="material-symbols-outlined leading-none">bolt</span>
@@ -361,6 +362,10 @@ export default function Dashboard({ user }: DashboardProps) {
 			{/* Main Content */}
 			<main className="pt-8 pb-xl px-6 md:px-10 flex justify-center">
 				<div className="max-w-7xl w-full flex flex-col gap-xl">
+
+					<div className="flex items-center justify-between gap-3">
+						<WorkspaceViewsNav active="pages" />
+					</div>
 
 					{!fetchError && workspace && (
 						<DailyStrip workspaceId={workspace.id} ownerId={user.id} />

@@ -93,3 +93,46 @@ npm run build                                                  ✅
   act on the previous day; the interval makes that window ≤60s.
 - Collaborators in different timezones can disagree on "today" (accepted UTC drift in v1).
 - `#daily` search visibility lags the first save (see finding 3).
+
+---
+
+## Round 3 — external review close-out + `main` merge (2026-11-03)
+
+Payload: SIL-203 merge-gate courier (owner: Dev Engineer). PR had drifted to `CONFLICTING`
+against `main` (base `0def707`, nine commits behind) and Pullfrog had left three inline
+suggestions on `2cbe751`.
+
+### Pullfrog findings — all three accepted and fixed
+
+1. **`components/daily-strip.tsx` — Retry control ≈24px, below the strip's own 44px bar.**
+   Fixed exactly as suggested: `flex min-h-11 items-center` on the retry button, so the touch
+   target matches the arrows and day cells without changing its visual proportions.
+2. **`components/quick-capture-palette.tsx` — every `forbidden` collapsed to "You do not have
+   edit access to that page."** A vanished access token is thrown as
+   `CaptureError('forbidden', 'Sign in again to capture.')`, so the old catch told a
+   session-expired user they lacked edit rights. Fixed: `forbidden` now surfaces
+   `error.message` (both thrown messages are already user-facing and distinct). Added a
+   regression test that a missing submit-time token toasts "Sign in again…" and never the
+   edit-access wording.
+3. **`components/dashboard.tsx` — tooltip advertised only `Cmd+Shift+C`.** The handler accepts
+   `metaKey || ctrlKey`. Fixed: `Quick capture (⌘/Ctrl+Shift+C)`.
+
+### Merge with `main`
+
+`origin/main` advanced to `9e341a1` (DN-T3 backlink drawer, domain move to `lekhan.online`,
+wake-bridge, perf test script). One conflict, in `components/dashboard.tsx`: this branch adds
+`<DailyStrip>` at the top of `<main>`, `main` adds `<WorkspaceViewsNav active="pages" />` in the
+same slot. Both are kept — the views nav stays the first row and the strip renders directly
+beneath it, which is the layout both features assume. No other file conflicted; the new
+`d3-force` dependencies from `main` were installed for verification.
+
+### Verification after fixes + merge
+
+```text
+npx vitest run tests/unit/{quick-capture-palette,daily-strip,dashboard-refetch-on-auth}.test.tsx
+                                                               ✅ 3 files / 31 tests
+npm run typecheck                                              ✅
+npx eslint <changed files>                                     ✅
+```
+
+Full suite across the merged tree: `npx vitest run` → 110 files / 1012 passed, 1 skipped, 0 failed.

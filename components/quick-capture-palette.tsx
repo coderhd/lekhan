@@ -207,8 +207,12 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 				action: { label: 'Open', onClick: () => router.push(`/page/${destination!.id}`) },
 			})
 		} catch (error) {
+			// `CaptureError` messages for a rejected write are already user-facing
+			// and distinct: "Sign in again to capture." (expired/invalid token)
+			// versus "No edit access to that page." (viewer-only page). Keep the
+			// specific instruction instead of collapsing both into one.
 			const message = error instanceof CaptureError && error.code === 'forbidden'
-				? 'You do not have edit access to that page.'
+				? error.message
 				: 'Could not capture right now. Check your connection and try again.'
 			toast.error(message)
 		} finally {

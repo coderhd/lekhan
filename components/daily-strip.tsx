@@ -228,7 +228,7 @@ export default function DailyStrip ({ workspaceId, ownerId, today }: DailyStripP
 					<button
 						type="button"
 						onClick={() => openDay(failedDate)}
-						className={`rounded-md bg-primary px-3 py-1 text-xs font-bold text-on-primary hover:bg-primary/90 premium-transition ${FOCUS_RING}`}
+						className={`flex min-h-11 items-center rounded-md bg-primary px-3 py-1 text-xs font-bold text-on-primary hover:bg-primary/90 premium-transition ${FOCUS_RING}`}
 					>
 						Retry opening {shortDateFormatter.format(failedDate)}
 					</button>

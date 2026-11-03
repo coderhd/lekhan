@@ -15,9 +15,9 @@ export interface LocalProbeResult {
 export function getOsSpecificCorsCommand(runtime: LocalRuntime): { macos: string; linux: string; windows: string } {
 	if (runtime === 'ollama') {
 		return {
-			macos: 'OLLAMA_ORIGINS="http://localhost:3000,https://lekhan.app,app://*" ollama serve',
-			linux: 'OLLAMA_ORIGINS="http://localhost:3000,https://lekhan.app,app://*" ollama serve',
-			windows: '$env:OLLAMA_ORIGINS="http://localhost:3000,https://lekhan.app,app://*" ; ollama serve'
+			macos: 'OLLAMA_ORIGINS="http://localhost:3000,https://lekhan.online,app://*" ollama serve',
+			linux: 'OLLAMA_ORIGINS="http://localhost:3000,https://lekhan.online,app://*" ollama serve',
+			windows: '$env:OLLAMA_ORIGINS="http://localhost:3000,https://lekhan.online,app://*" ; ollama serve'
 		}
 	}
 	if (runtime === 'lmstudio') {

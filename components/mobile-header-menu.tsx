@@ -11,6 +11,8 @@ interface MobileHeaderMenuProps {
 	setIsHistoryOpen: (val: boolean) => void
 	isAIPanelOpen: boolean
 	setIsAIPanelOpen: (val: boolean) => void
+	isBacklinksOpen: boolean
+	setIsBacklinksOpen: (val: boolean) => void
 	theme: 'light' | 'dark'
 	toggleTheme: () => void
 	activeUsers: { name: string; color: string; id: string }[]
@@ -35,6 +37,8 @@ export default function MobileHeaderMenu({
 	setIsHistoryOpen,
 	isAIPanelOpen,
 	setIsAIPanelOpen,
+	isBacklinksOpen,
+	setIsBacklinksOpen,
 
 	activeUsers,
 	connectionState,
@@ -59,6 +63,7 @@ export default function MobileHeaderMenu({
 		<div className="relative flex items-center md:hidden" ref={menuRef}>
 			<button
 				onClick={() => setIsOpen(!isOpen)}
+				data-backlink-trigger
 				className={`flex items-center justify-center h-8 w-8 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface ${isOpen ? 'bg-primary/10 text-primary border-primary/30' : 'bg-surface-container-low'}`}
 				title="More options"
 			>
@@ -97,8 +102,23 @@ export default function MobileHeaderMenu({
 
 					<button
 						onClick={() => {
+							setIsBacklinksOpen(!isBacklinksOpen)
+							setIsHistoryOpen(false)
+							setIsAIPanelOpen(false)
+							setIsOpen(false)
+						}}
+						aria-pressed={isBacklinksOpen}
+						className={`flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${isBacklinksOpen ? 'text-primary' : 'text-on-surface'}`}
+					>
+						<span className="material-symbols-outlined text-[20px]">link</span>
+						Backlinks
+					</button>
+
+					<button
+						onClick={() => {
 							setIsHistoryOpen(!isHistoryOpen)
 							setIsAIPanelOpen(false)
+							setIsBacklinksOpen(false)
 							setIsOpen(false)
 						}}
 						className={`flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${isHistoryOpen ? 'text-primary' : 'text-on-surface'}`}
@@ -111,6 +131,7 @@ export default function MobileHeaderMenu({
 						onClick={() => {
 							setIsAIPanelOpen(!isAIPanelOpen)
 							setIsHistoryOpen(false)
+							setIsBacklinksOpen(false)
 							setIsOpen(false)
 						}}
 						className={`flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${isAIPanelOpen ? 'text-primary' : 'text-on-surface'}`}
