@@ -68,18 +68,24 @@
   - `tests/unit/sync-persister.test.ts` TC06/TC07 — XmlFragment indexing
     (already on main via PR #195; relied on, not re-added).
 
-## Post-rebase re-verification (2026-11-02, resumed run)
+## Post-rebase re-verification (2026-11-03, resumed run)
 
-The branch was rebased onto `origin/main` at `000e2f8` (GV-T3 backlink drawer,
-PR #193) with no conflicts, then the full gate was re-run from the rebased tip
-`2fce8a4`:
+The branch was rebased onto current `origin/main` (`d65161a`, after the DN-T3
+merges #195/#196). The only conflicts were in `server/index.js`; they were
+resolved by keeping both changes:
+
+- main's relay write gate (`resolveRelayReadOnly`, entitlement re-check), and
+- this hotfix's `readOnly=1` export gate + hydration-gated persistence.
+
+`markWritable` now excludes viewers, billing-limited relays, **and** export
+reads. `server/persister.js` was restored to main (PR #195 already ships the
+`XmlFragment` indexing fix), so this PR does not re-ship it.
+
+Full gate from the rebased tip:
 
 - `npm run typecheck` — clean.
 - `npm run lint` — clean.
-- `npm test` — 109 files / 975 passed, 1 skipped; no unhandled errors.
+- `npm test` — 140 files: 1430 passed, 1 skipped, **3 pre-existing failures in
+  `tests/unit/billing-gateway.test.ts`**. Verified the same 3 failures on a clean
+  `origin/main` worktree at `d65161a`; they are unrelated to this change.
 - `npm run build` — clean (static routes prerendered).
-
-State at hand-off: branch `fix/214-vault-export-cold-export` is 2 commits ahead
-of `origin/main` and **not yet pushed**. The Paperclip control plane and its
-GitHub credential broker became unavailable during the run, so pushing + opening
-the PR could not be completed; no code work remains before SHIP.
