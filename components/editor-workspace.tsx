@@ -36,9 +36,10 @@ import { CustomSelect } from './ui/custom-select'
 import { PromptDialog } from './ui/prompt-dialog'
 import * as Y from 'yjs'
 import { Mention } from '@tiptap/extension-mention'
-import MentionList, { MentionItem } from './mention-list'
+import MentionList, { type MentionItem } from './mention-list'
+import WikilinkList from './wikilink-list'
 import { fetchPageDetails, fetchPageMemberRole, updatePageTitle, updatePageProperties, fetchMentionablePageCollaborators, fetchPageTags, fetchWorkspacePages, createPage } from '@/services/graph'
-import { Wikilink, type WorkspacePageSummary, normalizeWikilinkTarget } from '@/lib/wikilink'
+import { Wikilink, buildWikilinkSuggestions, exitWikilinkSuggestion, type WorkspacePageSummary, normalizeWikilinkTarget } from '@/lib/wikilink'
 
 import { TableToolbar } from './table-toolbar'
 import { CodeBlockLanguageSelect } from './code-block-language-select'
@@ -167,6 +168,19 @@ export default function EditorWorkspace({	pageId,
 	const [isExportOpen, setIsExportOpen] = useState(false)
 	const [workspaceId, setWorkspaceId] = useState<string | null>(null)
 	const [workspacePages, setWorkspacePages] = useState<WorkspacePageSummary[]>([])
+	// Live read for the `[[` popup items callback: the editor is created once
+	// per [ydoc, provider] cycle, so state would be stale inside the
+	// Suggestion closure; ref keeps suggestions current without recreating
+	// the editor on every page fetch.
+	const workspacePagesRef = useRef<WorkspacePageSummary[]>([])
+	// Sync via layout effect, not render (CodeRabbit #187 finding): a
+	// discarded render would otherwise leave the ref pointing at data that
+	// never committed. The `items` callback only runs from editor events
+	// after commit, so this is safe. (Same hazard the repo documents for
+	// pageIdRef below.)
+	useLayoutEffect(() => {
+		workspacePagesRef.current = workspacePages
+	}, [workspacePages])
 
 	// Live Page metadata for clipboard copy-out (S3). The copy handler is
 	// synchronous, so title/tags/properties are mirrored into a ref rather than
@@ -238,7 +252,13 @@ export default function EditorWorkspace({	pageId,
 	}, [router])
 
 	const handleCreateWikilinkPage = useCallback(async (targetTitle: string) => {
-		if (!workspaceId) return
+		if (!workspaceId) {
+			// Anonymous visitors have no workspace to create pages in; the
+			// loadWorkspacePages fetch is skipped for them entirely. Say so
+			// instead of silently no-oping (clean-room finding 4).
+			toast.error('Sign in to create pages')
+			return
+		}
 		const normalized = normalizeWikilinkTarget(targetTitle)
 		if (inFlightPageCreationsRef.current.has(normalized)) return
 		inFlightPageCreationsRef.current.add(normalized)
@@ -474,6 +494,102 @@ export default function EditorWorkspace({	pageId,
 						workspacePages,
 						onNavigateToPage: (targetPageId) => handleNavigateToPageRef.current(targetPageId),
 						onCreatePage: (targetTitle) => handleCreateWikilinkPageRef.current(targetTitle),
+						// `[[` autocomplete popup (SIL-159 / #142): Obsidian-style
+						// mid-block page suggest + "Create page" empty state.
+						// allowedPrefixes null = `[[` fires after any character
+						// (Obsidian parity); pages come from the live ref.
+						// allowSpaces true keeps the popup alive across spaces so
+						// a multi-word title can be typed end-to-end (CodeRabbit
+						// #187 Major); the closed-]] grammar guard composed in
+						// lib/wikilink's default shouldShow still applies.
+						suggestion: {
+							char: '[[',
+							allowedPrefixes: null,
+							allowSpaces: true,
+							items: ({ query }: { query: string }) =>
+								buildWikilinkSuggestions(workspacePagesRef.current, query),
+							command: ({ editor: ed, range, props }: any) => {
+								// Guard against committing over a range that already
+								// contains a closed link ("[[alias|target]]" edits) —
+								// replacing it would orphan the tail as literal text
+								// (clean-room finding 2).
+								const rangeText = ed.state.doc.textBetween(range.from, range.to, '\n')
+								if (typeof rangeText !== 'string' || rangeText.includes(']]')) return
+								// Commit a complete `[[target]]` link in place;
+								// the decoration plugin re-resolves on this
+								// transaction, so an existing page lights up
+								// immediately without any extra redraw.
+								ed.chain().focus()
+									.insertContentAt(range, { type: 'text', text: `[[${props.title}]]` })
+									.run()
+								// Close the popup on commit (Obsidian parity): the
+								// suggestion state machine would otherwise re-match
+								// the just-inserted `[[...]]` text and re-open.
+								exitWikilinkSuggestion(ed)
+								if (props.kind === 'create') {
+									handleCreateWikilinkPageRef.current(props.title)
+								}
+							},
+							render: () => {
+								let component: any
+								let popup: any
+
+								return {
+									onStart: (props: any) => {
+										const container = document.createElement('div')
+										const root = createRoot(container)
+										component = { root, container, ref: { current: null } }
+
+										const renderList = (items: any[], command: any) => {
+											root.render(
+												<WikilinkList
+													ref={(r: any) => { component.ref.current = r }}
+													items={items}
+													command={command}
+												/>
+											)
+										}
+
+										renderList(props.items, props.command)
+
+										popup = tippy('body', {
+											getReferenceClientRect: props.clientRect,
+											appendTo: () => document.body,
+											content: container,
+											showOnCreate: true,
+											interactive: true,
+											trigger: 'manual',
+											placement: 'bottom-start',
+										})
+									},
+									onUpdate: (props: any) => {
+										if (!component) return
+										const renderList = (items: any[], command: any) => {
+											component.root.render(
+												<WikilinkList
+													ref={(r: any) => { component.ref.current = r }}
+													items={items}
+													command={command}
+												/>
+											)
+										}
+										renderList(props.items, props.command)
+										popup?.[0]?.setProps({ getReferenceClientRect: props.clientRect })
+									},
+									onKeyDown: (props: any) => {
+										if (props.event.key === 'Escape') {
+											popup?.[0]?.hide()
+											return true
+										}
+										return component?.ref?.current?.onKeyDown(props) || false
+									},
+									onExit: () => {
+										popup?.[0]?.destroy()
+										component?.root?.unmount()
+									},
+								}
+							},
+						},
 					})
 				}
 				return ext
