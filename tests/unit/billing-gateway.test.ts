@@ -27,6 +27,10 @@ const h = vi.hoisted(() => {
 			const chain: Record<string, unknown> = {}
 			chain.select = () => chain
 			chain.eq = () => chain
+			chain.or = () => chain
+			// Awaited update/select queries return an array, unlike maybeSingle.
+			chain.then = (resolve: (value: unknown) => unknown) =>
+				Promise.resolve({ data: state.plan ? [state.plan] : [], error: null }).then(resolve)
 			chain.order = () => chain
 			chain.update = (values: Record<string, unknown>) => {
 				updates.push({ table, values })

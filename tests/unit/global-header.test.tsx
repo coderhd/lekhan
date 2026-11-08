@@ -100,6 +100,13 @@ describe('GlobalHeader', () => {
 	// 44px (min-h-11 slot controls) once the dashboard hydrated, pushing the
 	// whole page down 5px. Both rows must reserve the load-bearing slot height
 	// upfront so late slot registration cannot change header metrics.
+	it('reserves separate mobile rows without an unconditional action width', async () => {
+		render(<GlobalHeaderProvider><GlobalHeader /></GlobalHeaderProvider>)
+		const header = await screen.findByRole('banner')
+		expect(header).toHaveClass('flex-col', 'sm:flex-row')
+		expect(header.querySelector('.min-w-\\[300px\\]')).toBeNull()
+	})
+
 	it('reserves fixed action-row heights before any route slot registers', async () => {
 		pathname = '/'
 

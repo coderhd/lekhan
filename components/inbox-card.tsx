@@ -183,15 +183,11 @@ export default function InboxCard ({ workspaceId, ownerId, today }: InboxCardPro
 				</button>
 			</div>
 
-			<div className="mt-3">
+			{/* Five single-line previews plus the overflow count fit in the same
+			   reserved region as loading, empty and retry states. */}
+			<div className="mt-3 min-h-48">
 				{loading ? (
-					/* SIL-231: while captures load, render the zero state's exact box
-					   (same container, same static description) with the first line
-					   swapped for the loading status. Identical structure means the
-					   box height matches the settled empty state at every viewport
-					   width, so data landing never moves the dashboard below. The
-					   count badge's aria-label already announces the loading state
-					   for screen readers. */
+
 					<div role="status" className="rounded-lg border border-dashed border-black/10 dark:border-white/10 px-3 py-4 text-sm">
 						<p className="font-medium text-on-surface">Loading captures…</p>
 						<p className="text-on-surface-variant">Captures land here until you link or delete them. Tags organise them without clearing the inbox.</p>
@@ -218,10 +214,10 @@ export default function InboxCard ({ workspaceId, ownerId, today }: InboxCardPro
 							{preview.map((entry, index) => (
 								<li
 									key={`${entry.pageId}-${index}-${entry.text}`}
-									className="flex items-baseline gap-2 rounded-lg px-2 py-1 text-sm text-on-surface"
+									className="flex min-w-0 items-baseline gap-2 rounded-lg px-2 py-1 text-sm text-on-surface"
 								>
 									<span className="shrink-0 text-xs text-on-surface-variant">{entry.pageTitle}</span>
-									<span className="truncate">{entry.text}</span>
+									<span className="min-w-0 truncate">{entry.text}</span>
 								</li>
 							))}
 						</ul>
