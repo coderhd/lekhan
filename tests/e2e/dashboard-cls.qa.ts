@@ -1,3 +1,4 @@
+/Users/harshdave/.rvm/scripts/rvm:29: operation not permitted: ps
 import { test, expect } from '@playwright/test'
 
 // Synthetic local Supabase responses exercise the real dashboard without a
@@ -43,6 +44,7 @@ for (const width of [320, 390, 768, 1280]) {
    await expect(inbox.getByRole('status')).toContainText('Loading captures')
    await page.evaluate(() => document.fonts.ready)
    const before = await inbox.boundingBox()
+   if (width === 320) console.log(JSON.stringify({ debug: 'loading', layout: await inbox.evaluate(element => Array.from(element.children, child => ({ height: child.getBoundingClientRect().height, width: child.getBoundingClientRect().width, className: child.className, text: child.textContent?.slice(0, 100) }))) }))
    const shiftsBefore = await page.evaluate(() => (window as unknown as { layoutShifts: number[] }).layoutShifts.reduce((a, b) => a + b, 0))
    release()
    if (state === 'populated') {
@@ -53,6 +55,7 @@ for (const width of [320, 390, 768, 1280]) {
    if (state === 'error') await expect(inbox.getByRole('button', { name: 'Try again' })).toBeVisible()
    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
    const after = await inbox.boundingBox()
+   if (width === 320) console.log(JSON.stringify({ debug: state, layout: await inbox.evaluate(element => Array.from(element.children, child => ({ height: child.getBoundingClientRect().height, width: child.getBoundingClientRect().width, className: child.className, text: child.textContent?.slice(0, 100) }))) }))
    expect(after!.height).toBe(before!.height)
    expect(after!.y).toBe(before!.y)
    const geometry = await page.evaluate(() => ({ viewport: innerWidth, scrollWidth: document.documentElement.scrollWidth, headerHeight: document.querySelector('header')!.getBoundingClientRect().height, cls: (window as unknown as { layoutShifts: number[] }).layoutShifts.reduce((a, b) => a + b, 0) }))
@@ -74,10 +77,7 @@ for (const width of [320, 390, 768, 1280]) {
    const interactionMs = await page.evaluate(start => performance.now() - start, start)
    expect(interactionMs).toBeLessThan(1000)
    expect(errors).toEqual([])
-   const measurement = { width, state, ...geometry, inboxHeight: after!.height, inboxDelta: after!.height - before!.height, inboxCls: geometry.cls - shiftsBefore, interactionMs }
-   console.log(JSON.stringify(measurement))
-   await test.info().attach('measurement.json', { body: JSON.stringify(measurement, null, 2), contentType: 'application/json' })
-   await test.info().attach('dashboard.png', { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' })
+   console.log(JSON.stringify({ width, state, ...geometry, inboxHeight: after!.height, inboxDelta: after!.height - before!.height, inboxCls: geometry.cls - shiftsBefore, interactionMs }))
    await page.keyboard.press('Escape')
   })
  }
