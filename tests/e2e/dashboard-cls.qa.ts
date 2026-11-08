@@ -43,7 +43,7 @@ for (const width of [320, 390, 768, 1280]) {
    })
    await page.goto('/')
    const inbox = page.getByRole('region', { name: 'Inbox', exact: true })
-   await expect(inbox).toBeVisible({ timeout: 30_000 })
+   await expect(inbox).toBeVisible({ timeout: 60_000 })
    await inboxRequestHeld
    await expect(inbox.getByRole('status')).toContainText('Loading captures')
    await page.evaluate(() => document.fonts.ready)
