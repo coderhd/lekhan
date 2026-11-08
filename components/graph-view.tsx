@@ -25,6 +25,7 @@ import {
 import { edgeCountBadge, formatCount, sampleEdges } from '@/lib/graph-view/degrade'
 import type { WorkspaceGraphData } from '@/lib/graph-view/types'
 import GraphFilters from './graph-filters'
+import styles from './workbench/graph.module.css'
 
 const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-container focus-visible:ring-offset-2'
 const LABEL_ZOOM = 0.55
@@ -82,6 +83,7 @@ interface Palette {
  */
 export default function GraphView ({ data, layout, className }: GraphViewProps) {
 	const router = useRouter()
+	const [view, setView] = useState<'map' | 'list'>('map')
 	const containerRef = useRef<HTMLDivElement>(null)
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const dragRef = useRef<DragState | null>(null)
@@ -418,6 +420,11 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 				dispatch={handleFilter}
 			/>
 
+			<div role="group" aria-label="Graph display" className={styles.modes}>
+				<button type="button" aria-pressed={view === 'map'} onClick={() => setView('map')}>Map</button>
+				<button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}>List</button>
+			</div>
+			<div className={styles.visuals} data-view={view}>
 			{noMatches ? (
 				<div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-2xl border border-black/10 text-center dark:border-white/10">
 					<span className="material-symbols-outlined text-[40px] text-on-surface-variant/60" aria-hidden="true">filter_alt_off</span>
@@ -430,7 +437,7 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 				<div
 					ref={containerRef}
 					data-highlighted-node={highlightedId ?? undefined}
-					className="relative min-h-[320px] flex-1 overflow-hidden rounded-2xl border border-black/10 bg-surface-container-lowest dark:border-white/10"
+					className={styles.map}
 				>
 					<canvas
 						ref={canvasRef}
@@ -446,32 +453,6 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 						onPointerLeave={handlePointerLeave}
 					/>
 
-					{/* Keyboard/AT path: the canvas is a picture, so page navigation
-					    lives in this list. It becomes visible as soon as it is focused. */}
-					<div className="sr-only focus-within:not-sr-only focus-within:absolute focus-within:left-4 focus-within:top-4 focus-within:z-20 focus-within:max-h-72 focus-within:w-64 focus-within:overflow-auto focus-within:rounded-xl focus-within:border focus-within:border-black/10 focus-within:bg-surface-container focus-within:p-3 focus-within:shadow-xl dark:focus-within:border-white/10">
-						<h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-on-surface-variant">Pages in this graph</h2>
-						<ul className="flex flex-col gap-1 text-sm">
-							{nodes.filter(node => node.kind === 'page').map(node => (
-								<li key={node.id}>
-									<Link
-										href={`/page/${node.id}`}
-										onFocus={() => setHighlightedId(node.id)}
-										onBlur={() => setHighlightedId(current => (current === node.id ? null : current))}
-										onMouseEnter={() => setHighlightedId(node.id)}
-										onMouseLeave={() => setHighlightedId(current => (current === node.id ? null : current))}
-										className={`block truncate rounded px-1 py-0.5 text-on-surface hover:bg-black/5 dark:hover:bg-white/10 ${FOCUS_RING}`}
-									>
-										{node.title}
-									</Link>
-								</li>
-							))}
-						</ul>
-						{nodes.some(node => node.kind === 'unresolved') && (
-							<p className="mt-2 border-t border-black/10 pt-2 text-xs text-on-surface-variant dark:border-white/10">
-								Unresolved: {nodes.filter(node => node.kind === 'unresolved').map(node => node.title).join(', ')}
-							</p>
-						)}
-					</div>
 
 					{linkCount === 0 && nodes.length > 0 && !filtering && (
 						<div className="pointer-events-none absolute inset-x-4 top-4 z-10 mx-auto max-w-md rounded-xl border border-black/10 bg-surface-container/95 p-3 text-center shadow-lg backdrop-blur dark:border-white/10">
@@ -570,6 +551,33 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 					</p>
 				</div>
 			)}
+			{!noMatches && (
+					<div className={styles.pageList} aria-label="Pages in this graph">
+						<h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-on-surface-variant">Pages in this graph</h2>
+						<ul className="flex flex-col gap-1 text-sm">
+							{nodes.filter(node => node.kind === 'page').map(node => (
+								<li key={node.id}>
+									<Link
+										href={`/page/${node.id}`}
+										onFocus={() => setHighlightedId(node.id)}
+										onBlur={() => setHighlightedId(current => (current === node.id ? null : current))}
+										onMouseEnter={() => setHighlightedId(node.id)}
+										onMouseLeave={() => setHighlightedId(current => (current === node.id ? null : current))}
+										className={`block truncate rounded px-1 py-0.5 text-on-surface hover:bg-black/5 dark:hover:bg-white/10 ${FOCUS_RING}`}
+									>
+										{node.title}
+									</Link>
+								</li>
+							))}
+						</ul>
+						{nodes.some(node => node.kind === 'unresolved') && (
+							<p className="mt-2 border-t border-black/10 pt-2 text-xs text-on-surface-variant dark:border-white/10">
+								Unresolved: {nodes.filter(node => node.kind === 'unresolved').map(node => node.title).join(', ')}
+							</p>
+						)}
+					</div>
+			)}
+			</div>
 		</div>
 	)
 }

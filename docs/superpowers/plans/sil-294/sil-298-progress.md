@@ -19,3 +19,9 @@ Overlay open() hooks stay unchanged. No service/schema/storage changes planned.
 - GREEN: 7 suites / 26 tests passed (editor anonymous/member/editor, formatting, clipboard, version integration, legacy route, hydration, sync indicator). Unsaved content and the exact ProseMirror node survive navigation open/Escape, with focus returned. Anonymous editor is non-editable and has no workspace navigation.
 - Legacy route-level test confirms awaited params redirect the same UUID to /page; existing destination guards are unchanged.
 - Editor uses scoped styles, in-flow chrome, wrapped full formatting controls and writing title. Existing panes, services, editor hooks and Yjs ownership remain intact. Graph/settings and visual context comparison remain pending.
+
+## Graph increment
+
+- RED: graph route had no shared main navigation; integration assertion failed.
+- GREEN: 6 suites / 54 tests passed: route loading/error/retry/no-workspace, graph map/navigation, filters, layout and serialization.
+- Uses the real loaded workspace name. A visible page list and map/list control share the renderer's already-filtered nodes; unresolved targets remain non-navigable. No graph writes or new data owner.

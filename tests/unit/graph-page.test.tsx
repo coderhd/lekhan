@@ -1,3 +1,4 @@
+import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
 import '@testing-library/jest-dom'
 import React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -88,11 +89,14 @@ describe('GraphPage', () => {
 	})
 
 	it('loads the workspace graph and serializes it into canvas props', async () => {
-		render(<GraphPage />)
+		render(<GlobalHeaderProvider><GraphPage /></GlobalHeaderProvider>)
 
 		expect(await screen.findByRole('img')).toHaveAccessibleName(/2 pages and 2 page links/i)
 		expect(screen.getByRole('heading', { name: 'Graph' })).toBeInTheDocument()
 		expect(screen.getByRole('link', { name: /graph/i })).toHaveAttribute('aria-current', 'page')
+		expect(screen.getByRole('navigation', { name: 'Main navigation' })).toBeInTheDocument()
+		expect(screen.getByText('My Workspace', { selector: '.wb-workspace-name span:last-child' })).toBeInTheDocument()
+		expect(screen.getByRole('button', { name: 'List' })).toBeInTheDocument()
 		expect(workspaceGraph).toHaveBeenCalledWith('ws-1')
 		expect(pageTags).toHaveBeenCalledWith(['p-1', 'p-2'])
 		// Read-only route: no workspace write path is touched.
@@ -102,7 +106,7 @@ describe('GraphPage', () => {
 	it('shows the graph skeleton while the workspace graph loads', async () => {
 		workspaces.mockReturnValue(new Promise(() => {}))
 
-		render(<GraphPage />)
+		render(<GlobalHeaderProvider><GraphPage /></GlobalHeaderProvider>)
 
 		expect(await screen.findByRole('status', { name: /building your graph/i })).toHaveAttribute('aria-busy', 'true')
 	})
@@ -110,7 +114,7 @@ describe('GraphPage', () => {
 	it('redirects signed-out visitors to login', async () => {
 		getUser.mockResolvedValue({ data: { user: null }, error: null })
 
-		render(<GraphPage />)
+		render(<GlobalHeaderProvider><GraphPage /></GlobalHeaderProvider>)
 
 		await waitFor(() => expect(replace).toHaveBeenCalledWith('/login'))
 		expect(workspaceGraph).not.toHaveBeenCalled()
@@ -119,7 +123,7 @@ describe('GraphPage', () => {
 	it('explains the empty workspace state instead of erroring', async () => {
 		workspaces.mockResolvedValue([])
 
-		render(<GraphPage />)
+		render(<GlobalHeaderProvider><GraphPage /></GlobalHeaderProvider>)
 
 		expect(await screen.findByText(/no workspace yet/i)).toBeInTheDocument()
 		expect(screen.getByRole('link', { name: /go to pages/i })).toHaveAttribute('href', '/')
@@ -130,7 +134,7 @@ describe('GraphPage', () => {
 		const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
 		workspaceGraph.mockRejectedValueOnce(new Error('network down'))
 
-		render(<GraphPage />)
+		render(<GlobalHeaderProvider><GraphPage /></GlobalHeaderProvider>)
 
 		expect(await screen.findByText(/couldn't load your graph/i)).toBeInTheDocument()
 		expect(consoleError).toHaveBeenCalled()
@@ -141,3 +145,6 @@ describe('GraphPage', () => {
 		expect(workspaceGraph).toHaveBeenCalledTimes(2)
 	})
 })
+
+vi.mock('@/components/global-search-palette', () => ({ useGlobalSearch: () => ({ open: vi.fn() }) }))
+vi.mock('@/components/quick-capture-palette', () => ({ useQuickCapture: () => ({ open: vi.fn() }) }))

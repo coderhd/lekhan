@@ -9,7 +9,11 @@ import { fetchWorkspaceGraph, fetchWorkspaces, fetchWorkspacePageTags } from '@/
 import { serializeWorkspaceGraph } from '@/lib/graph-view/serialize'
 import type { WorkspaceGraphData } from '@/lib/graph-view/types'
 import GraphView, { GraphViewSkeleton } from './graph-view'
-import WorkspaceViewsNav from './workspace-views-nav'
+import WorkbenchShell from './workbench/workbench-shell'
+import { useGlobalSearch } from './global-search-palette'
+import { useQuickCapture } from './quick-capture-palette'
+import ThemeToggle from './theme-toggle'
+import styles from './workbench/routes.module.css'
 
 const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-container focus-visible:ring-offset-2'
 
@@ -24,6 +28,9 @@ type Status = 'loading' | 'error' | 'ready' | 'no-workspace'
  */
 export default function GraphPage () {
 	const router = useRouter()
+	const { open: onSearch } = useGlobalSearch()
+	const { open: onCapture } = useQuickCapture()
+	const [workspaceName, setWorkspaceName] = useState('Workspace')
 	const [status, setStatus] = useState<Status>('loading')
 	const [data, setData] = useState<WorkspaceGraphData | null>(null)
 	const requestRef = useRef(0)
@@ -50,6 +57,7 @@ export default function GraphPage () {
 				return
 			}
 
+			setWorkspaceName(workspace.name)
 			const graph = await fetchWorkspaceGraph(workspace.id)
 			const tagsByPage = await fetchWorkspacePageTags(graph.pages.map(page => page.id))
 			if (!current()) return
@@ -72,15 +80,12 @@ export default function GraphPage () {
 	}, [load])
 
 	return (
-		<div className="min-h-screen bg-background text-on-background">
-			<main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-6 py-8 md:px-10">
+		<WorkbenchShell active="graph" workspaceName={workspaceName} onSearch={onSearch} onCapture={onCapture} headerActions={<ThemeToggle />}>
+			<main className={styles.route}>
 				<header className="flex flex-col gap-4">
-					<div className="flex items-center justify-between gap-3">
-						<WorkspaceViewsNav active="graph" />
-					</div>
 					<div className="flex flex-wrap items-end justify-between gap-3">
 						<div className="flex flex-col gap-1">
-							<h1 className="text-2xl font-bold text-on-surface md:text-3xl">Graph</h1>
+							<h1 className={styles.title}>Graph</h1>
 							<p className="max-w-2xl text-sm text-on-surface-variant">
 								Pages are nodes and page links are edges. Links to pages that don&apos;t exist yet
 								show as dashed ghost nodes, so nothing you wrote disappears from the map.
@@ -97,7 +102,7 @@ export default function GraphPage () {
 
 				<section
 					aria-label="Workspace graph"
-					className="h-[calc(100vh-14rem)] min-h-[420px] w-full"
+					className={styles.graph}
 				>
 					{status === 'loading' && <GraphViewSkeleton />}
 
@@ -138,7 +143,7 @@ export default function GraphPage () {
 					{status === 'ready' && data && <GraphView data={data} className="h-full" />}
 				</section>
 			</main>
-		</div>
+		</WorkbenchShell>
 	)
 }
 
