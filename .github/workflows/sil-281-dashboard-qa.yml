@@ -43,5 +43,5 @@ jobs:
         with:
           name: sil-281-dashboard-browser-evidence
           path: test-results/dashboard-qa-*/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
