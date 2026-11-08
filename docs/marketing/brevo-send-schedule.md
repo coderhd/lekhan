@@ -16,12 +16,13 @@ passwords, or account identifiers in this file.
 | Tracking contract | SIL-226 — must use the attribute names and values in §5 verbatim |
 | Programme | SIL-201 |
 
-**Dependency state (read before building).** The copy and templates exist on
-`docs/sil-201-brevo-welcome-sequence`, not on `main`. The SIL-223 approval card
-and the SIL-224 verdict are still open. The build may be prepared in **paused**
-state against those files, but **activation waits** until both dependencies are
-`done` and the copy approval is recorded. If either changes wording or links,
-re-check the templates and this schedule before activating.
+**Dependency state (read before building).** The copy and templates are
+available on the current SIL-201 work branch. Before building or activating,
+confirm SIL-223 copy approval and the SIL-224 template verdict are both
+resolved. The build may be prepared inactive against those files, but
+**activation waits** until both dependencies are `done` and copy approval is
+recorded. If either changes wording or links, re-check the templates and this
+schedule before activating.
 
 ---
 
@@ -32,7 +33,9 @@ re-check the templates and this schedule before activating.
    verify; they may not activate, pause, or send from the Brevo account.
 2. **Double opt-in is the only entry.** A contact enters the sequence only when
    the app has recorded `CONFIRMED_AT` and the contact is on the
-   `founding_waitlist` list. Unconfirmed contacts never enter emails 1–4.
+   `founding_waitlist` list. `FC-01` also requires `FC_STAGE` to be empty or
+   `confirmed`; an already-advanced contact cannot receive email 1 again.
+   Unconfirmed contacts never enter emails 1–4.
 3. **Email 4 is never automated.** It carries a per-contact invite link and is
    sent by a human, in batches, from the Brevo UI.
 4. **No credentials in this document.** Brevo access stays in the founder's
@@ -51,26 +54,31 @@ control campaign sends.
 | # | Email | Delay from previous | Send window (IST + recipient local) | Weekday rule | Segment / condition | Exit rule |
 |---|---|---|---|---|---|---|
 | 1 | Spot confirmed | **0** — entry send | **Immediate** after `CONFIRMED_AT` (24/7, any hour). Recipient local = the moment they confirm. | Any day. | On `founding_waitlist`; `CONFIRMED_AT` is not empty; `FC_STAGE` is empty or `confirmed`. | Activated · unsubscribed · hard bounce · `FC_STAGE` already advanced · `CONFIRMED_AT` empty |
-| 2 | The import story | **≥ 72 h** from email 1 (day 3), then the next eligible window | **10:00–11:00 IST** = 04:30–05:30 UTC = 05:30–06:30 CET = 23:30–00:30 ET (previous day) = 20:30–21:30 PT (previous day) | **Tue–Thu only.** A due date on Fri, Sat, Sun, or Mon waits for the next Tuesday. | `FC_STAGE = welcome_1_sent`; `CONFIRMED_AT` is 3 or more days ago; `ACTIVATED_AT` empty; on `founding_waitlist`. | Activated · unsubscribed · hard bounce · stage changed · invite already sent |
-| 3 | The AI stance | **≥ 48 h** from email 2 **and ≥ 168 h** from email 1 (day 7), then the next eligible window | **10:00–11:00 IST** (same local conversions as email 2) | **Tue–Thu only.** Same next-Tuesday rule. | `FC_STAGE = welcome_2_sent`; `FC_EMAIL3_READY = true`; `CONFIRMED_AT` is 7 or more days ago; `ACTIVATED_AT` empty; on `founding_waitlist`. | Activated · unsubscribed · hard bounce · stage changed · invite already sent |
+| 2 | The import story | **At least 3 calendar dates after the actual email 1 send date** (date gate, not a 72-hour elapsed-time guarantee), then the next eligible window | **10:00–11:00 IST** = 04:30–05:30 UTC = 05:30–06:30 CET = 23:30–00:30 ET (previous day) = 20:30–21:30 PT (previous day) | **Tue–Thu only.** A due date on Fri, Sat, Sun, or Mon waits for the next Tuesday. | `FC_STAGE = welcome_1_sent`; `FC_EMAIL1_SENT_AT` is at least 3 calendar dates before today's IST date; `CONFIRMED_AT` is not empty; `ACTIVATED_AT` empty; on `founding_waitlist`. | Activated · unsubscribed · hard bounce · stage changed · invite already sent |
+| 3 | The AI stance | **≥ 49 h** from email 2 (48 h safety floor plus 1 h to avoid a same-time trigger race) **and calendar day 7+ after confirmation** (date gate, not a 168-hour elapsed-time guarantee), then the next eligible window | **10:00–11:00 IST** (same local conversions as email 2) | **Tue–Thu only.** Same next-Tuesday rule. | `FC_STAGE = welcome_2_sent`; `FC_EMAIL3_READY = true`; `CONFIRMED_AT` date is at least 7 calendar dates before today's IST date; `ACTIVATED_AT` empty; on `founding_waitlist`. | Activated · unsubscribed · hard bounce · stage changed · invite already sent |
 | 4 | Your invite | **Event-driven**, no fixed delay: the next Tue–Thu window after an invite token is issued | **10:00–11:00 IST**, manual batch (same local conversions) | **Tue–Thu only.** Never Fri–Mon. | `FC_STAGE = welcome_3_sent`; `CONFIRMED_AT` not empty; `ACTIVATED_AT` empty; invite token issued. | Activated · unsubscribed · hard bounce · no token · already invited |
 
 ### 2.1 What the delays actually produce
 
-The delay is a **floor**, not an exact send time. The weekday/window rule is
-applied after the floor. Expected ranges for a contact who confirms at any hour:
+The calendar-date check is a **floor**, not an exact send time or elapsed-hour
+guarantee. `CONFIRMED_AT` and `FC_EMAIL1_SENT_AT` are date-only fields; Brevo
+cannot use them to enforce 72 elapsed hours from an arbitrary confirmation or
+send time. Email 2 is gated from the actual email 1 send date, including manual
+reconciliation, so an older confirmation imported just before a scheduled
+check cannot receive emails 1 and 2 on the same day. Expected arrivals:
 
-| Email | Floor | Realistic arrival |
+| Email | Calendar-date floor | Realistic arrival |
 |---|---|---|
 | 1 | none | within minutes of confirmation |
-| 2 | 72 h | **day 3–7** after confirmation (weekend shift) |
-| 3 | 168 h from confirm and a 47 h delay from email 2 (the next window makes the real gap ≥ 48 h) | **day 7–11** after confirmation |
+| 2 | Email 1 send date ≤ today's IST date − 3 calendar days | **calendar day 3–7** after email 1 (weekend shift; elapsed time can be under 72 hours) |
+| 3 | Confirmation date ≤ today's IST date − 7 calendar dates, plus ≥49 h after email 2 and the next later scheduled check | **calendar day 8–14** after confirmation (elapsed time from confirm can be under 168 hours) |
 | 4 | invite issued | **0–4 calendar days** after the token is issued, on the next Tue–Thu window |
 
-Example: confirm Monday → email 2 Thursday (day 3) → email 3 the following
-Tuesday (day 8). Confirm Tuesday → email 2 the following Tuesday (day 7) →
-email 3 Thursday (day 9). Confirm Friday → email 2 Tuesday (day 4) → email 3
-the Tuesday after next (day 11).
+Examples: email 1 Monday → email 2 Thursday (day 3); if email 1 is manually
+reconciled on Friday for a contact confirmed weeks earlier, email 2 still waits
+until the next eligible Tue–Thu check after the three-calendar-date floor. If
+email 2 arrives Tuesday, its 49-hour timer completes Friday, after the Thursday
+check, so email 3 waits until the next Tuesday.
 
 ### 2.2 Recipient-local conversion table
 
@@ -103,9 +111,11 @@ do not do that in v1.
 - A due date that lands on Friday, Saturday, Sunday, or Monday waits for the
   **next Tuesday**.
 - **Never two sequence emails on the same calendar day (IST).** Email 2 sets a
-  47-hour timer and flips `FC_EMAIL3_READY`; email 3 can only enter on the next
-  Tue–Thu window, so the real gap is at least 48 hours. The 168-hour floor from
-  confirmation keeps it near day 7.
+  49-hour timer after its send action and flips `FC_EMAIL3_READY`; email 3 can
+  only enter on a later Tue–Thu 10:00 check. The extra hour avoids relying on
+  ordering when a 48-hour timer and scheduled filter check would be due at the
+  same time. The 7-calendar-date confirmation gate is not an elapsed 168-hour
+  promise.
 - If the window falls on a public holiday in the recipient's country, the
   operator may skip to the next Tue–Thu window. This is a manual judgment, not
   an automation rule.
@@ -143,9 +153,12 @@ So the sequence is:
 | `FC-04 invite` | **Manual batch**, Brevo UI | Human sends email 4 with the per-contact link |
 
 No `Time delay` node controls the **send window** — that is the weekly schedule.
-The only delay node is a fixed **47-hour** timer inside `FC-02` after email 2;
-it flips `FC_EMAIL3_READY` so email 3 cannot follow within 48 hours. The
-day-3/day-7 floors live in the filter (`CONFIRMED_AT` relative-date conditions).
+The only delay node is a fixed **49-hour** timer inside `FC-02` after email 2;
+it flips `FC_EMAIL3_READY` after the 48-hour minimum plus a one-hour scheduling
+buffer. Email 3 can enter only at a later Tue–Thu check. The
+3-calendar-date email 2 threshold compares `FC_EMAIL1_SENT_AT` with today's
+IST date; the 7-calendar-date email 3 threshold compares `CONFIRMED_AT` with
+today's IST date.
 This is intentional; putting the window itself on a delay node would
 reintroduce the drift.
 
@@ -205,8 +218,13 @@ RPC succeeds), `services/waitlist.ts` (payload builder), `lib/brevo.ts` (the
 existing contacts wrapper). This is P1 in the copy doc. Until it ships, use
 Path B.
 
-**Path B — wave-1 bridge (safe today).** Export **only confirmed rows** and
-import them into `founding_waitlist`:
+**Path B — wave-1 bridge.** Export **only confirmed rows** and import them into
+`founding_waitlist`. Production ordering is mandatory: first pass G0–G4, then
+Harsh activates the approved `FC-01`, `FC-02`, and `FC-03` workflows and records
+the activation times; only after all three are active does the operator import
+the confirmed-only CSV. Brevo's list-add trigger is not retroactive, so an
+import while `FC-01` is inactive will not enroll those contacts later. Do not
+import early and assume activation will catch them.
 
 ```sql
 select email, utm_source, position, referred_by, confirmed_at
@@ -217,8 +235,8 @@ order by position;
 
 Then import with the column map in §5.4. Do **not** import `confirmed_at is
 null` rows. The import itself fires Brevo's "Contact added to list" trigger, so
-email 1 goes out; that is correct — the person already confirmed, even if the
-confirmation happened days earlier.
+active `FC-01` enrolls the contact and sends email 1; that is correct — the
+person already confirmed, even if the confirmation happened days earlier.
 
 **Reconciliation before import:** compare the export count with
 `select count(*) from waitlist where confirmed_at is not null;` and record both
@@ -243,12 +261,13 @@ no free-text variants.
 
 | Attribute | Type | Example | Written by | Used by | Required? |
 |---|---|---|---|---|---|
-| `CONFIRMED_AT` | Date | `2026-11-06` | App on confirm (Path A) or manual import (Path B) | Entry guard, delay floors, segments | **Yes** |
+| `CONFIRMED_AT` | Date | `2026-11-06` | App on confirm (Path A) or manual import (Path B) | Consent entry guard | **Yes** |
+| `FC_EMAIL1_SENT_AT` | Date | `2026-11-06` | `FC-01 confirm` after email 1; Harsh after a verified manual send | Email 2's three-calendar-date floor, measured from the actual email 1 send date | **Yes before email 2** |
 | `FOUNDING_POSITION` | Number | `37` | App/import from `waitlist.position` | Ops ordering, reporting; **not used in copy** | Optional (P2) |
 | `SIGNUP_SOURCE` | Text | `early_page` · `x_bio` · `linkedin_bio` · `referral` · `manual_import` | App/import from `waitlist.utm_source` / `referred_by` | Acquisition reporting; not a send condition | Yes, default `early_page` |
 | `UTM_CAMPAIGN` | Text | `phase2_founding` | App/import from the signup URL's `utm_campaign` | Cohort reporting; **not a send condition** | Optional |
 | `FC_STAGE` | Text | `confirmed` · `welcome_1_sent` · `welcome_2_sent` · `welcome_3_sent` · `invited` · `activated` · `exited` | The automations, human operator | Duplicate prevention, segments, exit | **Yes** |
-| `FC_EMAIL3_READY` | Boolean | `true` | `FC-02 import story`, after a 47 h delay | No-stacking gate for email 3 | **Yes** |
+| `FC_EMAIL3_READY` | Boolean | `true` | `FC-02 import story`, after a 49 h delay | No-stacking gate for email 3 | **Yes** |
 | `INVITE_URL` | Text | `https://lekhan.online/invite/<token>` | App invite flow (P3) | Email 4 merge tag | Only after P3 |
 | `ACTIVATED_AT` | Date | `2026-11-08` | Product event or human operator | Exit from every workflow | Yes, best-effort |
 | `USECASE` | Text | `research notes` | App at signup | Optional segmentation | No |
@@ -275,20 +294,22 @@ expected previous state.
 
 | From | Event | To | Writer |
 |---|---|---|---|
-| — | Confirmed and added to `founding_waitlist` | `confirmed` | App (Path A) / import (Path B) |
-| `confirmed` | Email 1 sent | `welcome_1_sent` | `FC-01 confirm` |
+| — | Confirmed and added to `founding_waitlist` | `confirmed` in Path A; empty is valid in Path B | App (Path A) / import (Path B) |
+| empty / `confirmed` | Email 1 sent; set `FC_EMAIL1_SENT_AT` to current date in the same workflow | `welcome_1_sent` | `FC-01 confirm` |
 | `welcome_1_sent` | Email 2 sent | `welcome_2_sent` | `FC-02 import story` |
-| `welcome_2_sent` | 47 h after email 2 (not a stage change) | `welcome_2_sent` + `FC_EMAIL3_READY=true` | `FC-02 import story` |
+| `welcome_2_sent` | 49 h after email 2 (not a stage change) | `welcome_2_sent` + `FC_EMAIL3_READY=true` | `FC-02 import story` |
 | `welcome_2_sent` + ready | Email 3 sent | `welcome_3_sent` | `FC-03 ai stance` |
 | `welcome_3_sent` | Email 4 sent | `invited` | Human operator (bulk update after the batch) |
 | `invited` | First workspace activation | `activated` | Product sync (ideal) / human operator (until then) |
 | any | Unsubscribe, hard bounce, manual suppression | `exited` | Brevo / human operator |
 
-`FC_EMAIL3_READY` is the no-stacking gate. Email 2 sets it only after its
-47-hour timer; email 3's filter requires it. The next Tue–Thu window then makes
-the real gap at least 48 hours. Do not replace it with a hand-maintained date —
-a date attribute at day granularity would either block the legitimate
-48-hour window or need manual edits.
+`FC_EMAIL1_SENT_AT` prevents email 2 from following email 1 on the same day
+when a contact has an old confirmation date or email 1 was manually reconciled.
+It is intentionally date-only, so the three-date floor is not a 72-hour
+promise. `FC_EMAIL3_READY` is the separate no-stacking gate: email 2 sets it
+only after its 49-hour timer; email 3's filter requires it at the next later
+Tue–Thu check. This guarantees at least a 48-hour gap without a same-time
+trigger race.
 
 ### 5.3 Tags
 
@@ -314,12 +335,28 @@ Brevo tags label **campaigns, templates, and automations**; contact state is the
 | `utm_source` | `SIGNUP_SOURCE` | Map `null` → `early_page`; keep the literal value otherwise |
 | `referred_by` | `SIGNUP_SOURCE` | Only when `utm_source` is null: map to `referral` |
 | — | `UTM_CAMPAIGN` | From the signup URL if available; otherwise leave empty |
-| — | `FC_STAGE` | Set `confirmed` on import |
-| — | `FC_EMAIL3_READY` | Set `false` on import |
-| — | `ACTIVATED_AT` | Leave empty; the operator fills it if the contact activates early |
+| — | `FC_EMAIL1_SENT_AT` | Do not map or set on import; preserve existing value. Only record the actual send date after a verified email 1 send. |
+| — | `FC_STAGE` | Do not map or set on import; preserve existing state. New contacts may remain empty and pass the `FC-01` empty-or-`confirmed` guard. |
+| — | `FC_EMAIL3_READY` | Do not map or set on import; preserve existing value. `FC-02` sets it after email 2's 49-hour delay. |
+| — | `ACTIVATED_AT` | Do not map or set on import; preserve existing value. |
 
 Do not import `confirmed_at is null` rows, and do not import the `token` column —
 it is a live confirmation credential and must never leave the database.
+Before the import, compare the confirmed-only export with current Brevo contacts
+and the activation source. Keep workflow-managed attributes (`FC_STAGE`,
+`FC_EMAIL1_SENT_AT`, `FC_EMAIL3_READY`, `ACTIVATED_AT`) unmapped for every row;
+an import must never initialize, clear, or reset them. Existing contacts already
+on the list are not re-added to force a trigger. For an existing contact that
+needs an update, update only acquisition fields and leave workflow-managed
+attributes untouched. Preserve and exclude activated contacts from the send
+audience.
+
+For a previously sent email 1, record its actual send date in
+`FC_EMAIL1_SENT_AT` only after verifying the send. If email 1 has not been sent,
+the human operator may send it only after the approval gate, then record the
+date and set `FC_STAGE=welcome_1_sent`. If the send date or activation state is
+unknown, keep the contact out of the send audience until reconciled; never infer
+it from `CONFIRMED_AT`.
 
 ---
 
@@ -341,9 +378,16 @@ Steps:
 1. **Conditional split** — `CONFIRMED_AT` **is not empty**.
    - **No** → exit. This is the hard guard against a bad import.
    - **Yes** → continue.
-2. **Send an email** — template `FC-01-confirm`, tag `fc-welcome-1`.
-3. **Update contact attribute** — `FC_STAGE` = `welcome_1_sent`.
-4. End.
+2. **Conditional split** — `FC_STAGE` **is empty OR exactly `confirmed`**.
+   - **No** → exit without sending or changing attributes. This prevents an
+     already-advanced contact from receiving email 1 again if re-added.
+   - **Yes** → continue.
+3. **Send an email** — template `FC-01-confirm`, tag `fc-welcome-1`.
+4. **Update contact attribute** — `FC_EMAIL1_SENT_AT` = current date (Brevo
+   account timezone set to Asia/Kolkata), recording the actual email 1 send
+   date.
+5. **Update contact attribute** — `FC_STAGE` = `welcome_1_sent`.
+6. End.
 
 ### 6.2 `FC-02 import story` — email 2, day 3+
 
@@ -358,8 +402,10 @@ Filter (all must match):
 
 - Contact is in list `founding_waitlist`
 - `CONFIRMED_AT` **is not empty**
-- `CONFIRMED_AT` **is 3 or more days ago** (date ≤ today − 3; the UI may label
-  this "more than 2 days ago" or "at least 3 days ago")
+- `FC_EMAIL1_SENT_AT` **is at least 3 calendar dates before today's IST date**
+  (date ≤ today's IST date − 3; the UI may label this "more than 2 days ago"
+  or "at least 3 days ago"). This is a calendar-date threshold from the actual
+  email 1 send, not a 72-hour elapsed-time floor.
 - `FC_STAGE` **is exactly** `welcome_1_sent`
 - `ACTIVATED_AT` **is empty**
 
@@ -367,7 +413,9 @@ Steps:
 
 1. **Send an email** — template `FC-02-import-story`, tag `fc-welcome-2`.
 2. **Update contact attribute** — `FC_STAGE` = `welcome_2_sent`.
-3. **Time delay** — **47 hours**.
+3. **Time delay** — **49 hours**, starting after the email 2 send action
+   completes. This includes the 48-hour minimum plus a one-hour buffer so a
+   timer due at 10:00 cannot race that same day's scheduled filter check.
 4. **Update contact attribute** — `FC_EMAIL3_READY` = `true`.
 5. End.
 
@@ -383,7 +431,9 @@ Steps:
 Filter (all must match):
 
 - Contact is in list `founding_waitlist`
-- `CONFIRMED_AT` **is 7 or more days ago** (date ≤ today − 7)
+- `CONFIRMED_AT` **is at least 7 calendar dates before today's IST date**
+  (date ≤ today's IST date − 7). This is a calendar-date threshold, not a
+  168-hour elapsed-time floor.
 - `FC_STAGE` **is exactly** `welcome_2_sent`
 - `FC_EMAIL3_READY` **is** `true`
 - `ACTIVATED_AT` **is empty**
@@ -493,11 +543,14 @@ before activation. No agent may self-authorize.
 
 | Check | Expected | Actual | Pass? |
 |---|---|---|---|
-| Test contact added to `founding_waitlist_test` | Email 1 arrives within 15 min | | |
+| Confirmed test contact added to `founding_waitlist_test` and enters cloned test `FC-01` (whose list trigger targets only the test list) | Email 1 arrives within 15 min | | |
 | `FC_STAGE` after email 1 | `welcome_1_sent` | | |
-| Email 2 test copy with `CONFIRMED_AT` 4 days ago | Email 2 arrives; stage `welcome_2_sent` | | |
-| Email 2 test copy with `CONFIRMED_AT` 1 day ago | No send | | |
-| Email 3 test copy with `CONFIRMED_AT` 8 days ago, stage `welcome_2_sent`, `FC_EMAIL3_READY=true` | Email 3 arrives; stage `welcome_3_sent` | | |
+| Already-advanced test contact (`FC_STAGE=welcome_2_sent`) added to the test list with `CONFIRMED_AT` set | No email 1; stage remains `welcome_2_sent` | | |
+| Older confirmation (`CONFIRMED_AT` 30 calendar dates ago) with verified email 1 just before a scheduled check (`FC_EMAIL1_SENT_AT` today) | No email 2; wait until the actual email 1 date is at least 3 calendar dates old | | |
+| Confirmed test contact in `founding_waitlist_test` matches cloned `FC-02` with `FC_EMAIL1_SENT_AT` 4 calendar dates ago and `FC_STAGE=welcome_1_sent` | Email 2 test arrives; stage `welcome_2_sent` | | |
+| Existing imported test contact has `FC_STAGE=welcome_2_sent`, `FC_EMAIL1_SENT_AT` set, and `ACTIVATED_AT` populated | Import leaves all three unchanged; no email 1; activated contact stays excluded | | |
+| Import row contains old `CONFIRMED_AT`, but no verified `FC_EMAIL1_SENT_AT` | No email 2 until a human verifies/records the actual send date | | |
+| Email 3 test copy with `CONFIRMED_AT` 8 calendar dates ago, stage `welcome_2_sent`, `FC_EMAIL3_READY=true` | Email 3 arrives; stage `welcome_3_sent` | | |
 | Email 3 test with `FC_EMAIL3_READY=false` | No send | | |
 | Unconfirmed contact on the test list | No email 1; no entry to 2–4 | | |
 | Unsubscribe link in each email | Resolves; contact suppressed afterwards | | |
@@ -520,7 +573,7 @@ log.
 - [ ] **2. List.** Contacts → Lists → Create list `founding_waitlist`
       (and a separate `founding_waitlist_test` for the dry run).
 - [ ] **3. Attributes.** Contacts → Settings → Contact attributes → create
-      `CONFIRMED_AT` (date), `FOUNDING_POSITION` (number), `SIGNUP_SOURCE`
+      `CONFIRMED_AT` (date), `FC_EMAIL1_SENT_AT` (date), `FOUNDING_POSITION` (number), `SIGNUP_SOURCE`
       (text), `UTM_CAMPAIGN` (text), `FC_STAGE` (text), `FC_EMAIL3_READY`
       (boolean), `INVITE_URL` (text), `ACTIVATED_AT` (date). Keep `USECASE`
       and `UTM_SOURCE` as they are.
@@ -552,10 +605,13 @@ log.
 ### C. Segments
 
 - [ ] **11. `FC - ready email 2`.** List `founding_waitlist`; `CONFIRMED_AT`
-      not empty and 3 or more days ago; `FC_STAGE` = `welcome_1_sent`;
+      not empty; `FC_EMAIL1_SENT_AT` at least 3 calendar dates before today's
+      IST date;
+      `FC_STAGE` = `welcome_1_sent`;
       `ACTIVATED_AT` empty.
-- [ ] **12. `FC - ready email 3`.** Same list; `CONFIRMED_AT` 7 or more days
-      ago; `FC_STAGE` = `welcome_2_sent`; `FC_EMAIL3_READY` = `true`;
+- [ ] **12. `FC - ready email 3`.** Same list; `CONFIRMED_AT` at least 7
+      calendar dates before today's IST date; `FC_STAGE` = `welcome_2_sent`;
+      `FC_EMAIL3_READY` = `true`;
       `ACTIVATED_AT` empty.
 - [ ] **13. `FC - invite wave`.** `FC_STAGE` = `welcome_3_sent`;
       `ACTIVATED_AT` empty.
@@ -565,14 +621,17 @@ log.
 ### D. Automations (build inactive)
 
 - [ ] **15. `FC-01 confirm`.** Trigger "Contact added to list" →
-      `founding_waitlist`; conditional split `CONFIRMED_AT` is not empty;
-      send template `FC-01-confirm`; update `FC_STAGE=welcome_1_sent`; exit
-      conditions from §7; re-entry off. **Save, do not activate.**
+      `founding_waitlist`; conditional split `CONFIRMED_AT` is not empty, then
+      split `FC_STAGE` is empty OR exactly `confirmed`; otherwise exit without
+      sending or changing attributes. Send template `FC-01-confirm`; set
+      `FC_EMAIL1_SENT_AT` to the current date in Asia/Kolkata; then set
+      `FC_STAGE=welcome_1_sent`; exit conditions from §7; re-entry off. **Save,
+      do not activate.**
 - [ ] **16. `FC-02 import story`.** Trigger "Contact matches custom filters"
       with the §6.2 filter, scheduled Tue/Wed/Thu 10:00 IST (one multi-day
       trigger if available, otherwise three triggers). Send template
       `FC-02-import-story`; update `FC_STAGE=welcome_2_sent`; add a
-      **47-hour Time delay**; update `FC_EMAIL3_READY=true`; exit conditions;
+      **49-hour Time delay**; update `FC_EMAIL3_READY=true`; exit conditions;
       re-entry off. **Save, do not activate.**
 - [ ] **17. `FC-03 ai stance`.** Same trigger pattern with the §6.3 filter;
       send `FC-03-ai-stance`; update `FC_STAGE=welcome_3_sent`; exit
@@ -583,15 +642,40 @@ log.
 - [ ] **18. Test sends.** Send all four templates to the internal test address.
       Check 320/600 px, dark mode, plain text, every button/UTM, the
       unsubscribe link, and that no `{{…}}` is visible.
-- [ ] **19. Dry run.** Use `founding_waitlist_test` and the test copies
-      described in §8.4. Verify the stage transitions and the "unconfirmed
-      never enters" guard. Delete the test copies and test contacts.
+- [ ] **19. Dry run.** Clone `FC-01`, `FC-02`, and `FC-03` as test workflows;
+      change each list trigger/filter to `founding_waitlist_test` and restrict
+      sends to the internal test address. Keep production workflows inactive
+      and unchanged. Harsh Dave may temporarily activate only these test copies
+      for the dry run. Verify the unconfirmed and already-advanced guards. Test
+      an older `CONFIRMED_AT` date with `FC_EMAIL1_SENT_AT` set to the day of a
+      just-sent email 1 before the scheduled check; email 2 must wait until the
+      three-calendar-date floor. Import an existing test contact with
+      `FC_STAGE=welcome_2_sent`, a sent-date value, and populated `ACTIVATED_AT`;
+      confirm the import preserves all workflow-managed fields and the contact
+      receives no email 1. Deactivate/delete the test copies and test contacts.
 - [ ] **20. Approval.** Harsh posts written approval on SIL-225, naming the
       copy revision and template revision. **Stop here until it is posted.**
-- [ ] **21. Activate.** Harsh activates `FC-01 confirm`, then `FC-02 import
-      story`, then `FC-03 ai stance`, in that order. Record each activation in
-      §8.3. Do not activate email 4; it stays manual.
-- [ ] **22. First 24 h.** Watch bounces, unsubscribes, replies, and link
+- [ ] **21. Activate.** After G0–G4 are complete, Harsh activates `FC-01
+      confirm`, then `FC-02 import story`, then `FC-03 ai stance`, in that
+      order. Record each activation in §8.3. Do not activate email 4; it stays
+      manual. For Path B, all three must be active before the confirmed-only
+      import begins.
+- [ ] **22. Path B import (manual bridge only).** Reconcile the confirmed-only
+      export count as specified in §4.3, reconcile existing Brevo list members
+      and activation records, then import with only acquisition/consent fields
+      mapped. Leave `FC_STAGE`, `FC_EMAIL1_SENT_AT`, `FC_EMAIL3_READY`, and
+      `ACTIVATED_AT` unmapped. Confirm a new contact entered `FC-01`, and record
+      counts and completion time. If any rows were imported before activation,
+      stop and reconcile list members against stage, actual email 1 send dates,
+      and activation records; do not re-import the whole CSV, reset a stage, or
+      remove/re-add contacts to force the trigger. For a confirmed contact whose
+      email 1 is not recorded as sent, Harsh must verify consent and send the
+      email 1 template manually, then set `FC_EMAIL1_SENT_AT` to the verified
+      send date and `FC_STAGE=welcome_1_sent`; do not enroll that contact in
+      `FC-01`. Preserve any existing state for previously sent or activated
+      contacts. If send date or activation state is unknown, exclude the contact
+      until reconciled. Record all counts and actions before proceeding.
+- [ ] **23. First 24 h.** Watch bounces, unsubscribes, replies, and link
       errors against §11. If a threshold is crossed, use §10.
 
 ---
@@ -616,7 +700,8 @@ in-flight contacts to finish.
    Campaigns.
 2. **Export the list.** Contacts → select `founding_waitlist` → Export CSV.
    Include email, `CONFIRMED_AT`, `FOUNDING_POSITION`, `SIGNUP_SOURCE`,
-   `UTM_CAMPAIGN`, `FC_STAGE`, `FC_EMAIL3_READY`, `ACTIVATED_AT`. Store the
+   `UTM_CAMPAIGN`, `FC_EMAIL1_SENT_AT`, `FC_STAGE`, `FC_EMAIL3_READY`,
+   `ACTIVATED_AT`. Store the
    export in the founder's restricted drive, **not** in the repo.
 3. **Snapshot the config.** Save the automation settings, segment definitions,
    template names, subject/preview text, and the current copy/template
@@ -625,9 +710,11 @@ in-flight contacts to finish.
    contacts affected, and the export filename/location. Do not paste the CSV.
 5. **Fix and verify.** Correct the copy/template/filter, re-run the §8.4 dry
    run, and get a fresh written approval before reactivating.
-6. **Reactivate carefully.** Contacts removed by Stop must be re-imported or
-   re-added with the correct `FC_STAGE`; do not re-add them as `confirmed` or
-   they will receive email 1 again.
+6. **Reactivate carefully.** Reconcile contacts removed by Stop against actual
+   send history, `FC_EMAIL1_SENT_AT`, `FC_STAGE`, and activation records.
+   Preserve those values. Do not re-add an advanced contact as `confirmed` or
+   allow a CSV import to reset its state; keep unknown send dates or activation
+   state excluded until the human operator verifies them.
 
 ### 10.3 Rollback triggers
 
@@ -684,6 +771,8 @@ this list size.
 |---|---|
 | Table with email, delay, send window (IST + local), weekday rule, segment/condition, exit rule | §2, §2.2, §2.3 |
 | Double opt-in is the entry trigger; unconfirmed never enter 2–4 | §4.1, §4.2, §6.1 guard, §6.2/6.3 filters |
+| Email 2 waits from the actual email 1 send date and cannot follow a late import the same day | `FC_EMAIL1_SENT_AT` in §5.1–5.2, §6.1–6.2, §8.4 and §9.E boundary tests |
+| Path B import cannot overwrite stage, send date, email 3 readiness, or activation state | §5.4 unmapped fields and reconciliation; §8.4 preservation test; §9.E import steps; §10.2 recovery |
 | Attributes/tags defined and consistent with tracking | §5.1–§5.4; SIL-226 consumes §5 verbatim |
 | Step-by-step Brevo UI build checklist ending at a named human | §9, §8.3 (Harsh Dave) |
 | Rollback/kill-switch (pause, export contact list) | §10 |
