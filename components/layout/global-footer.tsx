@@ -93,7 +93,7 @@ export function GlobalFooter() {
 	}, [])
 
 	// Hide footer completely on editor page (edge-to-edge editor chrome)
-	if (workbenchChrome || isEditorPathname(pathname)) {
+	if (['/login', '/signup', '/forgot-password'].includes(pathname ?? '') || workbenchChrome || pathname?.startsWith('/invite/') || isEditorPathname(pathname)) {
 		return null
 	}
 

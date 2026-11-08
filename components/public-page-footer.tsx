@@ -10,7 +10,7 @@ import Link from 'next/link'
  */
 export default function PublicPageFooter() {
 	return (
-		<footer className="mt-10 pb-2 flex flex-col items-center gap-3 text-center">
+		<footer className="mt-10 py-6 border-t border-outline-variant flex flex-wrap items-center justify-between gap-4 text-sm">
 			<Link
 				href="/signup"
 				className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary-container text-on-primary-container text-sm font-bold hover:brightness-110 active:scale-95 premium-transition shadow-sm"

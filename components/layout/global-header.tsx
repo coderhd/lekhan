@@ -70,7 +70,7 @@ export function GlobalHeader({ children, rightActions }: GlobalHeaderProps) {
 	}, [])
 
 	if (
-		workbenchChrome ||
+		workbenchChrome || pathname?.startsWith('/invite/') ||
 		pathname === '/login' ||
 		pathname === '/signup' ||
 		pathname === '/forgot-password' ||

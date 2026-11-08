@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import AccessFrame from './workbench/access-frame'
 import { Lock } from 'lucide-react'
 
 interface PublicAccessDeniedProps {
@@ -22,12 +23,12 @@ export default function PublicAccessDenied ({ variant }: PublicAccessDeniedProps
 	const isPublic = variant === 'public'
 
 	return (
-		<main className="min-h-screen bg-background text-on-background flex items-center justify-center px-4">
+		<AccessFrame story={false}>
 			<div className="w-full max-w-md text-center flex flex-col items-center">
 				<div className="h-14 w-14 rounded-2xl bg-surface-container-low border border-black/10 dark:border-white/10 flex items-center justify-center mb-6">
 					<Lock className="h-6 w-6 text-on-surface-variant" aria-hidden="true" />
 				</div>
-				<h1 className="text-lg font-bold text-on-surface mb-2">
+				<h1 className="text-4xl font-medium text-on-surface mb-6">
 					This page isn't available
 				</h1>
 				<p className="text-sm text-on-surface-variant mb-8 leading-relaxed">
@@ -35,7 +36,7 @@ export default function PublicAccessDenied ({ variant }: PublicAccessDeniedProps
 				</p>
 				{isPublic
 					? (
-						<div className="flex items-center gap-3">
+						<div className="flex items-center flex-wrap gap-3">
 							<Link
 								href="/login"
 								className="rounded-xl bg-primary-container text-on-primary-container font-bold py-2.5 px-5 text-sm hover:brightness-110 active:scale-95 transition-all shadow-sm"
@@ -59,6 +60,6 @@ export default function PublicAccessDenied ({ variant }: PublicAccessDeniedProps
 						</Link>
 						)}
 			</div>
-		</main>
+		</AccessFrame>
 	)
 }

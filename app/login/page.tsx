@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import Image from 'next/image'
+import AccessFrame from '@/components/workbench/access-frame'
 import { Mail, Lock } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { track } from '@/lib/analytics'
@@ -52,25 +52,10 @@ export default function LoginPage() {
 	}
 
 	return (
-		<div className="bg-background selection:bg-primary-container selection:text-on-primary-container min-h-screen relative overflow-hidden flex flex-col">
-			{/* Ambient Glow Effects */}
-			<div className="hero-glow top-0 left-0" style={{ transform: 'translate(-10%, -10%)' }}></div>
-			<div className="hero-glow bottom-0 right-0" style={{ transform: 'translate(10%, 10%)' }}></div>
-
-			{/* Top Navigation Bar */}
-			<header className="w-full fixed top-0 bg-surface/5 backdrop-blur-xl border-b border-on-surface/10 z-50 flex justify-center items-center px-6 md:px-10 h-16">
-				<Link href="/" className="flex items-center group cursor-pointer">
-					<img alt="Lekhan Logo" className="h-6 w-6 md:h-7 md:w-7 object-contain cursor-pointer hover:scale-110 transition-transform" src="/logo.png" />
-					<span className="font-display-lg text-xl md:text-2xl font-bold text-primary-container transition-colors group-hover:text-primary leading-none translate-y-[1px]">ekhan</span>
-				</Link>
-			</header>
-
-			<main className="flex-1 flex items-center justify-center pt-24 pb-20 px-4">
-				{/* Login Card */}
-				<div className="glass w-full max-w-md rounded-xl p-6 md:p-10 flex flex-col gap-8 z-10 animate-in fade-in zoom-in duration-700">
+		<AccessFrame>
+			<div className="flex flex-col gap-8">
 					{/* Header Section */}
 					<div className="flex flex-col items-center text-center gap-2">
-						<Image alt="Lekhan Workspace Logo" className="w-16 h-16 md:w-20 md:h-20 mb-4" src="/logo.png" width={80} height={80} />
 						<h1 className="font-display-lg text-2xl md:text-3xl font-bold text-on-surface">Welcome Back</h1>
 						<p className="font-body-md text-on-surface-variant max-w-[280px]">Collaborate and create in your shared workspace.</p>
 					</div>
@@ -144,8 +129,7 @@ export default function LoginPage() {
 							<Link href="/signup" className="text-primary font-semibold hover:underline">Sign Up</Link>
 						</p>
 					</div>
-				</div>
-			</main>
-		</div>
+			</div>
+		</AccessFrame>
 	)
 }

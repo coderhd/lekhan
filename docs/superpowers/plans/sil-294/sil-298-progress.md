@@ -37,3 +37,9 @@ Overlay open() hooks stay unchanged. No service/schema/storage changes planned.
 - RED: failed capture had only a toast; a capture continued appending after reauth locked during destination preparation.
 - GREEN: 16 capture-palette tests passed in the 22-test checkpoint above, including retained draft/retry and lock during destination lookup. Operation generations now invalidate preparation and stale success UI; existing appendCaptureBlock remains authoritative. An append already sent to the CRDT service cannot be retroactively cancelled by chrome.
 - Scoped Radix sheet, explicit close/return focus, input remains disabled while submitting, destination-search error/retry and stale-result guards; Cmd/Ctrl+Shift+C and Enter contract preserved.
+
+## Access routes increment
+
+- RED: signup/reset controls lacked associated labels; unavailable invites had no inspectable unavailable state; failed acceptance had only a toast.
+- GREEN: 5 suites / 18 tests passed for signup/reset retained input and service-confirmed success, login failures/hydration, invitation pending/failure/unavailable, public denial and anonymous editor permissions.
+- AccessFrame provides the approved in-flow two-column desktop/single-column mobile treatment, theme and legal links. Invitation retains page-scoped handlers and the existing pending-token/login and accepted-page destinations. Unavailable/failure views now remain inspectable without leaking a title.
