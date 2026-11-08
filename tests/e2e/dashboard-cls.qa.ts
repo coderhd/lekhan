@@ -1,4 +1,3 @@
-/Users/harshdave/.rvm/scripts/rvm:29: operation not permitted: ps
 import { test, expect } from '@playwright/test'
 
 // Synthetic local Supabase responses exercise the real dashboard without a
