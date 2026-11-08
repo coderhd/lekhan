@@ -30,6 +30,7 @@ import ThemeToggle from './theme-toggle'
 import PublicPageFooter from './public-page-footer'
 import Link from 'next/link'
 import WorkbenchShell from './workbench/workbench-shell'
+import EditorFormatting from './workbench/editor-formatting'
 import { useQuickCapture } from './quick-capture-palette'
 import styles from './workbench/editor.module.css'
 import { useGlobalSearch } from '@/components/global-search-palette'
@@ -171,6 +172,16 @@ export default function EditorWorkspace({	pageId,
 	const [isHistoryOpen, setIsHistoryOpen] = useState(false)
 	const [isAIPanelOpen, setIsAIPanelOpen] = useState(false)
 	const [isBacklinksOpen, setIsBacklinksOpen] = useState(false)
+	const [wideContext, setWideContext] = useState(false)
+	useEffect(() => {
+		if (anonVisitor) return
+		const media = window.matchMedia('(min-width: 1280px)')
+		const update = () => setWideContext(media.matches)
+		update()
+		if (media.matches) setIsBacklinksOpen(true)
+		media.addEventListener('change', update)
+		return () => media.removeEventListener('change', update)
+	}, [anonVisitor])
 	const [previewDoc, setPreviewDoc] = useState<Y.Doc | null>(null)
 	const [previewVersionName, setPreviewVersionName] = useState<string | null>(null)
 	const [isViewer, setIsViewer] = useState<boolean | null>(null)
@@ -1294,11 +1305,15 @@ export default function EditorWorkspace({	pageId,
 	return (
 		<EditorFrame anonVisitor={anonVisitor} pageId={pageId} pages={workspacePages} onSearch={openGlobalSearch}
 			headerActions={<><SyncIndicator connectionState={connectionState} isSynced={isSynced} /><ThemeToggle /><ProfileMenu user={currentUser} size="sm" /></>}>
-		<div className={styles.workspace}>
+		<div className={styles.workspace} data-context={wideContext && isBacklinksOpen}>
 
 			{/* Redesigned Top Header and Integrated Toolbar */}
 			<header className={styles.pageHeader}>
 				{/* Row 1: App Controls & Document Title */}
+				                        <h1 className={styles.title}>
+							{!isViewer ? <InlineEdit initialValue={title} onSave={handleSaveTitle}
+								textClassName={styles.titleText} inputClassName={styles.titleInput} /> : title}
+						</h1>
 				<div className={styles.pageActions}>
 					<div className="flex items-center gap-md">
                         {anonVisitor && <Link href="/" className={styles.publicLogo}>Lekhan</Link>}
@@ -1483,7 +1498,7 @@ export default function EditorWorkspace({	pageId,
 
 				{/* Row 2: Formatting Toolbar or Read Only Banner */}
 				{!isViewer ? (
-					<div role="toolbar" aria-label="Page formatting" className={`${styles.toolbar} ${previewDoc ? 'opacity-40 pointer-events-none' : ''}`}>
+					<EditorFormatting editor={editor} onLink={() => setIsLinkPromptOpen(true)} disabled={!!previewDoc}>
 
 					{/* Font Family Selection */}
 					<div className="flex shrink-0 items-center border-r border-black/10 dark:border-white/10 h-6 px-1">
@@ -1580,7 +1595,7 @@ export default function EditorWorkspace({	pageId,
 					<div className="flex shrink-0 items-center gap-xs px-md h-6">
 						<ColorHighlightPopover editor={editor} />
 					</div>
-					</div>
+					</EditorFormatting>
 				) : anonVisitor ? (
 					<div className="min-h-[40px] py-2 px-6 md:px-10 flex justify-center items-center bg-primary/10 border-y border-primary/20 text-on-surface-variant text-sm font-medium">
 						<span className="material-symbols-outlined mr-2 text-base">link</span>
@@ -1594,7 +1609,7 @@ export default function EditorWorkspace({	pageId,
 				)}
 
 				{/* Row 3: Offline Warning — shown regardless of viewer/toolbar row above */}
-				{isOffline && <OfflineBanner />}
+				{isOffline && !anonVisitor && <OfflineBanner />}
 			</header>
 
 			<div className={styles.writingArea}>
@@ -1608,10 +1623,7 @@ export default function EditorWorkspace({	pageId,
 					)}
 
 					<div className={`editor-canvas ${styles.canvas}`}>
-                        <h1 className={styles.title}>
-							{!isViewer ? <InlineEdit initialValue={title} onSave={handleSaveTitle}
-								textClassName={styles.titleText} inputClassName={styles.titleInput} /> : title}
-						</h1>
+
 						{!isViewer && editor && <DragContextMenu editor={editor} />}
 
 						{previewVersionName && (
@@ -1673,6 +1685,7 @@ export default function EditorWorkspace({	pageId,
 
 				{isBacklinksOpen && (
 					<BacklinkPane
+						docked={wideContext}
 						pageId={pageId}
 						pageTitle={title}
 						onClose={() => setIsBacklinksOpen(false)}

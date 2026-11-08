@@ -43,3 +43,10 @@ Overlay open() hooks stay unchanged. No service/schema/storage changes planned.
 - RED: signup/reset controls lacked associated labels; unavailable invites had no inspectable unavailable state; failed acceptance had only a toast.
 - GREEN: 5 suites / 18 tests passed for signup/reset retained input and service-confirmed success, login failures/hydration, invitation pending/failure/unavailable, public denial and anonymous editor permissions.
 - AccessFrame provides the approved in-flow two-column desktop/single-column mobile treatment, theme and legal links. Invitation retains page-scoped handlers and the existing pending-token/login and accepted-page destinations. Unavailable/failure views now remain inspectable without leaking a title.
+
+## Responsive editor refinement
+
+- RED: narrow formatting disclosure did not exist; wide backlinks did not provide a non-modal complementary region.
+- GREEN: 4 suites / 37 tests passed covering full formatting disclosure, unchanged live editor, wide non-modal context, existing backlink drawer and capture behavior.
+- Writing title precedes actions/toolbar. At 1280+ the existing backlink query docks in a 272px context column; below that it keeps the existing named modal behavior. The formatting dialog discloses the original commands and preserves the editor subtree. Capture now uses the annotated four-row text area with Enter submission and Shift+Enter text entry.
+- Browser launch rechecked: macOS MachPort rendezvous denied bootstrap_check_in; Chromium exited SIGTRAP before about:blank. No visual/responsive/browser a11y/performance acceptance is claimed. Issue workspace reports no managed runtime.

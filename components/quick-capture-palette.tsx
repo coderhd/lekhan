@@ -252,7 +252,7 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 		}
 	}, [text, userId, target, reset, router, isLocked, open])
 
-	const onCaptureKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+	const onCaptureKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
 		if (event.key === 'Enter' && !event.shiftKey) {
 			event.preventDefault()
 			void submit()
@@ -355,10 +355,9 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 									<label htmlFor="quick-capture-input" className="sr-only">Capture text</label>
 									<div className="flex items-center gap-xs px-4 py-3">
 										<span aria-hidden className="material-symbols-outlined text-on-surface-variant shrink-0">bolt</span>
-										<input
-											id="quick-capture-input"
+										<textarea
+											id="quick-capture-input" rows={4}
 											disabled={submitting}
-											type="text"
 											autoFocus
 											value={text}
 											onChange={event => setText(event.target.value)}

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Link2, X } from 'lucide-react'
 import { fetchPageBacklinks } from '@/services/graph'
 import { buildBacklinkContext } from '@/lib/backlinks/context'
+import styles from './workbench/editor.module.css'
 import type { Backlink } from '@/types'
 
 export interface BacklinkRow {
@@ -79,6 +80,7 @@ export function BacklinkList ({ rows, onNavigate }: BacklinkListProps) {
 }
 
 interface BacklinkPaneProps {
+	docked?: boolean
 	pageId: string
 	onClose: () => void
 	/**
@@ -103,7 +105,7 @@ interface BacklinkPaneProps {
  * no write path. Focus is trapped while it is mounted and returned to the
  * trigger on close; Escape and the labelled close button both dismiss it.
  */
-export default function BacklinkPane ({ pageId, pageTitle, onClose, bodyByPage }: BacklinkPaneProps) {
+export default function BacklinkPane ({ pageId, pageTitle, onClose, bodyByPage, docked = false }: BacklinkPaneProps) {
 	const router = useRouter()
 	const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
 	const [backlinks, setBacklinks] = useState<Backlink[]>([])
@@ -142,6 +144,7 @@ export default function BacklinkPane ({ pageId, pageTitle, onClose, bodyByPage }
 	})), [backlinks, bodyByPage, pageTitle])
 
 	useEffect(() => {
+		if (docked) return
 		restoreFocusRef.current = document.activeElement as HTMLElement | null
 		closeRef.current?.focus()
 		return () => {
@@ -156,7 +159,7 @@ export default function BacklinkPane ({ pageId, pageTitle, onClose, bodyByPage }
 			const visible = triggers.find((trigger) => trigger.offsetParent !== null) ?? triggers[0]
 			visible?.focus()
 		}
-	}, [])
+	}, [docked])
 
 	const handleNavigate = useCallback((targetPageId: string) => {
 		router.push(`/page/${targetPageId}`)
@@ -201,24 +204,25 @@ export default function BacklinkPane ({ pageId, pageTitle, onClose, bodyByPage }
 	// Capture phase so a click that blurs to <body> cannot route Tab/Escape to
 	// the editor behind the backdrop.
 	useEffect(() => {
+		if (docked) return
 		document.addEventListener('keydown', handleKeyDown, true)
 		return () => document.removeEventListener('keydown', handleKeyDown, true)
-	}, [handleKeyDown])
+	}, [handleKeyDown, docked])
 
 	return (
 		<>
-			<div
+			{!docked && <div
 				className="fixed inset-0 z-50 bg-black/30"
 				onClick={onClose}
 				aria-hidden="true"
 				data-testid="backlink-pane-backdrop"
-			/>
+			/>}
 			<div
 				ref={panelRef}
-				role="dialog"
-				aria-modal="true"
+				role={docked ? 'complementary' : 'dialog'}
+				aria-modal={docked ? undefined : true}
 				aria-labelledby="backlink-pane-title"
-				className="fixed inset-y-0 right-0 z-[60] flex w-full flex-col border-l border-black/10 bg-background shadow-2xl dark:border-white/10 md:w-[400px]"
+				className={docked ? styles.dockedContext : "fixed inset-y-0 right-0 z-[60] flex w-full flex-col border-l border-black/10 bg-background shadow-2xl dark:border-white/10 md:w-[400px]"}
 			>
 				<header className="flex flex-none items-center justify-between border-b border-black/10 px-4 py-3 dark:border-white/10">
 					<div className="flex items-center gap-2">

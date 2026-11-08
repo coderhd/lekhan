@@ -169,6 +169,30 @@ describe('EditorWorkspace public reading chrome (#30 T2)', () => {
 		await waitFor(() => expect(screen.getByRole('button', { name: 'Open workspace navigation' })).toHaveFocus())
 	})
 
+	it('discloses all formatting on narrow screens without replacing the editor', async () => {
+		vi.mocked(window.matchMedia).mockImplementation(query => ({ matches: query === '(max-width: 767px)', media: query, onchange: null, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn() }))
+		await renderEditor({ anonVisitor: false, role: 'owner' })
+		const writing = document.querySelector('.ProseMirror')
+		fireEvent.click(screen.getByRole('button', { name: 'More formatting actions' }))
+		expect(screen.getByRole('dialog', { name: 'More formatting' })).toBeInTheDocument()
+		expect(screen.getByTitle('Insert Table')).toBeInTheDocument()
+		fireEvent.keyDown(screen.getByRole('dialog', { name: 'More formatting' }), { key: 'Escape' })
+		expect(document.querySelector('.ProseMirror')).toBe(writing)
+		vi.mocked(window.matchMedia).mockImplementation(query => ({ matches: false, media: query, onchange: null, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn() }))
+	})
+
+	it('docks wide-screen backlinks without trapping focus away from writing', async () => {
+		vi.mocked(window.matchMedia).mockImplementation(query => ({ matches: query === '(min-width: 1280px)', media: query, onchange: null, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn() }))
+		await renderEditor({ anonVisitor: false, role: 'owner' })
+		expect(await screen.findByRole('complementary', { name: 'Backlinks' })).toBeInTheDocument()
+		expect(screen.queryByRole('dialog', { name: 'Backlinks' })).toBeNull()
+		const writing = document.querySelector<HTMLElement>('.ProseMirror')!
+		writing.focus()
+		fireEvent.keyDown(writing, { key: 'Tab' })
+		expect(writing).toHaveFocus()
+		vi.mocked(window.matchMedia).mockImplementation(query => ({ matches: false, media: query, onchange: null, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn() }))
+	})
+
 	it('editor gets the full workspace without the reading chrome', async () => {
 		await renderEditor({ anonVisitor: false, role: 'owner' })
 

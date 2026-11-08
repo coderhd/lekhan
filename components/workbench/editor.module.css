@@ -20,3 +20,6 @@
 .publicLogo { font-size: 18px; font-weight: 650; }
 @media (min-width: 768px) { .title { font-size: 40px; } .publicReading .canvas { padding-block: 64px; } }
 @media (prefers-reduced-motion: reduce) { .workspace * { scroll-behavior: auto; transition: none; animation: none; } }
+
+.dockedContext { width: 272px; flex: 0 0 272px; align-self: flex-start; border-left: 1px solid hsl(var(--outline-variant)); padding-left: 24px; color: hsl(var(--on-surface)); }
+@media (min-width: 1280px) { .workspace[data-context=true] .writingArea { gap: 48px; } .workspace[data-context=true] .pageHeader { max-width: calc(100% - 320px); } }
