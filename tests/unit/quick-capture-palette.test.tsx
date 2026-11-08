@@ -332,4 +332,31 @@ describe('QuickCapturePalette', () => {
 		})
 		expect(screen.queryByRole('dialog')).toBeNull()
 	})
+	it('announces a recoverable failure inline and retains text for retry', async () => {
+		appendCaptureBlock.mockRejectedValueOnce(new Error('offline'))
+		renderPalette()
+		await openViaKey()
+		fireEvent.change(captureInput(), { target: { value: 'Keep this thought' } })
+		await act(async () => { fireEvent.keyDown(captureInput(), { key: 'Enter' }) })
+		expect(screen.getByRole('alert').textContent).toMatch(/could not capture/i)
+		expect((captureInput() as HTMLInputElement).value).toBe('Keep this thought')
+		await act(async () => { fireEvent.keyDown(captureInput(), { key: 'Enter' }) })
+		expect(appendCaptureBlock).toHaveBeenCalledTimes(2)
+		expect(screen.queryByRole('dialog')).toBeNull()
+	})
+
+	it('does not append when reauth locks during destination preparation', async () => {
+		let resolveWorkspace!: (workspace: { id: string; owner_id: string }) => void
+		ensureWorkspace.mockImplementationOnce(() => new Promise(resolve => { resolveWorkspace = resolve }))
+		const view = renderPalette()
+		await openViaKey()
+		fireEvent.change(captureInput(), { target: { value: 'Private thought' } })
+		await act(async () => { fireEvent.keyDown(captureInput(), { key: 'Enter' }) })
+		reauth.useSessionReauth.mockReturnValue({ isLocked: true })
+		view.rerender(<QuickCapturePalette><Trigger /></QuickCapturePalette>)
+		await act(async () => { resolveWorkspace({ id: 'ws-1', owner_id: 'user-1' }) })
+		expect(appendCaptureBlock).not.toHaveBeenCalled()
+		expect(toast.success).not.toHaveBeenCalled()
+	})
+
 })

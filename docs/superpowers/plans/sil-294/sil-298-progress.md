@@ -31,3 +31,9 @@ Overlay open() hooks stay unchanged. No service/schema/storage changes planned.
 - RED: arrow navigation changed selection without moving focus; confirmation assertions found direct nomination requests and no recoverable inline error.
 - GREEN: settings, ownership confirmation and capture recovery checkpoint: 4 suites / 22 tests passed. Earlier settings/provider/BYOK/unified suites: 6 suites / 41 tests passed before confirmation addition.
 - All current settings tabs retained, with roving tabindex, arrow/Home/End focus and panel associations. Provider registry/vault, billing and ownership API contracts remain owned by existing components. Ownership confirmation cancel sends no request; failure retains successor and shows an alert.
+
+## Capture increment
+
+- RED: failed capture had only a toast; a capture continued appending after reauth locked during destination preparation.
+- GREEN: 16 capture-palette tests passed in the 22-test checkpoint above, including retained draft/retry and lock during destination lookup. Operation generations now invalidate preparation and stale success UI; existing appendCaptureBlock remains authoritative. An append already sent to the CRDT service cannot be retroactively cancelled by chrome.
+- Scoped Radix sheet, explicit close/return focus, input remains disabled while submitting, destination-search error/retry and stale-result guards; Cmd/Ctrl+Shift+C and Enter contract preserved.

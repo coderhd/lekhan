@@ -19,6 +19,7 @@ import { ensureDailyPage } from '@/lib/daily-notes'
 import { appendCaptureBlock, CaptureError } from '@/lib/quick-capture'
 import { useSessionReauth } from '@/components/session-reauth-provider'
 import { toast } from 'sonner'
+import styles from './workbench/overlays.module.css'
 
 const DEBOUNCE_MS = 200
 const SEARCH_LIMIT = 12
@@ -64,6 +65,12 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 	const [target, setTarget] = useState<CaptureTarget | null>(null)
 	const [mode, setMode] = useState<'capture' | 'pick'>('capture')
 	const [submitting, setSubmitting] = useState(false)
+	const [captureError, setCaptureError] = useState<string | null>(null)
+	const [pickerError, setPickerError] = useState(false)
+	const [pickerRetry, setPickerRetry] = useState(0)
+	const operationRef = useRef(0)
+	const submittingRef = useRef(false)
+	const returnFocusRef = useRef<HTMLElement | null>(null)
 	const [query, setQuery] = useState('')
 	const [rows, setRows] = useState<PageRow[]>([])
 	const [loading, setLoading] = useState(false)
@@ -72,6 +79,8 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 	const requestIdRef = useRef(0)
 
 	const reset = useCallback(() => {
+		setCaptureError(null)
+		setPickerError(false)
 		setText('')
 		setTarget(null)
 		setMode('capture')
@@ -82,7 +91,8 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 	}, [])
 
 	const openPalette = useCallback(() => {
-		if (!userId || isLocked) return
+		if (!userId || isLocked || submittingRef.current) return
+		returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
 		reset()
 		setOpen(true)
 	}, [userId, isLocked, reset])
@@ -112,7 +122,7 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 		const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
 			if (!mounted) return
 			setUserId(session?.user?.id ?? null)
-			if (!session) setOpen(false)
+			if (!session) { operationRef.current += 1; setOpen(false) }
 		})
 		return () => {
 			mounted = false
@@ -123,7 +133,9 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 	// Close if the reauth lock engages while open.
 	useEffect(() => {
 		if (isLocked) setOpen(false)
-	}, [isLocked])
+		operationRef.current += 1
+		return () => { operationRef.current += 1 }
+	}, [isLocked, userId, open])
 
 	// Page picker: recent pages when empty, ranked workspace search otherwise —
 	// the same `search_pages` RPC the `[[` autocomplete path uses.
@@ -131,6 +143,8 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 		if (!userId || !open || mode !== 'pick' || isLocked) return
 		const requestId = ++requestIdRef.current
 		setLoading(true)
+		setPickerError(false)
+		setRows([])
 		if (debounceRef.current) clearTimeout(debounceRef.current)
 		debounceRef.current = setTimeout(async () => {
 			try {
@@ -152,22 +166,29 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 				console.error('Quick capture page search failed:', error)
 				toast.error('Could not search pages. Please try again.')
 				setRows([])
+				setPickerError(true)
 			} finally {
 				if (requestId === requestIdRef.current) setLoading(false)
 			}
 		}, DEBOUNCE_MS)
 		return () => {
+			requestIdRef.current += 1
 			if (debounceRef.current) clearTimeout(debounceRef.current)
 		}
-	}, [query, userId, open, mode, isLocked])
+	}, [query, userId, open, mode, isLocked, pickerRetry])
 
 	const submit = useCallback(async () => {
 		const body = text.trim()
-		if (!body || submitting || !userId) return
+		if (!body || submittingRef.current || !userId || isLocked || !open) return
+		const operation = operationRef.current
+		const current = () => operation === operationRef.current
+		submittingRef.current = true
+		setCaptureError(null)
 
 		setSubmitting(true)
 		try {
 			const { data: { session } } = await supabase.auth.getSession()
+			if (!current()) return
 			const token = session?.access_token
 			if (!token) {
 				throw new CaptureError('forbidden', 'Sign in again to capture.')
@@ -179,14 +200,17 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 				// silently drops viewer writes, so fail before connecting rather
 				// than showing a success toast for a discarded capture.
 				const page = await fetchPageDetails(destination.id)
+				if (!current()) return
 				if (page.owner_id !== userId) {
 					const role = await fetchPageMemberRole(destination.id, userId)
+					if (!current()) return
 					if (role !== 'owner' && role !== 'editor') {
 						throw new CaptureError('forbidden', 'No edit access to that page.')
 					}
 				}
 			} else {
 				const workspace = await ensureWorkspace(userId)
+				if (!current()) return
 				const page = await ensureDailyPage(
 					{ id: workspace.id, owner_id: workspace.owner_id },
 					new Date(),
@@ -194,12 +218,14 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 				destination = { id: page.id, title: page.title }
 			}
 
+			if (!current()) return
 			const { bulletText } = await appendCaptureBlock({
 				pageId: destination.id,
 				token,
 				text: body,
 			})
 
+			if (!current()) return
 			setOpen(false)
 			reset()
 			// The dashboard Inbox card reads the indexed page text; tell it a
@@ -214,14 +240,17 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 			// and distinct: "Sign in again to capture." (expired/invalid token)
 			// versus "No edit access to that page." (viewer-only page). Keep the
 			// specific instruction instead of collapsing both into one.
+			if (!current()) return
 			const message = error instanceof CaptureError && error.code === 'forbidden'
 				? error.message
 				: 'Could not capture right now. Check your connection and try again.'
+			setCaptureError(message)
 			toast.error(message)
 		} finally {
+			submittingRef.current = false
 			setSubmitting(false)
 		}
-	}, [text, submitting, userId, target, reset, router])
+	}, [text, userId, target, reset, router, isLocked, open])
 
 	const onCaptureKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
 		if (event.key === 'Enter' && !event.shiftKey) {
@@ -231,6 +260,7 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 	}
 
 	const choosePage = (row: PageRow) => {
+		if (loading || pickerError || isLocked || !userId || !open) return
 		setTarget({ id: row.id, title: row.title })
 		setMode('capture')
 		setQuery('')
@@ -257,14 +287,15 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 			{userId && !isLocked && (
 				<Dialog.Root open={open} onOpenChange={next => { if (!next) setOpen(false) }}>
 					<Dialog.Portal>
-						<Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] animate-in fade-in" />
+						<Dialog.Overlay className={styles.scrim} />
 						<Dialog.Content
-							className="fixed top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-xl bg-surface-container rounded-2xl border border-black/10 dark:border-white/10 shadow-2xl z-[100000] animate-in zoom-in-95"
+							className={styles.sheet}
+							onCloseAutoFocus={event => { event.preventDefault(); returnFocusRef.current?.focus() }}
 							aria-describedby="quick-capture-description"
 						>
-							<Dialog.Title className="px-4 pt-4 text-sm font-bold uppercase tracking-wider text-on-surface-variant">
+							<div className={styles.heading}><Dialog.Title>
 								Quick capture
-							</Dialog.Title>
+							</Dialog.Title><Dialog.Close className={styles.close} aria-label="Close quick capture">✕</Dialog.Close></div>
 							<Dialog.Description id="quick-capture-description" className="px-4 pb-3 text-sm text-on-surface-variant">
 								{mode === 'pick'
 									? 'Choose the page that should receive this capture.'
@@ -283,7 +314,7 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 											type="text"
 											autoFocus
 											value={query}
-											onChange={event => setQuery(event.target.value)}
+											onChange={event => { requestIdRef.current += 1; setRows([]); setLoading(true); setQuery(event.target.value) }}
 											onKeyDown={onPickerKeyDown}
 											placeholder="Search pages…"
 											className="w-full bg-transparent outline-none text-on-surface placeholder:text-on-surface-variant/50"
@@ -292,6 +323,8 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 									<div className="max-h-[45vh] overflow-y-auto py-1">
 										{loading ? (
 											<p className="px-4 py-3 text-sm text-on-surface-variant">Searching…</p>
+										) : pickerError ? (
+											<div role="alert" className={styles.error}><p>Couldn’t search pages. Your query is still here.</p><button type="button" onClick={() => setPickerRetry(value => value + 1)}>Try again</button></div>
 										) : rows.length === 0 ? (
 											<p className="px-4 py-3 text-sm text-on-surface-variant">
 												{query.trim() ? 'No pages match your search.' : 'No recent pages.'}
@@ -304,7 +337,7 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 													onClick={() => choosePage(row)}
 													onMouseEnter={() => setSelectedIndex(index)}
 													className={`w-full flex items-center gap-sm px-4 py-2 text-left premium-transition ${
-														index === selectedIndex ? 'bg-primary/10 text-on-primary' : 'text-on-surface'
+														index === selectedIndex ? 'bg-surface-container-high text-on-surface' : 'text-on-surface'
 													} ${FOCUS_RING}`}
 												>
 													<span aria-hidden className="material-symbols-outlined text-base shrink-0">{row.icon || 'description'}</span>
@@ -324,6 +357,7 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 										<span aria-hidden className="material-symbols-outlined text-on-surface-variant shrink-0">bolt</span>
 										<input
 											id="quick-capture-input"
+											disabled={submitting}
 											type="text"
 											autoFocus
 											value={text}
@@ -340,6 +374,8 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 								</div>
 							)}
 
+							{captureError && <div role="alert" className={styles.error}>{captureError}</div>}
+
 							<div className="flex flex-wrap items-center justify-between gap-2 border-t border-black/5 dark:border-white/5 px-4 py-3">
 								<div className="flex items-center gap-2">
 									{mode === 'pick' ? (
@@ -355,6 +391,7 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 										<>
 											<button
 												type="button"
+												disabled={submitting}
 												onClick={() => setMode('pick')}
 												className={`flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/10 ${FOCUS_RING}`}
 											>
@@ -364,6 +401,7 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 											{target && (
 												<button
 													type="button"
+													disabled={submitting}
 													onClick={() => setTarget(null)}
 													className={`flex min-h-11 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/10 ${FOCUS_RING}`}
 												>
