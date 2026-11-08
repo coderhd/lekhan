@@ -9,6 +9,8 @@ type GlobalHeaderSlots = Partial<Record<GlobalHeaderSlotName, SlotEntry>>
 
 type GlobalHeaderSlotsContextValue = {
 	slots: GlobalHeaderSlots
+	workbenchChrome: boolean
+	registerWorkbenchChrome: () => () => void
 	registerSlot: (slot: GlobalHeaderSlotName, content: React.ReactNode) => () => void
 }
 
@@ -23,6 +25,16 @@ export function useGlobalHeaderSlots() {
 }
 
 export function GlobalHeaderProvider({ children }: { children: React.ReactNode }) {
+	const [chromeOwners, setChromeOwners] = useState<Set<symbol>>(() => new Set())
+	const registerWorkbenchChrome = useCallback(() => {
+		const id = Symbol()
+		setChromeOwners(current => new Set(current).add(id))
+		return () => setChromeOwners(current => {
+			const next = new Set(current)
+			next.delete(id)
+			return next
+		})
+	}, [])
 	const [slots, setSlots] = useState<GlobalHeaderSlots>({})
 
 	const registerSlot = useCallback((slot: GlobalHeaderSlotName, content: React.ReactNode) => {
@@ -34,7 +46,7 @@ export function GlobalHeaderProvider({ children }: { children: React.ReactNode }
 	}, [])
 
 	return (
-		<GlobalHeaderSlotsContext.Provider value={{ slots, registerSlot }}>
+		<GlobalHeaderSlotsContext.Provider value={{ slots, registerSlot, workbenchChrome: chromeOwners.size > 0, registerWorkbenchChrome }}>
 			{children}
 		</GlobalHeaderSlotsContext.Provider>
 	)

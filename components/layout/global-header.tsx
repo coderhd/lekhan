@@ -15,7 +15,7 @@ interface GlobalHeaderProps {
 
 export function GlobalHeader({ children, rightActions }: GlobalHeaderProps) {
 	const pathname = usePathname()
-	const { slots } = useGlobalHeaderSlots()
+	const { slots, workbenchChrome } = useGlobalHeaderSlots()
 	const [user, setUser] = useState<any | null>(null)
 	const [loading, setLoading] = useState(true)
 	const [menuOpen, setMenuOpen] = useState(false)
@@ -70,6 +70,7 @@ export function GlobalHeader({ children, rightActions }: GlobalHeaderProps) {
 	}, [])
 
 	if (
+		workbenchChrome ||
 		pathname === '/login' ||
 		pathname === '/signup' ||
 		pathname === '/forgot-password' ||

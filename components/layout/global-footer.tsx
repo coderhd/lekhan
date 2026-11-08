@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useGlobalHeaderSlots } from './global-header-context'
 import { isEditorPathname } from '@/lib/routes'
 
 import { useState, useEffect } from 'react'
@@ -64,6 +65,7 @@ const socialLinks = [
 
 export function GlobalFooter() {
 	const pathname = usePathname()
+	const { workbenchChrome } = useGlobalHeaderSlots()
 	const [isAuthenticated, setIsAuthenticated] = useState(false)
 	const [loading, setLoading] = useState(true)
 
@@ -91,7 +93,7 @@ export function GlobalFooter() {
 	}, [])
 
 	// Hide footer completely on editor page (edge-to-edge editor chrome)
-	if (isEditorPathname(pathname)) {
+	if (workbenchChrome || isEditorPathname(pathname)) {
 		return null
 	}
 

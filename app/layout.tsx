@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { GoogleAnalytics } from '@/components/analytics/google-analytics'
 import './globals.css'
+import './workbench.css'
 import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/components/theme-provider'
 import { GlobalFooter } from '@/components/layout/global-footer'
