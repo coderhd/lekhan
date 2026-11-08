@@ -38,5 +38,16 @@ describe('SettingsClient Tabbed Navigation', () => {
 
 		fireEvent.click(screen.getByRole('tab', { name: /Billing & Subscription/i }))
 		expect(screen.getByText(/Subscription & Plan/i)).toBeInTheDocument()
+		const billing = screen.getByRole('tab', { name: /Billing & Subscription/i })
+		billing.focus()
+		fireEvent.keyDown(billing, { key: 'ArrowRight' })
+		expect(screen.getByRole('tab', { name: /AI & Models/i })).toHaveFocus()
+		expect(screen.getByRole('tab', { name: /AI & Models/i })).toHaveAttribute('tabindex', '0')
+		expect(billing).toHaveAttribute('tabindex', '-1')
+		expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'settings-tab-ai')
+		expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page')
 	})
 })
+
+vi.mock('@/components/global-search-palette', () => ({ useGlobalSearch: () => ({ open: vi.fn() }) }))
+vi.mock('@/components/quick-capture-palette', () => ({ useQuickCapture: () => ({ open: vi.fn() }) }))

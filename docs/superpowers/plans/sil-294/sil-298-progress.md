@@ -25,3 +25,9 @@ Overlay open() hooks stay unchanged. No service/schema/storage changes planned.
 - RED: graph route had no shared main navigation; integration assertion failed.
 - GREEN: 6 suites / 54 tests passed: route loading/error/retry/no-workspace, graph map/navigation, filters, layout and serialization.
 - Uses the real loaded workspace name. A visible page list and map/list control share the renderer's already-filtered nodes; unresolved targets remain non-navigable. No graph writes or new data owner.
+
+## Settings increment
+
+- RED: arrow navigation changed selection without moving focus; confirmation assertions found direct nomination requests and no recoverable inline error.
+- GREEN: settings, ownership confirmation and capture recovery checkpoint: 4 suites / 22 tests passed. Earlier settings/provider/BYOK/unified suites: 6 suites / 41 tests passed before confirmation addition.
+- All current settings tabs retained, with roving tabindex, arrow/Home/End focus and panel associations. Provider registry/vault, billing and ownership API contracts remain owned by existing components. Ownership confirmation cancel sends no request; failure retains successor and shows an alert.

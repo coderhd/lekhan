@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { AlertTriangle, ArrowRightLeft, Check, Copy, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { supabase } from '@/lib/supabase'
 
 export interface OwnershipCandidate {
@@ -36,6 +37,9 @@ async function authHeaders(): Promise<Record<string, string>> {
  * workspace keeps its plan for the paid period.
  */
 export default function OwnershipTransferCard({ candidates }: { candidates: OwnershipCandidate[] }) {
+	const [confirmation, setConfirmation] = useState<'initiate' | 'accept' | null>(null)
+	const [error, setError] = useState<string | null>(null)
+	const actionRef = useRef(false)
 	const [successorId, setSuccessorId] = useState('')
 	const [pending, setPending] = useState<'initiate' | 'accept' | null>(null)
 	const [transfer, setTransfer] = useState<TransferState | null>(null)
@@ -58,6 +62,9 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 			toast.error('Choose the person who should take ownership.')
 			return
 		}
+		if (actionRef.current) return
+		actionRef.current = true
+		setError(null)
 		setPending('initiate')
 		try {
 			const res = await fetch('/api/billing/transfer', {
@@ -70,14 +77,20 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 			setTransfer(data as TransferState)
 			toast.success('Transfer prepared — the outgoing subscription is stopped at period end.')
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Could not start the transfer.')
+			const message = err instanceof Error ? err.message : 'Could not start the transfer.'
+			setError(message)
+			toast.error(message)
 		} finally {
+			actionRef.current = false
 			setPending(null)
 		}
 	}
 
 	const accept = async () => {
 		if (!acceptToken) return
+		if (actionRef.current) return
+		actionRef.current = true
+		setError(null)
 		setPending('accept')
 		try {
 			const res = await fetch('/api/billing/transfer', {
@@ -90,8 +103,11 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 			toast.success('You now own this workspace. Add a payment method to keep it after the paid period.')
 			window.location.assign('/settings')
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Could not accept the transfer.')
+			const message = err instanceof Error ? err.message : 'Could not accept the transfer.'
+			setError(message)
+			toast.error(message)
 		} finally {
+			actionRef.current = false
 			setPending(null)
 		}
 	}
@@ -108,6 +124,17 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 		}
 	}
 
+	const confirmationDialog = <ConfirmDialog
+		open={confirmation !== null}
+		onOpenChange={open => { if (!open) setConfirmation(null) }}
+		title={confirmation === 'accept' ? 'Accept workspace ownership?' : 'Prepare ownership transfer?'}
+		description={confirmation === 'accept'
+			? 'The workspace and its billing obligation move to your signed-in account. Add a payment method to renew after the paid period.'
+			: `Nominate ${options.find(candidate => candidate.id === successorId)?.email ?? 'the selected collaborator'}. Your outgoing subscription stops at period end. The successor must accept from their own account; pages and history stay intact.`}
+		confirmText={confirmation === 'accept' ? 'Confirm acceptance' : 'Confirm preparation'}
+		onConfirm={() => { void (confirmation === 'accept' ? accept() : initiate()) }}
+	/>
+
 	if (acceptToken) {
 		return (
 			<section className="bg-primary/5 border border-primary/30 rounded-2xl p-6 md:p-8 space-y-4">
@@ -123,7 +150,7 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 				<div className="flex flex-wrap gap-3">
 					<button
 						type="button"
-						onClick={() => void accept()}
+						onClick={() => setConfirmation('accept')}
 						disabled={pending === 'accept'}
 						className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-primary text-on-primary hover:bg-primary/90 transition-colors disabled:opacity-60"
 					>
@@ -138,6 +165,8 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 						Not now
 					</button>
 				</div>
+				{error && <p role="alert" className="text-error text-sm">{error}</p>}
+				{confirmationDialog}
 			</section>
 		)
 	}
@@ -180,6 +209,8 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 				<p className="text-[11px] text-on-surface-variant">
 					Pages, collaborators and history are never deleted by a transfer.
 				</p>
+				{error && <p role="alert" className="text-error text-sm">{error}</p>}
+				{confirmationDialog}
 			</section>
 		)
 	}
@@ -222,7 +253,7 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 					</div>
 					<button
 						type="button"
-						onClick={() => void initiate()}
+						onClick={() => setConfirmation('initiate')}
 						disabled={pending === 'initiate' || !successorId}
 						className="px-4 py-2.5 rounded-xl text-xs font-bold bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors disabled:opacity-50"
 					>
@@ -235,6 +266,8 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 				<AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-500" />
 				A workspace can have only one owner. The successor must not already own a Lekhan workspace.
 			</p>
+			{error && <p role="alert" className="text-error text-sm">{error}</p>}
+			{confirmationDialog}
 		</section>
 	)
 }

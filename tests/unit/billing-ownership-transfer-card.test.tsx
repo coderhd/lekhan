@@ -49,6 +49,8 @@ describe('OwnershipTransferCard (T13)', () => {
 			}),
 		})
 		fireEvent.click(screen.getByRole('button', { name: /Prepare transfer/i }))
+		expect(fetchMock).not.toHaveBeenCalled()
+		fireEvent.click(screen.getByRole('button', { name: 'Confirm preparation' }))
 
 		await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/billing/transfer', expect.objectContaining({ method: 'POST' })))
 		expect(await screen.findByText(/Transfer prepared/i)).toBeInTheDocument()
@@ -70,4 +72,18 @@ describe('OwnershipTransferCard (T13)', () => {
 		render(<OwnershipTransferCard candidates={[]} />)
 		expect(screen.getByText(/Invite someone to a page first/i)).toBeInTheDocument()
 	})
+	it('cancels nomination without a request and retains the selected collaborator after failure', async () => {
+		render(<OwnershipTransferCard candidates={[{ id: 'u-2', email: 'maya@example.com' }]} />)
+		fireEvent.change(screen.getByLabelText('New owner'), { target: { value: 'u-2' } })
+		fireEvent.click(screen.getByRole('button', { name: /Prepare transfer/i }))
+		fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+		expect(fetchMock).not.toHaveBeenCalled()
+		fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'Try later' }) })
+		fireEvent.click(screen.getByRole('button', { name: /Prepare transfer/i }))
+		fireEvent.click(screen.getByRole('button', { name: 'Confirm preparation' }))
+		await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Try later'))
+		expect(screen.getByLabelText('New owner')).toHaveValue('u-2')
+		expect(screen.queryByText('Transfer prepared')).toBeNull()
+	})
+
 })

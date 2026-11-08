@@ -37,3 +37,6 @@ describe('Settings AI Usage Tab (T12 credits retirement)', () => {
 		expect(screen.queryByText(/Credits Remaining/i)).not.toBeInTheDocument()
 	})
 })
+
+vi.mock('@/components/global-search-palette', () => ({ useGlobalSearch: () => ({ open: vi.fn() }) }))
+vi.mock('@/components/quick-capture-palette', () => ({ useQuickCapture: () => ({ open: vi.fn() }) }))

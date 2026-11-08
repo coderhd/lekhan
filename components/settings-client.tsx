@@ -17,6 +17,12 @@ import { AIProviderSettings } from './settings/ai-provider-settings'
 import { AIRegistryState } from '@/lib/ai/types'
 import { getDefaultAIRegistryState } from '@/lib/ai/catalog'
 import { encryptAIRegistry, syncVaultToSupabase, loadVaultFromSupabase } from '@/lib/ai/vault'
+import WorkbenchShell from './workbench/workbench-shell'
+import { useGlobalSearch } from './global-search-palette'
+import { useQuickCapture } from './quick-capture-palette'
+import ThemeToggle from './theme-toggle'
+import ProfileMenu from './profile-menu'
+import styles from './workbench/routes.module.css'
 import { getOrCreateUserVaultKey } from '@/lib/crypto'
 
 const EMPTY_PAGES: any[] = []
@@ -32,6 +38,8 @@ export default function SettingsClient({
 	setPages?: React.Dispatch<React.SetStateAction<any[]>>
 }) {
 	const router = useRouter()
+	const { open: onSearch } = useGlobalSearch()
+	const { open: onCapture } = useQuickCapture()
 	const [activeTab, setActiveTab] = useState<'profile' | 'collaborators' | 'usage' | 'billing' | 'ai'>('profile')
 	const [registryState, setRegistryState] = useState<AIRegistryState>(getDefaultAIRegistryState())
 	const [password, setPassword] = useState('')
@@ -304,41 +312,41 @@ export default function SettingsClient({
 	)
 
 	const handleTabKeyDown = (e: React.KeyboardEvent) => {
-		const tabs: Array<'ai' | 'profile' | 'collaborators' | 'usage' | 'billing'> = ['ai', 'profile', 'collaborators', 'usage', 'billing']
+		const tabs = ['ai', 'profile', 'collaborators', 'usage', 'billing'] as const
 		const currentIndex = tabs.indexOf(activeTab)
-		if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-			e.preventDefault()
-			const nextIndex = (currentIndex + 1) % tabs.length
-			setActiveTab(tabs[nextIndex])
-		} else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-			e.preventDefault()
-			const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length
-			setActiveTab(tabs[prevIndex])
-		}
+		let nextIndex = currentIndex
+		if (e.key === 'ArrowDown' || e.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length
+		else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabs.length) % tabs.length
+		else if (e.key === 'Home') nextIndex = 0
+		else if (e.key === 'End') nextIndex = tabs.length - 1
+		else return
+		e.preventDefault()
+		setActiveTab(tabs[nextIndex])
+		document.getElementById(`settings-tab-${tabs[nextIndex]}`)?.focus()
 	}
 
 	return (
-		<div className="h-screen bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container flex flex-col font-body-md overflow-hidden">
-			<main className="flex-1 overflow-hidden flex justify-center px-6 md:px-10">
-				<div className="w-full max-w-[1400px] h-full flex flex-col lg:flex-row gap-8 py-8">
+		<WorkbenchShell active="settings" workspaceName="Workspace" onSearch={onSearch} onCapture={onCapture}
+			headerActions={<><ThemeToggle />{user.id && <ProfileMenu user={{ ...user, id: user.id }} size="sm" />}</>}>
+			<main className={styles.route}>
+				<header><h1 className={styles.title}>Settings</h1><p className="text-sm text-on-surface-variant">Your profile, providers and workspace access.</p></header>
+				<div className={styles.settings}>
 					{/* Sidebar Navigation */}
-					<aside 
-						role="tablist" 
-						aria-label="Settings navigation" 
+					<aside
+						role="tablist"
+						aria-label="Settings navigation"
 						onKeyDown={handleTabKeyDown}
-						className="w-full lg:w-64 shrink-0 flex flex-row lg:flex-col gap-2 overflow-x-auto border-b lg:border-b-0 lg:border-r border-black/10 dark:border-white/10 pb-4 lg:pb-0 lg:pr-6"
+						className={styles.settingNav}
 					>
 						<button
 							id="settings-tab-ai"
 							type="button"
 							role="tab"
 							aria-selected={activeTab === 'ai'}
+							tabIndex={activeTab === 'ai' ? 0 : -1}
 							aria-controls="settings-panel-ai"
 							onClick={() => setActiveTab('ai')}
-							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'ai'
-								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
-								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
-								}`}
+
 						>
 							<Bot className="w-4 h-4" /> AI & Models
 						</button>
@@ -347,12 +355,10 @@ export default function SettingsClient({
 							type="button"
 							role="tab"
 							aria-selected={activeTab === 'profile'}
+							tabIndex={activeTab === 'profile' ? 0 : -1}
 							aria-controls="settings-panel-profile"
 							onClick={() => setActiveTab('profile')}
-							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'profile'
-								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
-								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
-								}`}
+
 						>
 							<User className="w-4 h-4" /> Profile & Security
 						</button>
@@ -361,12 +367,10 @@ export default function SettingsClient({
 							type="button"
 							role="tab"
 							aria-selected={activeTab === 'collaborators'}
+							tabIndex={activeTab === 'collaborators' ? 0 : -1}
 							aria-controls="settings-panel-collaborators"
 							onClick={() => setActiveTab('collaborators')}
-							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'collaborators'
-								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
-								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
-								}`}
+
 						>
 							<Users className="w-4 h-4" /> Collaborators & Access
 						</button>
@@ -375,12 +379,10 @@ export default function SettingsClient({
 							type="button"
 							role="tab"
 							aria-selected={activeTab === 'usage'}
+							tabIndex={activeTab === 'usage' ? 0 : -1}
 							aria-controls="settings-panel-usage"
 							onClick={() => setActiveTab('usage')}
-							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'usage'
-								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
-								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
-								}`}
+
 						>
 							<Sparkles className="w-4 h-4" /> AI Usage
 						</button>
@@ -389,27 +391,25 @@ export default function SettingsClient({
 							type="button"
 							role="tab"
 							aria-selected={activeTab === 'billing'}
+							tabIndex={activeTab === 'billing' ? 0 : -1}
 							aria-controls="settings-panel-billing"
 							onClick={() => setActiveTab('billing')}
-							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'billing'
-								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
-								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
-								}`}
+
 						>
 							<CreditCard className="w-4 h-4" /> Billing & Subscription
 						</button>
 					</aside>
 
 					{/* Main Tab Content */}
-					<div className="flex-1 h-full overflow-y-auto hide-scrollbar pb-16">
+					<div className={styles.settingsMain}>
 						{activeTab === 'ai' && (
 							<div id="settings-panel-ai" role="tabpanel" aria-labelledby="settings-tab-ai" className="space-y-8 w-full max-w-4xl">
 								<h2 className="text-2xl font-display-lg text-on-surface mb-2">AI & Models</h2>
 								<p className="text-sm text-on-surface-variant mb-6">Manage your connected AI providers, local models, and billing tiers.</p>
-								<AIProviderSettings 
-									user={user} 
-									registryState={registryState} 
-									onSaveRegistry={handleSaveRegistry} 
+								<AIProviderSettings
+									user={user}
+									registryState={registryState}
+									onSaveRegistry={handleSaveRegistry}
 								/>
 							</div>
 						)}
@@ -437,9 +437,9 @@ export default function SettingsClient({
 									<p className="text-sm text-on-surface-variant mb-6">Update your password to keep your account secure.</p>
 									<form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
 										<div>
-											<label className="block text-xs font-label-sm text-on-surface-variant uppercase tracking-wider mb-2">New Password</label>
+											<label htmlFor="settings-new-password" className="block text-sm mb-2">New Password</label>
 											<input
-												type="password"
+												type="password" id="settings-new-password" autoComplete="new-password"
 												value={password}
 												onChange={(e) => setPassword(e.target.value)}
 												className="w-full bg-black/5 dark:bg-surface-dim border border-black/10 dark:border-outline/30 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container/50 transition-all placeholder:text-on-surface-variant/50"
@@ -448,9 +448,9 @@ export default function SettingsClient({
 											/>
 										</div>
 										<div>
-											<label className="block text-xs font-label-sm text-on-surface-variant uppercase tracking-wider mb-2">Confirm Password</label>
+											<label htmlFor="settings-confirm-password" className="block text-sm mb-2">Confirm Password</label>
 											<input
-												type="password"
+												type="password" id="settings-confirm-password" autoComplete="new-password"
 												value={confirmPassword}
 												onChange={(e) => setConfirmPassword(e.target.value)}
 												className="w-full bg-black/5 dark:bg-surface-dim border border-black/10 dark:border-outline/30 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container/50 transition-all placeholder:text-on-surface-variant/50"
@@ -460,13 +460,13 @@ export default function SettingsClient({
 										</div>
 
 										{passwordError && (
-											<div className="p-3 bg-error-container/20 border border-error/50 rounded-lg text-error text-sm font-medium flex items-center gap-2 mt-4">
+											<div role="alert" className="p-3 bg-error-container/20 border border-error/50 rounded-lg text-error text-sm font-medium flex items-center gap-2 mt-4">
 												<span className="material-symbols-outlined text-[18px]">error</span>
 												{passwordError}
 											</div>
 										)}
 										{passwordSuccess && (
-											<div className="p-3 bg-[#a0f399]/20 border border-[#a0f399]/50 rounded-lg text-[#a0f399] text-sm font-medium flex items-center gap-2 mt-4">
+											<div role="status" className="p-3 bg-[#a0f399]/20 border border-[#a0f399]/50 rounded-lg text-[#a0f399] text-sm font-medium flex items-center gap-2 mt-4">
 												<span className="material-symbols-outlined text-[18px]">check_circle</span>
 												{passwordSuccess}
 											</div>
@@ -636,6 +636,6 @@ export default function SettingsClient({
 					</div>
 				</div>
 			</main>
-		</div>
+		</WorkbenchShell>
 	)
 }
