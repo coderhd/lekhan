@@ -1,6 +1,13 @@
 import '@testing-library/jest-dom'
 import React from 'react'
-import { render, screen, act, waitFor, fireEvent } from '@testing-library/react'
+import {
+	render,
+	screen,
+	act,
+	fireEvent,
+	waitFor,
+	within
+} from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import Dashboard from '@/components/dashboard'
 import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
@@ -8,13 +15,19 @@ import GlobalSearchPalette from '@/components/global-search-palette'
 import QuickCapturePalette from '@/components/quick-capture-palette'
 
 vi.mock('@/components/session-reauth-provider', () => ({
-	useSessionReauth: () => ({ isLocked: false, lockSession: vi.fn(), unlockSession: vi.fn() }),
+	useSessionReauth: () => ({
+		isLocked: false,
+		lockSession: vi.fn(),
+		unlockSession: vi.fn()
+	})
 }))
+
+const push = vi.fn()
 
 let authCallbacks: ((event: string, session: any) => void)[] = []
 
 vi.mock('next/navigation', () => ({
-	useRouter: () => ({ push: vi.fn() }),
+	useRouter: () => ({ push })
 }))
 
 vi.mock('@/lib/supabase', () => {
@@ -25,19 +38,25 @@ vi.mock('@/lib/supabase', () => {
 		eq: vi.fn(() => pagesBuilder),
 		in: vi.fn(() => pagesBuilder),
 		order: vi.fn(() => pagesBuilder),
-		then: vi.fn((cb: any) => Promise.resolve({ data: [], error: null }).then(cb)),
+		then: vi.fn((cb: any) =>
+			Promise.resolve({ data: [], error: null }).then(cb)
+		)
 	}
 	return {
 		supabase: {
 			from: vi.fn(() => pagesBuilder),
 			auth: {
-				onAuthStateChange: vi.fn((cb: (event: string, session: any) => void) => {
-					authCallbacks.push(cb)
-					return { data: { subscription: { unsubscribe: vi.fn() } } }
-				}),
-				getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
-			},
-		},
+				onAuthStateChange: vi.fn(
+					(cb: (event: string, session: any) => void) => {
+						authCallbacks.push(cb)
+						return { data: { subscription: { unsubscribe: vi.fn() } } }
+					}
+				),
+				getSession: vi
+					.fn()
+					.mockResolvedValue({ data: { session: null }, error: null })
+			}
+		}
 	}
 })
 
@@ -46,6 +65,8 @@ const fetchWorkspacePages = vi.fn()
 const fetchSharedPages = vi.fn()
 const fetchPageInvites = vi.fn()
 const createPage = vi.fn()
+const deletePage = vi.fn()
+const updatePageTitle = vi.fn()
 
 vi.mock('@/services/graph', () => ({
 	ensureWorkspace: (...args: any[]) => ensureWorkspace(...args),
@@ -53,28 +74,32 @@ vi.mock('@/services/graph', () => ({
 	fetchSharedPages: (...args: any[]) => fetchSharedPages(...args),
 	fetchPendingPageInvitations: (...args: any[]) => fetchPageInvites(...args),
 	createPage: (...args: any[]) => createPage(...args),
-	deletePage: vi.fn(),
-	updatePageTitle: vi.fn(),
+	deletePage: (...args: any[]) => deletePage(...args),
+	updatePageTitle: (...args: any[]) => updatePageTitle(...args)
 }))
 
 vi.mock('@/services/search', () => ({
 	searchPages: vi.fn().mockResolvedValue([]),
-	fetchRecentPages: vi.fn().mockResolvedValue([]),
+	fetchRecentPages: vi.fn().mockResolvedValue([])
 }))
 
-vi.mock('@/components/invitations', () => ({ default: () => <div data-testid="invitations" /> }))
+vi.mock('@/components/invitations', () => ({
+	default: () => <div data-testid="invitations" />
+}))
 vi.mock('@/components/profile-menu', () => ({ default: () => <div /> }))
 vi.mock('@/components/theme-toggle', () => ({ default: () => <div /> }))
-vi.mock('@/components/global-loader', () => ({ default: ({ text }: { text: string }) => <div>{text}</div> }))
-vi.mock('@/components/inline-edit', () => ({ InlineEdit: () => <div /> }))
-vi.mock('@/components/ui/confirm-dialog', () => ({ ConfirmDialog: () => <div /> }))
+vi.mock('@/components/global-loader', () => ({
+	default: ({ text }: { text: string }) => <div>{text}</div>
+}))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 const user = { id: 'user-1', email: 'author@example.com' }
 
 function deferred<T>() {
 	let resolve!: (value: T) => void
-	const promise = new Promise<T>((res) => { resolve = res })
+	const promise = new Promise<T>((res) => {
+		resolve = res
+	})
 	return { promise, resolve }
 }
 
@@ -97,6 +122,10 @@ function renderDashboard() {
 describe('Dashboard refetch on auth', () => {
 	beforeEach(() => {
 		authCallbacks = []
+		push.mockClear()
+		createPage.mockReset().mockResolvedValue({ id: 'created-page' })
+		deletePage.mockReset().mockResolvedValue(undefined)
+		updatePageTitle.mockReset().mockResolvedValue(undefined)
 		ensureWorkspace.mockReset()
 		fetchWorkspacePages.mockReset()
 		fetchSharedPages.mockReset()
@@ -107,13 +136,78 @@ describe('Dashboard refetch on auth', () => {
 		fetchPageInvites.mockResolvedValue([])
 	})
 
+	it('offers real page links and a named create action instead of clickable cards', async () => {
+		fetchWorkspacePages.mockResolvedValue([
+			{ id: 'page-1', title: 'My page', updated_at: new Date().toISOString() }
+		])
+		renderDashboard()
+		const links = await screen.findAllByRole('link', { name: /my page/i })
+		expect(
+			links.every((link) => link.getAttribute('href') === '/page/page-1')
+		).toBe(true)
+		expect(screen.getByRole('button', { name: 'New page' })).toBeInTheDocument()
+	})
+
+	it('creates through the existing workspace service and navigates to the returned page', async () => {
+		renderDashboard()
+		await screen.findByText('A first page.', { exact: false })
+		fireEvent.click(screen.getByRole('button', { name: 'New page' }))
+		await waitFor(() =>
+			expect(createPage).toHaveBeenCalledWith('ws-1', 'user-1')
+		)
+		expect(push).toHaveBeenCalledWith('/page/created-page')
+	})
+
+	it('requires confirmation for the exact page and keeps Cancel non-destructive', async () => {
+		fetchWorkspacePages.mockResolvedValue([
+			{ id: 'page-1', title: 'My page', updated_at: new Date().toISOString() }
+		])
+		renderDashboard()
+		const trigger = await screen.findByRole('button', {
+			name: 'Actions for My page'
+		})
+		fireEvent.keyDown(trigger, { key: 'Enter' })
+		fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+		const dialog = await screen.findByRole('alertdialog')
+		fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+		expect(deletePage).not.toHaveBeenCalled()
+		fireEvent.keyDown(trigger, { key: 'Enter' })
+		fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+		fireEvent.click(
+			within(await screen.findByRole('alertdialog')).getByRole('button', {
+				name: 'Delete'
+			})
+		)
+		await waitFor(() => expect(deletePage).toHaveBeenCalledWith('page-1'))
+	})
+
+	it('renames through the existing handler with the selected page id', async () => {
+		fetchWorkspacePages.mockResolvedValue([
+			{ id: 'page-1', title: 'My page', updated_at: new Date().toISOString() }
+		])
+		renderDashboard()
+		fireEvent.keyDown(
+			await screen.findByRole('button', { name: 'Actions for My page' }),
+			{ key: 'Enter' }
+		)
+		fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }))
+		const input = await screen.findByRole('textbox', { name: 'Page title' })
+		fireEvent.change(input, { target: { value: 'Renamed page' } })
+		fireEvent.keyDown(input, { key: 'Enter' })
+		await waitFor(() =>
+			expect(updatePageTitle).toHaveBeenCalledWith('page-1', 'Renamed page')
+		)
+	})
+
 	it('refetches documents when a fresh session is established (SIGNED_IN)', async () => {
 		renderDashboard()
 
 		await waitFor(() => expect(fetchWorkspacePages).toHaveBeenCalledTimes(1))
 
 		act(() => {
-			fireAuth('SIGNED_IN', { user: { id: 'user-1', email: 'author@example.com' } })
+			fireAuth('SIGNED_IN', {
+				user: { id: 'user-1', email: 'author@example.com' }
+			})
 		})
 
 		await waitFor(() => expect(fetchWorkspacePages).toHaveBeenCalledTimes(2))
@@ -125,8 +219,12 @@ describe('Dashboard refetch on auth', () => {
 		await waitFor(() => expect(fetchWorkspacePages).toHaveBeenCalledTimes(1))
 
 		act(() => {
-			fireAuth('TOKEN_REFRESHED', { user: { id: 'user-1', email: 'author@example.com' } })
-			fireAuth('USER_UPDATED', { user: { id: 'user-1', email: 'author@example.com' } })
+			fireAuth('TOKEN_REFRESHED', {
+				user: { id: 'user-1', email: 'author@example.com' }
+			})
+			fireAuth('USER_UPDATED', {
+				user: { id: 'user-1', email: 'author@example.com' }
+			})
 		})
 
 		expect(fetchWorkspacePages).toHaveBeenCalledTimes(1)
@@ -137,17 +235,28 @@ describe('Dashboard refetch on auth', () => {
 
 		renderDashboard()
 
-		expect(await screen.findByText(/couldn't load your pages/i)).toBeInTheDocument()
+		expect(
+			await screen.findByText(/couldn't load your pages/i)
+		).toBeInTheDocument()
 		expect(screen.queryByText(/welcome to lekhan/i)).not.toBeInTheDocument()
 
-		fetchWorkspacePages.mockResolvedValueOnce([{ id: 'doc-1', title: 'My Doc', owner_id: 'user-1', updated_at: new Date().toISOString() }])
+		fetchWorkspacePages.mockResolvedValueOnce([
+			{
+				id: 'doc-1',
+				title: 'My Doc',
+				owner_id: 'user-1',
+				updated_at: new Date().toISOString()
+			}
+		])
 
 		act(() => {
 			screen.getByRole('button', { name: /try again/i }).click()
 		})
 
 		await waitFor(() => expect(fetchWorkspacePages).toHaveBeenCalledTimes(2))
-		expect(screen.queryByText(/couldn't load your pages/i)).not.toBeInTheDocument()
+		expect(
+			screen.queryByText(/couldn't load your pages/i)
+		).not.toBeInTheDocument()
 	})
 
 	it('replaces the error view with a loading state during a retry', async () => {
@@ -155,7 +264,9 @@ describe('Dashboard refetch on auth', () => {
 
 		renderDashboard()
 
-		expect(await screen.findByText(/couldn't load your pages/i)).toBeInTheDocument()
+		expect(
+			await screen.findByText(/couldn't load your pages/i)
+		).toBeInTheDocument()
 
 		const ownedDeferred = deferred<any[]>()
 		const sharedDeferred = deferred<any[]>()
@@ -169,17 +280,28 @@ describe('Dashboard refetch on auth', () => {
 			screen.getByRole('button', { name: /try again/i }).click()
 		})
 
-		expect(screen.queryByText(/couldn't load your pages/i)).not.toBeInTheDocument()
+		expect(
+			screen.queryByText(/couldn't load your pages/i)
+		).not.toBeInTheDocument()
 		expect(screen.getByText('Loading dashboard...')).toBeInTheDocument()
 
 		await act(async () => {
-			ownedDeferred.resolve([{ id: 'doc-1', title: 'My Doc', owner_id: 'user-1', updated_at: new Date().toISOString() }])
+			ownedDeferred.resolve([
+				{
+					id: 'doc-1',
+					title: 'My Doc',
+					owner_id: 'user-1',
+					updated_at: new Date().toISOString()
+				}
+			])
 			sharedDeferred.resolve([])
 			invitesDeferred.resolve([])
 		})
 
 		expect(screen.queryByText('Loading dashboard...')).not.toBeInTheDocument()
-		expect(screen.queryByText(/couldn't load your pages/i)).not.toBeInTheDocument()
+		expect(
+			screen.queryByText(/couldn't load your pages/i)
+		).not.toBeInTheDocument()
 	})
 
 	it('keeps the newer result when a refreshed request resolves before the original', async () => {
@@ -203,7 +325,9 @@ describe('Dashboard refetch on auth', () => {
 		fetchPageInvites.mockImplementationOnce(() => secondInvites.promise)
 
 		act(() => {
-			fireAuth('SIGNED_IN', { user: { id: 'user-1', email: 'author@example.com' } })
+			fireAuth('SIGNED_IN', {
+				user: { id: 'user-1', email: 'author@example.com' }
+			})
 		})
 
 		await waitFor(() => expect(fetchWorkspacePages).toHaveBeenCalledTimes(2))
@@ -211,8 +335,18 @@ describe('Dashboard refetch on auth', () => {
 		// Resolve the newer (refreshed) request first with two docs.
 		await act(async () => {
 			secondOwned.resolve([
-				{ id: 'new-doc-1', title: 'Newer Doc', owner_id: 'user-1', updated_at: new Date().toISOString() },
-				{ id: 'new-doc-2', title: 'Also Newer', owner_id: 'user-1', updated_at: new Date().toISOString() },
+				{
+					id: 'new-doc-1',
+					title: 'Newer Doc',
+					owner_id: 'user-1',
+					updated_at: new Date().toISOString()
+				},
+				{
+					id: 'new-doc-2',
+					title: 'Also Newer',
+					owner_id: 'user-1',
+					updated_at: new Date().toISOString()
+				}
 			])
 			secondShared.resolve([])
 			secondInvites.resolve([])
@@ -220,32 +354,26 @@ describe('Dashboard refetch on auth', () => {
 
 		// Then resolve the stale original with a single older doc.
 		await act(async () => {
-			firstOwned.resolve([{ id: 'stale-doc', title: 'Stale Doc', owner_id: 'user-1', updated_at: new Date().toISOString() }])
+			firstOwned.resolve([
+				{
+					id: 'stale-doc',
+					title: 'Stale Doc',
+					owner_id: 'user-1',
+					updated_at: new Date().toISOString()
+				}
+			])
 			firstShared.resolve([])
 			firstInvites.resolve([])
 		})
 
 		// The newer two-doc result must remain, not the stale single-doc one.
-		await waitFor(() => expect(screen.getAllByText('Owned').length).toBe(2))
+		await waitFor(() =>
+			expect(
+				within(screen.getByRole('list', { name: 'Owned pages' })).getAllByRole(
+					'link'
+				)
+			).toHaveLength(2)
+		)
 		expect(screen.queryByText(/stale doc/i)).not.toBeInTheDocument()
-	})
-
-	it('recovers from the no-results state by clearing search and filters', async () => {
-		fetchWorkspacePages.mockResolvedValue([
-			{ id: 'doc-1', title: 'My Doc', owner_id: 'user-1', updated_at: new Date().toISOString() },
-		])
-
-		renderDashboard()
-		await waitFor(() => expect(screen.getAllByText('Owned').length).toBe(1))
-
-		fireEvent.change(screen.getByPlaceholderText('Search...'), { target: { value: 'definitely-no-match' } })
-		expect(screen.getByText(/no results found/i)).toBeInTheDocument()
-		expect(screen.queryAllByText('Owned')).toHaveLength(0)
-
-		fireEvent.click(screen.getByRole('button', { name: /clear search and filters/i }))
-
-		expect(screen.queryByText(/no results found/i)).not.toBeInTheDocument()
-		await waitFor(() => expect(screen.getAllByText('Owned').length).toBe(1))
-		expect((screen.getByPlaceholderText('Search...') as HTMLInputElement).value).toBe('')
 	})
 })

@@ -91,6 +91,7 @@ export function InlineEdit({
 				<>
 					<input
 						type='text'
+						aria-label='Page title'
 						value={value}
 						onChange={(e) => setValue(e.target.value)}
 						onKeyDown={(e) => {
@@ -102,7 +103,7 @@ export function InlineEdit({
 						placeholder='Untitled Document'
 					/>
 					<div className="flex items-center gap-1 shrink-0">
-						<button onClick={handleSave} className="text-primary hover:bg-primary/10 rounded-full premium-transition flex items-center justify-center p-1">
+						<button aria-label="Save page title" onClick={handleSave} className="text-primary hover:bg-primary/10 rounded-full premium-transition flex items-center justify-center p-1">
 							<span className={cn("material-symbols-outlined text-[18px]", iconClassName)}>check</span>
 						</button>
 						<button 
@@ -129,7 +130,7 @@ export function InlineEdit({
 					>
 						{value}
 					</span>
-					<button 
+					<button aria-label="Cancel title editing"
 						onClick={(e) => {
 							e.preventDefault()
 							e.stopPropagation()
