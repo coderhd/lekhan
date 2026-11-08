@@ -6,7 +6,7 @@
 
 **Architecture:** Keep route guards, feature state, services, editor lifecycle, and storage in their current owners. Introduce shared presentation components only after reading the approved source annotations. Preserve the existing semantic light/dark tokens and installed Radix primitives.
 
-**Tech stack:** Next.js 16.2, React 19.2, TypeScript, Tailwind 3, Radix, TipTap/Yjs; Vitest/Testing Library and Playwright.
+**Tech stack:** Next.js (installed runtime reports 16.3.2), React 19.2, TypeScript, Tailwind 3, Radix, TipTap/Yjs; Vitest/Testing Library and Playwright.
 
 **Spec:** `docs/superpowers/specs/sil-279-spec.md`; parent plan: `docs/superpowers/plans/sil-279/implementation_plan.md`.
 
@@ -15,9 +15,9 @@
 - [x] Read the assignment, parent SIL-279 description and authenticated board approval, AGENTS.md, CONTEXT.md, DESIGN.md, SDLC workflow, and ADRs 0001/0003/0004/0005 (markdown engine)/0006.
 - [x] Confirm scope: workspace, page editor, legacy redirect, graph, settings, auth/first-run/public access, global search and quick capture.
 - [x] Confirm source-level route and feature ownership below.
-- [ ] Read the approved Open Design handoff, design system, page annotations, states, and reflow instructions.
-- [ ] Obtain the QA-authored pre-build test plan required by `docs/agents/sdlc-workflow.md`.
-- [ ] Establish an isolated worktree before product edits; the shared checkout is concurrently used by SIL-291 and contains unrelated changes.
+- [x] Read the approved Open Design handoff, design-system/catalog, renderer source, tokens and reflow instructions.
+- [x] Independent QA pre-build plan recorded in `qa-test-plan.md` (17 acceptance IDs).
+- [x] Isolated local checkout at `.paperclip-scratch/sil-294/worktree`, branch `feat/sil-294-workbench-ui`. The sandbox denied linked-worktree metadata writes; the local clone preserves unrelated shared edits.
 
 The authenticated board comment on SIL-279 (2026-11-08, `30c66686-a150-4dbc-ac87-feaf52aadc17`) approves the exact artifact below. Earlier parent-spec claims that selection is pending are stale; do not ask the user to select again. Likewise, the parent's old session-specific prohibition on running tests does not apply to this assignment, which explicitly requests the full verification command.
 
@@ -25,9 +25,9 @@ Approved index: `od://app/api/projects/9fa925fe-a46d-45ce-97b0-e5038bb1e37a/prev
 
 Approved handoff: `od://app/api/projects/9fa925fe-a46d-45ce-97b0-e5038bb1e37a/preview/222f49aa-228c-4707-a433-fdd3160e20e4/workbench-mockups/handoff.md`
 
-**Current blocker:** Open Design is installed at `/Applications/Open Design.app`, but `codex mcp get open-design --json` returns `No MCP server named 'open-design' found`, and this session exposes no Open Design tools. The registration target is outside this run's writable roots. SIL-293 already belongs to DevOps Engineer to provide authorized access or export these exact files. Do not duplicate that issue, guess a localhost endpoint, or implement guessed compositions. Once SIL-293 supplies a readable export/control path, inspect the files and replace this readiness gate with the source-specific dimensions and state mapping.
+**Access resolved:** The operator registration is in the desktop Codex configuration while the background agent uses a separate configuration. Using the already configured signed local MCP executable with read-only `get_project`, `list_files` and `get_file` calls succeeded. The returned resolved project directory supplied the exact `workbench-mockups` sources. No configuration, account or generation mode was changed. A reference copy is at `.paperclip-scratch/sil-294/reference`.
 
-No product files have been changed by SIL-294 at this checkpoint. The proposed shell contract and implementation tasks below remain preparatory until source annotations are read.
+**Implementation checkpoint:** `a680dbe` commits the shared shell/props and QA plan; `8b781ea` commits the workspace page-list composition and existing action wiring. These are local commits in the isolated checkout, not pushed or merged. Remaining route families and integrated review are still required.
 
 ## Global constraints
 
@@ -132,6 +132,12 @@ Keep `GlobalHeaderSlotName = 'main' | 'right'` and the two overlay `open()` cont
 - [ ] Request fresh-context clean-room subagent review of `git diff origin/main...HEAD` on all four AGENTS.md axes and QA sign-off; save `docs/reviews/pr-<id>-review.md` and fix valid findings.
 - [ ] Create the PR only after internal review; register PR/evidence in Paperclip. Respect Pullfrog/CodeRabbit and CI gates for any later merge. Do not deploy.
 
-## Checkpoint evidence
+## Checkpoint evidence — foundation and workspace
 
-This checkpoint performed read-only source and control-plane inspection plus this plan. Product verification, visual comparisons, performance measurements and clean-room review have not run because the approved artifact is unreadable here. No application completion claim is supported yet.
+- Baseline: header/navigation/search suites, 21 tests passed before edits.
+- RED: shared shell module absent; then page-link regression failed against the old card markup; rename-input accessible-name regression failed before the label addition.
+- GREEN: 5 suites / 38 tests passed (`workbench-shell`, `global-header`, `dashboard-refetch-on-auth`, `daily-strip`, `inbox-card`). Covers actual routes/current destination, mobile dialog Escape/focus and edit-subtree preservation, search action handoff, stale fetch/retry, real create/rename/delete IDs and non-destructive Cancel.
+- `npm run typecheck` passed. Targeted ESLint on changed TypeScript files passed. `git diff --check` passed.
+- Browser attempts: both installed Chrome and Playwright headless shell aborted before navigation (SIGABRT/SIGTRAP; process cleanup reported EPERM). The Next development server also hit EMFILE watcher limits; stopped through its managed exec session. No screenshots, composed-surface contrast, actual mobile keyboard or screen-reader results are claimed.
+- DailyStrip and InboxCard remain in the workspace context, preserving features not illustrated in the sample. Date/title filters remain above the real list. These production-content adaptations require final design comparison.
+- Full repository command, remaining route migrations, visual comparison, performance measurements, independent clean-room gate and PR remain pending.
