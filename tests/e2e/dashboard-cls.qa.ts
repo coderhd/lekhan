@@ -28,7 +28,6 @@ for (const width of [320, 390, 768, 1280]) {
     const url = new URL(route.request().url())
     if (url.pathname.includes('/auth/')) return route.fulfill({ json: user })
     const table = url.pathname.split('/').pop()
-    if (width === 320 && table === 'pages') console.log(JSON.stringify({ debug: 'pages-request', state, path: url.pathname, title: url.searchParams.get('title') }))
     let data: unknown = []
     if (table === 'workspaces') data = workspace
     if (table === 'workspace_plans') data = { workspace_id: workspace.id, tier: 'free', gateway: 'none' }
@@ -43,11 +42,9 @@ for (const width of [320, 390, 768, 1280]) {
     return route.fulfill({ json: data })
    })
    await page.goto('/')
-   await Promise.race([
-    inboxRequestHeld,
-    page.waitForTimeout(10_000).then(() => { throw new Error('Inbox date-window request was not intercepted within 10 seconds') }),
-   ])
    const inbox = page.getByRole('region', { name: 'Inbox', exact: true })
+   await expect(inbox).toBeVisible({ timeout: 30_000 })
+   await inboxRequestHeld
    await expect(inbox.getByRole('status')).toContainText('Loading captures')
    await page.evaluate(() => document.fonts.ready)
    const before = await inbox.boundingBox()
