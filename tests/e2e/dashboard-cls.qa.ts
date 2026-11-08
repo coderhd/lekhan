@@ -32,7 +32,7 @@ for (const width of [320, 390, 768, 1280]) {
     if (table === 'workspaces') data = workspace
     if (table === 'workspace_plans') data = { workspace_id: workspace.id, tier: 'free', gateway: 'none' }
     if (table === 'pages') {
-     if (url.searchParams.get('title')?.split(',').length === 14) {
+     if ((url.searchParams.get('title')?.split(',').length ?? 0) > 1) {
       markInboxRequestHeld()
       await pending
       if (state === 'error') return route.fulfill({ status: 500, json: { message: 'Synthetic inbox failure' } })
