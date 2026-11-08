@@ -1,3 +1,4 @@
+import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, cleanup, waitFor } from '@testing-library/react'
 import EditorWorkspace from '../../components/editor-workspace'
@@ -90,14 +91,14 @@ vi.mock('@tiptap/react', async (importOriginal) => {
 
 function editorTree(pageId = 'page-1') {
 	return (
-		<GlobalSearchPalette>
+		<GlobalHeaderProvider><GlobalSearchPalette>
 			<EditorWorkspace
 				pageId={pageId}
 				initialTitle="Test Doc"
 				token="token-1"
 				currentUser={{ id: 'test-user', email: 'test@example.com' }}
 			/>
-		</GlobalSearchPalette>
+		</GlobalSearchPalette></GlobalHeaderProvider>
 	)
 }
 
@@ -242,3 +243,5 @@ describe('Obsidian paste through the live editor', () => {
 		expect(document.querySelector('.ProseMirror')?.textContent ?? '').not.toContain('Body heading')
 	})
 })
+
+vi.mock('@/components/quick-capture-palette', () => ({ useQuickCapture: () => ({ open: vi.fn() }) }))

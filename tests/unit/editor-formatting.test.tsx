@@ -1,3 +1,4 @@
+import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import EditorWorkspace from '../../components/editor-workspace'
@@ -59,14 +60,14 @@ describe('EditorWorkspace Formatting', () => {
 		const mockUser = { id: 'test-user', email: 'test@example.com' }
 		
 		render(
-			<GlobalSearchPalette>
+			<GlobalHeaderProvider><GlobalSearchPalette>
 				<EditorWorkspace 
 					pageId="page-1" 
 					initialTitle="Test Doc"
 					token="token-1" 
 					currentUser={mockUser} 
 				/>
-			</GlobalSearchPalette>
+			</GlobalSearchPalette></GlobalHeaderProvider>
 		)
 
 		expect(await screen.findByTitle('Bold')).toBeDefined()
@@ -75,3 +76,5 @@ describe('EditorWorkspace Formatting', () => {
 		expect(await screen.findByTitle('Ordered List')).toBeDefined()
 	})
 })
+
+vi.mock('@/components/quick-capture-palette', () => ({ useQuickCapture: () => ({ open: vi.fn() }) }))

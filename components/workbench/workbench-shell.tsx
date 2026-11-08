@@ -179,6 +179,7 @@ export default function WorkbenchShell({
 						type="button"
 						className="wb-icon-button wb-header-search"
 						aria-label="Search pages"
+						title="Search (Cmd+K)"
 						onClick={onSearch}
 					>
 						<Search aria-hidden="true" />

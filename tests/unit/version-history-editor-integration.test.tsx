@@ -1,3 +1,4 @@
+import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import EditorWorkspace from '../../components/editor-workspace'
@@ -97,9 +98,9 @@ describe('VersionHistory Editor Integration', () => {
 	it('should open and close the version history drawer when clicking the header button', async () => {
 		const mockUser = { id: 'test-user', email: 'test@example.com', full_name: 'Test User' }
 		render(
-			<GlobalSearchPalette>
+			<GlobalHeaderProvider><GlobalSearchPalette>
 				<EditorWorkspace pageId="page-1" initialTitle="Test Doc" token="token-1" currentUser={mockUser} />
-			</GlobalSearchPalette>
+			</GlobalSearchPalette></GlobalHeaderProvider>
 		)
 
 		await screen.findByTitle('Version History')
@@ -112,9 +113,9 @@ describe('VersionHistory Editor Integration', () => {
 	it('should open the version history drawer with Cmd+Shift+S', async () => {
 		const mockUser = { id: 'test-user', email: 'test@example.com', full_name: 'Test User' }
 		render(
-			<GlobalSearchPalette>
+			<GlobalHeaderProvider><GlobalSearchPalette>
 				<EditorWorkspace pageId="page-1" initialTitle="Test Doc" token="token-1" currentUser={mockUser} />
-			</GlobalSearchPalette>
+			</GlobalSearchPalette></GlobalHeaderProvider>
 		)
 
 		expect(screen.queryByText('Version History')).toBeNull()
@@ -127,9 +128,9 @@ describe('VersionHistory Editor Integration', () => {
 		vi.useFakeTimers()
 		const mockUser = { id: 'test-user', email: 'test@example.com', full_name: 'Test User' }
 		render(
-			<GlobalSearchPalette>
+			<GlobalHeaderProvider><GlobalSearchPalette>
 				<EditorWorkspace pageId="page-1" initialTitle="Test Doc" token="token-1" currentUser={mockUser} />
-			</GlobalSearchPalette>
+			</GlobalSearchPalette></GlobalHeaderProvider>
 		)
 
 		await vi.advanceTimersByTimeAsync(900000)
@@ -144,9 +145,9 @@ describe('VersionHistory Editor Integration', () => {
 		mockHasUnsyncedChanges = false
 		const mockUser = { id: 'test-user', email: 'test@example.com', full_name: 'Test User' }
 		render(
-			<GlobalSearchPalette>
+			<GlobalHeaderProvider><GlobalSearchPalette>
 				<EditorWorkspace pageId="page-1" initialTitle="Test Doc" token="token-1" currentUser={mockUser} />
-			</GlobalSearchPalette>
+			</GlobalSearchPalette></GlobalHeaderProvider>
 		)
 
 		await vi.advanceTimersByTimeAsync(900000)
@@ -156,3 +157,5 @@ describe('VersionHistory Editor Integration', () => {
 		vi.useRealTimers()
 	})
 })
+
+vi.mock('@/components/quick-capture-palette', () => ({ useQuickCapture: () => ({ open: vi.fn() }) }))

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useLayoutEffect, useState, useCallback, useRef, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { useEditor, EditorContent, Editor, ReactNodeViewRenderer } from '@tiptap/react'
@@ -28,8 +28,15 @@ import { SlashMenuComponent } from './slash-menu'
 import ProfileMenu from './profile-menu'
 import ThemeToggle from './theme-toggle'
 import PublicPageFooter from './public-page-footer'
+import Link from 'next/link'
+import WorkbenchShell from './workbench/workbench-shell'
+import { useQuickCapture } from './quick-capture-palette'
+import styles from './workbench/editor.module.css'
 import { useGlobalSearch } from '@/components/global-search-palette'
+import { ColorHighlightPopover } from './color-highlight-popover'
+import { ImageUploadButton } from './image-upload-button'
 import GlobalLoader from './global-loader'
+import { CustomSelect } from './ui/custom-select'
 import { PromptDialog } from './ui/prompt-dialog'
 import * as Y from 'yjs'
 import { Mention } from '@tiptap/extension-mention'
@@ -44,7 +51,6 @@ import InboxTriageDialog, { type InboxTriageMode } from './inbox-triage-dialog'
 import type { SearchResult } from '@/types'
 
 import { TableToolbar } from './table-toolbar'
-import { EditorToolbar } from './editor-toolbar'
 import { CodeBlockLanguageSelect } from './code-block-language-select'
 import { DragContextMenu } from './drag-context-menu'
 import { exportToDocx, exportToPdf, downloadBlob } from '@/lib/export-utils'
@@ -374,10 +380,6 @@ export default function EditorWorkspace({	pageId,
 		setDiffPreview(null)
 		setIsLekhanBotOpen(true)
 	}, [])
-
-	// Stable identity so the memoized toolbar is not invalidated by unrelated
-	// workspace re-renders (SIL-230 / #144).
-	const handleOpenLinkPrompt = useCallback(() => setIsLinkPromptOpen(true), [])
 
 	const { open: openGlobalSearch } = useGlobalSearch()
 
@@ -1290,25 +1292,17 @@ export default function EditorWorkspace({	pageId,
 
 
 	return (
-		<div className="bg-background text-on-background font-body-md selection:bg-primary-container selection:text-on-primary-container h-screen overflow-hidden flex flex-col">
+		<EditorFrame anonVisitor={anonVisitor} pageId={pageId} pages={workspacePages} onSearch={openGlobalSearch}
+			headerActions={<><SyncIndicator connectionState={connectionState} isSynced={isSynced} /><ThemeToggle /><ProfileMenu user={currentUser} size="sm" /></>}>
+		<div className={styles.workspace}>
+
 			{/* Redesigned Top Header and Integrated Toolbar */}
-			<header className="flex-none w-full z-50 bg-surface-container/80 backdrop-blur-xl border-b border-black/10 dark:border-white/10 flex flex-col">
+			<header className={styles.pageHeader}>
 				{/* Row 1: App Controls & Document Title */}
-				<div className="h-14 px-6 md:px-10 flex justify-between items-center border-b border-white/5">
+				<div className={styles.pageActions}>
 					<div className="flex items-center gap-md">
-						<img alt="Lekhan Logo" className="h-6 w-6 object-contain cursor-pointer hover:scale-110 premium-transition" src="/logo.png" onClick={() => router.push('/')} />
-						<div className="flex items-center gap-sm group">
-							{!isViewer ? (
-								<InlineEdit
-									initialValue={title}
-									onSave={handleSaveTitle}
-								/>
-							) : (
-								<div className="px-2 py-1 text-sm font-bold text-on-surface truncate max-w-[200px] md:max-w-[400px]">
-									{title}
-								</div>
-							)}
-						</div>
+                        {anonVisitor && <Link href="/" className={styles.publicLogo}>Lekhan</Link>}
+
 						{anonVisitor && (
 							<span
 								className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold whitespace-nowrap"
@@ -1319,16 +1313,7 @@ export default function EditorWorkspace({	pageId,
 								<span className="text-on-surface-variant/80 font-semibold">· view-only</span>
 							</span>
 						)}
-						{!anonVisitor && (
-							<div className="hidden md:flex items-center gap-xs ml-2 text-on-surface-variant/60 font-label-sm text-label-sm">
-								<SyncIndicator
-									connectionState={connectionState}
-									isSynced={isSynced}
-									hasUnsyncedChanges={hasUnsyncedChanges}
-									isLocalSynced={isLocalSynced}
-								/>
-							</div>
-						)}
+
 					</div>
 
 					<div className="flex items-center gap-sm md:gap-md">
@@ -1368,15 +1353,6 @@ export default function EditorWorkspace({	pageId,
 							)}
 						</div>
 
-						{!anonVisitor && (
-							<button
-								onClick={openGlobalSearch}
-								className="hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium bg-surface-container-low"
-								title="Search (Cmd+K)"
-							>
-								<span className="material-symbols-outlined text-primary-container text-lg">search</span>
-							</button>
-						)}
 
 						{!anonVisitor && (
 							<button
@@ -1427,8 +1403,6 @@ export default function EditorWorkspace({	pageId,
 								activeUsers={activeUsers}
 								connectionState={connectionState}
 								isSynced={isSynced}
-								hasUnsyncedChanges={hasUnsyncedChanges}
-								isLocalSynced={isLocalSynced}
 							/>
 						)}
 
@@ -1502,25 +1476,111 @@ export default function EditorWorkspace({	pageId,
 							</div>
 						)}
 
-						<div className={anonVisitor ? 'block' : 'hidden md:block'}>
-							<ThemeToggle />
-						</div>
+                        {anonVisitor && <ThemeToggle />}
 
-						{!anonVisitor && (
-							<div>
-								<ProfileMenu user={currentUser} size="sm" />
-							</div>
-						)}
 					</div>
 				</div>
 
 				{/* Row 2: Formatting Toolbar or Read Only Banner */}
 				{!isViewer ? (
-					<EditorToolbar
-						editor={editor}
-						onOpenLinkPrompt={handleOpenLinkPrompt}
-						disabled={Boolean(previewDoc)}
-					/>
+					<div role="toolbar" aria-label="Page formatting" className={`${styles.toolbar} ${previewDoc ? 'opacity-40 pointer-events-none' : ''}`}>
+
+					{/* Font Family Selection */}
+					<div className="flex shrink-0 items-center border-r border-black/10 dark:border-white/10 h-6 px-1">
+						<CustomSelect
+							value={editor?.getAttributes('textStyle').fontFamily || ''}
+							onValueChange={(val) => {
+								if (val === '') {
+									editor?.chain().focus().unsetFontFamily().run()
+								} else {
+									editor?.chain().focus().setFontFamily(val).run()
+								}
+							}}
+							options={[
+								{ label: 'Inter (Default)', value: '' },
+								{ label: 'Arial', value: 'Arial, Helvetica, sans-serif', style: { fontFamily: 'Arial, Helvetica, sans-serif' } },
+								{ label: 'Comic Sans', value: 'Comic Sans MS, Comic Sans', style: { fontFamily: 'Comic Sans MS, Comic Sans' } },
+								{ label: 'Georgia', value: 'Georgia, serif', style: { fontFamily: 'Georgia, serif' } },
+								{ label: 'Courier New', value: '"Courier New", Courier, monospace', style: { fontFamily: '"Courier New", Courier, monospace' } },
+							]}
+							triggerClassName="h-8 w-[140px] border-none bg-transparent hover:bg-black/5 dark:hover:bg-white/10 px-2 font-medium focus:ring-0"
+							contentClassName="w-[160px]"
+						/>
+					</div>
+
+					{/* Text Style / Headings Selection */}
+					<div className="flex shrink-0 items-center border-r border-black/10 dark:border-white/10 h-6 px-1">
+						<CustomSelect
+							value={
+								editor?.isActive('heading', { level: 1 }) ? 'h1' :
+									editor?.isActive('heading', { level: 2 }) ? 'h2' :
+										editor?.isActive('heading', { level: 3 }) ? 'h3' : 'p'
+							}
+							onValueChange={(val) => {
+								if (val === 'p') {
+									editor?.chain().focus().setParagraph().run()
+								} else if (val === 'h1') {
+									editor?.chain().focus().toggleHeading({ level: 1 }).run()
+								} else if (val === 'h2') {
+									editor?.chain().focus().toggleHeading({ level: 2 }).run()
+								} else if (val === 'h3') {
+									editor?.chain().focus().toggleHeading({ level: 3 }).run()
+								}
+							}}
+							options={[
+								{ label: 'Title', value: 'h1', style: { fontSize: '24px', fontWeight: 700 } },
+								{ label: 'Heading', value: 'h2', style: { fontSize: '18px', fontWeight: 600 } },
+								{ label: 'Subheading', value: 'h3', style: { fontSize: '14px', fontWeight: 600 } },
+								{ label: 'Body', value: 'p', style: { fontSize: '14px', fontWeight: 400 } },
+							]}
+							triggerClassName="h-8 w-[140px] border-none bg-transparent hover:bg-black/5 dark:hover:bg-white/10 px-2 font-medium focus:ring-0"
+							contentClassName="w-auto min-w-[160px] whitespace-nowrap"
+						/>
+					</div>
+
+					<div className="flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6">
+						<button onClick={() => editor?.chain().focus().undo().run()} className="p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded transition-colors text-on-surface-variant hover:text-on-surface flex items-center justify-center" title="Undo"><span className="material-symbols-outlined text-[18px]">undo</span></button>
+						<button onClick={() => editor?.chain().focus().redo().run()} className="p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded transition-colors text-on-surface-variant hover:text-on-surface flex items-center justify-center" title="Redo"><span className="material-symbols-outlined text-[18px]">redo</span></button>
+					</div>
+					<div className="flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6">
+						<button onClick={() => editor?.chain().focus().toggleBold().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('bold') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Bold"><span className="material-symbols-outlined text-[18px]">format_bold</span></button>
+						<button onClick={() => editor?.chain().focus().toggleItalic().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('italic') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Italic"><span className="material-symbols-outlined text-[18px]">format_italic</span></button>
+						<button onClick={() => editor?.chain().focus().toggleUnderline().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('underline') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Underline"><span className="material-symbols-outlined text-[18px]">format_underlined</span></button>
+						<button onClick={() => editor?.chain().focus().toggleStrike().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('strike') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Strike"><span className="material-symbols-outlined text-[18px]">format_strikethrough</span></button>
+					</div>
+					<div className="flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6">
+						<button onClick={() => editor?.chain().focus().setTextAlign('left').run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive({ textAlign: 'left' }) ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Align Left"><span className="material-symbols-outlined text-[18px]">format_align_left</span></button>
+						<button onClick={() => editor?.chain().focus().setTextAlign('center').run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive({ textAlign: 'center' }) ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Align Center"><span className="material-symbols-outlined text-[18px]">format_align_center</span></button>
+						<button onClick={() => editor?.chain().focus().setTextAlign('right').run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive({ textAlign: 'right' }) ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Align Right"><span className="material-symbols-outlined text-[18px]">format_align_right</span></button>
+					</div>
+					<div className="flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6">
+						<button onClick={() => editor?.chain().focus().toggleBulletList().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('bulletList') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Bullet List"><span className="material-symbols-outlined text-[18px]">format_list_bulleted</span></button>
+						<button onClick={() => editor?.chain().focus().toggleOrderedList().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('orderedList') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Ordered List"><span className="material-symbols-outlined text-[18px]">format_list_numbered</span></button>
+						<button onClick={() => editor?.chain().focus().toggleTaskList().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('taskList') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Task List"><span className="material-symbols-outlined text-[18px]">check_box</span></button>
+						<button onClick={() => editor?.chain().focus().toggleBlockquote().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('blockquote') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Blockquote"><span className="material-symbols-outlined text-[18px]">format_quote</span></button>
+						<button onClick={() => editor?.chain().focus().toggleCodeBlock().run()} className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('codeBlock') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`} title="Code Block"><span className="material-symbols-outlined text-[18px]">code_blocks</span></button>
+					</div>
+					<div className="flex shrink-0 items-center gap-xs px-md h-6 border-r border-black/10 dark:border-white/10">
+						<button
+							onClick={() => setIsLinkPromptOpen(true)}
+							className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('link') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}
+							title="Link"
+						>
+							<span className="material-symbols-outlined text-[18px]">link</span>
+						</button>
+						<ImageUploadButton onUpload={(url) => editor?.chain().focus().setImage({ src: url }).run()} />
+						<button
+							onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+							className={`p-1 rounded transition-colors flex items-center justify-center ${editor?.isActive('table') ? 'text-primary bg-primary/10' : 'text-on-surface hover:bg-black/5 dark:hover:bg-white/10'}`}
+							title="Insert Table"
+						>
+							<span className="material-symbols-outlined text-[18px]">table</span>
+						</button>
+					</div>
+					<div className="flex shrink-0 items-center gap-xs px-md h-6">
+						<ColorHighlightPopover editor={editor} />
+					</div>
+					</div>
 				) : anonVisitor ? (
 					<div className="min-h-[40px] py-2 px-6 md:px-10 flex justify-center items-center bg-primary/10 border-y border-primary/20 text-on-surface-variant text-sm font-medium">
 						<span className="material-symbols-outlined mr-2 text-base">link</span>
@@ -1537,9 +1597,9 @@ export default function EditorWorkspace({	pageId,
 				{isOffline && <OfflineBanner />}
 			</header>
 
-			<div className="flex-1 flex overflow-hidden relative">
+			<div className={styles.writingArea}>
 				{/* Main Workspace (Expanded, Dark Continuous Canvas) */}
-				<main className={`flex-1 flex flex-col items-center bg-background relative scroll-smooth transition-all overflow-y-auto no-scrollbar py-8 pb-36 ${isBacklinksOpen ? 'lg:mr-[400px]' : (isAIPanelOpen || isHistoryOpen ? 'lg:mr-80' : '')}`}>
+				<main className={styles.main}>
 
 					{!isViewer && editor && (
 						<div className="sticky top-2 z-30 flex items-center justify-center gap-2 mb-2">
@@ -1547,7 +1607,11 @@ export default function EditorWorkspace({	pageId,
 						</div>
 					)}
 
-					<div className={`editor-canvas w-full max-w-5xl min-h-[calc(100vh-12rem)] px-[40px] py-[20px] md:px-[60px] md:py-[40px] transition-all duration-300 relative group`}>
+					<div className={`editor-canvas ${styles.canvas}`}>
+                        <h1 className={styles.title}>
+							{!isViewer ? <InlineEdit initialValue={title} onSave={handleSaveTitle}
+								textClassName={styles.titleText} inputClassName={styles.titleInput} /> : title}
+						</h1>
 						{!isViewer && editor && <DragContextMenu editor={editor} />}
 
 						{previewVersionName && (
@@ -1671,6 +1735,32 @@ export default function EditorWorkspace({	pageId,
 				defaultValue={editor?.getAttributes('link').href || ''}
 			/>
 		</div>
+		</EditorFrame>
 	)
 }
 
+
+/** Stable frame: opening navigation or page context never replaces the editor subtree. */
+function EditorFrame({ anonVisitor, children, ...props }: {
+	anonVisitor: boolean
+	children: ReactNode
+	pageId: string
+	pages: WorkspacePageSummary[]
+	onSearch: () => void
+	headerActions: ReactNode
+}) {
+	if (anonVisitor) return <div className={styles.publicReading}>{children}</div>
+	return <SignedEditorFrame {...props}>{children}</SignedEditorFrame>
+}
+
+function SignedEditorFrame({ children, pageId, pages, onSearch, headerActions }: {
+	children: ReactNode
+	pageId: string
+	pages: WorkspacePageSummary[]
+	onSearch: () => void
+	headerActions: ReactNode
+}) {
+	const { open: onCapture } = useQuickCapture()
+	return <WorkbenchShell active="editor" workspaceName="Workspace" pages={pages} currentPageId={pageId}
+		onSearch={onSearch} onCapture={onCapture} headerActions={headerActions}>{children}</WorkbenchShell>
+}

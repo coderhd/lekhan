@@ -1,3 +1,4 @@
+import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
@@ -82,7 +83,7 @@ interface RenderOpts {
 async function renderEditor ({ anonVisitor, role, userId = 'test-user' }: RenderOpts) {
 	memberRole.value = role
 	render(
-		<GlobalSearchPalette>
+		<GlobalHeaderProvider><GlobalSearchPalette>
 			<EditorWorkspace
 				pageId="page-1"
 				initialTitle="Shared Page"
@@ -90,7 +91,7 @@ async function renderEditor ({ anonVisitor, role, userId = 'test-user' }: Render
 				currentUser={{ id: userId, email: `${userId}@example.com`, full_name: anonVisitor ? 'Anonymous Viewer' : 'Test User' }}
 				anonVisitor={anonVisitor}
 			/>
-		</GlobalSearchPalette>,
+		</GlobalSearchPalette></GlobalHeaderProvider>,
 	)
 	await waitFor(() => {
 		expect(document.querySelector('.ProseMirror')).toBeTruthy()
@@ -122,6 +123,8 @@ describe('EditorWorkspace public reading chrome (#30 T2)', () => {
 		})
 
 		expect(screen.queryByTitle('Search (Cmd+K)')).toBeNull()
+		expect(screen.queryByLabelText('Workspace navigation')).toBeNull()
+		expect(document.querySelector('.ProseMirror')).toHaveAttribute('contenteditable', 'false')
 		expect(screen.queryByTitle('Version History')).toBeNull()
 		expect(screen.queryByTitle('Backlinks')).toBeNull()
 		expect(screen.queryByTitle('Settings')).toBeNull()
@@ -154,6 +157,18 @@ describe('EditorWorkspace public reading chrome (#30 T2)', () => {
 		expect(await screen.findByText('Alpha source')).toBeInTheDocument()
 	})
 
+	it('keeps unsaved editing content and the same editor node through workspace navigation', async () => {
+		await renderEditor({ anonVisitor: false, role: 'owner' })
+		const writing = document.querySelector('.ProseMirror')!
+		fireEvent.input(writing, { target: { textContent: 'Unfinished local thought' } })
+		fireEvent.click(screen.getByRole('button', { name: 'Open workspace navigation' }))
+		expect(screen.getByRole('dialog', { name: 'Workspace navigation' })).toBeInTheDocument()
+		fireEvent.keyDown(screen.getByRole('dialog', { name: 'Workspace navigation' }), { key: 'Escape' })
+		expect(document.querySelector('.ProseMirror')).toBe(writing)
+		expect(writing.textContent).toContain('Unfinished local thought')
+		await waitFor(() => expect(screen.getByRole('button', { name: 'Open workspace navigation' })).toHaveFocus())
+	})
+
 	it('editor gets the full workspace without the reading chrome', async () => {
 		await renderEditor({ anonVisitor: false, role: 'owner' })
 
@@ -162,3 +177,5 @@ describe('EditorWorkspace public reading chrome (#30 T2)', () => {
 		expect(screen.queryByRole('link', { name: /create your own workspace/i })).toBeNull()
 	})
 })
+
+vi.mock('@/components/quick-capture-palette', () => ({ useQuickCapture: () => ({ open: vi.fn() }) }))
