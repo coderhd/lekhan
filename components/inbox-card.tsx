@@ -148,7 +148,7 @@ export default function InboxCard ({ workspaceId, ownerId, today }: InboxCardPro
 			aria-busy={loading}
 			className="w-full rounded-2xl border border-black/10 dark:border-white/10 bg-surface-container-low px-4 py-3"
 		>
-			<div className="flex flex-wrap items-center justify-between gap-3">
+			<div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
 				<div className="flex items-center gap-2">
 					<InboxIcon aria-hidden className="h-4 w-4 text-primary" />
 					<h2 id="inbox-card-heading" className="font-semibold text-on-surface">Inbox</h2>
