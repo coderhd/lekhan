@@ -6,8 +6,12 @@ ship from this repo as markdown/MDX, versioned with the product.
 
 ## Requirements
 
-- Node.js **20.9+** (Node 22 LTS or 24 recommended)
+- Node.js **22.x**
 - npm 10+
+
+The `engines.node` constraint pins the Node 22 major for Vercel builds and functions.
+Vercel gives this field precedence over the project setting; keep it at `22.x` to
+receive Node 22 patches without automatically upgrading to a newer major.
 
 ## Develop
 
