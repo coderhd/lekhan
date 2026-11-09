@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { writeFile } from 'node:fs/promises'
 
 // Synthetic local Supabase responses exercise the real dashboard without a
 // logged-in profile or mutations to a user's workspace.
@@ -19,6 +20,11 @@ for (const width of [320, 390, 768, 1280]) {
     new PerformanceObserver(list => { for (const entry of list.getEntries()) if (!(entry as PerformanceEntry & { hadRecentInput: boolean }).hadRecentInput) entries.push((entry as PerformanceEntry & { value: number }).value) }).observe({ type: 'layout-shift', buffered: true })
    }, { user })
    const errors: string[] = []
+   const networkFailures: Array<{ url: string, method: string, failure?: string, status?: number }> = []
+   // Do not persist query strings or headers, which could contain credentials.
+   const safeUrl = (value: string) => { const url = new URL(value); return url.origin + url.pathname }
+   page.on('requestfailed', request => networkFailures.push({ url: safeUrl(request.url()), method: request.method(), failure: request.failure()?.errorText }))
+   page.on('response', response => { if (response.status() >= 400) networkFailures.push({ url: safeUrl(response.url()), method: response.request().method(), status: response.status() }) })
    page.on('pageerror', error => errors.push(error.message))
    let release!: () => void
    const pending = new Promise<void>(resolve => { release = resolve })
@@ -60,12 +66,18 @@ for (const width of [320, 390, 768, 1280]) {
      }
     })
     const measurement = { width, state, phase, ...geometry }
-    await test.info().attach(`${phase}.json`, { body: JSON.stringify(measurement, null, 2), contentType: 'application/json' })
-    await test.info().attach(`${phase}.png`, { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' })
+    await writeFile(test.info().outputPath(`${phase}.json`), JSON.stringify(measurement, null, 2))
+    await page.screenshot({ path: test.info().outputPath(`${phase}.png`), fullPage: true })
     console.log(JSON.stringify(measurement))
     return geometry
    }
-   await inbox.getByRole('status').waitFor()
+   try {
+    await inbox.getByRole('status').waitFor()
+   } catch (error) {
+    await writeFile(test.info().outputPath('cold-boot.json'), JSON.stringify({ width, state, url: safeUrl(page.url()), networkFailures, pageErrors: errors }, null, 2))
+    await page.screenshot({ path: test.info().outputPath('cold-boot.png'), fullPage: true })
+    throw error
+   }
    await page.evaluate(() => document.fonts.ready)
    const loadingText = await inbox.getByRole('status').textContent()
    const before = await inbox.boundingBox()

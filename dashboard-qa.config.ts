@@ -11,6 +11,7 @@ export default defineConfig({
 	workers: 1,
 	timeout: 90000,
 	reporter: 'list',
+	preserveOutput: 'always',
 	outputDir: production ? 'test-results/dashboard-qa-production' : 'test-results/dashboard-qa-development',
 	use: { headless: true, baseURL },
 	webServer: {
