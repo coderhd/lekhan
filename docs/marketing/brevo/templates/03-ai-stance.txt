@@ -1,0 +1,26 @@
+AI is turning into the line item every notes app learns to love. We went the
+other way.
+
+Bring a key from OpenAI, Anthropic, Gemini, or Sarvam - or point Lekhan at a
+custom endpoint. Cloud calls are relayed through our API to the provider you
+chose, using your key. We don't take a cut of inference, and on your own key
+AI never touches your plan credits.
+
+If you'd rather keep inference off someone else's servers, run a local model
+with Ollama. Those requests go from your browser to your machine. They don't
+pass through us.
+
+No key and no local model? The built-in Sarvam actions - chat, translate,
+text-to-speech, transliteration - run on a small plan-credit allowance. That
+is the one place a credit count exists, and I'd rather say so plainly than
+bury it.
+
+The stance in one line: AI costs what your provider charges, or nothing but
+your hardware.
+
+- Harsh, Lekhan
+
+See how AI works here:
+https://lekhan.online/faq?utm_source=brevo&utm_medium=email&utm_campaign=founding_welcome&utm_content=email-3-ai
+
+Unsubscribe: {{unsubscribe}}
