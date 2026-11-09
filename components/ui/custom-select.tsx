@@ -19,6 +19,7 @@ interface CustomSelectProps {
 	triggerClassName?: string
 	contentClassName?: string
 	align?: 'start' | 'center' | 'end'
+	modal?: boolean
 }
 
 export function CustomSelect({
@@ -30,12 +31,13 @@ export function CustomSelect({
 	triggerClassName,
 	contentClassName,
 	align = 'start',
+	modal = false,
 }: CustomSelectProps) {
 	const selectedOption = options.find((opt) => opt.value === value)
 
 	return (
 		<div className={className}>
-			<DropdownMenu.Root modal={false}>
+			<DropdownMenu.Root modal={modal}>
 				<DropdownMenu.Trigger asChild>
 					<button
 						className={cn(

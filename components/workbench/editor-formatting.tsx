@@ -32,8 +32,8 @@ export default function EditorFormatting({ editor, onLink, disabled, children }:
   <Dialog.Root open={open} onOpenChange={setOpen}>
    <Dialog.Trigger asChild><button type="button" aria-label="More formatting actions">•••</button></Dialog.Trigger>
    <Dialog.Portal>
-    <Dialog.Overlay className={overlay.scrim} />
-    <Dialog.Content className={overlay.sheet}>
+    <Dialog.Overlay className={`${overlay.scrim} ${styles.formattingScrim}`} />
+    <Dialog.Content className={`${overlay.sheet} ${styles.formattingSheet}`}>
      <div className={overlay.heading}><Dialog.Title>More formatting</Dialog.Title><Dialog.Close aria-label="Close formatting">✕</Dialog.Close></div>
      <Dialog.Description className="sr-only">All page formatting commands.</Dialog.Description>
      <div className={styles.toolbar}>{children}</div>

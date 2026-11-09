@@ -1503,6 +1503,7 @@ export default function EditorWorkspace({	pageId,
 					{/* Font Family Selection */}
 					<div className="flex shrink-0 items-center border-r border-black/10 dark:border-white/10 h-6 px-1">
 						<CustomSelect
+							modal
 							value={editor?.getAttributes('textStyle').fontFamily || ''}
 							onValueChange={(val) => {
 								if (val === '') {
@@ -1526,6 +1527,7 @@ export default function EditorWorkspace({	pageId,
 					{/* Text Style / Headings Selection */}
 					<div className="flex shrink-0 items-center border-r border-black/10 dark:border-white/10 h-6 px-1">
 						<CustomSelect
+							modal
 							value={
 								editor?.isActive('heading', { level: 1 }) ? 'h1' :
 									editor?.isActive('heading', { level: 2 }) ? 'h2' :

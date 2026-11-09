@@ -32,6 +32,7 @@ export default function WorkbenchShell({
 }: WorkbenchShellProps) {
 	const [navigationOpen, setNavigationOpen] = useState(false)
 	const pendingAction = useRef<(() => void) | null>(null)
+	const navigationTrigger = useRef<HTMLButtonElement>(null)
 	const { registerWorkbenchChrome } = useGlobalHeaderSlots()
 	useEffect(() => registerWorkbenchChrome(), [registerWorkbenchChrome])
 
@@ -127,6 +128,7 @@ export default function WorkbenchShell({
 					<Dialog.Root open={navigationOpen} onOpenChange={setNavigationOpen}>
 						<Dialog.Trigger asChild>
 							<button
+								ref={navigationTrigger}
 								type="button"
 								className="wb-icon-button wb-mobile-navigation"
 								aria-label="Open workspace navigation"
@@ -143,6 +145,9 @@ export default function WorkbenchShell({
 										event.preventDefault()
 										const action = pendingAction.current
 										pendingAction.current = null
+										// Palettes remember the focused element as their return target.
+										// The menu item has unmounted, so focus its persistent trigger first.
+										navigationTrigger.current?.focus()
 										action()
 									}
 								}}

@@ -106,7 +106,7 @@ export function InlineEdit({
 						<button aria-label="Save page title" onClick={handleSave} className="text-primary hover:bg-primary/10 rounded-full premium-transition flex items-center justify-center p-1">
 							<span className={cn("material-symbols-outlined text-[18px]", iconClassName)}>check</span>
 						</button>
-						<button 
+						<button aria-label="Cancel title editing"
 							onClick={(e) => {
 								e.preventDefault()
 								e.stopPropagation()
@@ -130,13 +130,13 @@ export function InlineEdit({
 					>
 						{value}
 					</span>
-					<button aria-label="Cancel title editing"
+					<button aria-label="Edit page title"
 						onClick={(e) => {
 							e.preventDefault()
 							e.stopPropagation()
 							setIsEditing(true)
 						}}
-						className="text-on-surface-variant hover:text-primary-container opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center p-1 shrink-0"
+						className="text-on-surface-variant hover:text-primary-container opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all flex items-center justify-center p-1 shrink-0"
 					>
 						<span className={cn("material-symbols-outlined text-[18px]", iconClassName)}>edit</span>
 					</button>

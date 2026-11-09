@@ -1,6 +1,6 @@
 import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import EditorWorkspace from '../../components/editor-workspace'
 import GlobalSearchPalette from '../../components/global-search-palette'
@@ -176,6 +176,11 @@ describe('EditorWorkspace public reading chrome (#30 T2)', () => {
 		fireEvent.click(screen.getByRole('button', { name: 'More formatting actions' }))
 		expect(screen.getByRole('dialog', { name: 'More formatting' })).toBeInTheDocument()
 		expect(screen.getByTitle('Insert Table')).toBeInTheDocument()
+		const bodyStyle = within(screen.getByRole('dialog', { name: 'More formatting' })).getByRole('button', { name: 'Title' })
+		bodyStyle.focus()
+		fireEvent.keyDown(bodyStyle, { key: 'ArrowDown' })
+		fireEvent.click(await screen.findByRole('menuitem', { name: 'Heading' }))
+		await waitFor(() => expect(writing?.querySelector('h2')).toBeTruthy())
 		fireEvent.keyDown(screen.getByRole('dialog', { name: 'More formatting' }), { key: 'Escape' })
 		expect(document.querySelector('.ProseMirror')).toBe(writing)
 		vi.mocked(window.matchMedia).mockImplementation(query => ({ matches: false, media: query, onchange: null, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn() }))
