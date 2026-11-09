@@ -40,11 +40,45 @@ for (const width of [320, 390, 768, 1280]) {
    })
    await page.goto('/')
    const inbox = page.getByRole('region', { name: 'Inbox', exact: true })
-   await expect(inbox.getByRole('status')).toContainText('Loading captures')
+   // Save both states before assertions, including on a settled-state timeout.
+   const capture = async (phase: string) => {
+    const geometry = await inbox.evaluate(section => {
+     const bounds = (element: Element | null) => {
+      if (!element) return null
+      const { x, y, width, height } = element.getBoundingClientRect()
+      return { x, y, width, height }
+     }
+     const header = section.firstElementChild
+     const preview = header?.nextElementSibling ?? null
+     return {
+      inbox: bounds(section), header: bounds(header), heading: bounds(header?.firstElementChild ?? null),
+      badge: bounds(header?.querySelector('[aria-live]') ?? null),
+      openButton: bounds(header?.querySelector('button') ?? null),
+      preview: bounds(preview), previewContent: bounds(preview?.firstElementChild ?? null),
+      downstream: bounds(section.nextElementSibling ?? section.parentElement?.nextElementSibling ?? null),
+      cls: (window as unknown as { layoutShifts: number[] }).layoutShifts.reduce((a, b) => a + b, 0),
+     }
+    })
+    const measurement = { width, state, phase, ...geometry }
+    await test.info().attach(`${phase}.json`, { body: JSON.stringify(measurement, null, 2), contentType: 'application/json' })
+    await test.info().attach(`${phase}.png`, { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' })
+    console.log(JSON.stringify(measurement))
+    return geometry
+   }
+   await inbox.getByRole('status').waitFor()
    await page.evaluate(() => document.fonts.ready)
+   const loadingText = await inbox.getByRole('status').textContent()
    const before = await inbox.boundingBox()
-   const shiftsBefore = await page.evaluate(() => (window as unknown as { layoutShifts: number[] }).layoutShifts.reduce((a, b) => a + b, 0))
+   const shiftsBefore = (await capture('loading')).cls
    release()
+   try {
+    const settled = state === 'populated' ? inbox.getByRole('list', { name: 'Pending captures' }) : state === 'empty' ? inbox.getByText('Inbox zero') : inbox.getByRole('button', { name: 'Try again' })
+    await settled.waitFor()
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+   } finally {
+    await capture('settled')
+   }
+   expect(loadingText).toContain('Loading captures')
    if (state === 'populated') {
     await expect(inbox.getByRole('list', { name: 'Pending captures' }).getByRole('listitem')).toHaveCount(5)
     await expect(inbox.getByText('+2 more pending')).toBeVisible()

@@ -29,19 +29,30 @@ jobs:
       - name: Run development browser QA
         run: npx playwright test -c dashboard-qa.config.ts
       - name: Build production bundle with synthetic QA settings
+        if: ${{ !cancelled() }}
+        id: production_build
         run: npm run build
         env:
           NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
           NEXT_PUBLIC_SUPABASE_ANON_KEY: synthetic-qa-key
       - name: Run production browser QA
+        if: ${{ !cancelled() && steps.production_build.outcome == 'success' }}
         run: npx playwright test -c dashboard-qa.config.ts
         env:
           DASHBOARD_QA_MODE: production
-      - name: Publish browser evidence
+      - name: Publish development browser evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: sil-281-dashboard-browser-evidence
-          path: test-results/dashboard-qa-*/
+          name: sil-296-dashboard-development
+          path: test-results/dashboard-qa-development/
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 30
+      - name: Publish production browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sil-296-dashboard-production
+          path: test-results/dashboard-qa-production/
+          if-no-files-found: warn
+          retention-days: 30
