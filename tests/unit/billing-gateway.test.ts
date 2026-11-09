@@ -21,24 +21,44 @@ const h = vi.hoisted(() => {
 		auth: { getUser: async () => ({ data: { user: state.user }, error: null }) },
 		from: (table: string) => {
 			const result = () => ({
-				data: table === 'workspaces' ? state.workspace : state.plan,
+				data: table === 'workspaces' ? state.workspace : state.plan && { ...state.plan },
 				error: null,
 			})
 			const chain: Record<string, unknown> = {}
+			let updateValues: Record<string, unknown> | null = null
+			let workspaceId: unknown
 			chain.select = () => chain
-			chain.eq = () => chain
+			chain.eq = (column: string, value: unknown) => {
+				if (column === 'workspace_id') workspaceId = value
+				return chain
+			}
 			chain.order = () => chain
 			chain.update = (values: Record<string, unknown>) => {
 				updates.push({ table, values })
+				updateValues = values
 				return chain
 			}
+			chain.or = (filter: string) => ({
+				select: async (columns: string) => {
+					const prefix = 'checkout_pending_at.is.null,checkout_pending_at.lt.'
+					if (table !== 'workspace_plans' || columns !== 'workspace_id' || !filter.startsWith(prefix)) throw new Error('Unexpected reservation query')
+					reservations.push(filter)
+					const cutoff = filter.slice(prefix.length)
+					const plan = state.plan
+					const pendingAt = plan?.checkout_pending_at
+					if (!plan || plan.workspace_id !== workspaceId || (typeof pendingAt === 'string' && pendingAt >= cutoff)) return { data: [], error: null }
+					Object.assign(plan, updateValues)
+					return { data: [{ workspace_id: workspaceId }], error: null }
+				},
+			})
 			chain.maybeSingle = async () => result()
 			chain.single = async () => result()
 			return chain
 		},
 	}
 	const updates: Array<{ table: string; values: Record<string, unknown> }> = []
-	return { state, client, updates }
+	const reservations: string[] = []
+	return { state, client, updates, reservations }
 })
 
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => h.client }))
@@ -104,6 +124,7 @@ beforeEach(() => {
 	h.state.user = { id: 'user-1' }
 	h.state.workspace = { id: 'ws-1', owner_id: 'user-1' }
 	h.state.plan = null
+	h.reservations.length = 0
 })
 
 afterEach(() => {
@@ -398,6 +419,25 @@ describe('/api/billing/checkout — single-live-subscription invariant', () => {
 		const res = await checkoutPOST(request('/api/billing/checkout', { tier: 'pro', cycle: 'monthly', currency: 'USD' }))
 		expect(res.status).toBe(409)
 		expect((await res.json()).code).toBe('subscription_exists')
+	})
+
+	it('reserves only one checkout when requests race after reading the same plan', async () => {
+		h.state.plan = { workspace_id: 'ws-1', gateway: 'none', is_founding: false, tier: 'free' }
+		const createCheckout = vi.spyOn(getFakeGateway('stripe'), 'createCheckout')
+		try {
+			const body = { tier: 'pro', cycle: 'monthly', currency: 'USD' }
+			const responses = await Promise.all([
+				checkoutPOST(request('/api/billing/checkout', body)),
+				checkoutPOST(request('/api/billing/checkout', body)),
+			])
+			expect(h.reservations).toHaveLength(2)
+			expect(responses.map((response) => response.status).sort()).toEqual([200, 409])
+			const rejected = responses.find((response) => response.status === 409)!
+			expect((await rejected.json()).code).toBe('checkout_in_progress')
+			expect(createCheckout).toHaveBeenCalledTimes(1)
+		} finally {
+			createCheckout.mockRestore()
+		}
 	})
 
 	it('resolves isFounding from server state, never from the request body', async () => {
