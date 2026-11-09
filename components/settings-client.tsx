@@ -32,6 +32,7 @@ export default function SettingsClient({
 	setPages?: React.Dispatch<React.SetStateAction<any[]>>
 }) {
 	const router = useRouter()
+	const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({})
 	const [activeTab, setActiveTab] = useState<'profile' | 'collaborators' | 'usage' | 'billing' | 'ai'>('profile')
 	const [registryState, setRegistryState] = useState<AIRegistryState>(getDefaultAIRegistryState())
 	const [password, setPassword] = useState('')
@@ -91,7 +92,7 @@ export default function SettingsClient({
 		setPagesState(initialPages)
 	}, [initialPages])
 
-	// Workspace billing entitlement (T12) — the source of the plan badge. There is
+	// Workspace billing entitlement (T12) — the source of the tier badge. There is
 	// no AI credit state anywhere in settings; AI is never metered.
 	const [entitlement, setEntitlement] = useState<WorkspaceEntitlement | null>(null)
 	const [referral, setReferral] = useState<ReferralSummary | null>(null)
@@ -100,6 +101,17 @@ export default function SettingsClient({
 	const [billingAction, setBillingAction] = useState<'portal' | 'cancel' | 'resubscribe' | 'refresh' | null>(null)
 	const [defaultCurrency, setDefaultCurrency] = useState<'USD' | 'INR' | undefined>(undefined)
 	const referralTracked = useRef<number | null>(null)
+	// Latest loadBilling, callable from the mount-only round-trip effect below.
+	const loadBillingRef = useRef<((action?: 'refresh' | null) => Promise<void>) | undefined>(undefined)
+
+	const authHeaders = async (): Promise<Record<string, string>> => {
+		const { data } = await supabase.auth.getSession()
+		const token = data.session?.access_token
+		return {
+			'Content-Type': 'application/json',
+			...(token ? { Authorization: `Bearer ${token}` } : {}),
+		}
+	}
 
 	// D3: the edge geo header seeds the explicit picker; the browser never guesses.
 	useEffect(() => {
@@ -119,21 +131,46 @@ export default function SettingsClient({
 		}
 	}, [])
 
-	const authHeaders = async (): Promise<Record<string, string>> => {
-		const { data } = await supabase.auth.getSession()
-		const token = data.session?.access_token
-		return {
-			'Content-Type': 'application/json',
-			...(token ? { Authorization: `Bearer ${token}` } : {}),
-		}
-	}
-
 	// T13 — an emailed/pasted accept link must land on the card that consumes it.
 	useEffect(() => {
 		if (typeof window === 'undefined') return
 		if (new URLSearchParams(window.location.search).get('transfer')) {
 			setActiveTab('collaborators')
 		}
+	}, [])
+
+	// Stripe round-trip returns land on /settings?billing=<state> (T11). The summary
+	// refetches on mount; here we give honest feedback (never claiming what the
+	// webhook hasn't confirmed) and scrub the transient param so reloads don't
+	// re-toast. Returns that may follow a just-applied change schedule one late
+	// refetch because the entitlement webhook can land after the gateway redirect.
+	useEffect(() => {
+		if (typeof window === 'undefined') return
+		const returnUrl = new URLSearchParams(window.location.search)
+		const billingState = returnUrl.get('billing')
+		if (!billingState) return
+		returnUrl.delete('billing')
+		const query = returnUrl.toString()
+		window.history.replaceState(null, '', query ? `${window.location.pathname}?${query}` : window.location.pathname)
+		let lateRefresh: ReturnType<typeof setTimeout> | undefined
+		switch (billingState) {
+			case 'checkout_success':
+				toast.success('Checkout confirmed — your tier summary below will update.')
+				break
+			case 'checkout_cancelled':
+				toast.info('Checkout was cancelled — nothing has changed.')
+				break
+			case 'plan_change_return':
+			case 'portal_return':
+				// The portal return fires even when the user backed out, so never
+				// claim a change happened; just acknowledge + refetch the truth.
+				toast.info('Returned from the payment portal.')
+				break
+		}
+		if (billingState === 'checkout_success' || billingState === 'plan_change_return' || billingState === 'portal_return') {
+			lateRefresh = setTimeout(() => { void loadBillingRef.current?.() }, 4000)
+		}
+		return () => { if (lateRefresh) clearTimeout(lateRefresh) }
 	}, [])
 
 	const loadBilling = async (action: 'refresh' | null = null) => {
@@ -166,6 +203,11 @@ export default function SettingsClient({
 	useEffect(() => {
 		void loadBilling()
 	}, [user?.id])
+
+	// Keep the round-trip effect's late refetch pointed at the live loader.
+	useEffect(() => {
+		loadBillingRef.current = loadBilling
+	})
 
 	const handleManageBilling = async () => {
 		setBillingAction('portal')
@@ -303,101 +345,66 @@ export default function SettingsClient({
 		currentPage * itemsPerPage
 	)
 
+	const TAB_ORDER: Array<'ai' | 'profile' | 'collaborators' | 'usage' | 'billing'> = ['ai', 'profile', 'collaborators', 'usage', 'billing']
+
+	// WAI-ARIA tabs: arrow keys move focus *and* select; roving keeps one tab stop.
 	const handleTabKeyDown = (e: React.KeyboardEvent) => {
-		const tabs: Array<'ai' | 'profile' | 'collaborators' | 'usage' | 'billing'> = ['ai', 'profile', 'collaborators', 'usage', 'billing']
-		const currentIndex = tabs.indexOf(activeTab)
+		if (e.metaKey || e.ctrlKey || e.altKey) return
+		const currentIndex = TAB_ORDER.indexOf(activeTab)
+		let nextIndex = -1
 		if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-			e.preventDefault()
-			const nextIndex = (currentIndex + 1) % tabs.length
-			setActiveTab(tabs[nextIndex])
+			nextIndex = (currentIndex + 1) % TAB_ORDER.length
 		} else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-			e.preventDefault()
-			const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length
-			setActiveTab(tabs[prevIndex])
+			nextIndex = (currentIndex - 1 + TAB_ORDER.length) % TAB_ORDER.length
+		} else if (e.key === 'Home') {
+			nextIndex = 0
+		} else if (e.key === 'End') {
+			nextIndex = TAB_ORDER.length - 1
 		}
+		if (nextIndex === -1) return
+		e.preventDefault()
+		setActiveTab(TAB_ORDER[nextIndex])
+		tabRefs.current[TAB_ORDER[nextIndex]]?.focus()
 	}
+
+	const SETTINGS_TABS: Array<{ id: 'ai' | 'profile' | 'collaborators' | 'usage' | 'billing'; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+		{ id: 'ai', label: 'AI & Models', icon: Bot },
+		{ id: 'profile', label: 'Profile & Security', icon: User },
+		{ id: 'collaborators', label: 'Collaborators & Access', icon: Users },
+		{ id: 'usage', label: 'AI Usage', icon: Sparkles },
+		{ id: 'billing', label: 'Billing & Subscription', icon: CreditCard },
+	]
 
 	return (
 		<div className="h-screen bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container flex flex-col font-body-md overflow-hidden">
 			<main className="flex-1 overflow-hidden flex justify-center px-6 md:px-10">
 				<div className="w-full max-w-[1400px] h-full flex flex-col lg:flex-row gap-8 py-8">
 					{/* Sidebar Navigation */}
-					<aside 
-						role="tablist" 
-						aria-label="Settings navigation" 
+					<aside
+						role="tablist"
+						aria-label="Settings navigation"
 						onKeyDown={handleTabKeyDown}
 						className="w-full lg:w-64 shrink-0 flex flex-row lg:flex-col gap-2 overflow-x-auto border-b lg:border-b-0 lg:border-r border-black/10 dark:border-white/10 pb-4 lg:pb-0 lg:pr-6"
 					>
-						<button
-							id="settings-tab-ai"
-							type="button"
-							role="tab"
-							aria-selected={activeTab === 'ai'}
-							aria-controls="settings-panel-ai"
-							onClick={() => setActiveTab('ai')}
-							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'ai'
-								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
-								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
-								}`}
-						>
-							<Bot className="w-4 h-4" /> AI & Models
-						</button>
-						<button
-							id="settings-tab-profile"
-							type="button"
-							role="tab"
-							aria-selected={activeTab === 'profile'}
-							aria-controls="settings-panel-profile"
-							onClick={() => setActiveTab('profile')}
-							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'profile'
-								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
-								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
-								}`}
-						>
-							<User className="w-4 h-4" /> Profile & Security
-						</button>
-						<button
-							id="settings-tab-collaborators"
-							type="button"
-							role="tab"
-							aria-selected={activeTab === 'collaborators'}
-							aria-controls="settings-panel-collaborators"
-							onClick={() => setActiveTab('collaborators')}
-							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'collaborators'
-								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
-								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
-								}`}
-						>
-							<Users className="w-4 h-4" /> Collaborators & Access
-						</button>
-						<button
-							id="settings-tab-usage"
-							type="button"
-							role="tab"
-							aria-selected={activeTab === 'usage'}
-							aria-controls="settings-panel-usage"
-							onClick={() => setActiveTab('usage')}
-							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'usage'
-								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
-								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
-								}`}
-						>
-							<Sparkles className="w-4 h-4" /> AI Usage
-						</button>
-						<button
-							id="settings-tab-billing"
-							type="button"
-							role="tab"
-							aria-selected={activeTab === 'billing'}
-							aria-controls="settings-panel-billing"
-							onClick={() => setActiveTab('billing')}
-							className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === 'billing'
-								? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
-								: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
-								}`}
-						>
-							<CreditCard className="w-4 h-4" /> Billing & Subscription
-						</button>
+						{SETTINGS_TABS.map((tab) => (
+							<button
+								key={tab.id}
+								ref={(el) => { tabRefs.current[tab.id] = el }}
+								id={`settings-tab-${tab.id}`}
+								type="button"
+								role="tab"
+								tabIndex={activeTab === tab.id ? 0 : -1}
+								aria-selected={activeTab === tab.id}
+								aria-controls={`settings-panel-${tab.id}`}
+								onClick={() => setActiveTab(tab.id)}
+								className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-medium transition-all whitespace-nowrap ${activeTab === tab.id
+									? 'bg-primary-container text-on-primary-container font-bold shadow-sm'
+									: 'text-on-surface-variant hover:bg-black/5 dark:hover:bg-white/5'
+									}`}
+							>
+								<tab.icon className="w-4 h-4" /> {tab.label}
+							</button>
+						))}
 					</aside>
 
 					{/* Main Tab Content */}
@@ -405,7 +412,7 @@ export default function SettingsClient({
 						{activeTab === 'ai' && (
 							<div id="settings-panel-ai" role="tabpanel" aria-labelledby="settings-tab-ai" className="space-y-8 w-full max-w-4xl">
 								<h2 className="text-2xl font-display-lg text-on-surface mb-2">AI & Models</h2>
-								<p className="text-sm text-on-surface-variant mb-6">Manage your connected AI providers, local models, and billing tiers.</p>
+								<p className="text-sm text-on-surface-variant mb-6">Connect AI providers and run local or free models. AI is never metered by Lekhan.</p>
 								<AIProviderSettings 
 									user={user} 
 									registryState={registryState} 
@@ -601,12 +608,12 @@ export default function SettingsClient({
 											</p>
 										</div>
 										<span className="px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold capitalize shrink-0">
-											{entitlement?.tier ?? 'free'} plan
+											{billingLoading || billingError ? '…' : `${entitlement?.tier ?? 'free'} tier`}
 										</span>
 									</div>
 									<ul className="text-xs text-on-surface-variant space-y-2">
 										<li className="flex items-start gap-2"><Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />Your provider key is used directly; provider usage is billed by that provider, not by Lekhan.</li>
-										<li className="flex items-start gap-2"><Bot className="w-4 h-4 text-primary shrink-0 mt-0.5" />No plan bundles an AI allowance, and no AI action is blocked by a Lekhan quota.</li>
+										<li className="flex items-start gap-2"><Bot className="w-4 h-4 text-primary shrink-0 mt-0.5" />No tier bundles an AI allowance, and no AI action is blocked by a Lekhan quota.</li>
 									</ul>
 								</section>
 
