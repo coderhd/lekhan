@@ -55,10 +55,14 @@ async function api(method, p, body, auth = false) {
 }
 
 const agents = await api("GET", `/api/companies/${COMPANY}/agents`);
+const ceos = agents.filter((agent) => agent.role === "ceo" && agent.status !== "terminated");
+if (ceos.length === 0) throw new Error("no current CEO in the company agent roster");
+if (ceos.length > 1) throw new Error("multiple current CEOs in the company agent roster");
+
 const byName = (n) => agents.find((a) => a.name === n)?.id ?? null;
 const A = {
   tl: byName("Tech Lead"), qa: byName("QA Engineer"), designer: byName("UI/UX Designer"),
-  po: byName("Product Owner"), ceo: byName("OpenCode Agent"),
+  po: byName("Product Owner"), ceo: ceos[0].id,
 };
 for (const [k, v] of Object.entries(A)) if (!v) throw new Error(`missing agent: ${k}`);
 
