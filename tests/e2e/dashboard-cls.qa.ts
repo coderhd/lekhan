@@ -46,6 +46,7 @@ for (const width of [320, 390, 768, 1280]) {
    })
    await page.goto('/')
    const inbox = page.getByRole('region', { name: 'Inbox', exact: true })
+   const downstream = page.getByRole('heading', { name: 'Pages', exact: true })
    // Save both states before assertions, including on a settled-state timeout.
    const capture = async (phase: string) => {
     const geometry = await inbox.evaluate(section => {
@@ -61,7 +62,7 @@ for (const width of [320, 390, 768, 1280]) {
       badge: bounds(header?.querySelector('[aria-live]') ?? null),
       openButton: bounds(header?.querySelector('button') ?? null),
       preview: bounds(preview), previewContent: bounds(preview?.firstElementChild ?? null),
-      downstream: bounds(section.nextElementSibling ?? section.parentElement?.nextElementSibling ?? null),
+      downstream: bounds(Array.from(document.querySelectorAll('h2')).find(heading => heading.textContent?.trim() === 'Pages') ?? null),
       cls: (window as unknown as { layoutShifts: number[] }).layoutShifts.reduce((a, b) => a + b, 0),
      }
     })
@@ -79,17 +80,35 @@ for (const width of [320, 390, 768, 1280]) {
     throw error
    }
    await page.evaluate(() => document.fonts.ready)
+   await expect(downstream).toBeVisible()
+   // The heading's ancestor fades and translates on entry; measure after that animation.
+   await downstream.evaluate(async element => {
+    const animations: Animation[] = []
+    for (let node: Element | null = element; node; node = node.parentElement) animations.push(...node.getAnimations())
+    await Promise.all(animations.map(animation => animation.finished))
+   })
    const loadingText = await inbox.getByRole('status').textContent()
    const before = await inbox.boundingBox()
-   const shiftsBefore = (await capture('loading')).cls
+   const loadingGeometry = await capture('loading')
+   const shiftsBefore = loadingGeometry.cls
+   let settledGeometry: Awaited<ReturnType<typeof capture>> | undefined
    release()
    try {
     const settled = state === 'populated' ? inbox.getByRole('list', { name: 'Pending captures' }) : state === 'empty' ? inbox.getByText('Inbox zero') : inbox.getByRole('button', { name: 'Try again' })
     await settled.waitFor()
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
    } finally {
-    await capture('settled')
+    settledGeometry = await capture('settled')
    }
+   await expect(downstream).toBeVisible()
+   for (const geometry of [loadingGeometry, settledGeometry!]) {
+    expect(geometry.downstream).not.toBeNull()
+    expect(geometry.downstream!.width).toBeGreaterThan(0)
+    expect(geometry.downstream!.height).toBeGreaterThan(0)
+    expect(geometry.downstream!.y).toBeGreaterThanOrEqual(geometry.inbox!.y + geometry.inbox!.height)
+   }
+   expect(settledGeometry!.downstream!.x).toBeCloseTo(loadingGeometry.downstream!.x, 1)
+   expect(settledGeometry!.downstream!.y).toBeCloseTo(loadingGeometry.downstream!.y, 1)
    expect(loadingText).toContain('Loading captures')
    if (state === 'populated') {
     await expect(inbox.getByRole('list', { name: 'Pending captures' }).getByRole('listitem')).toHaveCount(5)
