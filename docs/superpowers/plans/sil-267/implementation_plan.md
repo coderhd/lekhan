@@ -8,8 +8,8 @@ Spec: `docs/superpowers/specs/sil-267-spec.md`.
    job timeout. Verify parsed event, directory, permissions, and step configuration.
 2. Document the check name and administrator request in `docs-site/README.md`.
    Run a clean docs install and production build in a run-owned temporary copy;
-   record the actual outcome. Root application checks are outside this CI-only
-   change's verification scope.
+   record the actual outcome. Run the repository verification gate before merge
+   and record its results alongside the isolated docs build evidence.
 3. Have an independent reviewer audit the complete proposed patch across the four
    required axes and record evidence in `docs/reviews/pr-sil-267-review.md`.
 4. Publish a feature branch and PR when writes are permitted. Wait for internal
