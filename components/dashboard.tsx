@@ -300,7 +300,7 @@ export default function Dashboard({ user }: DashboardProps) {
 				pages={myPages}
 			/>
 			<GlobalHeaderSlot slot="right">
-				<div className="flex items-center gap-md">
+				<div className="flex shrink-0 items-center gap-1 sm:gap-md">
 					<button
 						onClick={openQuickCapture}
 						className="flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 py-2 premium-transition text-on-surface-variant hover:text-on-surface hover:bg-black/5 dark:hover:bg-white/10"

@@ -79,6 +79,21 @@ describe('InboxCard', () => {
 		expect(await screen.findByRole('status')).toHaveTextContent(/loading captures/i)
 	})
 
+	it.each(['empty', 'populated', 'error'])('keeps the reserved preview region through %s resolution', async (state) => {
+		let resolve!: (items: ReturnType<typeof item>[]) => void
+		let reject!: (error: Error) => void
+		fetchInboxItems.mockReturnValueOnce(new Promise((res, rej) => { resolve = res; reject = rej }))
+		renderCard()
+		const region = screen.getByRole('status').parentElement!
+		expect(region).toHaveClass('min-h-48')
+		await act(async () => {
+			if (state === 'error') reject(new Error('offline'))
+			else resolve(state === 'populated' ? Array.from({ length: 7 }, (_, i) => item(i)) : [])
+		})
+		expect(region).toBeInTheDocument()
+		expect(region).toHaveClass('min-h-48')
+	})
+
 	it('shows an error with a retry that recovers', async () => {
 		fetchInboxItems.mockRejectedValueOnce(new Error('network down'))
 		fetchInboxItems.mockResolvedValueOnce([item(0)])
