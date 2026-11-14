@@ -41,6 +41,19 @@ it is **not** a static export).
 - Env vars: none required. Optional `NEXT_PUBLIC_DOCS_URL` sets the canonical metadata base
   (defaults to `https://docs.lekhan.online`).
 
+## CI build check
+
+`.github/workflows/docs-site.yml` defines the `docs-site-build` check. It runs
+`npm ci` and `npm run build` from this directory on Node 22 for every pull request
+targeting `main` and every push to `main`. The npm cache uses this app's lockfile.
+There are no path filters, so unrelated PRs also report a result for the required
+check.
+
+Repository administrator request: after the first successful Actions run, add
+`docs-site-build` (GitHub Actions) to the required status checks in the existing
+`main` branch protection rule or ruleset. Preserve the other required checks and
+protection settings. The workflow alone does not enable branch protection.
+
 ## Content
 
 All docs live in `content/docs/` as `.mdx`:
