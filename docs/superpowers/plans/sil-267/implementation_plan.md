@@ -3,7 +3,7 @@
 Spec: `docs/superpowers/specs/sil-267-spec.md`.
 
 1. Add `.github/workflows/docs-site.yml` with unfiltered PR-to-main and push-to-main
-   events, stable `docs-site-build` job name, read-only permissions, Node 24, docs
+   events, stable `docs-site-build` job name, read-only permissions, Node 22, docs
    lockfile cache, docs working directory, install and build steps, and a bounded
    job timeout. Verify parsed event, directory, permissions, and step configuration.
 2. Document the check name and administrator request in `docs-site/README.md`.

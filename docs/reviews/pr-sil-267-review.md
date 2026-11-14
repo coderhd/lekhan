@@ -25,7 +25,7 @@ Actions run, an existing PR, or an enabled required check on `main`.
 ## Configuration evidence
 
 - Checkout precedes setup-node; both use official v6 actions on `ubuntu-latest`.
-- Node 24 satisfies `docs-site/package.json`'s `>=20.9` engine requirement.
+- Follow-up: main now pins the docs engine to Node 22. The workflow was updated to match that engine after review.
 - `defaults.run.working-directory: docs-site` applies to both `npm ci` and
   `npm run build`, in that order. Setup-node's repository-relative
   `cache-dependency-path` correctly selects `docs-site/package-lock.json`.

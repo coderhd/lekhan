@@ -44,7 +44,7 @@ it is **not** a static export).
 ## CI build check
 
 `.github/workflows/docs-site.yml` defines the `docs-site-build` check. It runs
-`npm ci` and `npm run build` from this directory on Node 24 for every pull request
+`npm ci` and `npm run build` from this directory on Node 22 for every pull request
 targeting `main` and every push to `main`. The npm cache uses this app's lockfile.
 There are no path filters, so unrelated PRs also report a result for the required
 check.

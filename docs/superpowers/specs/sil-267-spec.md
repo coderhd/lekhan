@@ -15,7 +15,7 @@ that the resulting check be required on `main`.
 
 ## Boundaries and verification
 
-Use Node 24 (supported by `docs-site/package.json`), an Ubuntu GitHub-hosted runner,
+Use Node 22 (supported by `docs-site/package.json`), an Ubuntu GitHub-hosted runner,
 read-only repository permissions, and npm caching keyed to the docs lockfile.
 No application code, root scripts, dependencies, deployment settings, or production
 secrets change. CONTEXT.md and ADR storage, encryption, and tier invariants are
