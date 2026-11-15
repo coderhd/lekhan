@@ -19,13 +19,20 @@ for (const width of [320, 390, 768, 1280]) {
     Object.assign(window, { layoutShifts: entries })
     new PerformanceObserver(list => { for (const entry of list.getEntries()) if (!(entry as PerformanceEntry & { hadRecentInput: boolean }).hadRecentInput) entries.push((entry as PerformanceEntry & { value: number }).value) }).observe({ type: 'layout-shift', buffered: true })
    }, { user })
-   const errors: string[] = []
+   const errors: Array<{ name: string, message: string, stack: string | null }> = []
+   const scriptResponses: Array<{ url: string, status: number, contentType?: string, contentLength?: string }> = []
    const networkFailures: Array<{ url: string, method: string, failure?: string, status?: number }> = []
    // Do not persist query strings or headers, which could contain credentials.
    const safeUrl = (value: string) => { const url = new URL(value); return url.origin + url.pathname }
    page.on('requestfailed', request => networkFailures.push({ url: safeUrl(request.url()), method: request.method(), failure: request.failure()?.errorText }))
-   page.on('response', response => { if (response.status() >= 400) networkFailures.push({ url: safeUrl(response.url()), method: response.request().method(), status: response.status() }) })
-   page.on('pageerror', error => errors.push(error.message))
+   page.on('response', response => {
+    if (response.request().resourceType() === 'script') {
+     const headers = response.headers()
+     scriptResponses.push({ url: safeUrl(response.url()), status: response.status(), contentType: headers['content-type'], contentLength: headers['content-length'] })
+    }
+    if (response.status() >= 400) networkFailures.push({ url: safeUrl(response.url()), method: response.request().method(), status: response.status() })
+   })
+   page.on('pageerror', error => errors.push({ name: error.name, message: error.message, stack: error.stack ?? null }))
    let release!: () => void
    const pending = new Promise<void>(resolve => { release = resolve })
    await page.route('http://127.0.0.1:54321/**', async route => {
@@ -75,7 +82,7 @@ for (const width of [320, 390, 768, 1280]) {
    try {
     await inbox.getByRole('status').waitFor()
    } catch (error) {
-    await writeFile(test.info().outputPath('cold-boot.json'), JSON.stringify({ width, state, url: safeUrl(page.url()), networkFailures, pageErrors: errors }, null, 2))
+    await writeFile(test.info().outputPath('cold-boot.json'), JSON.stringify({ width, state, url: safeUrl(page.url()), networkFailures, scriptResponses, pageErrors: errors }, null, 2))
     await page.screenshot({ path: test.info().outputPath('cold-boot.png'), fullPage: true })
     throw error
    }
