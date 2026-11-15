@@ -30,6 +30,7 @@ A running log of product/architecture decisions and open questions for Lekhan �
 - [[permission-substrate-vs-team-workspace]]
 
 ## Process / engineering lifecycle
+- [[2026-11-06-weekly-retrospective]] — approved retrospective and decision record (October 30–November 5, 2026)
 - [[01-weekly-retro-hygiene-rules]] — blocked-column SLA, sprint-label integrity, bot-fixture parity in DoD (2026-10-27 retro)
 
 ## External input
