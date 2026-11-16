@@ -1,0 +1,100 @@
+diff --git a/server/src/__tests__/checkout-run-source.test.ts b/server/src/__tests__/checkout-run-source.test.ts
+new file mode 100644
+index 00000000..80237d37
+--- /dev/null
++++ b/server/src/__tests__/checkout-run-source.test.ts
+@@ -0,0 +1,94 @@
++import { randomUUID } from "node:crypto";
++import { eq } from "drizzle-orm";
++import { afterAll, beforeAll, describe, expect, it } from "vitest";
++import { agents, companies, createDb, heartbeatRuns, issues } from "@paperclipai/db";
++import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
++import { issueService } from "../services/issues.js";
++import { observeCrossIssueInfluence } from "../services/cross-issue-influence-limit.js";
++
++const support = await getEmbeddedPostgresTestSupport();
++const describeDb = support.supported ? describe : describe.skip;
++
++describeDb("checkout source binding", () => {
++  let tempDb: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>>;
++  let db: ReturnType<typeof createDb>;
++  beforeAll(async () => {
++    tempDb = await startEmbeddedPostgresTestDatabase("checkout-source-");
++    db = createDb(tempDb.connectionString);
++  }, 30_000);
++  afterAll(async () => { await tempDb?.cleanup(); });
++
++  async function fixture(snapshot: Record<string, unknown>) {
++    const companyId = randomUUID(), agentId = randomUUID(), runId = randomUUID(), issueId = randomUUID();
++    await db.insert(companies).values({ id: companyId, name: "Test", issuePrefix: `C${companyId.replace(/-/g, "").slice(0, 6)}` });
++    await db.insert(agents).values({ id: agentId, companyId, name: "Test", role: "engineer", status: "active", adapterType: "codex_local", adapterConfig: {}, runtimeConfig: {}, permissions: {} });
++    await db.insert(issues).values({ id: issueId, companyId, title: "Task", status: "todo", priority: "medium", assigneeAgentId: agentId });
++    await db.insert(heartbeatRuns).values({ id: runId, companyId, agentId, status: "running", invocationSource: "manual", contextSnapshot: snapshot });
++    return { companyId, agentId, runId, issueId };
++  }
++
++  it("binds a successful trusted checkout so comments and updates do not spend the cross-issue cap", async () => {
++    const f = await fixture({ source: "scheduler" });
++    await issueService(db).checkout(f.issueId, f.agentId, ["todo"], f.runId, { bindRunSource: true } as never);
++    const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, f.runId));
++    expect(run.contextSnapshot).toMatchObject({ source: "scheduler", issueId: f.issueId });
++    for (const kind of ["comment", "update"] as const) {
++      await expect(observeCrossIssueInfluence(db, { ...f, targetIssueId: f.issueId, kind })).resolves.toBeNull();
++    }
++  });
++
++  it("never replaces an existing task binding when another issue is checked out", async () => {
++    const original = randomUUID();
++    const f = await fixture({ taskId: original, source: "scheduler" });
++    await issueService(db).checkout(f.issueId, f.agentId, ["todo"], f.runId, { bindRunSource: true } as never);
++    const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, f.runId));
++    expect(run.contextSnapshot).toEqual({ taskId: original, source: "scheduler" });
++    await expect(observeCrossIssueInfluence(db, { ...f, targetIssueId: f.issueId, kind: "comment" })).resolves.toMatchObject({ count: 1 });
++  });
++
++  it("preserves conflicting snapshot bindings instead of treating the first field as authoritative", async () => {
++    const original = randomUUID();
++    const f = await fixture({ taskId: original, source: "scheduler" });
++    await db.update(heartbeatRuns).set({
++      contextSnapshot: { issueId: f.issueId, taskId: original, source: "scheduler" },
++    }).where(eq(heartbeatRuns.id, f.runId));
++
++    await issueService(db).checkout(f.issueId, f.agentId, ["todo"], f.runId, { bindRunSource: true } as never);
++    const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, f.runId));
++    expect(run.contextSnapshot).toEqual({ issueId: f.issueId, taskId: original, source: "scheduler" });
++  });
++
++  it("does not promote a checkout when run authority has not been established", async () => {
++    const f = await fixture({ source: "scheduler" });
++    await issueService(db).checkout(f.issueId, f.agentId, ["todo"], f.runId);
++    const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, f.runId));
++    expect(run.contextSnapshot).toEqual({ source: "scheduler" });
++  });
++
++  it("does not bind a run when checkout is attempted by an agent from another company", async () => {
++    const f = await fixture({ source: "scheduler" });
++    const otherCompanyId = randomUUID(), otherAgentId = randomUUID();
++    await db.insert(companies).values({ id: otherCompanyId, name: "Other", issuePrefix: `C${otherCompanyId.replace(/-/g, "").slice(0, 6)}` });
++    await db.insert(agents).values({ id: otherAgentId, companyId: otherCompanyId, name: "Other", role: "engineer", status: "active", adapterType: "codex_local", adapterConfig: {}, runtimeConfig: {}, permissions: {} });
++    await expect(issueService(db).checkout(f.issueId, otherAgentId, ["todo"], f.runId, { bindRunSource: true } as never)).rejects.toThrow();
++    const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, f.runId));
++    expect(run.contextSnapshot).toEqual({ source: "scheduler" });
++  });
++
++  it("does not rebind a run when two issue checkouts race", async () => {
++    const f = await fixture({ source: "scheduler" });
++    const secondIssueId = randomUUID();
++    await db.insert(issues).values({ id: secondIssueId, companyId: f.companyId, title: "Second task", status: "todo", priority: "medium", assigneeAgentId: f.agentId });
++    const results = await Promise.allSettled([f.issueId, secondIssueId].map((id) =>
++      issueService(db).checkout(id, f.agentId, ["todo"], f.runId, { bindRunSource: true } as never),
++    ));
++    expect(results.every((result) => result.status === "fulfilled")).toBe(true);
++    const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, f.runId));
++    const source = (run.contextSnapshot as Record<string, unknown>).issueId;
++    expect([f.issueId, secondIssueId]).toContain(source);
++    const other = source === f.issueId ? secondIssueId : f.issueId;
++    await expect(observeCrossIssueInfluence(db, { ...f, targetIssueId: source as string, kind: "comment" })).resolves.toBeNull();
++    await expect(observeCrossIssueInfluence(db, { ...f, targetIssueId: other, kind: "comment" })).resolves.toMatchObject({ count: 1 });
++  });
++
++});
