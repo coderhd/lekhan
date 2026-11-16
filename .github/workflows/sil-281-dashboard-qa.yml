@@ -29,6 +29,9 @@ jobs:
           echo '8768af0770332df649bf17cecdddff625731ffbb7fb9f178bce896fe4c00f787  '"$GITHUB_WORKSPACE"'/.github/qa/sil325-delta.patch' | sha256sum -c
           git apply --check "$GITHUB_WORKSPACE/.github/qa/sil325-delta.patch"
           git apply "$GITHUB_WORKSPACE/.github/qa/sil325-delta.patch"
+          echo '201d68130cfd5d3df459286e583ba192c82f9319618bc19e9feeaee3940015d7  '"$GITHUB_WORKSPACE"'/.github/qa/sil325-rollback.patch' | sha256sum -c
+          git apply --check "$GITHUB_WORKSPACE/.github/qa/sil325-rollback.patch"
+          git apply "$GITHUB_WORKSPACE/.github/qa/sil325-rollback.patch"
           node --version
           df -h .
       - name: Install dependencies
