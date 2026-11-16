@@ -1,4 +1,4 @@
-name: SIL-332 exact-head verification
+name: SIL-285 exact-head verification
 
 on:
   workflow_dispatch:
@@ -13,9 +13,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: cc75c9010e11d5e52d9a6952351dc065334d49a4
+          ref: 37d9da6c953f8926e8d56e24bfc39506a982042c
       - name: Record checked-out commit
-        run: git rev-parse HEAD && test "$(git rev-parse HEAD)" = cc75c9010e11d5e52d9a6952351dc065334d49a4
+        run: git rev-parse HEAD && test "$(git rev-parse HEAD)" = 37d9da6c953f8926e8d56e24bfc39506a982042c
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
