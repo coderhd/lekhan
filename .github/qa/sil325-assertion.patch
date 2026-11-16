@@ -1,0 +1,14 @@
+diff --git a/server/src/__tests__/checkout-run-source.test.ts b/server/src/__tests__/checkout-run-source.test.ts
+index e3504d06..df0932e6 100644
+--- a/server/src/__tests__/checkout-run-source.test.ts
++++ b/server/src/__tests__/checkout-run-source.test.ts
+@@ -114,7 +114,8 @@ describeDb("checkout source binding", () => {
+     await db.execute(sql`CREATE FUNCTION reject_test_binding() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'binding test failure'; END $$`);
+     await db.execute(sql`CREATE TRIGGER reject_test_binding BEFORE UPDATE OF context_snapshot ON heartbeat_runs FOR EACH ROW EXECUTE FUNCTION reject_test_binding()`);
+     try {
+-      await expect(issueService(db).checkout(f.issueId, f.agentId, ["todo"], f.runId, { bindRunSource: true } as never)).rejects.toThrow("binding test failure");
++      await expect(issueService(db).checkout(f.issueId, f.agentId, ["todo"], f.runId, { bindRunSource: true } as never))
++        .rejects.toMatchObject({ cause: expect.objectContaining({ message: "binding test failure" }) });
+       const [issue] = await db.select().from(issues).where(eq(issues.id, f.issueId));
+       const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, f.runId));
+       expect(issue.status).toBe("todo");

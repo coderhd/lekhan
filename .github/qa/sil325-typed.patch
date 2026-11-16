@@ -1,0 +1,42 @@
+diff --git a/server/src/__tests__/checkout-run-source.test.ts b/server/src/__tests__/checkout-run-source.test.ts
+index 5838847d..e3504d06 100644
+--- a/server/src/__tests__/checkout-run-source.test.ts
++++ b/server/src/__tests__/checkout-run-source.test.ts
+@@ -126,4 +126,16 @@ describeDb("checkout source binding", () => {
+     }
+   });
+ 
++
++  it.each(["issueId", "nativeIssueId"] as const)("does not override a different typed %s binding", async (field) => {
++    const f = await fixture({ source: "scheduler" });
++    const original = randomUUID();
++    await db.insert(issues).values({ id: original, companyId: f.companyId, title: "Original task", status: "todo", priority: "medium" });
++    await db.update(heartbeatRuns).set({ [field]: original, ...(field === "issueId" ? { scopeKind: "issue" as const } : {}) }).where(eq(heartbeatRuns.id, f.runId));
++    await issueService(db).checkout(f.issueId, f.agentId, ["todo"], f.runId, { bindRunSource: true });
++    const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, f.runId));
++    expect(run[field]).toBe(original);
++    expect(run.contextSnapshot).toEqual({ source: "scheduler" });
++  });
++
+ });
+diff --git a/server/src/services/issues.ts b/server/src/services/issues.ts
+index 08eac297..cb571903 100644
+--- a/server/src/services/issues.ts
++++ b/server/src/services/issues.ts
+@@ -7118,13 +7118,14 @@ async function lockIssueForCommentMutation(tx: DbTransaction, commentId: string)
+ 
+ // Caller must establish run authority before requesting promotion.
+ async function promoteCheckoutSource(tx: DbTransaction, companyId: string, agentId: string, runId: string, issueId: string) {
+-  const [run] = await tx.select({ contextSnapshot: heartbeatRuns.contextSnapshot })
++  const [run] = await tx.select({ contextSnapshot: heartbeatRuns.contextSnapshot, issueId: heartbeatRuns.issueId, nativeIssueId: heartbeatRuns.nativeIssueId })
+     .from(heartbeatRuns).where(and(eq(heartbeatRuns.id, runId), eq(heartbeatRuns.companyId, companyId), eq(heartbeatRuns.agentId, agentId))).for("update");
+   if (!run) throw forbidden("Checkout run authority unavailable");
++  if ([run.issueId, run.nativeIssueId].some((bound) => bound && bound !== issueId)) return;
+   const snapshot = run.contextSnapshot;
+   if (snapshot != null && (typeof snapshot !== "object" || Array.isArray(snapshot))) return;
+   const context = (snapshot ?? {}) as Record<string, unknown>;
+-  if ([context.issueId, context.taskId].some((value) => typeof value === "string" && value.trim().length > 0)) return;
++  if ([context.issueId, context.taskId, context.taskKey].some((value) => value != null && (typeof value !== "string" || value.trim().length > 0))) return;
+   await tx.update(heartbeatRuns).set({ contextSnapshot: { ...context, issueId } }).where(eq(heartbeatRuns.id, runId));
+ }
+ 

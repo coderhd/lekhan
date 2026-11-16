@@ -32,6 +32,12 @@ jobs:
           echo 'ed17105d031ae8b2470f294dfb749278ce3f4a0af2b9b8851c6b62b2b63e9d04  '"$GITHUB_WORKSPACE"'/.github/qa/sil325-implementation.patch' | sha256sum -c
           git apply --check "$GITHUB_WORKSPACE/.github/qa/sil325-implementation.patch"
           git apply "$GITHUB_WORKSPACE/.github/qa/sil325-implementation.patch"
+          echo '0a4cee925c88d07d8fd4f15213e6dbdd7a5b06eb8bf1c82abc8e5fdb6d341731  '"$GITHUB_WORKSPACE"'/.github/qa/sil325-typed.patch' | sha256sum -c
+          git apply --check "$GITHUB_WORKSPACE/.github/qa/sil325-typed.patch"
+          git apply "$GITHUB_WORKSPACE/.github/qa/sil325-typed.patch"
+          echo 'd423169d42c23100f6c870c8f8b8a607cb192603472e27c7518e38b86090b145  '"$GITHUB_WORKSPACE"'/.github/qa/sil325-assertion.patch' | sha256sum -c
+          git apply --check "$GITHUB_WORKSPACE/.github/qa/sil325-assertion.patch"
+          git apply "$GITHUB_WORKSPACE/.github/qa/sil325-assertion.patch"
           node --version
           df -h .
       - name: Install dependencies
