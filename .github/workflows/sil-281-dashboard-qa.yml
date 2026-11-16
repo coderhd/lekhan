@@ -26,6 +26,9 @@ jobs:
           git checkout --detach 6400698a8ec5c50d2074746c97c6266d160ed5a5
           git apply --check "$GITHUB_WORKSPACE/.github/qa/sil325-draft.patch"
           git apply "$GITHUB_WORKSPACE/.github/qa/sil325-draft.patch"
+          echo '8768af0770332df649bf17cecdddff625731ffbb7fb9f178bce896fe4c00f787  '"$GITHUB_WORKSPACE"'/.github/qa/sil325-delta.patch' | sha256sum -c
+          git apply --check "$GITHUB_WORKSPACE/.github/qa/sil325-delta.patch"
+          git apply "$GITHUB_WORKSPACE/.github/qa/sil325-delta.patch"
           node --version
           df -h .
       - name: Install dependencies

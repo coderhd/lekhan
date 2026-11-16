@@ -1,0 +1,27 @@
+diff --git a/server/src/__tests__/checkout-run-source.test.ts b/server/src/__tests__/checkout-run-source.test.ts
+index 80237d37..1ebd9380 100644
+--- a/server/src/__tests__/checkout-run-source.test.ts
++++ b/server/src/__tests__/checkout-run-source.test.ts
+@@ -91,4 +91,21 @@ describeDb("checkout source binding", () => {
+     await expect(observeCrossIssueInfluence(db, { ...f, targetIssueId: other, kind: "comment" })).resolves.toMatchObject({ count: 1 });
+   });
+ 
++
++  it("binds when an unowned in-progress checkout is adopted", async () => {
++    const f = await fixture({ source: "scheduler" });
++    await db.update(issues).set({ status: "in_progress", checkoutRunId: null, executionRunId: null }).where(eq(issues.id, f.issueId));
++    await issueService(db).checkout(f.issueId, f.agentId, ["todo"], f.runId, { bindRunSource: true } as never);
++    const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, f.runId));
++    expect(run.contextSnapshot).toMatchObject({ issueId: f.issueId });
++  });
++
++  it("does not bind when checkout is rejected by its status guard", async () => {
++    const f = await fixture({ source: "scheduler" });
++    await db.update(issues).set({ status: "done" }).where(eq(issues.id, f.issueId));
++    await expect(issueService(db).checkout(f.issueId, f.agentId, ["todo"], f.runId, { bindRunSource: true } as never)).rejects.toThrow();
++    const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, f.runId));
++    expect(run.contextSnapshot).toEqual({ source: "scheduler" });
++  });
++
+ });
+
