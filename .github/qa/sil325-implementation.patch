@@ -1,0 +1,102 @@
+diff --git a/server/src/__tests__/checkout-run-source.test.ts b/server/src/__tests__/checkout-run-source.test.ts
+index 1ebd9380..5838847d 100644
+--- a/server/src/__tests__/checkout-run-source.test.ts
++++ b/server/src/__tests__/checkout-run-source.test.ts
+@@ -1,5 +1,5 @@
+ import { randomUUID } from "node:crypto";
+-import { eq } from "drizzle-orm";
++import { eq, sql } from "drizzle-orm";
+ import { afterAll, beforeAll, describe, expect, it } from "vitest";
+ import { agents, companies, createDb, heartbeatRuns, issues } from "@paperclipai/db";
+ import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
+@@ -108,4 +108,22 @@ describeDb("checkout source binding", () => {
+     expect(run.contextSnapshot).toEqual({ source: "scheduler" });
+   });
+ 
++
++  it("rolls back checkout when source binding fails", async () => {
++    const f = await fixture({ source: "scheduler" });
++    await db.execute(sql`CREATE FUNCTION reject_test_binding() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'binding test failure'; END $$`);
++    await db.execute(sql`CREATE TRIGGER reject_test_binding BEFORE UPDATE OF context_snapshot ON heartbeat_runs FOR EACH ROW EXECUTE FUNCTION reject_test_binding()`);
++    try {
++      await expect(issueService(db).checkout(f.issueId, f.agentId, ["todo"], f.runId, { bindRunSource: true } as never)).rejects.toThrow("binding test failure");
++      const [issue] = await db.select().from(issues).where(eq(issues.id, f.issueId));
++      const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, f.runId));
++      expect(issue.status).toBe("todo");
++      expect(issue.checkoutRunId).toBeNull();
++      expect(run.contextSnapshot).toEqual({ source: "scheduler" });
++    } finally {
++      await db.execute(sql`DROP TRIGGER IF EXISTS reject_test_binding ON heartbeat_runs`);
++      await db.execute(sql`DROP FUNCTION IF EXISTS reject_test_binding()`);
++    }
++  });
++
+ });
+diff --git a/server/src/services/issues.ts b/server/src/services/issues.ts
+index 77aad51f..08eac297 100644
+--- a/server/src/services/issues.ts
++++ b/server/src/services/issues.ts
+@@ -7116,6 +7116,18 @@ async function lockIssueForCommentMutation(tx: DbTransaction, commentId: string)
+   return Boolean(issue);
+ }
+ 
++// Caller must establish run authority before requesting promotion.
++async function promoteCheckoutSource(tx: DbTransaction, companyId: string, agentId: string, runId: string, issueId: string) {
++  const [run] = await tx.select({ contextSnapshot: heartbeatRuns.contextSnapshot })
++    .from(heartbeatRuns).where(and(eq(heartbeatRuns.id, runId), eq(heartbeatRuns.companyId, companyId), eq(heartbeatRuns.agentId, agentId))).for("update");
++  if (!run) throw forbidden("Checkout run authority unavailable");
++  const snapshot = run.contextSnapshot;
++  if (snapshot != null && (typeof snapshot !== "object" || Array.isArray(snapshot))) return;
++  const context = (snapshot ?? {}) as Record<string, unknown>;
++  if ([context.issueId, context.taskId].some((value) => typeof value === "string" && value.trim().length > 0)) return;
++  await tx.update(heartbeatRuns).set({ contextSnapshot: { ...context, issueId } }).where(eq(heartbeatRuns.id, runId));
++}
++
+ export function issueService(db: Db) {
+   const instanceSettings = instanceSettingsService(db);
+   const treeControlSvc = issueTreeControlService(db);
+@@ -12739,7 +12751,7 @@ export function issueService(db: Db) {
+       agentId: string,
+       expectedStatuses: string[],
+       checkoutRunId: string | null,
+-      options: { blockedState?: { lastStatusDecisionId: string; statusVersion: number } } = {},
++      options: { blockedState?: { lastStatusDecisionId: string; statusVersion: number }; bindRunSource?: boolean } = {},
+     ) => {
+       const issueCompany = await db
+         .select({ companyId: issues.companyId })
+@@ -12831,7 +12843,7 @@ export function issueService(db: Db) {
+         await notifyDeferredExecutionEligibility(tx, { companyId: issueCompany.companyId });
+         await notifyDeliveryWork(tx, DELIVERY_QUEUES.agentTimers);
+         await notifyRoutineExecutionStatus(tx, id);
+-        return tx
++        const row = await tx
+           .update(issues)
+           .set({
+             assigneeAgentId: agentId,
+@@ -12862,6 +12874,8 @@ export function issueService(db: Db) {
+           )
+           .returning()
+           .then((rows) => rows[0] ?? null);
++        if (row && options.bindRunSource && checkoutRunId) await promoteCheckoutSource(tx, issueCompany.companyId, agentId, checkoutRunId, id);
++        return row;
+       });
+ 
+       if (updated) {
+@@ -12893,7 +12907,7 @@ export function issueService(db: Db) {
+       ) {
+         const adopted = await db.transaction(async tx => {
+           await notifyStatusCardIssueChange(tx, issueCompany.companyId);
+-          return tx
++          const row = await tx
+           .update(issues)
+           .set({
+             checkoutRunId,
+@@ -12914,6 +12928,8 @@ export function issueService(db: Db) {
+           )
+           .returning()
+           .then((rows) => rows[0] ?? null);
++          if (row && options.bindRunSource && checkoutRunId) await promoteCheckoutSource(tx, issueCompany.companyId, agentId, checkoutRunId, id);
++          return row;
+         });
+         if (adopted) return adopted;
+       }
