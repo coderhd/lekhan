@@ -1,58 +1,35 @@
-name: SIL-281 Dashboard Browser QA
+name: SIL-332 exact-head verification
 
 on:
-  push:
-    branches: [codex/sil-281-chromium-runner]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  dashboard-browser-qa:
+  verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 30
     steps:
-      - name: Check out source
-        uses: actions/checkout@v6
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/checkout@v6
         with:
-          node-version: '24'
+          ref: cc75c9010e11d5e52d9a6952351dc065334d49a4
+      - name: Record checked-out commit
+        run: git rev-parse HEAD && test "$(git rev-parse HEAD)" = cc75c9010e11d5e52d9a6952351dc065334d49a4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
           cache: npm
-      - name: Install dependencies
+      - name: Install
         run: npm ci
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Run development browser QA
-        run: npx playwright test -c dashboard-qa.config.ts
-      - name: Build production bundle with synthetic QA settings
-        if: ${{ !cancelled() }}
-        id: production_build
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test
+      - name: Build with synthetic settings
         run: npm run build
         env:
-          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: synthetic-qa-key
-      - name: Run production browser QA
-        if: ${{ !cancelled() && steps.production_build.outcome == 'success' }}
-        run: npx playwright test -c dashboard-qa.config.ts
-        env:
-          DASHBOARD_QA_MODE: production
-      - name: Publish development browser evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: sil-296-dashboard-development
-          path: test-results/dashboard-qa-development/
-          if-no-files-found: warn
-          retention-days: 30
-      - name: Publish production browser evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: sil-296-dashboard-production
-          path: test-results/dashboard-qa-production/
-          if-no-files-found: warn
-          retention-days: 30
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
