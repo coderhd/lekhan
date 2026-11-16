@@ -35,6 +35,9 @@ jobs:
           corepack prepare pnpm@9.15.4 --activate
           pnpm --version
           pnpm install --frozen-lockfile
+      - name: Build upstream plugin SDK
+        working-directory: /tmp/paperclip-sil325
+        run: pnpm --filter @paperclipai/plugin-sdk build
       - name: Run unexecuted draft regressions
         working-directory: /tmp/paperclip-sil325
         run: pnpm --dir server exec vitest run src/__tests__/checkout-run-source.test.ts
