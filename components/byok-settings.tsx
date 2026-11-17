@@ -73,7 +73,7 @@ export default function BYOKSettings() {
 					</div>
 					<div>
 						<h3 className="text-lg font-display-md text-on-surface">Sarvam AI Key (BYOK)</h3>
-						<p className="text-xs text-on-surface-variant">Use your custom key for unlimited AI features.</p>
+						<p className="text-xs text-on-surface-variant">Run AI on your own key. AI is never metered by Lekhan — the provider bills you directly.</p>
 					</div>
 				</div>
 				<div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[11px] font-bold shrink-0">

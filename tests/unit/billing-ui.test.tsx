@@ -100,7 +100,7 @@ describe('BillingSettings (T12 real states)', () => {
 			/>,
 		)
 		expect(screen.getByText(/Payment failed/i)).toBeInTheDocument()
-		expect(screen.getByText(/your notes are never deleted/i)).toBeInTheDocument()
+		expect(screen.getByText(/your pages are never deleted/i)).toBeInTheDocument()
 	})
 
 	it('shows the read-only state after grace expiry without deleting anything', () => {

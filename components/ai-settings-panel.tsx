@@ -84,7 +84,7 @@ export default function AISettingsPanel({
 				{/* Document Intelligence */}
 				<div className='space-y-2'>
 					<p className='text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60'>
-						Document Primary Language
+						Page Primary Language
 					</p>
 					<div className='rounded-xl border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 p-3 flex flex-col gap-1.5'>
 						<div className='flex items-center gap-2'>
@@ -100,7 +100,7 @@ export default function AISettingsPanel({
 							)}
 						</div>
 						<div className='text-[11px] text-on-surface-variant/60 leading-normal'>
-							For multilingual documents, this is automatically used as the source language for Lekhan Bot transliteration and AI actions.
+							For multilingual pages, this is automatically used as the source language for Lekhan Bot transliteration and AI actions.
 						</div>
 					</div>
 				</div>
@@ -175,7 +175,7 @@ export default function AISettingsPanel({
 
 			<div className='mt-auto pt-4 text-left border-t border-black/5 dark:border-white/5'>
 				<p className='text-[10px] text-on-surface-variant/50 leading-relaxed'>
-					AI-generated content may be inaccurate or misleading. Always review and verify important information before using it in your document.
+					AI-generated content may be inaccurate or misleading. Always review and verify important information before using it in your page.
 				</p>
 			</div>
 		</aside>
