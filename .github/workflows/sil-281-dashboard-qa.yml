@@ -41,6 +41,7 @@ jobs:
           echo '6a7f3a9253c7a19da343a9241545a65541ffbbc58db12799220de69cbdc0476f  '"$GITHUB_WORKSPACE"'/.github/qa/sil325-owned.patch' | sha256sum -c
           git apply --check "$GITHUB_WORKSPACE/.github/qa/sil325-owned.patch"
           git apply "$GITHUB_WORKSPACE/.github/qa/sil325-owned.patch"
+          python3 -c 'from pathlib import Path; p=Path("server/src/__tests__/checkout-run-source.test.ts"); s=p.read_text(); old="    expect(results.every((result) => result.status === \"fulfilled\")).toBe(true);"; new="    const failures = results.filter((result): result is PromiseRejectedResult => result.status === \"rejected\");\n    if (failures.length) throw new AggregateError(failures.map((result) => result.reason), \"Concurrent checkout rejected\");"; assert s.count(old)==1; p.write_text(s.replace(old,new))'
           node --version
           df -h .
       - name: Install dependencies
@@ -55,4 +56,10 @@ jobs:
         run: pnpm --filter @paperclipai/plugin-sdk build
       - name: Run unexecuted draft regressions
         working-directory: /tmp/paperclip-sil325
-        run: pnpm --dir server exec vitest run src/__tests__/checkout-run-source.test.ts
+        run: |
+          result=0
+          for attempt in 1 2 3; do
+            echo "Diagnostic attempt $attempt"
+            pnpm --dir server exec vitest run src/__tests__/checkout-run-source.test.ts || result=1
+          done
+          exit "$result"
