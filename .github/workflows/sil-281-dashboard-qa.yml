@@ -38,6 +38,9 @@ jobs:
           echo 'd423169d42c23100f6c870c8f8b8a607cb192603472e27c7518e38b86090b145  '"$GITHUB_WORKSPACE"'/.github/qa/sil325-assertion.patch' | sha256sum -c
           git apply --check "$GITHUB_WORKSPACE/.github/qa/sil325-assertion.patch"
           git apply "$GITHUB_WORKSPACE/.github/qa/sil325-assertion.patch"
+          echo '6a7f3a9253c7a19da343a9241545a65541ffbbc58db12799220de69cbdc0476f  '"$GITHUB_WORKSPACE"'/.github/qa/sil325-owned.patch' | sha256sum -c
+          git apply --check "$GITHUB_WORKSPACE/.github/qa/sil325-owned.patch"
+          git apply "$GITHUB_WORKSPACE/.github/qa/sil325-owned.patch"
           node --version
           df -h .
       - name: Install dependencies

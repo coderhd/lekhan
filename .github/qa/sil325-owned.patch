@@ -1,0 +1,46 @@
+diff --git a/server/src/__tests__/checkout-run-source.test.ts b/server/src/__tests__/checkout-run-source.test.ts
+index df0932e6..c9bd572d 100644
+--- a/server/src/__tests__/checkout-run-source.test.ts
++++ b/server/src/__tests__/checkout-run-source.test.ts
+@@ -139,4 +139,13 @@ describeDb("checkout source binding", () => {
+     expect(run.contextSnapshot).toEqual({ source: "scheduler" });
+   });
+ 
++
++  it("binds when the same run already owns the checkout", async () => {
++    const f = await fixture({ source: "scheduler" });
++    await db.update(issues).set({ status: "in_progress", checkoutRunId: f.runId, executionRunId: f.runId }).where(eq(issues.id, f.issueId));
++    await issueService(db).checkout(f.issueId, f.agentId, ["todo"], f.runId, { bindRunSource: true });
++    const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, f.runId));
++    expect(run.contextSnapshot).toMatchObject({ issueId: f.issueId });
++  });
++
+ });
+diff --git a/server/src/services/issues.ts b/server/src/services/issues.ts
+index cb571903..b174d2f2 100644
+--- a/server/src/services/issues.ts
++++ b/server/src/services/issues.ts
+@@ -13029,11 +13029,18 @@ export function issueService(db: Db) {
+         current.status === "in_progress" &&
+         sameRunLock(current.checkoutRunId, checkoutRunId)
+       ) {
+-        const row = await db
+-          .select()
+-          .from(issues)
+-          .where(eq(issues.id, id))
+-          .then((rows) => rows[0] ?? null);
++        const row = options.bindRunSource && checkoutRunId
++          ? await db.transaction(async (tx) => {
++              const [owned] = await tx.select().from(issues).where(and(
++                eq(issues.id, id), eq(issues.companyId, issueCompany.companyId),
++                eq(issues.status, "in_progress"), eq(issues.assigneeAgentId, agentId),
++                eq(issues.checkoutRunId, checkoutRunId),
++              )).for("update");
++              if (!owned) throw conflict("Issue checkout ownership changed");
++              await promoteCheckoutSource(tx, issueCompany.companyId, agentId, checkoutRunId, id);
++              return owned;
++            })
++          : await db.select().from(issues).where(eq(issues.id, id)).then((rows) => rows[0] ?? null);
+         if (!row) throw notFound("Issue not found");
+         const [enriched] = await withIssueLabels(db, [row]);
+         return enriched;
