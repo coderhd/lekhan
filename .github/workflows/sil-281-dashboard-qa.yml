@@ -41,7 +41,9 @@ jobs:
           echo '6a7f3a9253c7a19da343a9241545a65541ffbbc58db12799220de69cbdc0476f  '"$GITHUB_WORKSPACE"'/.github/qa/sil325-owned.patch' | sha256sum -c
           git apply --check "$GITHUB_WORKSPACE/.github/qa/sil325-owned.patch"
           git apply "$GITHUB_WORKSPACE/.github/qa/sil325-owned.patch"
-          python3 -c 'from pathlib import Path; p=Path("server/src/__tests__/checkout-run-source.test.ts"); s=p.read_text(); old="    expect(results.every((result) => result.status === \"fulfilled\")).toBe(true);"; new="    const failures = results.filter((result): result is PromiseRejectedResult => result.status === \"rejected\");\n    if (failures.length) throw new AggregateError(failures.map((result) => result.reason), \"Concurrent checkout rejected\");"; assert s.count(old)==1; p.write_text(s.replace(old,new))'
+          echo '10f2578e10a0d9ef5c19d68d5749fb323947463fa6d84750e0eda52a61de8b87  '"$GITHUB_WORKSPACE"'/.github/qa/sil325-race.patch' | sha256sum -c
+          git apply --check "$GITHUB_WORKSPACE/.github/qa/sil325-race.patch"
+          git apply "$GITHUB_WORKSPACE/.github/qa/sil325-race.patch"
           node --version
           df -h .
       - name: Install dependencies

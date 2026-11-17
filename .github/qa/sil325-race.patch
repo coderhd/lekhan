@@ -1,0 +1,28 @@
+--- a/server/src/__tests__/checkout-run-source.test.ts
++++ b/server/src/__tests__/checkout-run-source.test.ts
+@@ -76,20 +76,23 @@
+   });
+ 
+   it("does not rebind a run when two issue checkouts race", async () => {
++    for (let attempt = 0; attempt < 30; attempt++) {
+     const f = await fixture({ source: "scheduler" });
+     const secondIssueId = randomUUID();
+     await db.insert(issues).values({ id: secondIssueId, companyId: f.companyId, title: "Second task", status: "todo", priority: "medium", assigneeAgentId: f.agentId });
+     const results = await Promise.allSettled([f.issueId, secondIssueId].map((id) =>
+       issueService(db).checkout(id, f.agentId, ["todo"], f.runId, { bindRunSource: true } as never),
+     ));
+-    expect(results.every((result) => result.status === "fulfilled")).toBe(true);
++    const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
++    if (failures.length) throw new AggregateError(failures.map((result) => result.reason), `Concurrent checkout rejected on attempt ${attempt + 1}`);
+     const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, f.runId));
+     const source = (run.contextSnapshot as Record<string, unknown>).issueId;
+     expect([f.issueId, secondIssueId]).toContain(source);
+     const other = source === f.issueId ? secondIssueId : f.issueId;
+     await expect(observeCrossIssueInfluence(db, { ...f, targetIssueId: source as string, kind: "comment" })).resolves.toBeNull();
+     await expect(observeCrossIssueInfluence(db, { ...f, targetIssueId: other, kind: "comment" })).resolves.toMatchObject({ count: 1 });
+-  });
++    }
++  }, 120_000);
+ 
+ 
+   it("binds when an unowned in-progress checkout is adopted", async () => {
