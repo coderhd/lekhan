@@ -1,0 +1,22 @@
+Your wave is up. Here is your invite: {{contact.INVITE_URL}}
+
+Three things to do first, in this order:
+
+1. Import your vault. If it's large, start with one folder - the fidelity
+   report tells you what mapped.
+2. Share one page and invite one person. Collaboration is the part that's
+   hard to describe and easy to feel.
+3. Break something. Reply with what happened. Founding-cohort reports go
+   ahead of the public backlog.
+
+Your founding price stays locked for as long as your workspace exists. No
+card is needed during the beta.
+
+If the link doesn't work, reply and I'll send a fresh one.
+
+- Harsh, Lekhan
+
+Open my workspace:
+{{contact.INVITE_URL}}?utm_source=brevo&utm_medium=email&utm_campaign=founding_invite&utm_content=email-4-invite
+
+Unsubscribe: {{unsubscribe}}

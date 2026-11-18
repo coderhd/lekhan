@@ -1,0 +1,29 @@
+Most importers say the move worked. Then you open a page and your
+[[wikilinks]] are plain text.
+
+We built the import the other way around: check what mapped, then tell you
+exactly what didn't.
+
+What comes across today:
+
+- Wikilinks become real links in the graph, not strings that look like links.
+- Callouts keep their type and their content.
+- Frontmatter and tags stay attached to the page.
+- Folders become your page tree.
+
+What doesn't map is named. Every import ends with a fidelity report: pages
+imported, links resolved, links pointing at notes you never created, callouts
+it couldn't classify. Nothing disappears quietly.
+
+Your source vault is read, never rewritten. Export back to markdown whenever
+you want - md, html, pdf, or docx.
+
+If a note imports badly, send me the file. It becomes a test case before the
+next wave.
+
+- Harsh, Lekhan
+
+See how import works:
+https://lekhan.online/faq?utm_source=brevo&utm_medium=email&utm_campaign=founding_welcome&utm_content=email-2-import
+
+Unsubscribe: {{unsubscribe}}

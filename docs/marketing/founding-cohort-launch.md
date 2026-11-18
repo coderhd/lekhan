@@ -28,7 +28,7 @@ Shared context: `.agents/product-marketing.md`.
 
 - [x] Landing page value prop → copy below → #85 build
 - [x] Email capture/waitlist → #85 + Brevo
-- [ ] Owned channel live: Brevo welcome sequence drafted (emails-skill pass)
+- [x] Owned channel live: Brevo welcome sequence drafted (emails-skill pass) — copy in [`brevo-welcome-sequence.md`](brevo-welcome-sequence.md); send stays human-in-the-loop
 - [ ] Social bios optimized with UTM'd early link
 - [ ] Launch assets: 3 screenshots + one 30s vault-import capture
 - [ ] Analytics events firing (#83)
