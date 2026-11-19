@@ -1,4 +1,5 @@
 'use client'
+import { Button as AstryxButton } from '@astryxdesign/core/Button'
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -519,33 +520,12 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 						aria-label="Graph view controls"
 						className="absolute bottom-4 right-4 flex items-center gap-1 rounded-xl border border-black/10 bg-surface-container/95 p-1 shadow-lg backdrop-blur dark:border-white/10"
 					>
-						<button
-							type="button"
-							aria-label="Zoom in"
-							title="Zoom in"
-							onClick={() => zoomBy(1.25)}
-							className={`flex h-11 w-11 items-center justify-center rounded-lg text-on-surface-variant hover:bg-black/5 hover:text-on-surface dark:hover:bg-white/10 ${FOCUS_RING}`}
-						>
-							<Plus size={18} aria-hidden="true" />
-						</button>
-						<button
-							type="button"
-							aria-label="Zoom out"
-							title="Zoom out"
-							onClick={() => zoomBy(0.8)}
-							className={`flex h-11 w-11 items-center justify-center rounded-lg text-on-surface-variant hover:bg-black/5 hover:text-on-surface dark:hover:bg-white/10 ${FOCUS_RING}`}
-						>
-							<Minus size={18} aria-hidden="true" />
-						</button>
-						<button
-							type="button"
-							aria-label="Reset view"
-							title="Reset view"
-							onClick={resetView}
-							className={`flex h-11 w-11 items-center justify-center rounded-lg text-on-surface-variant hover:bg-black/5 hover:text-on-surface dark:hover:bg-white/10 ${FOCUS_RING}`}
-						>
-							<RotateCcw size={16} aria-hidden="true" />
-						</button>
+						<AstryxButton label="Zoom in" variant="ghost" isIconOnly className="ax-touch"
+							icon={<Plus size={18} aria-hidden />} onClick={() => zoomBy(1.25)} />
+						<AstryxButton label="Zoom out" variant="ghost" isIconOnly className="ax-touch"
+							icon={<Minus size={18} aria-hidden />} onClick={() => zoomBy(0.8)} />
+						<AstryxButton label="Reset view" variant="ghost" isIconOnly className="ax-touch"
+							icon={<RotateCcw size={18} aria-hidden />} onClick={resetView} />
 					</div>
 
 					<p className="sr-only">

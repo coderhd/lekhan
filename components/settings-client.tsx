@@ -1,4 +1,5 @@
 'use client'
+import { Button as AstryxButton } from '@astryxdesign/core/Button'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
@@ -328,7 +329,7 @@ export default function SettingsClient({
 						onKeyDown={handleTabKeyDown}
 						className={styles.settingNav}
 					>
-						<button
+						<AstryxButton variant="ghost" width="100%"
 							id="settings-tab-ai"
 							type="button"
 							role="tab"
@@ -336,11 +337,8 @@ export default function SettingsClient({
 							tabIndex={activeTab === 'ai' ? 0 : -1}
 							aria-controls="settings-panel-ai"
 							onClick={() => setActiveTab('ai')}
-
-						>
-							<Bot className="w-4 h-4" /> AI & Models
-						</button>
-						<button
+							icon={<Bot aria-hidden />} label="AI & Models" />
+						<AstryxButton variant="ghost" width="100%"
 							id="settings-tab-profile"
 							type="button"
 							role="tab"
@@ -348,11 +346,8 @@ export default function SettingsClient({
 							tabIndex={activeTab === 'profile' ? 0 : -1}
 							aria-controls="settings-panel-profile"
 							onClick={() => setActiveTab('profile')}
-
-						>
-							<User className="w-4 h-4" /> Profile & Security
-						</button>
-						<button
+							icon={<User aria-hidden />} label="Profile & Security" />
+						<AstryxButton variant="ghost" width="100%"
 							id="settings-tab-collaborators"
 							type="button"
 							role="tab"
@@ -360,11 +355,8 @@ export default function SettingsClient({
 							tabIndex={activeTab === 'collaborators' ? 0 : -1}
 							aria-controls="settings-panel-collaborators"
 							onClick={() => setActiveTab('collaborators')}
-
-						>
-							<Users className="w-4 h-4" /> Collaborators & Access
-						</button>
-						<button
+							icon={<Users aria-hidden />} label="Collaborators & Access" />
+						<AstryxButton variant="ghost" width="100%"
 							id="settings-tab-usage"
 							type="button"
 							role="tab"
@@ -372,11 +364,8 @@ export default function SettingsClient({
 							tabIndex={activeTab === 'usage' ? 0 : -1}
 							aria-controls="settings-panel-usage"
 							onClick={() => setActiveTab('usage')}
-
-						>
-							<Sparkles className="w-4 h-4" /> AI Usage
-						</button>
-						<button
+							icon={<Sparkles aria-hidden />} label="AI Usage" />
+						<AstryxButton variant="ghost" width="100%"
 							id="settings-tab-billing"
 							type="button"
 							role="tab"
@@ -384,10 +373,7 @@ export default function SettingsClient({
 							tabIndex={activeTab === 'billing' ? 0 : -1}
 							aria-controls="settings-panel-billing"
 							onClick={() => setActiveTab('billing')}
-
-						>
-							<CreditCard className="w-4 h-4" /> Billing & Subscription
-						</button>
+							icon={<CreditCard aria-hidden />} label="Billing & Subscription" />
 					</aside>
 
 					{/* Main Tab Content */}

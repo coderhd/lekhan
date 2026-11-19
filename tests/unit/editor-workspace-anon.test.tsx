@@ -122,7 +122,7 @@ describe('EditorWorkspace public reading chrome (#30 T2)', () => {
 			expect(screen.getByTitle(/Switch to (Light|Dark) Mode/)).toBeTruthy()
 		})
 
-		expect(screen.queryByTitle('Search (Cmd+K)')).toBeNull()
+		expect(screen.queryByRole('button', { name: 'Search pages' })).toBeNull()
 		expect(screen.queryByLabelText('Workspace navigation')).toBeNull()
 		expect(document.querySelector('.ProseMirror')).toHaveAttribute('contenteditable', 'false')
 		expect(screen.queryByTitle('Version History')).toBeNull()
@@ -137,7 +137,7 @@ describe('EditorWorkspace public reading chrome (#30 T2)', () => {
 		await renderEditor({ anonVisitor: false, role: 'viewer', userId: 'member-5678' })
 
 		expect(await screen.findByText(/You have viewing access to this page\./)).toBeInTheDocument()
-		expect(screen.getByTitle('Search (Cmd+K)')).toBeInTheDocument()
+		expect(screen.getByRole('button', { name: 'Search pages' })).toBeInTheDocument()
 		expect(screen.getByLabelText(/Account menu/)).toBeInTheDocument()
 		expect(screen.queryByRole('link', { name: /create your own workspace/i })).toBeNull()
 	})

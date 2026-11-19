@@ -239,7 +239,7 @@ const STYLES = `
 
 /* Direct-child scoping: these rules must not leak onto the site layout's
    <main> wrapper or Sonner's notifications <section>. */
-.ek-page > main { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+.ek-page > main { width: min(100% - 2 * var(--lekhan-gutter), 80rem); margin-inline: auto; }
 
 .ek-hero {
 	display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .8fr);

@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 export default function PrivacyPolicyPage () {
 	return (
 		<div className="bg-background text-on-surface min-h-screen flex flex-col">
-			<div className="max-w-[800px] mx-auto px-6 md:px-10 pt-8 pb-24 flex-1">
+			<div className="ax-reading">
 				{/* Header */}
 				<div className="mb-12">
 					<h1 className="public-reading-title text-on-surface mb-4">

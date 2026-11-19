@@ -1,4 +1,5 @@
 'use client'
+import { Button as AstryxButton } from '@astryxdesign/core/Button'
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -186,16 +187,9 @@ export default function WorkbenchShell({
 					</span>
 				</div>
 				<div className="wb-topbar-actions">
-					<button
-						type="button"
-						className="wb-icon-button wb-header-search"
-						aria-label="Search pages"
-						title="Search (Cmd+K)"
-						onClick={onSearch}
-					>
-						<Search aria-hidden="true" />
-						<kbd>⌘ K</kbd>
-					</button>
+					<AstryxButton label="Search pages" variant="ghost" isIconOnly
+						className="wb-header-search ax-touch" tooltip="Search (⌘ K)"
+						icon={<Search aria-hidden="true" />} onClick={onSearch} />
 					{headerActions}
 				</div>
 			</header>

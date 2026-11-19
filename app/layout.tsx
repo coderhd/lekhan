@@ -1,6 +1,11 @@
 import type { Metadata } from 'next'
 import { GoogleAnalytics } from '@/components/analytics/google-analytics'
+import '@astryxdesign/core/reset.css'
+import '@astryxdesign/core/astryx.css'
+import '@astryxdesign/theme-neutral/theme.css'
 import './globals.css'
+import './astryx-website.css'
+import { AstryxProvider } from '@/components/astryx-provider'
 import './workbench.css'
 import { Toaster } from '@/components/ui/sonner'
 import { ThemeProvider } from '@/components/theme-provider'
@@ -33,7 +38,7 @@ export const metadata: Metadata = {
 	twitter: {
 		card: 'summary_large_image',
 		title: 'Lekhan — Write Together, Without Limits',
-		description: 'Local-first collaborative editor. Zero latency, full offline, AI-powered. Start writing free.',
+		description: 'Bring your Markdown notes into a shared workspace, connect ideas, and write together.',
 		images: ['/og.png'],
 	},
 	icons: {
@@ -54,7 +59,7 @@ export default function RootLayout({
 	children: React.ReactNode
 }) {
 	return (
-		<html lang='en' suppressHydrationWarning className="dark">
+		<html lang='en' suppressHydrationWarning className="dark" data-theme="dark">
 			<head>
 				<GoogleAnalytics />
 				<link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -69,7 +74,7 @@ export default function RootLayout({
 					enableSystem={false}
 					disableTransitionOnChange
 				>
-					<AnalyticsProvider>
+					<AstryxProvider><AnalyticsProvider>
 						<SessionReauthProvider>
 							<QuickCapturePalette>
 								<GlobalSearchPalette>
@@ -85,7 +90,7 @@ export default function RootLayout({
 								</GlobalSearchPalette>
 							</QuickCapturePalette>
 						</SessionReauthProvider>
-					</AnalyticsProvider>
+					</AnalyticsProvider></AstryxProvider>
 				</ThemeProvider>
 			</body>
 		</html>

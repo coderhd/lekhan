@@ -1,3 +1,5 @@
+import { Database, FileText, FolderArchive, FolderOpen, type LucideIcon } from 'lucide-react'
+import { ClickableCard } from '@astryxdesign/core/ClickableCard'
 import * as React from 'react'
 import { useState, useRef } from 'react'
 import {
@@ -22,6 +24,16 @@ import { importVaultIR, generateImportId, vaultFingerprint } from '@/services/va
 import type { ImportIR, ImportReport, ImportSourceKind } from '@/services/import-ir'
 import { ImportReportCard } from '@/components/import-report-card'
 import { track } from '@/lib/analytics'
+
+function ImportSource({ label, icon: Icon, onClick, children }: { label: string; icon: LucideIcon; onClick: () => void; children: string }) {
+	return (
+		<ClickableCard label={label} onClick={onClick} className="ax-import-card">
+			<Icon size={22} aria-hidden="true" />
+			<strong>{label}</strong>
+			<p>{children}</p>
+		</ClickableCard>
+	)
+}
 
 type Phase = 'choose' | 'picking' | 'ingesting' | 'writing' | 'done' | 'error'
 
@@ -54,6 +66,7 @@ export function ImportDialog ({
 	const [createdPages, setCreatedPages] = useState<Array<{ id: string; title: string }>>([])
 	const [resumedCount, setResumedCount] = useState(0)
 	const [activeSource, setActiveSource] = useState<ImportSourceKind>('obsidian')
+	const openerRef = useRef<HTMLElement | null>(null)
 	const zipInputRef = useRef<HTMLInputElement>(null)
 	const notionInputRef = useRef<HTMLInputElement>(null)
 	const folderInputRef = useRef<HTMLInputElement>(null)
@@ -246,7 +259,18 @@ export function ImportDialog ({
 
 	return (
 		<AlertDialog open={open} onOpenChange={handleOpenChange}>
-			<AlertDialogContent className="max-h-[85dvh] max-w-2xl overflow-y-auto">
+			<AlertDialogContent className="ax-import-dialog max-h-[85dvh] max-w-2xl overflow-y-auto"
+				onOpenAutoFocus={() => {
+					const opener = document.activeElement
+					openerRef.current = opener instanceof HTMLElement && opener !== document.body ? opener : null
+				}}
+				onCloseAutoFocus={event => {
+					const opener = openerRef.current
+					openerRef.current = null
+					if (!opener?.isConnected) return
+					event.preventDefault()
+					opener.focus()
+				}}>
 				<AlertDialogHeader>
 					<AlertDialogTitle className="font-serif text-3xl font-medium">Import</AlertDialogTitle>
 					<AlertDialogDescription>
@@ -255,54 +279,22 @@ export function ImportDialog ({
 				</AlertDialogHeader>
 
 				{phase === 'choose' && (
-					<div className="grid grid-cols-1 gap-3 py-3 sm:grid-cols-2">
-						<h3 className="col-span-full text-sm font-semibold">Import an Obsidian vault</h3>
-						<button
-							onClick={startFolderPick}
-							className="flex min-h-32 flex-col items-start gap-3 rounded-xl bg-surface-container-low p-4 text-left hover:bg-surface-container-high focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-						>
-							<span aria-hidden="true" className="material-symbols-outlined rounded-md bg-surface-container-high p-2 text-primary-ink">folder_open</span>
-							<span>
-								<span className="block font-bold">Obsidian vault (folder)</span>
-								<span className="block text-on-surface-variant text-sm">Pick your vault folder directly.</span>
-							</span>
-						</button>
-						<button
-							onClick={() => zipInputRef.current?.click()}
-							className="flex min-h-32 flex-col items-start gap-3 rounded-xl bg-surface-container-low p-4 text-left hover:bg-surface-container-high focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-						>
-							<span aria-hidden="true" className="material-symbols-outlined rounded-md bg-surface-container-high p-2 text-primary-ink">folder_zip</span>
-							<span>
-								<span className="block font-bold">Obsidian vault (.zip)</span>
-								<span className="block text-on-surface-variant text-sm">Use a ZIP of the vault folder. The report shows which content was preserved.</span>
-							</span>
-						</button>
-						<h3 className="col-span-full mt-2 pt-2 text-sm font-semibold">Other sources</h3>
-						<button
-							onClick={() => notionInputRef.current?.click()}
-							className="flex min-h-32 flex-col items-start gap-3 rounded-xl bg-surface-container-low p-4 text-left hover:bg-surface-container-high focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-						>
-							<span aria-hidden="true" className="material-symbols-outlined rounded-md bg-surface-container-high p-2 text-primary-ink">database</span>
-							<span>
-								<span className="block font-bold">Notion export (.zip)</span>
-								<span className="block text-on-surface-variant text-sm">
-									Choose Markdown &amp; CSV in Notion and select every ZIP part from the export.
-								</span>
-							</span>
-						</button>
-						<p className="col-span-full order-last text-xs leading-relaxed text-on-surface-variant">
-							Notion download links expire after 7 days. Files are read on your device and no Notion API connection is needed.
-						</p>
-						<button
-							onClick={() => markdownInputRef.current?.click()}
-							className="flex min-h-32 flex-col items-start gap-3 rounded-xl bg-surface-container-low p-4 text-left hover:bg-surface-container-high focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-						>
-							<span aria-hidden="true" className="material-symbols-outlined rounded-md bg-surface-container-high p-2 text-primary-ink">description</span>
-							<span>
-								<span className="block font-bold">Single Markdown file</span>
-								<span className="block text-on-surface-variant text-sm">One .md file becomes one page.</span>
-							</span>
-						</button>
+					<div className="ax-import-grid">
+						<h3>Obsidian</h3>
+						<ImportSource label="Obsidian vault (folder)" icon={FolderOpen} onClick={startFolderPick}>
+							Choose the folder that contains your vault.
+						</ImportSource>
+						<ImportSource label="Obsidian vault (.zip)" icon={FolderArchive} onClick={() => zipInputRef.current?.click()}>
+							Choose a compressed vault. Check the report for anything that needed conversion.
+						</ImportSource>
+						<h3>Other sources</h3>
+						<ImportSource label="Notion export (.zip)" icon={Database} onClick={() => notionInputRef.current?.click()}>
+							Choose Markdown &amp; CSV in Notion and select every ZIP part from the export.
+						</ImportSource>
+						<ImportSource label="Single Markdown file" icon={FileText} onClick={() => markdownInputRef.current?.click()}>
+							Turn one .md file into a page.
+						</ImportSource>
+						<p className="ax-import-help">Notion download links expire after 7 days. Files are read on your device and no Notion API connection is needed.</p>
 					</div>
 				)}
 

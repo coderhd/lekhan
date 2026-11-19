@@ -1,4 +1,5 @@
 'use client'
+import { Button as AstryxButton } from '@astryxdesign/core/Button'
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -363,14 +364,8 @@ export default function Dashboard({ user }: DashboardProps) {
 					<h1>Workspace</h1>
 					<p>{workspace?.name || 'Your workspace'}</p>
 				</div>
-				<button
-					type="button"
-					className="wb-button wb-button-primary"
-					onClick={handleCreatePage}
-				>
-					<Plus aria-hidden="true" />
-					New page
-				</button>
+				<AstryxButton label="New page" variant="primary" size="lg" className="ax-action"
+					icon={<Plus aria-hidden="true" />} onClick={handleCreatePage} />
 			</div>
 			{loading ? (
 				<div role="status">
