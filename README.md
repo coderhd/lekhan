@@ -36,11 +36,11 @@ The next desktop milestone is a narrow macOS release for a local Markdown vault 
 
 ```mermaid
 flowchart TD
-    Client["Browser / Desktop Client (Next.js 16 + React 19 + Tiptap)"]
+    Client["Web Client (Next.js 16 + React 19 + Tiptap)"]
     Sync["Node.js Sync Server (WebSocket + Yjs CRDT Hub)"]
     SupabaseDB["Supabase Postgres (Graph Schema, RLS, Auth)"]
     Storage["Supabase Storage (AES-256-GCM Encrypted Snapshots)"]
-    AI["AI Engine (Claude, OpenAI, Sarvam, Local llama.cpp)"]
+    AI["AI Provider Registry"]
 
     Client <-->|WebSocket Yjs Sync| Sync
     Client <-->|REST / Server Actions| SupabaseDB
@@ -50,7 +50,7 @@ flowchart TD
 
 ### Technology Stack
 * **Framework**: [Next.js 16](https://nextjs.org/) (App Router, Turbopack) & [React 19](https://react.dev/)
-* **Editor Substrate**: [Tiptap 2](https://tiptap.dev/) / [ProseMirror](https://prosemirror.net/) with custom decoration & node extensions
+* **Editor Substrate**: [Tiptap 3](https://tiptap.dev/) / [ProseMirror](https://prosemirror.net/) with custom decoration & node extensions
 * **Collaboration & CRDTs**: [Yjs](https://yjs.dev/) + `y-prosemirror` + `y-websocket`
 * **Styling & UI**: [Tailwind CSS](https://tailwindcss.com/), [Radix UI](https://www.radix-ui.com/), [Lucide Icons](https://lucide.dev/)
 * **Backend & Database**: [Supabase](https://supabase.com/) (PostgreSQL with RLS, Auth, Storage)
@@ -73,7 +73,7 @@ flowchart TD
 │   ├── lekhan-bot-bar.tsx# In-editor AI assistant
 │   └── global-search-palette.tsx # Cmd+K Search modal
 ├── docs/                 # Product specs, ADRs, runbooks, and roadmaps
-│   ├── adr/              # Architecture Decision Records (ADR 0001 - 0004)
+│   ├── adr/              # Architecture Decision Records
 │   ├── reviews/          # Clean-room code review audit reports
 │   └── roadmap.md        # Detailed internal product roadmap & issue tracking
 ├── lib/                  # Utilities, crypto engine, wikilink extension, analytics
@@ -86,7 +86,7 @@ flowchart TD
 ├── server/               # Collaborative Yjs WebSocket sync server
 │   └── index.js          # Sync server with snapshot encryption
 └── tests/                # Comprehensive test suite (Vitest + Playwright)
-    └── unit/             # 54 test files (408+ automated tests)
+    └── unit/             # Vitest unit and integration tests
 ```
 
 ---
@@ -95,7 +95,7 @@ flowchart TD
 
 ### Prerequisites
 * **Node.js**: v20.0.0 or higher (v24 recommended)
-* **npm** or **pnpm**
+* **npm**
 * A [Supabase](https://supabase.com) project
 
 ### Installation
