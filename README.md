@@ -5,14 +5,13 @@
 **The AI-native, collaborative knowledge workspace.**  
 *Local-first like Obsidian. Collaborative like Notion. AI on your terms.*
 
-[![CI / Verification](https://img.shields.io/badge/Verification-Passing-brightgreen.svg)](#-testing)
 [![Next.js](https://img.shields.io/badge/Next.js-16.3-black.svg?logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-blue.svg?logo=react)](https://react.dev/)
 [![Yjs CRDT](https://img.shields.io/badge/Yjs-CRDT%20Sync-orange.svg)](https://yjs.dev/)
 [![Security](https://img.shields.io/badge/Encryption-AES--256--GCM-blueviolet.svg)](#-security--encryption)
 [![License](https://img.shields.io/badge/License-AGPL%20v3%20%2F%20MIT-blue.svg)](LICENSE)
 
-[Early Access Waitlist](https://lekhan.online/early) · [Report Bug](https://github.com/coderhd/lekhan/issues) · [Roadmap](#-product-roadmap)
+[Early Access Waitlist](https://lekhan.online/early) · [Report Bug](https://github.com/coderhd/lekhan/issues) · [Roadmap](#web-beta-and-roadmap)
 
 </div>
 
@@ -20,77 +19,18 @@
 
 ## 🌟 What is Lekhan?
 
-**Lekhan** is an open-source knowledge workspace designed for thinkers, builders, and teams. It bridges the gap between **local-first privacy** and **seamless cloud collaboration**, ensuring you never have to choose between owning your data and collaborating in real-time.
+Lekhan is an open-source knowledge workspace for writing and organizing connected pages. Each workspace holds a graph of pages, links, tags, and properties. The editor, search, backlinks, and graph are different ways to work with that same content.
 
-* **One Knowledge Graph, Many Views**: Every page is a node in your personal knowledge graph. Backlinks, tags, databases, and visual graphs all operate on the same unified substrate.
-* **Local-First & Offline-Ready**: Sub-millisecond typing latency. Edit completely offline; changes automatically sync and merge conflict-free via CRDTs when you reconnect.
-* **Encrypted at Rest**: Document snapshots and version checkpoints are secured with envelope **AES-256-GCM** encryption (ADR 0001).
-* **AI on Your Terms**: Native support for Anthropic Claude, OpenAI, and Sarvam AI (Indic language models), with Bring-Your-Own-Key (BYOK) privacy and upcoming local LLM sidecars.
+- **Write and navigate.** Create nested pages, link them with `[[wikilinks]]`, find them with global search, and follow backlinks.
+- **Bring your work with you.** Import Markdown or an Obsidian vault, inspect the import report, and export your workspace as Markdown. The report identifies content that could not be imported faithfully.
+- **Work offline and collaborate.** The web editor uses local browser storage and Yjs. The sync hub carries changes between connected collaborators. Shared pages have role-based access.
+- **Choose how you use AI.** The provider registry supports user-managed keys and configurable providers. Availability depends on the deployment and provider setup.
 
----
+### Web beta and roadmap
 
-## ✨ Key Features
+The web beta is gated on the first-use flow: **sign up → import → collaborate → export**. Workbench is the redesigned web interface and has its own acceptance checks. Join the [early access waitlist](https://lekhan.online/early) or see the [product roadmap](docs/roadmap.md) and [beta quality criteria](https://github.com/coderhd/lekhan/issues/79).
 
-### 📝 Collaborative Editor & Knowledge Graph
-* **Conflict-Free Real-Time Collaboration**: Powered by **Yjs CRDTs** and WebSockets with live multi-user cursor presence.
-* **Interactive Wikilinks**: Type `[[Page Title]]` or `[[Target|Alias]]` to dynamically link notes. Click to navigate or instantly create missing pages.
-* **Rich Markdown Support**: Seamless block editor with Callouts, Code Blocks (syntax-highlighted with Lowlight), Tables, Task Lists, and Slash Commands (`/`).
-* **Universal Import & Export**: Full round-trip Markdown fidelity, native **Obsidian Vault Importer**, and one-click export to Markdown (`.md`), HTML, DOCX, and PDF.
-
-### 🧠 Built-in AI Companion
-* **In-Context AI Writing Assistant**: Ask Lekhan Bot (`Cmd/Ctrl + L`), trigger inline bubble menus, and generate diff previews before applying changes.
-* **Multi-Provider & Indic Language Support**: Built-in support for Claude 3.5, OpenAI GPT-4o, and Sarvam AI models for multilingual synthesis.
-* **Privacy-First**: No note titles, content, or sensitive payloads are tracked in analytics or sent to third parties without your permission.
-
-### 🔒 Security & Versioning
-* **Snapshot Encryption at Rest**: Encrypted using AES-256-GCM with authenticated headers (`LK_ENC_V1`) and multi-key rotation runbooks.
-* **Role-Based Access Control**: Granular permissions (Owner, Editor, Viewer) enforced at the database (RLS) and sync layers.
-* **Interactive Version History**: View timeline snapshots, preview previous states, and restore checkpoints non-destructively.
-
-### ⚡ Search & Navigation
-* **Keyboard-First Global Search**: Instant `Cmd + K` search across page titles, tags, and document contents with fuzzy matching.
-
----
-
-## 🗺️ Product Roadmap
-
-Lekhan's development is structured across distinct horizons. Public beta release is quality-gated by the [#79 UX-parity bar](https://github.com/coderhd/lekhan/issues/79).
-
-### 🚀 Horizon 0 — Foundation & Public Beta (Current)
-
-- [x] **Pages Graph Foundation**: Postgres schema, page links, page tags, and graph indexer.
-- [x] **Real-Time Sync Engine**: Node.js WebSocket hub with Yjs CRDT state persistence.
-- [x] **Markdown Round-Trip Engine**: Zero-loss import/export across Tiptap and standard Markdown.
-- [x] **Obsidian Importer**: One-click ingestion of folders, attachments, and wikilinks.
-- [x] **Snapshot Encryption at Rest (ADR 0001)**: AES-256-GCM envelope encryption for all stored snapshots.
-- [x] **Interactive Wikilinks**: Resolved link chips and on-the-fly page creation (`[[Target]]`).
-- [x] **Global Search**: Instant keyboard-first palette (`Cmd+K`).
-- [x] **Early Access Waitlist**: Live at `/early` with double opt-in.
-- [ ] **Tier Plumbing & Storage Caps** (`#82`): Granular quota enforcement.
-- [ ] **AI Provider Registry & BYOK** (`#28`): User-managed API keys and multi-model router.
-- [ ] **Private Beta Launch**: Invites roll to waitlist users.
-- [ ] **Billing & Regional Pricing** (`#29`): Stripe + Razorpay with perpetual free tier.
-- [ ] **Tauri Desktop Shell** (`#88`): Vault-on-disk (ADR 0003) with local `llama.cpp` sidecar.
-- [ ] **Internationalization (i18n)** (`#31`) & Public Documentation (`#32`).
-
-### 🌲 Horizon 1 — PKM Depth ("The Second Brain")
-
-- [ ] **Interactive Visual Graph**: 2D/3D force-directed knowledge graph with filterable tags and clusters.
-- [ ] **Dual-Dialect Interop Bridge (`#78`)**: Seamless bidirectional compatibility between Obsidian and Notion formats.
-- [ ] **Daily Notes & Quick Capture**: Calendar-linked journaling and instant inbox.
-- [ ] **Notion Importer (`#45`)**: Structured block-level Notion workspace migration.
-- [ ] **Public Publishing (`#40`)**: Fast, SEO-optimized public note sharing.
-- [ ] **Mobile Companion (`#43`)**: Native iOS & Android apps via Tauri mobile.
-- [ ] **Plugin System & Open-Core SDK (`#44`)**: Community extensions and themes.
-
-### 🏢 Horizon 2 & 3 — Notion-Grade Structure & The Suite
-
-- [ ] **Databases as Typed Views**: Tables, Kanban Boards, Calendars, and Galleries over the knowledge graph.
-- [ ] **Autonomous In-Workspace AI Agents**: Background synthesis, link suggestions, and auto-tagging.
-- [ ] **Team Workspaces**: SSO, audit logs, and organization management.
-- [ ] **AI-Native Office Suite**: Connected Sheets, Slides, Mail, and Chat.
-
----
+The next desktop milestone is a narrow macOS release for a local Markdown vault and collaboration. The bundled llama.cpp runtime and Model Library are deferred. See the [desktop storage decision](docs/adr/0003-desktop-markdown-plus-yjs-sidecar.md) for the design.
 
 ## 🏗️ Architecture
 
@@ -168,7 +108,7 @@ flowchart TD
 
 2. **Install dependencies**:
    ```bash
-   npm install
+   npm ci
    ```
 
 3. **Configure Environment Variables**:
@@ -178,7 +118,7 @@ flowchart TD
    ```
    ```env
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your_supabase_publishable_key
    SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
    # Encryption at Rest (ADR 0001)
@@ -192,14 +132,17 @@ flowchart TD
 
 4. **Run the Development Server**:
    ```bash
-   # Starts Next.js app and local sync server
    npm run dev
    ```
-   Open [http://localhost:3000](http://localhost:3000) in your browser.
+   Open [http://localhost:3000](http://localhost:3000) in your browser. For local collaboration testing, start the sync hub separately with `npm run server` after configuring its environment from `.env.example`.
 
 ---
 
 ## 🧪 Testing & Verification
+
+**Manual QA:** Start with the [Web Beta QA Handoff](docs/qa/web-beta-manual-qa.md). It explains the product, test setup, priority scenarios, expected behavior, and how to report findings. Use the assigned QA build and synthetic test data.
+
+For engineering context, see the [product roadmap](docs/roadmap.md) and the [hub persistence QA matrix](docs/qa/matrices/hub-page-persister-test-matrix.md).
 
 Lekhan maintains a strict verification bar. No code lands without passing the full suite:
 
@@ -210,7 +153,7 @@ npm run typecheck
 # Run linter
 npm run lint
 
-# Run all 400+ Vitest unit and integration tests
+# Run Vitest unit and integration tests
 npm test
 
 # Build for production (Turbopack)

@@ -11,6 +11,21 @@ Your assignment is to test the web beta from a new user's perspective. Start wit
 - Start in Chrome desktop. Repeat the core flow on Android Chrome where supported. Record the device, OS, browser, viewport, theme and build. Use TalkBack on Android or a desktop screen reader for the accessibility pass.
 - Use only the assigned environment and synthetic data. Leave paid checkout, external integrations and production account changes to separate assignments. If setup is missing, mark the affected cases **Blocked** and keep testing the rest.
 
+Before each run, write down the build, URL, browser and test roles. Start with an empty QA workspace for the owner and a separate browser profile for the collaborator. Use a new workspace or clearly labeled disposable pages for retests. Confirm the owner can receive mail at the approved test address before starting signup.
+
+Create this fixture folder locally and keep an untouched copy:
+
+```text
+QA Vault/
+  Start.md
+  Topics/
+    Field Notes.md
+  Assets/
+    sample.png
+```
+
+In `Start.md`, add a heading, a checkbox, a fenced code block, `#qa`, `[[Field Notes]]`, and `![[sample.png]]`. In `Field Notes.md`, add a heading, a table, and `[[Start]]`. Use a small image you created. Add a unique text marker per run to distinguish current data from earlier imports.
+
 ## P0 — Run first
 
 | ID | What to do | Expected result |
@@ -19,7 +34,7 @@ Your assignment is to test the web beta from a new user's perspective. Start wit
 | B02 Import | Import the synthetic vault. Read the import summary. Open both notes, follow their internal link, and inspect the nested note and image. | Supported content and links survive. The summary accurately reports skipped or failed items. |
 | B03 Collaborate | As owner, invite the second account as an editor. Open the same page in both profiles, make different edits, then reload both. Repeat with a viewer on a separate test page. | Both editor sessions converge and edits survive reload. The viewer can read and cannot edit. |
 | B04 Offline and reconnect | On an already opened test page, disconnect one editor, type a unique marker, reconnect, then check both profiles and reload. | The sync indicator reflects connectivity and pending changes. The marker appears once and survives reload. |
-| B05 Export | Export the test vault as Markdown after collaboration. Open the exported files locally and compare headings, checklist, code, links and image references with the source and the latest edits. | The export opens, includes the latest content and preserves supported structure. Any omissions are reported clearly. |
+| B05 Export | Export the workspace as Markdown after collaboration. Open the exported files locally and compare headings, checklist, code, links and image references with the source and the latest edits. | The export opens, includes the latest content and preserves supported structure. Any omissions are reported clearly. |
 | B06 Access | Open a private page URL in a fresh signed-out profile. If public sharing is part of this build, check a separately published synthetic page. | The private page reveals no note content. The published page renders read-only. |
 
 ## P1 — Workbench and accessibility
@@ -32,6 +47,23 @@ Your assignment is to test the web beta from a new user's perspective. Start wit
 | W04 Layout | Check light and dark themes at desktop and mobile sizes. Spot-check widths of 320, 375, 414, 768, 1024 and 1440 px in browser emulation. | Primary controls and content stay reachable without clipping or unintended horizontal scrolling. Record deviations with screenshots. |
 | W05 Accessibility | Use keyboard-only navigation, 200% browser zoom, reduced motion and a screen reader. Open and dismiss menus and dialogs. | Focus stays visible and returns sensibly on close. Controls have useful spoken names. Text and controls stay legible and usable. |
 | W06 Responsiveness | Record slow startup, search, page opening or typing. Include whether it was the first load, the device and approximate timing. | Note repeatable delays and capture a recording where possible. Engineering can compare measured traces with the release performance budgets. |
+
+## P1 — Failure and recovery checks
+
+| ID | What to do | Expected result |
+|---|---|---|
+| R01 Sign-in errors | Submit a wrong password in the test profile. Retry correctly. | The failure is clear, inputs remain usable, and the correct retry succeeds. |
+| R02 Re-import | Import the same fixture twice in a disposable workspace. Compare page counts and the two reports. | Import reports whether pages were added, skipped, or replaced. Existing edits are never silently overwritten. |
+| R03 Invitation states | If the owner provides fixtures, open a pending invitation while signed out, then an expired or revoked one. | Sign-in continues the valid invite flow. The unavailable invite gives a recovery message without leaking a private page title. |
+| R04 Save and retry | Edit a synthetic page, open and close navigation, search and history, then reload after sync confirms. | Editor content survives UI changes and reload. A disconnected client shows a pending or offline state until sync recovers. |
+| R05 Settings and keyboard | Open settings, move across tabs using arrows, then navigate a graph link via its list. | Selected tab and keyboard focus agree. The list provides a keyboard path to open the page. |
+
+## Evidence and exit criteria
+
+1. Run B01–B06 on desktop Chrome. Run the core flow, W03, and mobile navigation on physical Android Chrome. Use emulation for the other requested widths and record which widths were emulated.
+2. Run W01–W06 and R01–R05 for the Workbench candidate. Capture matching desktop and mobile screenshots in both themes. For screen reader checks include the actual device, screen reader and any missing names or announcements.
+3. Record the observed result for each role, platform and case. A **Fail** means you executed the case and observed a mismatch. A **Blocked** case has a missing prerequisite, such as mail, a second account or a fixture. Use **Not run** for work you did not attempt.
+4. A candidate is ready for release review when the P0 cases pass on the assigned platforms and there are no unresolved release-blocking findings. Record any remaining P1 findings and their disposition. Retest fixes on the new build, rerun related P0 cases, and keep previous evidence tied to its original build.
 
 ## Report your results
 
