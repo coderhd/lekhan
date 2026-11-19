@@ -148,6 +148,26 @@ describe('Dashboard refetch on auth', () => {
 		expect(screen.getByRole('button', { name: 'New page' })).toBeInTheDocument()
 	})
 
+	it('browses nested pages and keeps pages with an unavailable parent reachable', async () => {
+		const updated_at = new Date().toISOString()
+		fetchWorkspacePages.mockResolvedValue([
+			{ id: 'folder', title: 'Imported vault', parent_id: null, updated_at },
+			{ id: 'child', title: 'Nested note', parent_id: 'folder', updated_at },
+			{ id: 'orphan', title: 'Accessible note', parent_id: 'unavailable', updated_at }
+		])
+		renderDashboard()
+		const owned = within(await screen.findByRole('list', { name: 'Owned pages' }))
+		expect(owned.getByRole('link', { name: /accessible note/i })).toBeInTheDocument()
+		expect(owned.queryByRole('link', { name: /nested note/i })).toBeNull()
+		const disclosure = owned.getByRole('button', { name: 'Children of Imported vault' })
+		fireEvent.click(disclosure)
+		expect(disclosure).toHaveAttribute('aria-expanded', 'true')
+		expect(owned.getByRole('link', { name: /nested note/i })).toHaveAttribute('href', '/page/child')
+		fireEvent.click(disclosure)
+		fireEvent.click(screen.getByRole('button', { name: 'Recent' }))
+		expect(owned.getByRole('link', { name: /nested note/i })).toBeInTheDocument()
+	})
+
 	it('creates through the existing workspace service and navigates to the returned page', async () => {
 		renderDashboard()
 		await screen.findByText('A first page.', { exact: false })

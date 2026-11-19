@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, cleanup, waitFor, act } from '@testing-library/react'
 import { Profiler } from 'react'
 import '@testing-library/jest-dom'
+import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
+import QuickCapturePalette from '@/components/quick-capture-palette'
 
 /**
  * SIL-230 / #144 — typing must not re-render the editor workspace once per
@@ -124,14 +126,14 @@ describe('EditorWorkspace typing render budget (SIL-230)', () => {
 		let commits = 0
 		render(
 			<Profiler id='workspace' onRender={() => { commits++ }}>
-				<GlobalSearchPalette>
+				<GlobalHeaderProvider><QuickCapturePalette><GlobalSearchPalette>
 					<EditorWorkspace
 						pageId='page-1'
 						initialTitle='Typing benchmark'
 						token='token-1'
 						currentUser={{ id: 'test-user', email: 'test-user@example.com', full_name: 'Test User' }}
 					/>
-				</GlobalSearchPalette>
+				</GlobalSearchPalette></QuickCapturePalette></GlobalHeaderProvider>
 			</Profiler>,
 		)
 		await waitFor(() => expect(document.querySelector('.ProseMirror')).toBeTruthy(), { timeout: 5000 })

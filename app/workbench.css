@@ -432,3 +432,21 @@
 		scroll-behavior: auto !important;
 	}
 }
+
+.wb-browse-switch {
+	display: flex;
+	gap: .25rem;
+	margin-block: .75rem;
+	border-bottom: 1px solid var(--wb-line, currentColor);
+}
+
+.wb-browse-switch button {
+	min-height: 44px;
+	padding-inline: .875rem;
+	border-bottom: 2px solid transparent;
+}
+
+.wb-browse-switch button[aria-pressed="true"] {
+	border-bottom-color: currentColor;
+	font-weight: 650;
+}

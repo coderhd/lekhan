@@ -5,7 +5,7 @@ import { Zap, Lock, Users, Plane } from 'lucide-react'
 
 export const metadata: Metadata = {
 	title: 'About Lekhan — The Story Behind the Editor',
-	description: 'Why we built a local-first collaborative editor: notes stay markdown files on your disk, multiplayer works offline, and AI runs on your own key, a local model, or a simple plan credit.',
+	description: 'Why we built a web workspace for Markdown, linked notes and collaborative writing.',
 	openGraph: {
 			images: ['/og.png'],
 		title: 'About Lekhan',
@@ -42,11 +42,11 @@ export default function AboutPage () {
 			<div className="max-w-[800px] mx-auto px-6 md:px-10 pt-8 pb-24 flex-1">
 				{/* Header */}
 				<div className="text-center mb-16">
-					<h1 className="font-display-lg text-4xl md:text-5xl font-bold text-on-surface mb-4">
+					<h1 className="public-reading-title text-on-surface mb-4">
 						About Lekhan
 					</h1>
 					<p className="text-lg text-on-surface-variant max-w-2xl mx-auto">
-						Local-first like Obsidian, collaborative like Notion, AI on your own keys.
+						A web workspace for connecting Markdown notes and writing together.
 						Here&apos;s why we built it.
 					</p>
 				</div>

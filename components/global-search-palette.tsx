@@ -9,6 +9,7 @@ import { useSessionReauth } from '@/components/session-reauth-provider'
 import ShortcutHelpDialog from '@/components/shortcut-help-dialog'
 import { isTypingTarget } from '@/lib/shortcuts'
 import { toast } from 'sonner'
+import styles from './workbench/overlays.module.css'
 
 const DEBOUNCE_MS = 200
 const SEARCH_LIMIT = 15
@@ -147,6 +148,7 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 		if (!userId || !open || isLocked) return
 		const requestId = ++requestIdRef.current
 		setLoading(true)
+		setRows([])
 		setLoadError(false)
 		if (debounceRef.current) clearTimeout(debounceRef.current)
 		debounceRef.current = setTimeout(async () => {
@@ -175,14 +177,16 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 			}
 		}, DEBOUNCE_MS)
 		return () => {
+			requestIdRef.current += 1
 			if (debounceRef.current) clearTimeout(debounceRef.current)
 		}
 	}, [query, userId, open, isLocked, reloadKey])
 
 	const handleSelect = useCallback((row: SearchRow) => {
+		if (!userId || !open || isLocked || loading || loadError) return
 		setOpen(false)
 		router.push(`/page/${row.id}`)
-	}, [router])
+	}, [router, userId, open, isLocked, loading, loadError])
 
 	const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
 		if (e.key === 'ArrowDown') {
@@ -206,16 +210,23 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 			{userId && !isLocked && (
 				<Dialog.Root open={open} onOpenChange={setOpen}>
 					<Dialog.Portal>
-						<Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[99999] animate-in fade-in" />
-						<Dialog.Content data-modal="palette" className="fixed top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-xl bg-surface-container rounded-2xl border border-black/10 dark:border-white/10 shadow-2xl z-[100000] animate-in zoom-in-95">
-							<Dialog.Title className="sr-only">Search pages</Dialog.Title>
+						<Dialog.Overlay className={styles.scrim} />
+						<Dialog.Content data-modal="palette" className={styles.sheet} onCloseAutoFocus={(event) => {
+							event.preventDefault()
+							if (!helpOpen) modalOpenerRef.current?.focus()
+						}}>
+							<div className={styles.heading}>
+								<Dialog.Title>Search pages</Dialog.Title>
+								<Dialog.Close className={styles.close} aria-label="Close search">×</Dialog.Close>
+							</div>
+							<Dialog.Description className="sr-only">Search your pages or open a recent page.</Dialog.Description>
 							<div className="flex items-center gap-xs px-4 py-3 border-b border-black/5 dark:border-white/5">
 								<span className="material-symbols-outlined text-on-surface-variant shrink-0">search</span>
 								<input
 									type="text"
 									autoFocus
 									value={query}
-									onChange={(e) => setQuery(e.target.value)}
+									onChange={(e) => { setRows([]); setQuery(e.target.value) }}
 									onKeyDown={onInputKeyDown}
 									aria-label="Search pages"
 									className="w-full bg-transparent outline-none text-on-surface placeholder:text-on-surface-variant/50"

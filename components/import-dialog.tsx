@@ -246,58 +246,58 @@ export function ImportDialog ({
 
 	return (
 		<AlertDialog open={open} onOpenChange={handleOpenChange}>
-			<AlertDialogContent className="max-w-lg">
+			<AlertDialogContent className="max-h-[85dvh] max-w-xl overflow-y-auto">
 				<AlertDialogHeader>
-					<AlertDialogTitle>Import</AlertDialogTitle>
+					<AlertDialogTitle className="font-serif text-3xl font-medium">Import</AlertDialogTitle>
 					<AlertDialogDescription>
-						Bring your existing notes into Lekhan. Nothing is deleted from the source. Compatibility across tools — never live sync.
+						Choose a vault, export, or Markdown file. Lekhan creates pages in this workspace and leaves your source files intact.
 					</AlertDialogDescription>
 				</AlertDialogHeader>
 
 				{phase === 'choose' && (
 					<div className="grid gap-sm py-sm">
-						<button
-							onClick={() => zipInputRef.current?.click()}
-							className="flex items-start gap-sm p-md rounded-lg border border-black/10 dark:border-white/10 hover:bg-surface-container-high text-left premium-transition"
-						>
-							<span className="material-symbols-outlined mt-0.5">folder_zip</span>
-							<span>
-								<span className="block font-bold">Obsidian vault (.zip)</span>
-								<span className="block text-on-surface-variant text-sm">A ZIP of your vault folder — links, tags and callouts are preserved.</span>
-							</span>
-						</button>
-						<button
-							onClick={() => notionInputRef.current?.click()}
-							className="flex items-start gap-sm p-md rounded-lg border border-black/10 dark:border-white/10 hover:bg-surface-container-high text-left premium-transition"
-						>
-							<span className="material-symbols-outlined mt-0.5">database</span>
-							<span>
-								<span className="block font-bold">Notion export (.zip)</span>
-								<span className="block text-on-surface-variant text-sm">
-									Export → Markdown &amp; CSV. Notion&apos;s export queue can take up to 30 hours for large workspaces (download links expire after 7 days); select every part it produced. Parsed entirely on your device — no Notion API.
-								</span>
-							</span>
-						</button>
+						<h3 className="text-sm font-semibold">Import an Obsidian vault</h3>
 						<button
 							onClick={startFolderPick}
-							className="flex items-start gap-sm p-md rounded-lg border border-black/10 dark:border-white/10 hover:bg-surface-container-high text-left premium-transition"
+							className="group flex w-full items-start gap-4 rounded-lg border border-outline-variant bg-surface-container-low p-4 text-left hover:bg-surface-container-high focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
 						>
-							<span className="material-symbols-outlined mt-0.5">folder_open</span>
+							<span aria-hidden="true" className="material-symbols-outlined rounded-md bg-surface-container-high p-2 text-primary-ink">folder_open</span>
 							<span>
 								<span className="block font-bold">Obsidian vault (folder)</span>
 								<span className="block text-on-surface-variant text-sm">Pick your vault folder directly.</span>
 							</span>
 						</button>
-						<div className="flex items-center gap-sm px-md">
-							<div className="h-px flex-1 bg-black/10 dark:bg-white/10" />
-							<span className="text-xs text-on-surface-variant">or</span>
-							<div className="h-px flex-1 bg-black/10 dark:bg-white/10" />
-						</div>
+						<button
+							onClick={() => zipInputRef.current?.click()}
+							className="group flex w-full items-start gap-4 rounded-lg border border-outline-variant bg-surface-container-low p-4 text-left hover:bg-surface-container-high focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+						>
+							<span aria-hidden="true" className="material-symbols-outlined rounded-md bg-surface-container-high p-2 text-primary-ink">folder_zip</span>
+							<span>
+								<span className="block font-bold">Obsidian vault (.zip)</span>
+								<span className="block text-on-surface-variant text-sm">Use a ZIP of the vault folder. The report shows which content was preserved.</span>
+							</span>
+						</button>
+						<h3 className="mt-2 border-t border-outline-variant pt-3 text-sm font-semibold">Other sources</h3>
+						<button
+							onClick={() => notionInputRef.current?.click()}
+							className="group flex w-full items-start gap-4 rounded-lg border border-outline-variant bg-surface-container-low p-4 text-left hover:bg-surface-container-high focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+						>
+							<span aria-hidden="true" className="material-symbols-outlined rounded-md bg-surface-container-high p-2 text-primary-ink">database</span>
+							<span>
+								<span className="block font-bold">Notion export (.zip)</span>
+								<span className="block text-on-surface-variant text-sm">
+									Choose Markdown &amp; CSV in Notion and select every ZIP part from the export.
+								</span>
+							</span>
+						</button>
+						<p className="px-4 text-xs leading-relaxed text-on-surface-variant">
+							Notion download links expire after 7 days. Files are read on your device and no Notion API connection is needed.
+						</p>
 						<button
 							onClick={() => markdownInputRef.current?.click()}
-							className="flex items-start gap-sm p-md rounded-lg border border-black/10 dark:border-white/10 hover:bg-surface-container-high text-left premium-transition"
+							className="group flex w-full items-start gap-4 rounded-lg border border-outline-variant bg-surface-container-low p-4 text-left hover:bg-surface-container-high focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
 						>
-							<span className="material-symbols-outlined mt-0.5">description</span>
+							<span aria-hidden="true" className="material-symbols-outlined rounded-md bg-surface-container-high p-2 text-primary-ink">description</span>
 							<span>
 								<span className="block font-bold">Single Markdown file</span>
 								<span className="block text-on-surface-variant text-sm">One .md file becomes one page.</span>
@@ -333,7 +333,7 @@ export function ImportDialog ({
 				)}
 
 				{phase === 'error' && (
-					<div className="py-sm" data-testid="import-error">
+					<div className="py-sm" data-testid="import-error" role="alert">
 						<div className="rounded border border-red-500/40 bg-red-500/10 p-md mb-sm">
 							<p className="font-semibold mb-1">Import failed</p>
 							<p className="text-on-surface-variant text-sm">{errorMessage}</p>
@@ -349,7 +349,7 @@ export function ImportDialog ({
 					)}
 					{!busy && (
 						<button onClick={() => handleOpenChange(false)} className="px-md py-2 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 premium-transition">
-							{phase === 'done' ? 'Close' : 'Cancel'}
+							{phase === 'done' ? 'Back to workspace' : 'Cancel'}
 						</button>
 					)}
 				</AlertDialogFooter>

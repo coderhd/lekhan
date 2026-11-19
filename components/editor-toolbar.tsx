@@ -109,12 +109,13 @@ function shallowEqualState (a: ToolbarState | null, b: ToolbarState | null) {
 }
 
 interface EditorToolbarProps {
+	workbench?: boolean
 	editor: Editor | null
 	onOpenLinkPrompt: () => void
 	disabled?: boolean
 }
 
-function EditorToolbarImpl ({ editor, onOpenLinkPrompt, disabled = false }: EditorToolbarProps) {
+function EditorToolbarImpl ({ editor, onOpenLinkPrompt, disabled = false, workbench = false }: EditorToolbarProps) {
 	const state = useEditorState({
 		editor,
 		selector: ({ editor: current }) => selectToolbarState(current),
@@ -127,10 +128,11 @@ function EditorToolbarImpl ({ editor, onOpenLinkPrompt, disabled = false }: Edit
 		`p-1 rounded transition-colors flex items-center justify-center ${active ? activeButton : idleButton}`
 
 	return (
-		<div className={`min-h-[40px] py-2 px-6 md:px-10 flex flex-nowrap overflow-x-auto hide-scrollbar justify-start xl:justify-center items-center bg-surface-container-low border-y border-black/10 dark:border-white/10 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
+		<div className={workbench ? "flex min-w-0 flex-wrap items-center gap-y-2" : `min-h-[40px] py-2 px-6 md:px-10 flex flex-nowrap overflow-x-auto hide-scrollbar justify-start xl:justify-center items-center bg-surface-container-low border-y border-black/10 dark:border-white/10 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
 			{/* Font Family Selection */}
 			<div className='flex shrink-0 items-center border-r border-black/10 dark:border-white/10 h-6 px-1'>
 				<CustomSelect
+					modal={workbench}
 					value={state.fontFamily}
 					onValueChange={(val) => {
 						if (val === '') {
@@ -148,6 +150,7 @@ function EditorToolbarImpl ({ editor, onOpenLinkPrompt, disabled = false }: Edit
 			{/* Text Style / Headings Selection */}
 			<div className='flex shrink-0 items-center border-r border-black/10 dark:border-white/10 h-6 px-1'>
 				<CustomSelect
+					modal={workbench}
 					value={state.textStyle}
 					onValueChange={(val) => {
 						if (val === 'p') {

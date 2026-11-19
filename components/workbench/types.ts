@@ -12,6 +12,7 @@ export interface WorkbenchShellProps {
 	pages?: readonly WorkbenchPageLink[]
 	currentPageId?: string
 	onSearch: () => void
+	onBrowse?: () => void
 	onCapture?: () => void
 	onImport?: () => void
 	onExport?: () => void

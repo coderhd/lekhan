@@ -25,6 +25,8 @@ import GlobalLoader from './global-loader'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import {
 	ArrowRight,
+	ChevronRight,
+	Folder,
 	FileText,
 	MoreHorizontal,
 	Plus,
@@ -63,6 +65,8 @@ export default function Dashboard({ user }: DashboardProps) {
 	const [documentToDelete, setDocumentToDelete] = useState<string | null>(null)
 	const [filterDate, setFilterDate] = useState('all')
 	const [sortBy, setSortBy] = useState('newest')
+	const [pageView, setPageView] = useState<'browse' | 'recent'>('browse')
+	const [expandedPages, setExpandedPages] = useState<Set<string>>(() => new Set())
 
 	const fetchRequestIdRef = useRef(0)
 
@@ -172,7 +176,20 @@ export default function Dashboard({ user }: DashboardProps) {
 		if (!documentToDelete) return
 		try {
 			await deletePage(documentToDelete)
-			setMyPages((prev) => prev.filter((page) => page.id !== documentToDelete))
+			setMyPages(previous => {
+				const removed = new Set([documentToDelete])
+				const children = new Map<string, string[]>()
+				for (const page of previous) {
+					if (!page.parent_id) continue
+					const siblings = children.get(page.parent_id) ?? []
+					siblings.push(page.id)
+					children.set(page.parent_id, siblings)
+				}
+				for (const id of removed) {
+					for (const child of children.get(id) ?? []) removed.add(child)
+				}
+				return previous.filter(page => !removed.has(page.id))
+			})
 			toast.success('Page deleted successfully')
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err)
@@ -277,6 +294,48 @@ export default function Dashboard({ user }: DashboardProps) {
 		[applyFiltersAndSort, sharedPages]
 	)
 
+	const ownedRows = useMemo(() => {
+		const pages = filteredMyPages
+		const flat = pages.map(page => ({ page, depth: 0, hasChildren: false }))
+		if (pageView === 'recent' || searchQuery.trim() || filterDate !== 'all') return flat
+
+		const ids = new Set(pages.map(page => page.id))
+		const children = new Map<string | null, Page[]>()
+		for (const page of pages) {
+			const parent = page.parent_id && page.parent_id !== page.id && ids.has(page.parent_id) ? page.parent_id : null
+			const siblings = children.get(parent) ?? []
+			siblings.push(page)
+			children.set(parent, siblings)
+		}
+		const seen = new Set<string>()
+		const rows: typeof flat = []
+		const visit = (root: Page) => {
+			const stack = [{ page: root, depth: 0, visible: true }]
+			while (stack.length) {
+				const { page, depth, visible } = stack.pop()!
+				if (seen.has(page.id)) continue
+				seen.add(page.id)
+				const nested = children.get(page.id) ?? []
+				if (visible) rows.push({ page, depth, hasChildren: nested.length > 0 })
+				for (const child of [...nested].reverse()) {
+					stack.push({ page: child, depth: depth + 1, visible: visible && expandedPages.has(page.id) })
+				}
+			}
+		}
+		for (const root of children.get(null) ?? []) visit(root)
+		for (const page of pages) if (!seen.has(page.id)) visit(page)
+		return rows
+	}, [expandedPages, filterDate, filteredMyPages, pageView, searchQuery])
+
+	const togglePage = (id: string) => {
+		setExpandedPages(previous => {
+			const next = new Set(previous)
+			if (next.has(id)) next.delete(id)
+			else next.add(id)
+			return next
+		})
+	}
+
 	const recentPage = useMemo(
 		() =>
 			[...myPages].sort(
@@ -292,6 +351,12 @@ export default function Dashboard({ user }: DashboardProps) {
 			workspaceName={workspace?.name || 'Personal space'}
 			pages={myPages.slice(0, 8)}
 			onSearch={openGlobalSearch}
+			onBrowse={myPages.length ? () => {
+				setPageView('browse')
+				setSearchQuery('')
+				setFilterDate('all')
+				document.getElementById('workspace-pages-heading')?.focus()
+			} : undefined}
 			onCapture={openQuickCapture}
 			onImport={() => setImportDialogOpen(true)}
 			onExport={() => setVaultExportOpen(true)}
@@ -389,7 +454,7 @@ export default function Dashboard({ user }: DashboardProps) {
 							</section>
 						)}
 						<div className="wb-section-heading">
-							<h2>Recent pages</h2>
+							<h2 id="workspace-pages-heading" tabIndex={-1}>{pageView === 'browse' ? 'Workspace pages' : 'Recent pages'}</h2>
 							<button
 								type="button"
 								className="wb-button"
@@ -433,6 +498,10 @@ export default function Dashboard({ user }: DashboardProps) {
 								</select>
 							</label>
 						</div>
+						<div className="wb-browse-switch" role="group" aria-label="Page view">
+							<button type="button" aria-pressed={pageView === 'browse'} onClick={() => setPageView('browse')}>Browse</button>
+							<button type="button" aria-pressed={pageView === 'recent'} onClick={() => { setPageView('recent'); setSortBy('newest') }}>Recent</button>
+						</div>
 						{filteredMyPages.length === 0 ? (
 							<p className="wb-eyebrow">
 								{myPages.length
@@ -440,9 +509,17 @@ export default function Dashboard({ user }: DashboardProps) {
 									: 'You have no pages yet.'}
 							</p>
 						) : (
-							<ul aria-label="Owned pages">
-								{filteredMyPages.map((page) => (
-									<li className="wb-page-row" key={page.id}>
+							<ul id="browse-pages" aria-label="Owned pages">
+								{ownedRows.map(({ page, depth, hasChildren }) => (
+									<li className="wb-page-row" key={page.id} style={{ paddingInlineStart: `${Math.min(depth, 8) * 0.75}rem` }}>
+										{hasChildren && (
+											<button type="button" className="wb-icon-button"
+												aria-expanded={expandedPages.has(page.id)}
+												aria-label={`Children of ${page.title}`}
+												onClick={() => togglePage(page.id)}>
+												<ChevronRight className={expandedPages.has(page.id) ? 'rotate-90' : ''} aria-hidden="true" />
+											</button>
+										)}
 										{editingTitleId === page.id ? (
 											<InlineEdit
 												initialValue={page.title}
@@ -453,7 +530,7 @@ export default function Dashboard({ user }: DashboardProps) {
 											/>
 										) : (
 											<Link href={`/page/${page.id}`}>
-												<FileText aria-hidden="true" />
+												{hasChildren ? <Folder aria-hidden="true" /> : <FileText aria-hidden="true" />}
 												<span className="wb-page-label">
 													{page.title}
 													<small>
@@ -584,7 +661,12 @@ export default function Dashboard({ user }: DashboardProps) {
 				]}
 				onMarkdownFile={handleImportMarkdown}
 				onOpenPage={(pageId) => router.push(`/page/${pageId}`)}
-				onImportComplete={fetchPages}
+				onImportComplete={() => {
+					setPageView('browse')
+					setSearchQuery('')
+					setFilterDate('all')
+					return fetchPages()
+				}}
 			/>
 			<VaultExportDialog
 				open={vaultExportOpen}
@@ -595,7 +677,7 @@ export default function Dashboard({ user }: DashboardProps) {
 				open={!!documentToDelete}
 				onOpenChange={(open) => !open && setDocumentToDelete(null)}
 				title="Delete Page"
-				description="Are you sure you want to delete this page? This action cannot be undone."
+				description="Delete this page and any pages nested inside it? This action cannot be undone."
 				onConfirm={executeDelete}
 				confirmText="Delete"
 			/>

@@ -57,11 +57,11 @@ const faqData: FaqGroup[] = [
 			},
 			{
 				question: 'Can I move in from Obsidian?',
-				answer: 'Yes. Import your vault and your wikilinks, callouts, frontmatter, and tags come with you. The import produces a fidelity report that names anything it couldn\'t map — you always know exactly what arrived.',
+				answer: 'Yes. Import an Obsidian vault, then check the report for imported pages, resolved links, and content that needed conversion.',
 			},
 			{
 				question: 'Can I see the history of my document?',
-				answer: 'Yes — git-style history that lives on your own disk. Pin any version and it stays forever; auto-snapshots roll inside a generous local budget (100 MB per document). Visual diffs let you time-travel and restore, and local history is never gated by plan.',
+				answer: 'You can browse saved versions and restore earlier content. Available history and retention depend on your workspace tier.',
 			},
 		],
 	},
@@ -145,7 +145,7 @@ export default function FaqPage () {
 			<div className="max-w-[800px] mx-auto px-6 md:px-10 pt-8 pb-24 flex-1">
 				{/* Header */}
 				<div className="text-center mb-16">
-					<h1 className="font-display-lg text-4xl md:text-5xl font-bold text-on-surface mb-4">
+					<h1 className="public-reading-title text-on-surface mb-4">
 						Frequently Asked Questions
 					</h1>
 					<p className="text-lg text-on-surface-variant max-w-2xl mx-auto">

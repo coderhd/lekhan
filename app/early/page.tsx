@@ -78,23 +78,16 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 			    The hero CTA anchors to #claim for in-page navigation. */}
 
 			<main>
-				{/*
-				 * Edition hero: the real cap as the figure, paired with the
-				 * positioning line (Stat-Led requires words beside the number).
-				 */}
 				<section className="ek-hero">
-					<p className="ek-figure tnum" aria-label={`${FOUNDING_CAP} founding spots`}>
-						500
-					</p>
 					<div className="ek-hero-copy">
-						<h1 className="ek-headline">numbered spots. Your second brain, your files, your AI.</h1>
+						<h1 className="ek-headline">Join the Lekhan web beta.</h1>
 						<p className="ek-subhead">
-							Local-first like Obsidian, collaborative like Notion.
+							Bring your Markdown notes, connect your ideas, and try collaborative writing in the browser.
 						</p>
 						<p className="ek-qualifier tnum">
 							{claimed == null
-								? 'Founding edition · closes when full'
-								: `Founding edition · ${claimed} claimed · closes when full`}
+								? 'Founding edition · 500 spots'
+								: `Founding edition · ${claimed} of 500 spots claimed`}
 						</p>
 						{percentFull != null && (
 							<div
@@ -105,10 +98,41 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 								<div className="ek-meter-fill" style={{ width: `${percentFull}%` }} />
 							</div>
 						)}
-						<a className="ek-chip" href="#claim">
-							Claim your spot ↓
-						</a>
+
 					</div>
+				<div className="ek-claim" id="claim">
+					<h2 className="ek-section-head">Join early access</h2>
+					<p>Confirm your email after signing up. We’ll email you when your invite is ready.</p>
+
+					{joinedParam != null ? (
+						// No-JS path: the route redirected back with the spot number.
+						<div className="ek-plate" role="status">
+							{wave2 ? (
+								<>
+									<p className="ek-plate-figure tnum">№ {joinedParam}</p>
+									<p className="ek-plate-note">
+									The founding edition of 500 is fully claimed, so you&apos;re on the wave-two list.
+									We&apos;ll email your invite the moment a spot opens.
+									</p>
+								</>
+							) : (
+								<>
+									<p className="ek-plate-kicker">Your founding spot</p>
+									<p className="ek-plate-figure tnum">
+										№ {joinedParam} <span className="ek-plate-of">of 500</span>
+									</p>
+									<p className="ek-plate-note">
+										Spot reserved. Check your inbox for the confirmation email; your invite
+										follows once you confirm.
+									</p>
+								</>
+							)}
+						</div>
+					) : (
+						<EarlyAccessForm defaultRef={ref} defaultUtm={utm} />
+					)}
+				</div>
+
 				</section>
 
 				<section className="ek-shots">
@@ -150,37 +174,6 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 					</dl>
 				</section>
 
-				<section className="ek-claim" id="claim">
-					<h2 className="ek-section-head">Claim your spot</h2>
-
-					{joinedParam != null ? (
-						// No-JS path: the route redirected back with the spot number.
-						<div className="ek-plate" role="status">
-							{wave2 ? (
-								<>
-									<p className="ek-plate-figure tnum">№ {joinedParam}</p>
-									<p className="ek-plate-note">
-									The founding edition of 500 is fully claimed, so you&apos;re on the wave-two list.
-									We&apos;ll email your invite the moment a spot opens.
-									</p>
-								</>
-							) : (
-								<>
-									<p className="ek-plate-kicker">Your founding spot</p>
-									<p className="ek-plate-figure tnum">
-										№ {joinedParam} <span className="ek-plate-of">of 500</span>
-									</p>
-									<p className="ek-plate-note">
-										Spot reserved. Check your inbox for the confirmation email; your invite
-										follows once you confirm.
-									</p>
-								</>
-							)}
-						</div>
-					) : (
-						<EarlyAccessForm defaultRef={ref} defaultUtm={utm} />
-					)}
-				</section>
 
 				<section className="ek-faq">
 					<h2 className="ek-section-head">Fair questions</h2>
@@ -188,15 +181,13 @@ export default async function EarlyPage ({ searchParams }: PageProps) {
 						<div className="ek-faq-item">
 							<h3>What does “local-first” actually mean?</h3>
 							<p>
-								Your notes live as files you control. The app works without a network and syncs
-								when you have one. Leaving is an export button, not a migration project.
+								The web editor keeps a local browser copy for offline editing and syncs when you reconnect. You can export your workspace as Markdown.
 							</p>
 						</div>
 						<div className="ek-faq-item">
 							<h3>When do invites go out?</h3>
 							<p>
-								Rolling invites for the private beta start in September 2026, in spot-number
-								order. Confirm your email so your spot isn&apos;t skipped.
+								Invites roll out in spot-number order as the beta opens. Confirm your email to keep your place.
 							</p>
 						</div>
 						<div className="ek-faq-item">
@@ -260,20 +251,14 @@ const STYLES = `
 .ek-page > main { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 
 .ek-hero {
-	display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr);
-	gap: clamp(24px, 5vw, 72px); align-items: end;
+	display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .8fr);
+	gap: clamp(24px, 5vw, 72px); align-items: center;
 	padding: clamp(64px, 12vh, 128px) 0 clamp(48px, 8vh, 88px);
 	border-bottom: 1px solid var(--ek-hairline);
 	animation: ek-rise 500ms ease-out both;
 }
 @keyframes ek-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
-.ek-figure {
-	font-family: var(--font-geist-mono, 'Geist Mono', ui-monospace, monospace);
-	font-size: clamp(88px, 18vw, 200px);
-	font-weight: 500; line-height: 0.9; letter-spacing: -0.04em;
-	margin: 0; color: var(--ek-ink);
-}
 .ek-headline {
 	font-family: Fraunces, ui-serif, Georgia, serif;
 	font-size: clamp(28px, 4.5vw, 52px);
@@ -288,14 +273,8 @@ const STYLES = `
 }
 .ek-meter { height: 4px; background: rgba(25,23,19,0.1); border-radius: 2px; max-width: 340px; margin-bottom: 32px; overflow: hidden; }
 .ek-meter-fill { height: 100%; background: var(--ek-teak-bright); transition: width 600ms ease-out; }
-.ek-chip {
-	display: inline-block; padding: 10px 22px;
-	border: 1.5px solid var(--ek-ink); border-radius: 999px;
-	color: var(--ek-ink); text-decoration: none; font-weight: 500; font-size: 15px;
-	white-space: nowrap;
-}
-.ek-chip:hover { background: var(--ek-ink); color: var(--ek-paper); }
-
+.ek-claim { padding: clamp(1.25rem, 4vw, 2rem); background: var(--ek-paper); border: 1px solid var(--ek-hairline); border-radius: .75rem; }
+.ek-claim > p { margin: -1rem 0 1.25rem; color: var(--ek-muted); }
 .ek-page > main > section { padding: clamp(48px, 9vh, 88px) 0; border-bottom: 1px solid var(--ek-hairline); }
 .ek-section-head {
 	font-family: Fraunces, ui-serif, Georgia, serif;
@@ -328,7 +307,7 @@ const STYLES = `
 	background: var(--ek-paper-raised); color: var(--ek-ink);
 }
 .ek-textarea { width: 100%; max-width: 520px; resize: vertical; }
-			.ek-input:focus-visible, .ek-textarea:focus-visible, .ek-button:focus-visible, .ek-chip:focus-visible {
+			.ek-input:focus-visible, .ek-textarea:focus-visible, .ek-button:focus-visible {
 				outline: 2px solid var(--ek-ink);
 				outline-offset: 2px;
 			}
@@ -379,7 +358,6 @@ const STYLES = `
 	.ek-button { width: 100%; }
 }
 @media (max-width: 320px) {
-	.ek-figure { font-size: 72px; }
 	.ek-page > main { padding: 0 16px; }
 }
 /* Smooth anchor scroll (hero chip → claim form); disabled for reduced motion */

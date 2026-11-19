@@ -24,6 +24,7 @@ export default function WorkbenchShell({
 	pages = [],
 	currentPageId,
 	onSearch,
+	onBrowse,
 	onCapture,
 	onImport,
 	onExport,
@@ -59,6 +60,9 @@ export default function WorkbenchShell({
 					<Home aria-hidden="true" />
 					Workspace
 				</Link>
+				{mobile && onBrowse && (
+					<button type="button" onClick={() => runAction(onBrowse, mobile)}>Browse workspace pages</button>
+				)}
 				<button type="button" onClick={() => runAction(onSearch, mobile)}>
 					<Search aria-hidden="true" />
 					Search

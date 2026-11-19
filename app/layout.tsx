@@ -10,14 +10,14 @@ import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
 
 export const metadata: Metadata = {
 	title: {
-		default: 'Lekhan — Your notes, on your disk. Now multiplayer',
+		default: 'Lekhan — Connected notes and collaborative writing',
 		template: '%s | Lekhan',
 	},
-	description: 'Write, edit, and collaborate in real-time with Lekhan. A local-first editor with zero typing latency, full offline support, and AI assistance. Start writing free.',
+	description: 'Write, edit, and collaborate in real-time with Lekhan. A web workspace for Markdown, linked notes, offline editing, and AI assistance.',
 	metadataBase: new URL('https://lekhan.online'),
 	openGraph: {
 		title: 'Lekhan — Write Together, Without Limits',
-		description: 'A local-first collaborative editor with zero typing latency, offline support, and AI-assisted writing. Built for teams that value speed and privacy.',
+		description: 'Import Markdown, connect ideas, and write together in the browser.',
 		url: 'https://lekhan.online',
 		siteName: 'Lekhan',
 		images: [

@@ -30,6 +30,8 @@ export default function InvitePage ({
 		let current = true
 		setLoading(true)
 		setError(null)
+		setInvite(null)
+		setUnavailable(false)
 		const checkUserAndInvite = async () => {
 			try {
 				// 1. Get current session

@@ -17,7 +17,7 @@ export default function PrivacyPolicyPage () {
 			<div className="max-w-[800px] mx-auto px-6 md:px-10 pt-8 pb-24 flex-1">
 				{/* Header */}
 				<div className="mb-12">
-					<h1 className="font-display-lg text-4xl md:text-5xl font-bold text-on-surface mb-4">
+					<h1 className="public-reading-title text-on-surface mb-4">
 						Privacy Policy
 					</h1>
 					<p className="text-on-surface-variant">
