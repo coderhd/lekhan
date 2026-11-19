@@ -8,7 +8,7 @@
 [![Next.js](https://img.shields.io/badge/Next.js-16.3-black.svg?logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-blue.svg?logo=react)](https://react.dev/)
 [![Yjs CRDT](https://img.shields.io/badge/Yjs-CRDT%20Sync-orange.svg)](https://yjs.dev/)
-[![Security](https://img.shields.io/badge/Encryption-AES--256--GCM-blueviolet.svg)](#-security--encryption)
+[![Security](https://img.shields.io/badge/Encryption-AES--256--GCM-blueviolet.svg)](docs/adr/0001-encryption-at-rest-by-default-e2e-as-plus.md)
 [![License](https://img.shields.io/badge/License-AGPL%20v3%20%2F%20MIT-blue.svg)](LICENSE)
 
 [Early Access Waitlist](https://lekhan.online/early) · [Report Bug](https://github.com/coderhd/lekhan/issues) · [Roadmap](#web-beta-and-roadmap)
@@ -94,7 +94,7 @@ flowchart TD
 ## 💻 Getting Started
 
 ### Prerequisites
-* **Node.js**: v20.0.0 or higher (v24 recommended)
+* **Node.js**: v24
 * **npm**
 * A [Supabase](https://supabase.com) project
 
@@ -134,7 +134,7 @@ flowchart TD
    ```bash
    npm run dev
    ```
-   Open [http://localhost:3000](http://localhost:3000) in your browser. For local collaboration testing, start the sync hub separately with `npm run server` after configuring its environment from `.env.example`.
+   Open [http://localhost:3000](http://localhost:3000) in your browser. For local collaboration testing, start the sync hub separately with `npm run server` after configuring its environment from `.env.example`. Use a disposable Supabase project with the repository migrations applied. Match the port in `NEXT_PUBLIC_WS_URL` to the sync hub’s `PORT`.
 
 ---
 
