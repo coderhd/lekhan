@@ -230,16 +230,6 @@ export default function SettingsClient({
 		}
 	}
 
-	useEffect(() => {
-		if (typeof window !== 'undefined') {
-			const savedTheme = (localStorage.getItem('theme') as 'light' | 'dark') || 'dark'
-			if (savedTheme === 'dark') {
-				document.documentElement.classList.add('dark')
-			} else {
-				document.documentElement.classList.remove('dark')
-			}
-		}
-	}, [])
 
 	const handleChangePassword = async (e: React.FormEvent) => {
 		e.preventDefault()
@@ -329,7 +319,7 @@ export default function SettingsClient({
 		<WorkbenchShell active="settings" workspaceName="Workspace" onSearch={onSearch} onCapture={onCapture}
 			headerActions={<><ThemeToggle />{user.id && <ProfileMenu user={{ ...user, id: user.id }} size="sm" />}</>}>
 			<main className={styles.route}>
-				<header><h1 className={styles.title}>Settings</h1><p className="text-sm text-on-surface-variant">Your profile, providers and workspace access.</p></header>
+				<header><h1 className={styles.title}>Settings</h1><p className="text-sm text-on-surface-variant">Manage your account, workspace access, AI connections, and subscription.</p></header>
 				<div className={styles.settings}>
 					{/* Sidebar Navigation */}
 					<aside
@@ -405,7 +395,7 @@ export default function SettingsClient({
 						{activeTab === 'ai' && (
 							<div id="settings-panel-ai" role="tabpanel" aria-labelledby="settings-tab-ai" className="space-y-8 w-full max-w-4xl">
 								<h2 className="text-2xl font-display-lg text-on-surface mb-2">AI & Models</h2>
-								<p className="text-sm text-on-surface-variant mb-6">Manage your connected AI providers, local models, and billing tiers.</p>
+								<p className="text-sm text-on-surface-variant mb-6">Choose a provider and model. Connect your own API key or a supported local runtime.</p>
 								<AIProviderSettings
 									user={user}
 									registryState={registryState}
@@ -417,7 +407,7 @@ export default function SettingsClient({
 						{activeTab === 'profile' && (
 							<div id="settings-panel-profile" role="tabpanel" aria-labelledby="settings-tab-profile" className="space-y-8 max-w-3xl">
 								{/* Profile Section */}
-								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
+								<section className="border-b border-outline-variant pb-8">
 									<h2 className="text-2xl font-display-lg text-on-surface mb-6">Profile</h2>
 									<div className="space-y-6">
 										<div>
@@ -432,7 +422,7 @@ export default function SettingsClient({
 								</section>
 
 								{/* Security Section */}
-								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
+								<section className="border-b border-outline-variant pb-8">
 									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Security</h2>
 									<p className="text-sm text-on-surface-variant mb-6">Update your password to keep your account secure.</p>
 									<form onSubmit={handleChangePassword} className="space-y-4 max-w-md">

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import '@testing-library/jest-dom'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { AIProviderSettings } from '../../components/settings/ai-provider-settings'
 import { getDefaultAIRegistryState } from '../../lib/ai/catalog'
 
@@ -39,7 +39,10 @@ describe('AIProviderSettings UI', () => {
 		render(<AIProviderSettings registryState={registryState} onSaveRegistry={vi.fn()} />)
 		
 		const passwordInputs = screen.getAllByPlaceholderText(/API Key/i)
-		expect(passwordInputs.length).toBeGreaterThan(0)
+		expect(passwordInputs).toHaveLength(1)
+		fireEvent.change(screen.getByRole('combobox', { name: 'Provider' }), { target: { value: 'anthropic' } })
+		expect(screen.getByLabelText('Anthropic API key')).toHaveAttribute('type', 'password')
+		expect(screen.queryByLabelText('OpenAI API key')).toBeNull()
 		
 		const testButtons = screen.getAllByRole('button', { name: /^Test$/i })
 		expect(testButtons.length).toBeGreaterThan(0)

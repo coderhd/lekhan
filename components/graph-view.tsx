@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useTheme } from 'next-themes'
 import { useRouter } from 'next/navigation'
 import { Minus, Plus, RotateCcw } from 'lucide-react'
 import {
@@ -83,6 +84,7 @@ interface Palette {
  */
 export default function GraphView ({ data, layout, className }: GraphViewProps) {
 	const router = useRouter()
+	const { resolvedTheme } = useTheme()
 	const [view, setView] = useState<'map' | 'list'>('map')
 	const containerRef = useRef<HTMLDivElement>(null)
 	const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -301,7 +303,7 @@ export default function GraphView ({ data, layout, className }: GraphViewProps) 
 			context.fillStyle = palette.hover
 			context.fillText(truncate(highlightedNode.title), point.x + radius + 5, point.y + 1)
 		}
-	}, [camera, highlightedId, nodes, positioned.edges, size.height, size.width])
+	}, [camera, highlightedId, nodes, positioned.edges, resolvedTheme, size.height, size.width])
 
 	const pointFromEvent = (event: React.PointerEvent<HTMLCanvasElement>): Point => {
 		const rect = event.currentTarget.getBoundingClientRect()

@@ -1,4 +1,5 @@
 'use client'
+import { useTheme } from 'next-themes'
 
 import { useEffect, useLayoutEffect, useState, useCallback, useRef, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
@@ -184,7 +185,8 @@ export default function EditorWorkspace({	pageId,
 	const [previewVersionName, setPreviewVersionName] = useState<string | null>(null)
 	const [isViewer, setIsViewer] = useState<boolean | null>(null)
 	const [ownerId, setOwnerId] = useState<string | null>(null)
-	const [theme, setTheme] = useState<'light' | 'dark'>('dark')
+	const { resolvedTheme, setTheme } = useTheme()
+	const theme = resolvedTheme === 'light' ? 'light' : 'dark'
 	const [isLinkPromptOpen, setIsLinkPromptOpen] = useState(false)
 	const handleOpenLinkPrompt = useCallback(() => setIsLinkPromptOpen(true), [])
 	const [isLekhanBotOpen, setIsLekhanBotOpen] = useState(false)
@@ -396,29 +398,7 @@ export default function EditorWorkspace({	pageId,
 
 
 
-	useEffect(() => {
-		if (typeof window !== 'undefined') {
-			const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' || 'dark'
-			setTheme(savedTheme)
-			if (savedTheme === 'dark') {
-				document.documentElement.classList.add('dark')
-			} else {
-				document.documentElement.classList.remove('dark')
-			}
-		}
-	}, [])
-
-	const toggleTheme = () => {
-		const nextTheme = theme === 'dark' ? 'light' : 'dark'
-		setTheme(nextTheme)
-		localStorage.setItem('theme', nextTheme)
-		if (nextTheme === 'dark') {
-			document.documentElement.classList.add('dark')
-		} else {
-			document.documentElement.classList.remove('dark')
-		}
-	}
-
+	const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark')
 
 	useEffect(() => {
 		const checkRole = async () => {

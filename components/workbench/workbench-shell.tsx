@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import * as Dialog from '@radix-ui/react-dialog'
 import {
 	FileText,
@@ -176,6 +177,7 @@ export default function WorkbenchShell({
 						</Dialog.Portal>
 					</Dialog.Root>
 					<Link className="wb-logo" href="/">
+						<Image src="/logo.png" alt="" width={24} height={24} />
 						Lekhan
 					</Link>
 					<span className="wb-breadcrumb">

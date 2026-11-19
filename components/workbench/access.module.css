@@ -22,3 +22,6 @@
 .footer nav { display: flex; gap: 16px; }
 @media (min-width: 768px) { .body { grid-template-columns: minmax(0,1fr) minmax(0,1fr); padding: 64px 40px; gap: 80px; } .story { display: block; } .form { margin: 0; } }
 @media (prefers-reduced-motion: reduce) { .frame * { animation: none; transition: none; } }
+
+.logo { display: inline-flex; align-items: center; gap: .65rem; min-height: 44px; }
+.story h2 { font-family: Georgia, serif; text-wrap: balance; }

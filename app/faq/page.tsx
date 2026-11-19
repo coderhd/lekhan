@@ -4,11 +4,11 @@ import Link from 'next/link'
 
 export const metadata: Metadata = {
 	title: 'Frequently Asked Questions | Lekhan',
-	description: 'How Lekhan stores your notes, how offline multiplayer works, and how AI runs on your own key, a local model, or a simple plan credit.',
+	description: 'How Lekhan stores your notes, how offline multiplayer works, and how AI runs on your own key, or a supported local model.',
 	openGraph: {
 			images: ['/og.png'],
 		title: 'FAQ — Lekhan',
-		description: 'How Lekhan stores your notes, how offline multiplayer works, and how AI runs on your own key, a local model, or a simple plan credit.',
+		description: 'How Lekhan stores your notes, how offline multiplayer works, and how AI runs on your own key, or a supported local model.',
 	},
 }
 
@@ -53,7 +53,7 @@ const faqData: FaqGroup[] = [
 			},
 			{
 				question: 'What AI features does Lekhan include?',
-				answer: 'An AI assistant panel inside every document: summarize, improve clarity, fix grammar, generate ideas. Bring your own API key (OpenAI, Anthropic, Gemini, Sarvam, or a custom endpoint) — cloud calls are relayed through our API to the provider you pick. Or run a local model like Ollama, and requests go straight from your browser. On your own key, AI never consumes plan credits; without one, the built-in Sarvam actions (chat, translate, TTS, transliterate) run on a plan-credit allowance.',
+				answer: 'An AI assistant panel inside every document: summarize, improve clarity, fix grammar, generate ideas. Bring your own API key (OpenAI, Anthropic, Gemini, Sarvam, or a custom endpoint) — cloud calls are relayed through our API to the provider you pick. Or run a local model like Ollama, and requests go straight from your browser. Choose a provider or local runtime in AI & Models. Your provider’s usage terms apply.',
 			},
 			{
 				question: 'Can I move in from Obsidian?',

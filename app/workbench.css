@@ -450,3 +450,34 @@
 	border-bottom-color: currentColor;
 	font-weight: 650;
 }
+
+.workbench-shell { display: flex; flex-direction: column; }
+.wb-body { flex: 1; }
+.wb-state-art { position: relative; width: 100px; height: 86px; margin: 0 auto 20px; }
+.wb-state-sheet {
+	position: absolute;
+	width: 53px;
+	height: 65px;
+	border: 1px solid hsl(var(--outline-variant));
+	border-radius: 8px;
+}
+.wb-state-sheet-back {
+	top: 5px;
+	left: 17px;
+	background: hsl(var(--surface-container-high));
+	transform: rotate(-12deg);
+}
+.wb-state-sheet-front {
+	top: 13px;
+	left: 32px;
+	display: grid;
+	place-items: center;
+	background: hsl(var(--surface-container-lowest));
+	color: hsl(var(--primary-ink));
+	transform: rotate(8deg);
+	box-shadow: 0 6px 15px hsl(var(--on-surface) / .08);
+}
+
+.wb-logo { display: inline-flex; align-items: center; gap: .5rem; }
+.wb-empty { max-width: 36rem; padding: clamp(1rem, 4vw, 3rem); }
+.wb-empty h2 { font-size: clamp(1.5rem, 4vw, 2rem); }

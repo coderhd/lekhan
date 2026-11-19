@@ -42,6 +42,8 @@ import { ImportDialog } from '@/components/import-dialog'
 import { VaultExportDialog } from '@/components/vault-export-dialog'
 import { track } from '@/lib/analytics'
 
+import { WorkspaceIllustration } from './workbench/workspace-illustration'
+
 interface DashboardProps {
 	user: {
 		id: string
@@ -70,17 +72,6 @@ export default function Dashboard({ user }: DashboardProps) {
 
 	const fetchRequestIdRef = useRef(0)
 
-	useEffect(() => {
-		if (typeof window !== 'undefined') {
-			const savedTheme =
-				(localStorage.getItem('theme') as 'light' | 'dark') || 'dark'
-			if (savedTheme === 'dark') {
-				document.documentElement.classList.add('dark')
-			} else {
-				document.documentElement.classList.remove('dark')
-			}
-		}
-	}, [])
 
 	const fetchPages = useCallback(async () => {
 		const requestId = ++fetchRequestIdRef.current
@@ -369,7 +360,7 @@ export default function Dashboard({ user }: DashboardProps) {
 		>
 			<div className="wb-page-head">
 				<div>
-					<h1>Back to the page.</h1>
+					<h1>Workspace</h1>
 					<p>{workspace?.name || 'Your workspace'}</p>
 				</div>
 				<button
@@ -387,10 +378,10 @@ export default function Dashboard({ user }: DashboardProps) {
 				</div>
 			) : fetchError ? (
 				<div className="wb-empty" role="alert">
+					<WorkspaceIllustration variant="retry" />
 					<h2>Couldn't load your pages</h2>
 					<p>
-						Something went wrong while fetching your pages. Your content has not
-						been removed. Please try again.
+						Retry to reconnect to your workspace.
 					</p>
 					<button type="button" className="wb-button" onClick={fetchPages}>
 						<RefreshCw aria-hidden="true" />
@@ -401,6 +392,7 @@ export default function Dashboard({ user }: DashboardProps) {
 			  sharedPages.length === 0 &&
 			  pendingInvitesCount === 0 ? (
 				<div className="wb-empty">
+					<WorkspaceIllustration variant="empty" />
 					<h2>
 						A first page.
 						<br />A place to begin.

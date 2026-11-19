@@ -246,7 +246,7 @@ export function ImportDialog ({
 
 	return (
 		<AlertDialog open={open} onOpenChange={handleOpenChange}>
-			<AlertDialogContent className="max-h-[85dvh] max-w-xl overflow-y-auto">
+			<AlertDialogContent className="max-h-[85dvh] max-w-2xl overflow-y-auto">
 				<AlertDialogHeader>
 					<AlertDialogTitle className="font-serif text-3xl font-medium">Import</AlertDialogTitle>
 					<AlertDialogDescription>
@@ -255,11 +255,11 @@ export function ImportDialog ({
 				</AlertDialogHeader>
 
 				{phase === 'choose' && (
-					<div className="grid gap-sm py-sm">
-						<h3 className="text-sm font-semibold">Import an Obsidian vault</h3>
+					<div className="grid grid-cols-1 gap-3 py-3 sm:grid-cols-2">
+						<h3 className="col-span-full text-sm font-semibold">Import an Obsidian vault</h3>
 						<button
 							onClick={startFolderPick}
-							className="group flex w-full items-start gap-4 rounded-lg border border-outline-variant bg-surface-container-low p-4 text-left hover:bg-surface-container-high focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+							className="flex min-h-32 flex-col items-start gap-3 rounded-xl bg-surface-container-low p-4 text-left hover:bg-surface-container-high focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
 						>
 							<span aria-hidden="true" className="material-symbols-outlined rounded-md bg-surface-container-high p-2 text-primary-ink">folder_open</span>
 							<span>
@@ -269,7 +269,7 @@ export function ImportDialog ({
 						</button>
 						<button
 							onClick={() => zipInputRef.current?.click()}
-							className="group flex w-full items-start gap-4 rounded-lg border border-outline-variant bg-surface-container-low p-4 text-left hover:bg-surface-container-high focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+							className="flex min-h-32 flex-col items-start gap-3 rounded-xl bg-surface-container-low p-4 text-left hover:bg-surface-container-high focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
 						>
 							<span aria-hidden="true" className="material-symbols-outlined rounded-md bg-surface-container-high p-2 text-primary-ink">folder_zip</span>
 							<span>
@@ -277,10 +277,10 @@ export function ImportDialog ({
 								<span className="block text-on-surface-variant text-sm">Use a ZIP of the vault folder. The report shows which content was preserved.</span>
 							</span>
 						</button>
-						<h3 className="mt-2 border-t border-outline-variant pt-3 text-sm font-semibold">Other sources</h3>
+						<h3 className="col-span-full mt-2 pt-2 text-sm font-semibold">Other sources</h3>
 						<button
 							onClick={() => notionInputRef.current?.click()}
-							className="group flex w-full items-start gap-4 rounded-lg border border-outline-variant bg-surface-container-low p-4 text-left hover:bg-surface-container-high focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+							className="flex min-h-32 flex-col items-start gap-3 rounded-xl bg-surface-container-low p-4 text-left hover:bg-surface-container-high focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
 						>
 							<span aria-hidden="true" className="material-symbols-outlined rounded-md bg-surface-container-high p-2 text-primary-ink">database</span>
 							<span>
@@ -290,12 +290,12 @@ export function ImportDialog ({
 								</span>
 							</span>
 						</button>
-						<p className="px-4 text-xs leading-relaxed text-on-surface-variant">
+						<p className="col-span-full order-last text-xs leading-relaxed text-on-surface-variant">
 							Notion download links expire after 7 days. Files are read on your device and no Notion API connection is needed.
 						</p>
 						<button
 							onClick={() => markdownInputRef.current?.click()}
-							className="group flex w-full items-start gap-4 rounded-lg border border-outline-variant bg-surface-container-low p-4 text-left hover:bg-surface-container-high focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+							className="flex min-h-32 flex-col items-start gap-3 rounded-xl bg-surface-container-low p-4 text-left hover:bg-surface-container-high focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
 						>
 							<span aria-hidden="true" className="material-symbols-outlined rounded-md bg-surface-container-high p-2 text-primary-ink">description</span>
 							<span>

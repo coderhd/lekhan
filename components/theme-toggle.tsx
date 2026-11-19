@@ -13,18 +13,20 @@ export default function ThemeToggle() {
 	}, [])
 
 	if (!mounted) {
-		return <div className="h-7 w-12" />
+		return <div className="h-11 w-12" />
 	}
 
 	const isDark = resolvedTheme === 'dark'
 
 	return (
 		<button
+			type="button"
+			aria-pressed={isDark}
 			onClick={() => setTheme(isDark ? 'light' : 'dark')}
-			className="relative inline-flex h-7 w-12 items-center rounded-full bg-black/10 dark:bg-white/10 border border-black/20 dark:border-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-container/50 hover:bg-black/20 dark:hover:bg-white/20"
+			className="relative inline-flex min-h-11 w-12 items-center rounded-full bg-black/10 dark:bg-white/10 border border-black/20 dark:border-white/20 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-container/50 hover:bg-black/20 dark:hover:bg-white/20"
 			title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
 		>
-			<span className="sr-only">Toggle theme</span>
+			<span className="sr-only">Dark mode</span>
 			<span
 				className={`flex items-center justify-center h-5 w-5 transform rounded-full shadow-md border border-black/10 dark:border-transparent transition-transform duration-200 ${
 					isDark ? 'translate-x-[22px] bg-primary-container' : 'translate-x-1 bg-white'

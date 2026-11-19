@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Activity, Lock, Eye, EyeOff, CheckCircle2, AlertTriangle, CloudOff, KeyRound, Cpu, Loader2, Search, Zap, DollarSign } from 'lucide-react'
+import { Activity, Lock, Eye, EyeOff, CheckCircle2, AlertTriangle, CloudOff, KeyRound, Cpu, Loader2, Zap, DollarSign } from 'lucide-react'
 import { AIRegistryState, AIProviderType, ModelCard } from '../../lib/ai/types'
 import { getDefaultAIRegistryState } from '../../lib/ai/catalog'
 import { HardwareProfile, detectHardwareProfile } from '../../lib/ai/hardware'
@@ -33,15 +33,16 @@ export function AIProviderSettings({ registryState, onSaveRegistry }: AIProvider
 	const state = registryState ?? defaultState
 	const [hardware, setHardware] = useState<HardwareProfile | null>(null)
 	const [localProbe, setLocalProbe] = useState<LocalProbeResult | null>(null)
+	const [selectedProvider, setSelectedProvider] = useState<AIProviderType>(
+		() => BYOK_PROVIDERS.find(provider => provider.id === state.activeProviderId)?.id ?? 'openai'
+	)
 	const [showKeys, setShowKeys] = useState<Record<string, boolean>>({})
 	const [apiKeys, setApiKeys] = useState<Record<string, string>>({})
 	const [customBaseUrls, setCustomBaseUrls] = useState<Record<string, string>>({})
 	const [testingKey, setTestingKey] = useState<Record<string, boolean>>({})
 	const [isPingTesting, setIsPingTesting] = useState(false)
 	const [pingResult, setPingResult] = useState<{ latencyMs?: number; success?: boolean } | null>(null)
-	const [searchQuery, setSearchQuery] = useState('')
-	const [costFilter, setCostFilter] = useState<'all' | 'free' | 'local' | 'paid'>('all')
-	const [categoryFilter, setCategoryFilter] = useState<'all' | 'general' | 'reasoning' | 'coding' | 'indic'>('all')
+	const [modelChoice, setModelChoice] = useState('')
 
 	useEffect(() => {
 		detectHardwareProfile().then(setHardware)
@@ -153,16 +154,12 @@ export function AIProviderSettings({ registryState, onSaveRegistry }: AIProvider
 		}
 	}
 
-	const filteredModels = useMemo(() => {
-		let list = providerRegistry.catalog as ModelCard[]
-		if (costFilter !== 'all') list = list.filter(m => m.costTier === costFilter)
-		if (categoryFilter !== 'all') list = list.filter(m => m.category === categoryFilter)
-		if (searchQuery) {
-			const q = searchQuery.toLowerCase()
-			list = list.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q) || formatModelDescription(m).toLowerCase().includes(q))
-		}
-		return list
-	}, [searchQuery, costFilter, categoryFilter])
+	const models = providerRegistry.catalog as ModelCard[]
+	const optionKey = (model: ModelCard) => `${model.provider}:${model.id}`
+	const selectedModel = models.find(model => optionKey(model) === modelChoice)
+		?? models.find(model => model.id === state.activeModelId && model.provider === state.activeProviderId)
+		?? models[0]
+
 
 	const getDetectedPlatform = () => {
 		if (typeof navigator === 'undefined') return 'macos'
@@ -174,7 +171,7 @@ export function AIProviderSettings({ registryState, onSaveRegistry }: AIProvider
 	const platform = getDetectedPlatform()
 	const corsCommand = localProbe?.osCommand[platform as keyof typeof localProbe.osCommand] || localProbe?.osCommand.macos || ''
 
-	const hasKey = (id: string) => !!(apiKeys[id] || state.providers[id]?.apiKey)
+	const hasKey = (id: string) => Boolean(state.providers[id]?.apiKey)
 
 	return (
 		<div className="space-y-6 max-w-5xl w-full">
@@ -235,8 +232,24 @@ export function AIProviderSettings({ registryState, onSaveRegistry }: AIProvider
 					<h3 className="text-sm font-bold">Providers & Keys</h3>
 					<span className="text-[11px] text-black/50 dark:text-white/50">BYOK — keys stay encrypted on your device</span>
 				</div>
+				<label className="grid gap-2 text-sm">
+					Provider
+					<select value={selectedProvider}
+						onChange={event => {
+							const provider = BYOK_PROVIDERS.find(item => item.id === event.target.value)
+							if (provider) setSelectedProvider(provider.id)
+							setShowKeys({})
+						}}
+						className="min-h-11 w-full max-w-sm rounded-md border border-outline-variant bg-background px-3 text-on-surface">
+						{BYOK_PROVIDERS.map(provider => (
+							<option key={provider.id} value={provider.id}>
+								{provider.label}{hasKey(provider.id) ? ' · Configured' : ''}
+							</option>
+						))}
+					</select>
+				</label>
 				<div className="grid gap-3">
-					{BYOK_PROVIDERS.map(p => {
+					{BYOK_PROVIDERS.filter(provider => provider.id === selectedProvider).map(p => {
 						const configured = hasKey(p.id)
 						const isCustom = p.id === 'custom'
 						return (
@@ -252,6 +265,7 @@ export function AIProviderSettings({ registryState, onSaveRegistry }: AIProvider
 											<KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-black/30 dark:text-white/30" />
 											<input
 												type={showKeys[p.id] ? 'text' : 'password'}
+												aria-label={`${p.label} API key`}
 												placeholder={`${p.label} API key`}
 												value={apiKeys[p.id] || ''}
 												onChange={e => handleKeyChange(p.id, e.target.value)}
@@ -280,33 +294,24 @@ export function AIProviderSettings({ registryState, onSaveRegistry }: AIProvider
 						)
 					})}
 				</div>
-				<p className="text-[11px] leading-4 text-black/50 dark:text-white/50">Free presets (Gemini, Groq, DeepSeek, Z.AI) work with any provider row above — paste a free-tier key and pick a free model below. Tauri #88 will add a Model Library built once against the local sidecar.</p>
+				<p className="text-[11px] leading-4 text-black/50 dark:text-white/50">Save a key for the provider you want to use. Use the model list below to choose a supported model.</p>
 			</section>
 
 			<section className="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 space-y-4">
-				<div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-					<h3 className="text-sm font-bold">All models</h3>
-					<div className="relative w-full md:w-72">
-						<Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-black/40 dark:text-white/40" />
-						<input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search models, providers…" className="w-full pl-8 pr-3 py-2 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-xs focus:outline-none focus:ring-2 focus:ring-black/5" />
-					</div>
-				</div>
-				<div className="flex flex-wrap gap-2">
-					<div className="flex rounded-lg bg-black/5 dark:bg-white/5 p-1 gap-1">
-						{(['all','free','local','paid'] as const).map(v => (
-							<button key={v} onClick={() => setCostFilter(v)} aria-pressed={costFilter===v} className={`px-2.5 py-1 rounded-md text-[11px] font-medium capitalize ${costFilter===v ? 'bg-white dark:bg-white text-black shadow-sm' : 'text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white'}`}>{v}</button>
+				<h3 className="text-sm font-bold">All models</h3>
+				<label className="grid gap-2 text-sm">
+					Model
+					<select value={selectedModel ? optionKey(selectedModel) : ''}
+						onChange={event => setModelChoice(event.target.value)}
+						className="min-h-11 w-full max-w-sm rounded-md border border-outline-variant bg-background px-3 text-on-surface">
+						{models.map(model => (
+							<option key={optionKey(model)} value={optionKey(model)}>{model.name} · {model.provider}</option>
 						))}
-					</div>
-					<div className="flex rounded-lg bg-black/5 dark:bg-white/5 p-1 gap-1">
-						{(['all','general','reasoning','coding','indic'] as const).map(v => (
-							<button key={v} onClick={() => setCategoryFilter(v)} aria-pressed={categoryFilter===v} className={`px-2.5 py-1 rounded-md text-[11px] font-medium capitalize ${categoryFilter===v ? 'bg-white dark:bg-white text-black shadow-sm' : 'text-black/60 dark:text-white/60 hover:text-black dark:hover:text-white'}`}>{v}</button>
-						))}
-					</div>
-				</div>
-
-				<div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-					{filteredModels.map(model => {
-						const isActive = state.activeModelId === model.id
+					</select>
+				</label>
+				<div>
+					{selectedModel && [selectedModel].map(model => {
+						const isActive = state.activeModelId === model.id && state.activeProviderId === model.provider
 						const hwBadge = hardware && model.costTier === 'local' ? (() => { const r = getHardwareRecommendation(hardware); return { text: r.badgeText, variant: r.badgeVariant } })() : null
 						const compatible = isModelCompatible(model, hardware)
 						const keyConfigured = hasKey(model.provider)
@@ -332,7 +337,7 @@ export function AIProviderSettings({ registryState, onSaveRegistry }: AIProvider
 							</div>
 						)
 					})}
-					{filteredModels.length===0 && <div className="col-span-full rounded-xl border border-dashed border-black/10 dark:border-white/10 p-8 text-center text-xs text-black/50 dark:text-white/50">No models match</div>}
+					{!selectedModel && <p className="text-sm text-on-surface-variant">No models available.</p>}
 				</div>
 			</section>
 		</div>
