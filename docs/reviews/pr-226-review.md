@@ -42,3 +42,7 @@ Typecheck, ESLint, the full Vitest suite, and the production build exited succes
 | 6 and 7 | The AI Usage panel is absent. The Sarvam key form remains in AI & Models, and active model status stays readable as models change. |
 
 Chromium exercised 1440 px light, 390 px dark, and 320 px light using synthetic account and workspace data. Nested confirmations and role selection kept keyboard focus. Mock provider testing and encrypted fixture storage worked across reopen. The signed-out and transient error cases kept account data and editor state separate.
+
+## Responsive follow-up on 96d8021
+
+Chromium found horizontal overflow at 320 px in the top bar and at 768 and 1024 px while the formatting icon font was unavailable. The top bar now wraps on very narrow screens while retaining the account, theme, and sync controls. The toolbar reserves a glyph-sized space per icon and keeps its accessible button names. Chromium verified that document width equals viewport width at 320, 390, 768, and 1024 px with the font blocked. The scoped independent re-review passed without findings.
