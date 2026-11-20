@@ -85,4 +85,23 @@ describe('AIProviderSettings UI', () => {
 		}
 	})
 
+	it.each(['catalog', 'local'])('keeps keyboard focus at the %s model after activation', async source => {
+		const initial = getDefaultAIRegistryState()
+		const save = vi.fn().mockResolvedValue(undefined)
+		const { rerender } = render(<AIProviderSettings registryState={initial} onSaveRegistry={save} />)
+		await screen.findByText(/Hardware/i)
+		const model = providerRegistry.catalog.find(model => model.provider === 'anthropic')!
+		if (source === 'catalog') {
+			fireEvent.change(screen.getByLabelText('Model'), { target: { value: `${model.provider}:${model.id}` } })
+		}
+		const activate = source === 'catalog' ? screen.getByRole('button', { name: 'Use this model' }) : screen.getAllByRole('button', { name: 'Use' })[0]
+		activate.focus()
+		fireEvent.click(activate)
+		rerender(<AIProviderSettings registryState={save.mock.lastCall?.[0]} onSaveRegistry={save} />)
+
+		const group = screen.getByRole('group', { name: source === 'catalog' ? model.name : 'llama3' })
+		expect(group).toHaveFocus()
+		expect(group).toHaveTextContent('Active')
+	})
+
 })

@@ -46,6 +46,10 @@ export default function BYOKSettings() {
 				throw new Error(err.error || 'Key verification failed')
 			}
 
+			if (isConnected) {
+				toast.success('Saved Sarvam key verified.')
+				return
+			}
 			await saveEncryptedApiKey(apiKey.trim())
 			setIsConnected(true)
 			track('ai_provider_connected', { kind: 'byok' })
@@ -75,7 +79,7 @@ export default function BYOKSettings() {
 				<div className={styles.controlRow}>
 					<div className={styles.secret}>
 						<input id="sarvam-byok-key" type={showKey ? 'text' : 'password'} autoComplete="off"
-							aria-describedby="sarvam-byok-help" value={apiKey} placeholder="sk_sarvam..."
+							readOnly={isConnecting} aria-describedby="sarvam-byok-help" value={apiKey} placeholder="sk_sarvam..."
 							onChange={event => {
 								setApiKey(event.target.value)
 								setIsConnected(false)
@@ -85,9 +89,10 @@ export default function BYOKSettings() {
 						</button>
 					</div>
 					<div className={styles.actions}>
-						{isConnected
-							? <button type="button" className={styles.secondary} onClick={handleDisconnectKey}>Disconnect</button>
-							: <button type="submit" className={styles.primary} disabled={!isValidKey || isConnecting}>{isConnecting ? 'Connecting…' : 'Connect'}</button>}
+						<button type="submit" className={isConnected ? styles.secondary : styles.primary} disabled={!isValidKey || isConnecting}>
+							{isConnecting ? 'Verifying…' : isConnected ? 'Test saved key' : 'Connect'}
+						</button>
+						{isConnected && <button type="button" className={styles.secondary} disabled={isConnecting} onClick={handleDisconnectKey}>Disconnect</button>}
 					</div>
 				</div>
 				<p className={styles.hint} id="sarvam-byok-help">Keys start with <code>sk_</code> and are AES-256-GCM encrypted on this device.</p>

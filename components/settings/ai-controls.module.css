@@ -103,7 +103,7 @@
 	color: hsl(var(--on-surface-variant));
 	cursor: default;
 }
-.stack :is(input, select, button):focus-visible {
+.stack :is(input, select, button, [role="group"]):focus-visible {
 	outline: 2px solid var(--color-accent, hsl(var(--primary-ink)));
 	outline-offset: 2px;
 }

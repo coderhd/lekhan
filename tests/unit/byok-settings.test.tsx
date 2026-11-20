@@ -3,6 +3,7 @@ import '@testing-library/jest-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import BYOKSettings from '@/components/byok-settings'
 import React from 'react'
+import * as crypto from '@/lib/crypto'
 
 vi.mock('sonner', () => ({
 	toast: {
@@ -35,4 +36,22 @@ describe('BYOKSettings Component', () => {
 		const connectBtn = screen.getByRole('button', { name: /Connect/i })
 		expect(connectBtn).not.toBeDisabled()
 	})
+	it('revalidates a saved key without requiring an edit', async () => {
+		const load = vi.spyOn(crypto, 'getDecryptedApiKey').mockResolvedValue('sk_saved_key_123')
+		const request = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }))
+		try {
+			render(<BYOKSettings />)
+			const test = await screen.findByRole('button', { name: 'Test saved key' })
+			fireEvent.click(test)
+			expect(request).toHaveBeenCalledWith('/api/ai', expect.objectContaining({
+				body: JSON.stringify({ action: 'validate-key', key: 'sk_saved_key_123' }),
+			}))
+			expect(await screen.findByRole('button', { name: 'Test saved key' })).toBeEnabled()
+			expect(screen.getByRole('button', { name: 'Disconnect' })).toBeEnabled()
+		} finally {
+			load.mockRestore()
+			request.mockRestore()
+		}
+	})
+
 })

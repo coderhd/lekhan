@@ -147,8 +147,10 @@ export function AIProviderSettings({ registryState, onSaveRegistry, children }: 
 		}
 	}
 
-	const handleSelectModel = (modelId: string, providerId: string) => {
+	const handleSelectModel = (button: HTMLButtonElement, modelId: string, providerId: string) => {
 		if (onSaveRegistry) {
+			// Keep focus in the same model group when Active replaces its button.
+			if (document.activeElement === button) button.parentElement?.focus()
 			const newState = { ...state, activeModelId: modelId, activeProviderId: providerId }
 			onSaveRegistry(newState)
 			toast.success(`Active model: ${modelId}`)
@@ -247,7 +249,7 @@ export function AIProviderSettings({ registryState, onSaveRegistry, children }: 
 					</span>
 				</label>
 				{selectedModel ? (
-					<div className={styles.details}>
+					<div className={styles.details} role="group" aria-label={selectedModel.name} tabIndex={-1}>
 						<p className={styles.hint}>
 							{(selectedModel.contextWindow / 1000).toLocaleString()}k context · {selectedModel.speedTokPerSec} tokens/s · {selectedModel.costTier} · {selectedModel.category} · {selectedModel.hardwareTier}
 						</p>
@@ -258,7 +260,7 @@ export function AIProviderSettings({ registryState, onSaveRegistry, children }: 
 						)}
 						{selectedIsActive
 							? <span className={styles.status}><CheckCircle2 />Active</span>
-							: <button className={styles.primary} onClick={() => handleSelectModel(selectedModel.id, selectedModel.provider)}>Use this model</button>}
+							: <button className={styles.primary} onClick={event => handleSelectModel(event.currentTarget, selectedModel.id, selectedModel.provider)}>Use this model</button>}
 					</div>
 				) : <p className={styles.hint}>No models available.</p>}
 			</section>
@@ -277,11 +279,11 @@ export function AIProviderSettings({ registryState, onSaveRegistry, children }: 
 					</div>
 				)}
 				{localProbe?.models.length ? localProbe.models.map(model => (
-					<div key={model} className={styles.sectionHeader}>
+					<div key={model} className={styles.sectionHeader} role="group" aria-label={model} tabIndex={-1}>
 						<span>{model}</span>
 						{model === state.activeModelId && state.activeProviderId === 'ollama'
 							? <span className={styles.status}><CheckCircle2 />Active</span>
-							: <button className={styles.secondary} onClick={() => handleSelectModel(model, 'ollama')}>Use</button>}
+							: <button className={styles.secondary} onClick={event => handleSelectModel(event.currentTarget, model, 'ollama')}>Use</button>}
 					</div>
 				)) : <p className={styles.hint}>{localProbe ? 'No local models detected. Start Ollama and pull a model, then refresh.' : 'Checking for local models…'}</p>}
 				{hardware && (
