@@ -93,6 +93,7 @@ describe('Workbench shell', () => {
 	it('keeps the bot bar open and restores its picker when Escape closes settings', async () => {
 		const onClose = vi.fn()
 		render(<SettingsProvider><LekhanBotBar editor={null} token="" isVisible onClose={onClose} onResult={vi.fn()} /></SettingsProvider>)
+		expect(screen.getByPlaceholderText('Ask Lekhan Bot anything...')).toHaveFocus()
 		const picker = screen.getByRole('button', { name: 'Model picker' })
 		fireEvent.click(picker)
 		fireEvent.click(screen.getByRole('button', { name: /Configure Providers/ }))

@@ -84,6 +84,12 @@ function getStoredApiKey(): string {
 	return localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || ''
 }
 
+async function commitApiKeyStorage(commit: () => void): Promise<void> {
+	const locks = navigator.locks
+	if (locks) await locks.request(STORAGE_KEY, commit)
+	else commit()
+}
+
 export async function saveEncryptedApiKey(
 	plainKey: string,
 	{ onlyIfLegacyPlaintext = false }: { onlyIfLegacyPlaintext?: boolean } = {},
@@ -100,10 +106,12 @@ export async function saveEncryptedApiKey(
 		// the UI promises AES-256-GCM and must keep that promise or save nothing.
 		throw new Error('Secure encryption is not available in this browser. The key was not saved.')
 	}
-	// Another tab may have replaced or disconnected the key during encryption.
-	if (!shouldSave()) return
-	localStorage.setItem(STORAGE_KEY, encrypted)
-	localStorage.removeItem(LEGACY_STORAGE_KEY)
+	await commitApiKeyStorage(() => {
+		// Another tab may have replaced or disconnected the key during encryption.
+		if (!shouldSave()) return
+		localStorage.setItem(STORAGE_KEY, encrypted)
+		localStorage.removeItem(LEGACY_STORAGE_KEY)
+	})
 }
 
 export async function getDecryptedApiKey(): Promise<string> {
@@ -111,10 +119,12 @@ export async function getDecryptedApiKey(): Promise<string> {
 	return decryptApiKey(getStoredApiKey())
 }
 
-export function clearApiKey(): void {
+export async function clearApiKey(): Promise<void> {
 	if (typeof window === 'undefined') return
-	localStorage.removeItem(STORAGE_KEY)
-	localStorage.removeItem(LEGACY_STORAGE_KEY)
+	await commitApiKeyStorage(() => {
+		localStorage.removeItem(STORAGE_KEY)
+		localStorage.removeItem(LEGACY_STORAGE_KEY)
+	})
 }
 
 export async function generateEncryptionKey(): Promise<CryptoKey> {

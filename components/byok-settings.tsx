@@ -11,7 +11,9 @@ export default function BYOKSettings() {
 	const [apiKey, setApiKey] = useState('')
 	const [showKey, setShowKey] = useState(false)
 	const [isConnecting, setIsConnecting] = useState(false)
+	const [isDisconnecting, setIsDisconnecting] = useState(false)
 	const [isConnected, setIsConnected] = useState(false)
+	const isBusy = isConnecting || isDisconnecting
 
 	useEffect(() => {
 		const loadSavedKey = async () => {
@@ -62,11 +64,18 @@ export default function BYOKSettings() {
 		}
 	}
 
-	const handleDisconnectKey = () => {
-		clearApiKey()
-		setApiKey('')
-		setIsConnected(false)
-		toast.info('Sarvam API Key disconnected & removed from local storage.')
+	const handleDisconnectKey = async () => {
+		setIsDisconnecting(true)
+		try {
+			await clearApiKey()
+			setApiKey('')
+			setIsConnected(false)
+			toast.info('Sarvam API Key disconnected & removed from local storage.')
+		} catch {
+			toast.error('Could not remove the saved Sarvam key.')
+		} finally {
+			setIsDisconnecting(false)
+		}
 	}
 	return (
 		<section className={styles.section}>
@@ -79,7 +88,7 @@ export default function BYOKSettings() {
 				<div className={styles.controlRow}>
 					<div className={styles.secret}>
 						<input id="sarvam-byok-key" type={showKey ? 'text' : 'password'} autoComplete="off"
-							readOnly={isConnecting} aria-describedby="sarvam-byok-help" value={apiKey} placeholder="sk_sarvam..."
+							readOnly={isBusy} aria-describedby="sarvam-byok-help" value={apiKey} placeholder="sk_sarvam..."
 							onChange={event => {
 								setApiKey(event.target.value)
 								setIsConnected(false)
@@ -89,10 +98,12 @@ export default function BYOKSettings() {
 						</button>
 					</div>
 					<div className={styles.actions}>
-						<button type="submit" className={isConnected ? styles.secondary : styles.primary} disabled={!isValidKey || isConnecting}>
+						<button type="submit" className={isConnected ? styles.secondary : styles.primary} disabled={!isValidKey || isBusy}>
 							{isConnecting ? 'Verifying…' : isConnected ? 'Test saved key' : 'Connect'}
 						</button>
-						{isConnected && <button type="button" className={styles.secondary} disabled={isConnecting} onClick={handleDisconnectKey}>Disconnect</button>}
+						{isConnected && <button type="button" className={styles.secondary} disabled={isBusy} onClick={handleDisconnectKey}>
+							{isDisconnecting ? 'Disconnecting…' : 'Disconnect'}
+						</button>}
 					</div>
 				</div>
 				<p className={styles.hint} id="sarvam-byok-help">Keys start with <code>sk_</code> and are AES-256-GCM encrypted on this device.</p>

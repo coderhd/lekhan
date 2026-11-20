@@ -72,6 +72,10 @@ export default function LekhanBotBar({
 		setMounted(true)
 	}, [])
 
+	useEffect(() => {
+		if (isVisible && mounted) inputRef.current?.focus()
+	}, [isVisible, mounted])
+
 	const getSelectedText = (): string => {
 		if (!editor) return ''
 		const { from, to } = editor.state.selection
@@ -83,7 +87,6 @@ export default function LekhanBotBar({
 			setShowPresets(true)
 			setShowTranslatePicker(false)
 			setShowTransliteratePicker(false)
-			setTimeout(() => inputRef.current?.focus(), 100)
 
 			const loadUser = async () => {
 				try {
