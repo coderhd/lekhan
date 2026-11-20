@@ -29,7 +29,7 @@ The review used the supplied passing typecheck, lint, unit suite and production 
 
 The supplied Chromium cross-tab check confirmed prior profile data disappeared after sign-out. The 31 focused tests, typecheck and lint passed. The full verification rerun was in progress at sign-off.
 
-## Verification on the final code
+## Initial integrated verification
 
 Typecheck, ESLint, the full Vitest suite, and the production build exited successfully. Vitest reported 1,532 passes and one skipped live-fixture test across 155 test files.
 
@@ -46,3 +46,12 @@ Chromium exercised 1440 px light, 390 px dark, and 320 px light using synthetic 
 ## Responsive follow-up on 96d8021
 
 Chromium found horizontal overflow at 320 px in the top bar and at 768 and 1024 px while the formatting icon font was unavailable. The top bar now wraps on very narrow screens while retaining the account, theme, and sync controls. The toolbar reserves a glyph-sized space per icon and keeps its accessible button names. Chromium verified that document width equals viewport width at 320, 390, 768, and 1024 px with the font blocked. The scoped independent re-review passed without findings.
+
+## External review dispositions
+
+CodeRabbit’s three findings were addressed in aee510c and 789a3b7. The independent scoped re-review passed. The full rerun passed typecheck, lint, 1,536 tests, and the production build, with one live-fixture test skipped.
+
+- Successful Sarvam revalidation migrates matching legacy plaintext without duplicating connection analytics. The app serializes save, migration, and disconnect through a shared Web Lock where supported. A test verifies that an overlapping disconnect cannot restore the old key.
+- The public badge sits beside the editor title and wraps on narrow screens. Chromium verified the public reading layout at 320 and 1440 px.
+- Transfer confirmation returns focus to the card heading while its original action is disabled. Cancel returns focus to its trigger. Chromium verified both paths.
+- The full suite exposed a delayed Bot autofocus that could take focus after Settings closed. The composer now focuses when its visible portal mounts, and a regression test verifies that closing Settings restores the model picker.
