@@ -17,10 +17,11 @@ type OpenSettings = (tab?: SettingsTab, trigger?: HTMLElement | null) => void
 const SettingsContext = createContext<OpenSettings>(() => {})
 export const useOpenSettings = () => useContext(SettingsContext)
 
-export function SettingsDialog({ tab, onClose, returnFocus }: {
+export function SettingsDialog({ tab, onClose, returnFocus, redirectOnSignOut }: {
 	tab: SettingsTab
 	onClose: () => void
 	returnFocus?: HTMLElement | null
+	redirectOnSignOut?: boolean
 }) {
 	const { isLocked } = useSessionReauth()
 	const closing = useRef(false)
@@ -43,7 +44,7 @@ export function SettingsDialog({ tab, onClose, returnFocus }: {
 						<Dialog.Title>Settings</Dialog.Title>
 						<Dialog.Close className={styles.close} aria-label="Close settings"><X aria-hidden /></Dialog.Close>
 					</header>
-					<SettingsContent initialTab={tab} />
+					<SettingsContent initialTab={tab} redirectOnSignOut={redirectOnSignOut} />
 				</Dialog.Content>
 			</Dialog.Portal>
 		</Dialog.Root>

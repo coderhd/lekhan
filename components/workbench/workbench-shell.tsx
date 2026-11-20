@@ -194,7 +194,7 @@ export default function WorkbenchShell({
 				</div>
 				<div className="wb-topbar-actions">
 					<AstryxButton label="Search pages" variant="ghost" isIconOnly
-						className="wb-header-search ax-touch" tooltip="Search (⌘ K)"
+						className="wb-header-search ax-touch" tooltip={shortcutPlatform === 'mac' ? 'Search (⌘ K)' : 'Search (Ctrl K)'}
 						icon={<Search aria-hidden="true" />} onClick={onSearch} />
 					{headerActions}
 				</div>
