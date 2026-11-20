@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/alert-dialog"
 
 interface ConfirmDialogProps {
+  layerClassName?: string
+  returnFocus?: React.RefObject<HTMLButtonElement | null>
   open: boolean
   onOpenChange: (open: boolean) => void
   title: string
@@ -22,6 +24,8 @@ interface ConfirmDialogProps {
 
 export function ConfirmDialog({
   open,
+  layerClassName,
+  returnFocus,
   onOpenChange,
   title,
   description,
@@ -31,7 +35,12 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent layerClassName={layerClassName} onCloseAutoFocus={event => {
+        if (returnFocus) {
+          event.preventDefault()
+          if (returnFocus.current?.isConnected) returnFocus.current.focus()
+        }
+      }}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           {description && <AlertDialogDescription>{description}</AlertDialogDescription>}

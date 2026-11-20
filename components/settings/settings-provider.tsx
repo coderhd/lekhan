@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
 import { usePathname } from 'next/navigation'
 import * as Dialog from '@radix-ui/react-dialog'
@@ -23,17 +23,21 @@ export function SettingsDialog({ tab, onClose, returnFocus }: {
 	returnFocus?: HTMLElement | null
 }) {
 	const { isLocked } = useSessionReauth()
+	const closing = useRef(false)
 	if (isLocked) return null
 	return (
-		<Dialog.Root open onOpenChange={open => { if (!open) onClose() }}>
+		<Dialog.Root open onOpenChange={open => {
+				if (!open) {
+					closing.current = true
+					onClose()
+				}
+			}}>
 			<Dialog.Portal>
 				<Dialog.Overlay className={styles.scrim} />
 				<Dialog.Content data-modal="settings" className={styles.dialog} aria-describedby={undefined}
 					onCloseAutoFocus={event => {
-						if (returnFocus?.isConnected) {
-							event.preventDefault()
-							returnFocus.focus()
-						}
+						event.preventDefault()
+						if (closing.current && returnFocus?.isConnected) returnFocus.focus()
 					}}>
 					<header className={styles.header}>
 						<Dialog.Title>Settings</Dialog.Title>

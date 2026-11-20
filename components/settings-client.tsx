@@ -411,7 +411,7 @@ export default function SettingsClient({
 				{activeTab === 'collaborators' && (
 					<div id="settings-panel-collaborators" role="tabpanel" aria-labelledby="settings-tab-collaborators" className="space-y-8 max-w-3xl">
 						<OwnershipTransferCard candidates={ownershipCandidates} />
-						<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
+						<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-3 sm:p-6 md:p-8 backdrop-blur-md shadow-sm">
 							<h2 className="text-2xl font-display-lg text-on-surface mb-2">Manage Collaborators</h2>
 							<p className="text-sm text-on-surface-variant mb-6">View and manage access to pages you own.</p>
 
@@ -427,10 +427,10 @@ export default function SettingsClient({
 										return (
 											<div
 												key={doc.id}
-												className="border border-black/10 dark:border-outline/10 rounded-xl p-5 bg-white/50 dark:bg-surface-dim/30 hover:bg-white dark:hover:bg-surface-dim/50 transition-all shadow-sm"
+												className="border border-black/10 dark:border-outline/10 rounded-xl p-3 sm:p-5 bg-white/50 dark:bg-surface-dim/30 hover:bg-white dark:hover:bg-surface-dim/50 transition-all shadow-sm"
 											>
 												<div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
-													<h3 className="font-title-lg font-semibold text-primary-container">{doc.title || 'Untitled Page'}</h3>
+													<h3 className="font-title-lg font-semibold text-primary-container break-words">{doc.title || 'Untitled Page'}</h3>
 													<span className="text-xs font-bold px-3 py-1 bg-black/5 dark:bg-white/10 rounded-full text-on-surface-variant inline-block w-fit">
 														{members.length} {members.length === 1 ? 'collaborator' : 'collaborators'}
 													</span>
@@ -443,9 +443,9 @@ export default function SettingsClient({
 														{members.map((member: { user_id: string; role: string; profiles?: { full_name?: string; email: string } }) => (
 <li
 											key={member.user_id}
-											className="flex justify-between items-center bg-black/5 dark:bg-surface-variant/10 p-3 rounded-lg border border-black/5 dark:border-white/5 group"
+											className="flex flex-wrap justify-between items-center gap-3 bg-black/5 dark:bg-surface-variant/10 p-3 rounded-lg border border-black/5 dark:border-white/5 group"
 										>
-											<div className="flex items-center gap-3">
+											<div className="flex flex-[1_1_150px] min-w-0 items-center gap-3">
 												<div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs uppercase shrink-0">
 													{(member.profiles?.full_name || member.profiles?.email || '?').charAt(0)}
 												</div>
@@ -459,7 +459,7 @@ export default function SettingsClient({
 												</div>
 											</div>
 											{member.role !== 'owner' && (
-												<div className="flex items-center gap-2 shrink-0">
+												<div className="flex flex-wrap items-center max-w-full gap-2">
 													<CustomSelect
 														value={member.role as 'editor' | 'viewer'}
 														onValueChange={(val) => handleRoleChange(doc.id, member.user_id, val as 'editor' | 'viewer')}
@@ -487,7 +487,7 @@ export default function SettingsClient({
 									})}
 
 									{totalPages > 1 && (
-										<div className="flex items-center justify-between pt-4 border-t border-black/10 dark:border-white/10">
+										<div className="flex flex-wrap gap-2 items-center justify-between pt-4 border-t border-black/10 dark:border-white/10">
 											<button
 												onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
 												disabled={currentPage === 1}

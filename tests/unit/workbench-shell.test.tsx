@@ -12,8 +12,10 @@ import { describe, expect, it, vi } from 'vitest'
 import WorkbenchShell from '@/components/workbench/workbench-shell'
 import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
 
+import LekhanBotBar from '@/components/lekhan-bot-bar'
 import { SettingsProvider } from '@/components/settings/settings-provider'
 
+vi.mock('@/lib/supabase', () => ({ supabase: { auth: { getUser: async () => ({ data: { user: null } }) } } }))
 const reauth = vi.hoisted(() => ({ isLocked: false }))
 vi.mock('@/components/session-reauth-provider', () => ({ useSessionReauth: () => reauth }))
 vi.mock('@/components/settings/settings-content', () => ({ default: () => <p>Account settings</p> }))
@@ -86,6 +88,20 @@ describe('Workbench shell', () => {
 		expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 		expect(screen.getByRole('textbox', { name: 'Draft' })).toBe(draft)
 		expect(draft).toHaveValue('Unsaved text')
+	})
+
+	it('keeps the bot bar open and restores its picker when Escape closes settings', async () => {
+		const onClose = vi.fn()
+		render(<SettingsProvider><LekhanBotBar editor={null} token="" isVisible onClose={onClose} onResult={vi.fn()} /></SettingsProvider>)
+		const picker = screen.getByRole('button', { name: 'Model picker' })
+		fireEvent.click(picker)
+		fireEvent.click(screen.getByRole('button', { name: /Configure Providers/ }))
+		const dialog = await screen.findByRole('dialog', { name: 'Settings' })
+		fireEvent.keyDown(within(dialog).getByRole('button', { name: 'Close settings' }), { key: 'Escape' })
+		await waitFor(() => expect(picker).toHaveFocus())
+		expect(onClose).not.toHaveBeenCalled()
+		fireEvent.keyDown(picker, { key: 'Escape' })
+		expect(onClose).toHaveBeenCalledOnce()
 	})
 
 	it('releases the settings focus trap when the session locks', async () => {

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useRef } from 'react'
 import { AlertTriangle, ArrowRightLeft, Check, Copy, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import styles from '@/components/settings/settings.module.css'
 import { supabase } from '@/lib/supabase'
 
 export interface OwnershipCandidate {
@@ -39,6 +40,7 @@ async function authHeaders(): Promise<Record<string, string>> {
 export default function OwnershipTransferCard({ candidates }: { candidates: OwnershipCandidate[] }) {
 	const [confirmation, setConfirmation] = useState<'initiate' | 'accept' | null>(null)
 	const [error, setError] = useState<string | null>(null)
+	const confirmationTrigger = useRef<HTMLButtonElement>(null)
 	const actionRef = useRef(false)
 	const [successorId, setSuccessorId] = useState('')
 	const [pending, setPending] = useState<'initiate' | 'accept' | null>(null)
@@ -125,6 +127,8 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 	}
 
 	const confirmationDialog = <ConfirmDialog
+		layerClassName={styles.confirmationLayer}
+		returnFocus={confirmationTrigger}
 		open={confirmation !== null}
 		onOpenChange={open => { if (!open) setConfirmation(null) }}
 		title={confirmation === 'accept' ? 'Accept workspace ownership?' : 'Prepare ownership transfer?'}
@@ -150,6 +154,7 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 				<div className="flex flex-wrap gap-3">
 					<button
 						type="button"
+						ref={confirmationTrigger}
 						onClick={() => setConfirmation('accept')}
 						disabled={pending === 'accept'}
 						className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-primary text-on-primary hover:bg-primary/90 transition-colors disabled:opacity-60"
@@ -195,7 +200,7 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 						readOnly
 						aria-label="Transfer accept link"
 						value={absolute}
-						className="flex-1 min-w-[240px] px-3 py-2 rounded-xl text-[11px] bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-on-surface-variant"
+						className="flex-[1_1_240px] min-w-0 max-w-full px-3 py-2 rounded-xl text-[11px] bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-on-surface-variant"
 					/>
 					<button
 						type="button"
@@ -233,7 +238,7 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 				</p>
 			) : (
 				<div className="flex flex-wrap items-end gap-3">
-					<div className="flex-1 min-w-[220px]">
+					<div className="flex-[1_1_220px] min-w-0 max-w-full">
 						<label htmlFor="transfer-successor" className="block text-[11px] font-semibold text-on-surface mb-1.5">
 							New owner
 						</label>
@@ -253,6 +258,7 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 					</div>
 					<button
 						type="button"
+						ref={confirmationTrigger}
 						onClick={() => setConfirmation('initiate')}
 						disabled={pending === 'initiate' || !successorId}
 						className="px-4 py-2.5 rounded-xl text-xs font-bold bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors disabled:opacity-50"

@@ -9,7 +9,7 @@ function DirectSettings() {
 	const params = useSearchParams()
 	const router = useRouter()
 	const tab = params.get('transfer') ? 'collaborators' : params.has('billing') ? 'billing' : 'profile'
-	return <SettingsDialog tab={tab} onClose={() => router.replace('/')} />
+	return <SettingsDialog key={params.toString()} tab={tab} onClose={() => router.replace('/')} />
 }
 
 export default function SettingsPage() {

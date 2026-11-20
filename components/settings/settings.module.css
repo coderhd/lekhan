@@ -1,5 +1,5 @@
 /* Keep nested billing and transfer confirmations above the settings window. */
-:global(body):has(.dialog) { --alert-dialog-layer: 9992; }
+.confirmationLayer { z-index: 9992; }
 .scrim {
 	position: fixed;
 	inset: 0;

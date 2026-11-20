@@ -102,6 +102,7 @@ export default function LekhanBotBar({
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (e.key === 'Escape' && isVisible) {
+				if (e.defaultPrevented || document.querySelector('[data-modal="settings"]')) return
 				onClose()
 			}
 		}
