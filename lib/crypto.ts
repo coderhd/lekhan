@@ -80,26 +80,35 @@ export async function decryptApiKey(cipherText: string): Promise<string> {
 	}
 }
 
-export async function saveEncryptedApiKey(plainKey: string): Promise<void> {
+function getStoredApiKey(): string {
+	return localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || ''
+}
+
+export async function saveEncryptedApiKey(
+	plainKey: string,
+	{ onlyIfLegacyPlaintext = false }: { onlyIfLegacyPlaintext?: boolean } = {},
+): Promise<void> {
 	if (typeof window === 'undefined') {
 		throw new Error('Secure storage is unavailable in this context.')
 	}
 	const trimmed = plainKey.trim()
+	const shouldSave = () => !onlyIfLegacyPlaintext || getStoredApiKey().trim() === trimmed
+	if (!shouldSave()) return
 	const encrypted = await encryptApiKey(trimmed)
 	if (!encrypted || encrypted === trimmed) {
 		// WebCrypto unavailable: refuse to persist the plaintext fallback —
 		// the UI promises AES-256-GCM and must keep that promise or save nothing.
 		throw new Error('Secure encryption is not available in this browser. The key was not saved.')
 	}
+	// Another tab may have replaced or disconnected the key during encryption.
+	if (!shouldSave()) return
 	localStorage.setItem(STORAGE_KEY, encrypted)
 	localStorage.removeItem(LEGACY_STORAGE_KEY)
 }
 
 export async function getDecryptedApiKey(): Promise<string> {
 	if (typeof window === 'undefined') return ''
-	const cipherText = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || ''
-	if (!cipherText) return ''
-	return decryptApiKey(cipherText)
+	return decryptApiKey(getStoredApiKey())
 }
 
 export function clearApiKey(): void {

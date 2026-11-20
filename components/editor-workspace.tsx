@@ -1289,19 +1289,7 @@ export default function EditorWorkspace({	pageId,
 			<header className={styles.pageHeader}>
 				<div className={styles.pageActions}>
 					<div className="flex items-center gap-md">
-                        {anonVisitor && <Link href="/" className={styles.publicLogo}>Lekhan</Link>}
-
-						{anonVisitor && (
-							<span
-								className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold whitespace-nowrap"
-								title="This page is shared publicly — anyone with the link can view it"
-							>
-								<Globe className="w-3.5 h-3.5" />
-								<span>Public</span>
-								<span className="text-on-surface-variant/80 font-semibold">· view-only</span>
-							</span>
-						)}
-
+						{anonVisitor && <Link href="/" className={styles.publicLogo}>Lekhan</Link>}
 					</div>
 
 					<div className="flex items-center gap-sm md:gap-md">
@@ -1504,10 +1492,20 @@ export default function EditorWorkspace({	pageId,
 					)}
 
 					<div className={`editor-canvas ${styles.canvas}`}>
-						<h1 className={styles.title}>
-							{!isViewer ? <InlineEdit initialValue={title} onSave={handleSaveTitle}
-								textClassName={styles.titleText} inputClassName={styles.titleInput} /> : title}
-						</h1>
+						<div className={styles.titleRow}>
+							<h1 className={styles.title}>
+								{!isViewer ? <InlineEdit initialValue={title} onSave={handleSaveTitle}
+									textClassName={styles.titleText} inputClassName={styles.titleInput} /> : title}
+							</h1>
+							{anonVisitor && (
+								<span className="inline-flex shrink-0 items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary-ink text-xs font-bold whitespace-nowrap"
+									title="This page is shared publicly — anyone with the link can view it">
+									<Globe className="w-3.5 h-3.5" aria-hidden="true" />
+									<span>Public</span>
+									<span className="text-on-surface-variant font-semibold">· view-only</span>
+								</span>
+							)}
+						</div>
 						{!isViewer && editor && <DragContextMenu editor={editor} />}
 
 						{previewVersionName && (

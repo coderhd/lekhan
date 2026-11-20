@@ -110,7 +110,9 @@ describe('EditorWorkspace public reading chrome (#30 T2)', () => {
 	it('anon visitor sees the reading surface, not collaborator chrome', async () => {
 		await renderEditor({ anonVisitor: true, role: null, userId: 'anon-1234' })
 
-		expect(await screen.findByText('Public')).toBeInTheDocument()
+		const title = screen.getByRole('heading', { name: 'Shared Page' })
+		expect(title.parentElement).toContainElement(screen.getByText('Public'))
+		expect(screen.getByRole('link', { name: 'Lekhan' })).toHaveAttribute('href', '/')
 		expect(await screen.findByText(/Anyone with the link can view this page\./)).toBeInTheDocument()
 		expect(screen.getByRole('link', { name: /create your own workspace/i })).toHaveAttribute('href', '/signup')
 
@@ -139,6 +141,7 @@ describe('EditorWorkspace public reading chrome (#30 T2)', () => {
 		expect(await screen.findByText(/You have viewing access to this page\./)).toBeInTheDocument()
 		expect(screen.getByRole('button', { name: 'Search pages' })).toBeInTheDocument()
 		expect(screen.getByLabelText(/Account menu/)).toBeInTheDocument()
+		expect(screen.queryByText('Public')).toBeNull()
 		expect(screen.queryByRole('link', { name: /create your own workspace/i })).toBeNull()
 	})
 

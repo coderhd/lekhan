@@ -46,11 +46,11 @@ export default function BYOKSettings() {
 				throw new Error(err.error || 'Key verification failed')
 			}
 
+			await saveEncryptedApiKey(apiKey.trim(), { onlyIfLegacyPlaintext: isConnected })
 			if (isConnected) {
 				toast.success('Saved Sarvam key verified.')
 				return
 			}
-			await saveEncryptedApiKey(apiKey.trim())
 			setIsConnected(true)
 			track('ai_provider_connected', { kind: 'byok' })
 			toast.success('Sarvam API Key connected & AES-256 encrypted successfully!')

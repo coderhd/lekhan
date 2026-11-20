@@ -13,6 +13,7 @@ import {
 interface ConfirmDialogProps {
   layerClassName?: string
   returnFocus?: React.RefObject<HTMLButtonElement | null>
+  fallbackFocus?: React.RefObject<HTMLElement | null>
   open: boolean
   onOpenChange: (open: boolean) => void
   title: string
@@ -26,6 +27,7 @@ export function ConfirmDialog({
   open,
   layerClassName,
   returnFocus,
+  fallbackFocus,
   onOpenChange,
   title,
   description,
@@ -36,10 +38,14 @@ export function ConfirmDialog({
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent layerClassName={layerClassName} onCloseAutoFocus={event => {
-        if (returnFocus) {
-          event.preventDefault()
-          if (returnFocus.current?.isConnected) returnFocus.current.focus()
+        if (!returnFocus && !fallbackFocus) return
+        event.preventDefault()
+        const trigger = returnFocus?.current
+        if (trigger?.isConnected && !trigger.matches(':disabled')) {
+          trigger.focus()
+          if (document.activeElement === trigger) return
         }
+        if (fallbackFocus?.current?.isConnected) fallbackFocus.current.focus()
       }}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>

@@ -40,4 +40,13 @@ describe('AES-256-GCM BYOK Crypto Utilities', () => {
 		const keyAfterClear = await getDecryptedApiKey()
 		expect(keyAfterClear).toEqual('')
 	})
+
+	it('preserves an encrypted replacement when revalidating an older key', async () => {
+		const replacementKey = 'sk_replacement_key'
+		await saveEncryptedApiKey(replacementKey)
+		const stored = localStorage.getItem('lekhan_sarvam_api_key')
+		await saveEncryptedApiKey('sk_older_key', { onlyIfLegacyPlaintext: true })
+		expect(localStorage.getItem('lekhan_sarvam_api_key')).toBe(stored)
+		expect(await getDecryptedApiKey()).toBe(replacementKey)
+	})
 })

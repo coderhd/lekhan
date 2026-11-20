@@ -41,6 +41,7 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 	const [confirmation, setConfirmation] = useState<'initiate' | 'accept' | null>(null)
 	const [error, setError] = useState<string | null>(null)
 	const confirmationTrigger = useRef<HTMLButtonElement>(null)
+	const cardHeading = useRef<HTMLHeadingElement>(null)
 	const actionRef = useRef(false)
 	const [successorId, setSuccessorId] = useState('')
 	const [pending, setPending] = useState<'initiate' | 'accept' | null>(null)
@@ -129,6 +130,7 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 	const confirmationDialog = <ConfirmDialog
 		layerClassName={styles.confirmationLayer}
 		returnFocus={confirmationTrigger}
+		fallbackFocus={cardHeading}
 		open={confirmation !== null}
 		onOpenChange={open => { if (!open) setConfirmation(null) }}
 		title={confirmation === 'accept' ? 'Accept workspace ownership?' : 'Prepare ownership transfer?'}
@@ -144,7 +146,7 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 			<section className="bg-primary/5 border border-primary/30 rounded-2xl p-6 md:p-8 space-y-4">
 				<div className="flex items-center gap-2">
 					<ArrowRightLeft className="w-5 h-5 text-primary" />
-					<h2 className="text-lg font-display-md text-on-surface font-bold">Accept workspace ownership</h2>
+					<h2 ref={cardHeading} tabIndex={-1} className="text-lg font-display-md text-on-surface font-bold">Accept workspace ownership</h2>
 				</div>
 				<p className="text-xs text-on-surface-variant leading-relaxed">
 					You were invited to take ownership of this workspace. Nothing is deleted: pages,
@@ -182,7 +184,7 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 			<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm space-y-4">
 				<div className="flex items-center gap-2">
 					<ShieldCheck className="w-5 h-5 text-primary" />
-					<h2 className="text-lg font-display-md text-on-surface font-bold">Transfer prepared</h2>
+					<h2 ref={cardHeading} tabIndex={-1} className="text-lg font-display-md text-on-surface font-bold">Transfer prepared</h2>
 				</div>
 				<p className="text-xs text-on-surface-variant leading-relaxed">
 					Send this private link to the successor. They must sign in with their own account
@@ -224,7 +226,7 @@ export default function OwnershipTransferCard({ candidates }: { candidates: Owne
 		<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm space-y-4">
 			<div className="flex items-center gap-2">
 				<ArrowRightLeft className="w-5 h-5 text-primary" />
-				<h2 className="text-lg font-display-md text-on-surface font-bold">Workspace ownership</h2>
+				<h2 ref={cardHeading} tabIndex={-1} className="text-lg font-display-md text-on-surface font-bold">Workspace ownership</h2>
 			</div>
 			<p className="text-xs text-on-surface-variant leading-relaxed">
 				Hand the workspace and its billing obligation to a collaborator. The outgoing owner&apos;s
