@@ -21,6 +21,7 @@ export function BotBarModelPicker({
 	telemetry,
 }: BotBarModelPickerProps) {
 	const [isOpen, setIsOpen] = useState(false)
+	const triggerRef = useRef<HTMLButtonElement>(null)
 	const popoverRef = useRef<HTMLDivElement>(null)
 
 	useEffect(() => {
@@ -50,6 +51,7 @@ export function BotBarModelPicker({
 	return (
 		<div className="relative inline-flex items-center space-x-2" ref={popoverRef}>
 			<button
+				ref={triggerRef}
 				aria-label="Model picker"
 				aria-haspopup="listbox"
 				aria-expanded={isOpen}
@@ -113,6 +115,7 @@ export function BotBarModelPicker({
 					<div className="p-2 bg-black/40 border-t border-white/10">
 						<button
 							onClick={() => {
+								triggerRef.current?.focus()
 								onOpenSettings()
 								setIsOpen(false)
 							}}

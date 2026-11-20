@@ -12,6 +12,12 @@ import { describe, expect, it, vi } from 'vitest'
 import WorkbenchShell from '@/components/workbench/workbench-shell'
 import { GlobalHeaderProvider } from '@/components/layout/global-header-context'
 
+import { SettingsProvider } from '@/components/settings/settings-provider'
+
+const reauth = vi.hoisted(() => ({ isLocked: false }))
+vi.mock('@/components/session-reauth-provider', () => ({ useSessionReauth: () => reauth }))
+vi.mock('@/components/settings/settings-content', () => ({ default: () => <p>Account settings</p> }))
+
 const shell = (
 	children = <input aria-label="Draft" defaultValue="Keep this thought" />
 ) => (
@@ -61,6 +67,39 @@ describe('Workbench shell', () => {
 		expect(screen.getByRole('textbox', { name: 'Draft' })).toHaveValue(
 			'Keep this thought'
 		)
+	})
+
+	it.each(['desktop', 'mobile'])('restores the %s trigger and keeps the same draft after closing settings', async mode => {
+		render(<SettingsProvider>{shell()}</SettingsProvider>)
+		const draft = screen.getByRole('textbox', { name: 'Draft' })
+		fireEvent.change(draft, { target: { value: 'Unsaved text' } })
+		const mobile = mode === 'mobile'
+		const trigger = screen.getByRole('button', { name: mobile ? 'Open workspace navigation' : 'Settings' })
+		trigger.focus()
+		fireEvent.click(trigger)
+		if (mobile) fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Settings' }))
+		const dialog = await screen.findByRole('dialog', { name: 'Settings' })
+		expect(draft.isConnected).toBe(true)
+		if (mobile) fireEvent.click(within(dialog).getByRole('button', { name: 'Close settings' }))
+		else fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+		await waitFor(() => expect(trigger).toHaveFocus())
+		expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+		expect(screen.getByRole('textbox', { name: 'Draft' })).toBe(draft)
+		expect(draft).toHaveValue('Unsaved text')
+	})
+
+	it('releases the settings focus trap when the session locks', async () => {
+		const view = render(<SettingsProvider>{shell()}</SettingsProvider>)
+		fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+		expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
+		reauth.isLocked = true
+		try {
+			view.rerender(<SettingsProvider>{shell()}</SettingsProvider>)
+			expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+			await waitFor(() => expect(document.body.style.pointerEvents).not.toBe('none'))
+		} finally {
+			reauth.isLocked = false
+		}
 	})
 
 	it('runs caller actions and closes mobile navigation after choosing search', async () => {

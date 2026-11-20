@@ -1,4 +1,5 @@
 'use client'
+import { useOpenSettings } from '@/components/settings/settings-provider'
 import { Button as AstryxButton } from '@astryxdesign/core/Button'
 
 import { useEffect, useRef, useState } from 'react'
@@ -33,6 +34,7 @@ export default function WorkbenchShell({
 	headerActions,
 	children
 }: WorkbenchShellProps) {
+	const openSettings = useOpenSettings()
 	const [navigationOpen, setNavigationOpen] = useState(false)
 	const pendingAction = useRef<(() => void) | null>(null)
 	const navigationTrigger = useRef<HTMLButtonElement>(null)
@@ -77,14 +79,13 @@ export default function WorkbenchShell({
 					<Network aria-hidden="true" />
 					Graph
 				</Link>
-				<Link
-					href="/settings"
-					aria-current={active === 'settings' ? 'page' : undefined}
-					onClick={() => setNavigationOpen(false)}
-				>
+				<button type="button" aria-haspopup="dialog" onClick={event => {
+					const trigger = mobile ? navigationTrigger.current : event.currentTarget
+					runAction(() => openSettings('profile', trigger), mobile)
+				}}>
 					<Settings aria-hidden="true" />
 					Settings
-				</Link>
+				</button>
 			</nav>
 			{pages.length > 0 && (
 				<nav className="wb-pages" aria-label="Pages">

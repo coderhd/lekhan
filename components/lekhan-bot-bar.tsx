@@ -1,5 +1,6 @@
 'use client'
 
+import { useOpenSettings } from '@/components/settings/settings-provider'
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
@@ -268,11 +269,12 @@ export default function LekhanBotBar({
 		)
 	}
 
+	const openSettings = useOpenSettings()
 	const handleOpenSettings = () => {
 		if (onOpenSettings) {
 			onOpenSettings()
-		} else if (typeof window !== 'undefined') {
-			window.location.href = '/settings'
+		} else {
+			openSettings('ai')
 		}
 	}
 

@@ -1,9 +1,8 @@
 'use client'
-import { Button as AstryxButton } from '@astryxdesign/core/Button'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { User, Users, CreditCard, Sparkles, Bot } from 'lucide-react'
+import { User, Users, CreditCard, Bot } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { removePageMember, updatePageMemberRole, fetchOwnedPagesWithMembers } from '@/services/graph'
@@ -18,30 +17,34 @@ import { AIProviderSettings } from './settings/ai-provider-settings'
 import { AIRegistryState } from '@/lib/ai/types'
 import { getDefaultAIRegistryState } from '@/lib/ai/catalog'
 import { encryptAIRegistry, syncVaultToSupabase, loadVaultFromSupabase } from '@/lib/ai/vault'
-import WorkbenchShell from './workbench/workbench-shell'
-import { useGlobalSearch } from './global-search-palette'
-import { useQuickCapture } from './quick-capture-palette'
-import ThemeToggle from './theme-toggle'
-import ProfileMenu from './profile-menu'
-import styles from './workbench/routes.module.css'
 import { getOrCreateUserVaultKey } from '@/lib/crypto'
+
+import styles from './settings/settings.module.css'
+import type { SettingsTab } from './settings/settings-provider'
+
+const sections = [
+	{ id: 'ai', label: 'AI & Models', icon: Bot },
+	{ id: 'profile', label: 'Profile & Security', icon: User },
+	{ id: 'collaborators', label: 'Collaborators & Access', icon: Users },
+	{ id: 'billing', label: 'Billing & Subscription', icon: CreditCard },
+] as const
 
 const EMPTY_PAGES: any[] = []
 
 export default function SettingsClient({
 	user,
+	initialTab = 'profile',
 	pages: initialPages = EMPTY_PAGES,
 	setPages: setParentPages,
 }: {
 	user: { id?: string; email: string; full_name?: string }
+	initialTab?: SettingsTab
 	token?: string
 	pages?: any[]
 	setPages?: React.Dispatch<React.SetStateAction<any[]>>
 }) {
 	const router = useRouter()
-	const { open: onSearch } = useGlobalSearch()
-	const { open: onCapture } = useQuickCapture()
-	const [activeTab, setActiveTab] = useState<'profile' | 'collaborators' | 'usage' | 'billing' | 'ai'>('profile')
+	const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab)
 	const [registryState, setRegistryState] = useState<AIRegistryState>(getDefaultAIRegistryState())
 	const [password, setPassword] = useState('')
 	const [confirmPassword, setConfirmPassword] = useState('')
@@ -136,14 +139,6 @@ export default function SettingsClient({
 			...(token ? { Authorization: `Bearer ${token}` } : {}),
 		}
 	}
-
-	// T13 — an emailed/pasted accept link must land on the card that consumes it.
-	useEffect(() => {
-		if (typeof window === 'undefined') return
-		if (new URLSearchParams(window.location.search).get('transfer')) {
-			setActiveTab('collaborators')
-		}
-	}, [])
 
 	const loadBilling = async (action: 'refresh' | null = null) => {
 		if (!user?.id) {
@@ -303,7 +298,7 @@ export default function SettingsClient({
 	)
 
 	const handleTabKeyDown = (e: React.KeyboardEvent) => {
-		const tabs = ['ai', 'profile', 'collaborators', 'usage', 'billing'] as const
+		const tabs = sections.map(section => section.id)
 		const currentIndex = tabs.indexOf(activeTab)
 		let nextIndex = currentIndex
 		if (e.key === 'ArrowDown' || e.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length
@@ -317,301 +312,226 @@ export default function SettingsClient({
 	}
 
 	return (
-		<WorkbenchShell active="settings" workspaceName="Workspace" onSearch={onSearch} onCapture={onCapture}
-			headerActions={<><ThemeToggle />{user.id && <ProfileMenu user={{ ...user, id: user.id }} size="sm" />}</>}>
-			<main className={styles.route}>
-				<header><h1 className={styles.title}>Settings</h1><p className="text-sm text-on-surface-variant">Manage your account, workspace access, AI connections, and subscription.</p></header>
-				<div className={styles.settings}>
-					{/* Sidebar Navigation */}
-					<aside
-						role="tablist"
-						aria-label="Settings navigation"
-						onKeyDown={handleTabKeyDown}
-						className={styles.settingNav}
-					>
-						<AstryxButton variant="ghost" width="100%"
-							id="settings-tab-ai"
-							type="button"
-							role="tab"
-							aria-selected={activeTab === 'ai'}
-							tabIndex={activeTab === 'ai' ? 0 : -1}
-							aria-controls="settings-panel-ai"
-							onClick={() => setActiveTab('ai')}
-							icon={<Bot aria-hidden />} label="AI & Models" />
-						<AstryxButton variant="ghost" width="100%"
-							id="settings-tab-profile"
-							type="button"
-							role="tab"
-							aria-selected={activeTab === 'profile'}
-							tabIndex={activeTab === 'profile' ? 0 : -1}
-							aria-controls="settings-panel-profile"
-							onClick={() => setActiveTab('profile')}
-							icon={<User aria-hidden />} label="Profile & Security" />
-						<AstryxButton variant="ghost" width="100%"
-							id="settings-tab-collaborators"
-							type="button"
-							role="tab"
-							aria-selected={activeTab === 'collaborators'}
-							tabIndex={activeTab === 'collaborators' ? 0 : -1}
-							aria-controls="settings-panel-collaborators"
-							onClick={() => setActiveTab('collaborators')}
-							icon={<Users aria-hidden />} label="Collaborators & Access" />
-						<AstryxButton variant="ghost" width="100%"
-							id="settings-tab-usage"
-							type="button"
-							role="tab"
-							aria-selected={activeTab === 'usage'}
-							tabIndex={activeTab === 'usage' ? 0 : -1}
-							aria-controls="settings-panel-usage"
-							onClick={() => setActiveTab('usage')}
-							icon={<Sparkles aria-hidden />} label="AI Usage" />
-						<AstryxButton variant="ghost" width="100%"
-							id="settings-tab-billing"
-							type="button"
-							role="tab"
-							aria-selected={activeTab === 'billing'}
-							tabIndex={activeTab === 'billing' ? 0 : -1}
-							aria-controls="settings-panel-billing"
-							onClick={() => setActiveTab('billing')}
-							icon={<CreditCard aria-hidden />} label="Billing & Subscription" />
-					</aside>
+		<div className={styles.settings}>
+			<aside role="tablist" aria-label="Settings navigation" onKeyDown={handleTabKeyDown} className={styles.nav}>
+				{sections.map(({ id, label, icon: Icon }) => (
+					<button key={id} id={`settings-tab-${id}`} type="button" role="tab"
+						aria-selected={activeTab === id} tabIndex={activeTab === id ? 0 : -1}
+						aria-controls={`settings-panel-${id}`} onClick={() => setActiveTab(id)}>
+						<Icon aria-hidden="true" /><span>{label}</span>
+					</button>
+				))}
+			</aside>
 
-					{/* Main Tab Content */}
-					<div className={styles.settingsMain}>
-						{activeTab === 'ai' && (
-							<div id="settings-panel-ai" role="tabpanel" aria-labelledby="settings-tab-ai" className="space-y-8 w-full max-w-4xl">
-								<h2 className="text-2xl font-display-lg text-on-surface mb-2">AI & Models</h2>
-								<p className="text-sm text-on-surface-variant mb-6">Choose a provider and model. Connect your own API key or a supported local runtime.</p>
-								<AIProviderSettings
-									user={user}
-									registryState={registryState}
-									onSaveRegistry={handleSaveRegistry}
-								/>
+			{/* Main Tab Content */}
+			<div key={activeTab} className={styles.panel}>
+				{activeTab === 'ai' && (
+					<div id="settings-panel-ai" role="tabpanel" aria-labelledby="settings-tab-ai" className="space-y-8 w-full max-w-4xl">
+						<h2 className="text-2xl font-display-lg text-on-surface mb-2">AI & Models</h2>
+						<p className="text-sm text-on-surface-variant mb-6">Choose a provider and model. Connect your own API key or a supported local runtime.</p>
+						<AIProviderSettings
+							user={user}
+							registryState={registryState}
+							onSaveRegistry={handleSaveRegistry}
+						/>
+						<BYOKSettings />
+					</div>
+				)}
+
+				{activeTab === 'profile' && (
+					<div id="settings-panel-profile" role="tabpanel" aria-labelledby="settings-tab-profile" className="space-y-8 max-w-3xl">
+						{/* Profile Section */}
+						<section className="border-b border-outline-variant pb-8">
+							<h2 className="text-2xl font-display-lg text-on-surface mb-6">Profile</h2>
+							<div className="space-y-6">
+								<div>
+									<label className="block text-xs font-label-sm text-on-surface-variant uppercase tracking-wider mb-2">Email Address</label>
+									<div className="text-on-surface font-medium bg-black/5 dark:bg-white/5 px-4 py-3 rounded-lg border border-black/5 dark:border-white/5">{user.email}</div>
+								</div>
+								<div>
+									<label className="block text-xs font-label-sm text-on-surface-variant uppercase tracking-wider mb-2">Full Name</label>
+									<div className="text-on-surface font-medium bg-black/5 dark:bg-white/5 px-4 py-3 rounded-lg border border-black/5 dark:border-white/5">{user.full_name || 'Not provided'}</div>
+								</div>
 							</div>
-						)}
+						</section>
 
-						{activeTab === 'profile' && (
-							<div id="settings-panel-profile" role="tabpanel" aria-labelledby="settings-tab-profile" className="space-y-8 max-w-3xl">
-								{/* Profile Section */}
-								<section className="border-b border-outline-variant pb-8">
-									<h2 className="text-2xl font-display-lg text-on-surface mb-6">Profile</h2>
-									<div className="space-y-6">
-										<div>
-											<label className="block text-xs font-label-sm text-on-surface-variant uppercase tracking-wider mb-2">Email Address</label>
-											<div className="text-on-surface font-medium bg-black/5 dark:bg-white/5 px-4 py-3 rounded-lg border border-black/5 dark:border-white/5">{user.email}</div>
-										</div>
-										<div>
-											<label className="block text-xs font-label-sm text-on-surface-variant uppercase tracking-wider mb-2">Full Name</label>
-											<div className="text-on-surface font-medium bg-black/5 dark:bg-white/5 px-4 py-3 rounded-lg border border-black/5 dark:border-white/5">{user.full_name || 'Not provided'}</div>
-										</div>
+						{/* Security Section */}
+						<section className="border-b border-outline-variant pb-8">
+							<h2 className="text-2xl font-display-lg text-on-surface mb-2">Security</h2>
+							<p className="text-sm text-on-surface-variant mb-6">Update your password to keep your account secure.</p>
+							<form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+								<div>
+									<label htmlFor="settings-new-password" className="block text-sm mb-2">New Password</label>
+									<input
+										type="password" id="settings-new-password" autoComplete="new-password"
+										value={password}
+										onChange={(e) => setPassword(e.target.value)}
+										className="w-full bg-black/5 dark:bg-surface-dim border border-black/10 dark:border-outline/30 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container/50 transition-all placeholder:text-on-surface-variant/50"
+										placeholder="Minimum 6 characters"
+										required
+									/>
+								</div>
+								<div>
+									<label htmlFor="settings-confirm-password" className="block text-sm mb-2">Confirm Password</label>
+									<input
+										type="password" id="settings-confirm-password" autoComplete="new-password"
+										value={confirmPassword}
+										onChange={(e) => setConfirmPassword(e.target.value)}
+										className="w-full bg-black/5 dark:bg-surface-dim border border-black/10 dark:border-outline/30 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container/50 transition-all placeholder:text-on-surface-variant/50"
+										placeholder="Confirm new password"
+										required
+									/>
+								</div>
+
+								{passwordError && (
+									<div role="alert" className="p-3 bg-error-container/20 border border-error/50 rounded-lg text-error text-sm font-medium flex items-center gap-2 mt-4">
+										<span className="material-symbols-outlined text-[18px]">error</span>
+										{passwordError}
 									</div>
-								</section>
+								)}
+								{passwordSuccess && (
+									<div role="status" className="p-3 bg-[#a0f399]/20 border border-[#a0f399]/50 rounded-lg text-[#a0f399] text-sm font-medium flex items-center gap-2 mt-4">
+										<span className="material-symbols-outlined text-[18px]">check_circle</span>
+										{passwordSuccess}
+									</div>
+								)}
 
-								{/* Security Section */}
-								<section className="border-b border-outline-variant pb-8">
-									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Security</h2>
-									<p className="text-sm text-on-surface-variant mb-6">Update your password to keep your account secure.</p>
-									<form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
-										<div>
-											<label htmlFor="settings-new-password" className="block text-sm mb-2">New Password</label>
-											<input
-												type="password" id="settings-new-password" autoComplete="new-password"
-												value={password}
-												onChange={(e) => setPassword(e.target.value)}
-												className="w-full bg-black/5 dark:bg-surface-dim border border-black/10 dark:border-outline/30 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container/50 transition-all placeholder:text-on-surface-variant/50"
-												placeholder="Minimum 6 characters"
-												required
-											/>
-										</div>
-										<div>
-											<label htmlFor="settings-confirm-password" className="block text-sm mb-2">Confirm Password</label>
-											<input
-												type="password" id="settings-confirm-password" autoComplete="new-password"
-												value={confirmPassword}
-												onChange={(e) => setConfirmPassword(e.target.value)}
-												className="w-full bg-black/5 dark:bg-surface-dim border border-black/10 dark:border-outline/30 rounded-lg px-4 py-3 text-on-surface focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container/50 transition-all placeholder:text-on-surface-variant/50"
-												placeholder="Confirm new password"
-												required
-											/>
-										</div>
+								<button
+									type="submit"
+									disabled={loading || password.length < 6 || password !== confirmPassword}
+									className="mt-6 w-full bg-primary-container text-on-primary-fixed font-bold py-3 rounded-lg shadow-md hover:shadow-primary-container/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none"
+								>
+									{loading ? 'Updating...' : 'Change Password'}
+								</button>
+							</form>
+						</section>
+					</div>
+				)}
 
-										{passwordError && (
-											<div role="alert" className="p-3 bg-error-container/20 border border-error/50 rounded-lg text-error text-sm font-medium flex items-center gap-2 mt-4">
-												<span className="material-symbols-outlined text-[18px]">error</span>
-												{passwordError}
-											</div>
-										)}
-										{passwordSuccess && (
-											<div role="status" className="p-3 bg-[#a0f399]/20 border border-[#a0f399]/50 rounded-lg text-[#a0f399] text-sm font-medium flex items-center gap-2 mt-4">
-												<span className="material-symbols-outlined text-[18px]">check_circle</span>
-												{passwordSuccess}
-											</div>
-										)}
+				{activeTab === 'collaborators' && (
+					<div id="settings-panel-collaborators" role="tabpanel" aria-labelledby="settings-tab-collaborators" className="space-y-8 max-w-3xl">
+						<OwnershipTransferCard candidates={ownershipCandidates} />
+						<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
+							<h2 className="text-2xl font-display-lg text-on-surface mb-2">Manage Collaborators</h2>
+							<p className="text-sm text-on-surface-variant mb-6">View and manage access to pages you own.</p>
 
-										<button
-											type="submit"
-											disabled={loading || password.length < 6 || password !== confirmPassword}
-											className="mt-6 w-full bg-primary-container text-on-primary-fixed font-bold py-3 rounded-lg shadow-md hover:shadow-primary-container/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 disabled:opacity-50 disabled:pointer-events-none"
-										>
-											{loading ? 'Updating...' : 'Change Password'}
-										</button>
-									</form>
-								</section>
-							</div>
-						)}
+							{pagesState.length === 0 ? (
+								<div className="py-8 text-center bg-black/5 dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5 border-dashed">
+									<p className="text-on-surface-variant italic text-sm">You don't own any pages yet.</p>
+								</div>
+							) : (
+								<div className="space-y-6">
+									{paginatedPages.map((doc: any) => {
+										const members = doc.page_members || []
 
-						{activeTab === 'collaborators' && (
-							<div id="settings-panel-collaborators" role="tabpanel" aria-labelledby="settings-tab-collaborators" className="space-y-8 max-w-3xl">
-								<OwnershipTransferCard candidates={ownershipCandidates} />
-								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm">
-									<h2 className="text-2xl font-display-lg text-on-surface mb-2">Manage Collaborators</h2>
-									<p className="text-sm text-on-surface-variant mb-6">View and manage access to pages you own.</p>
-
-									{pagesState.length === 0 ? (
-										<div className="py-8 text-center bg-black/5 dark:bg-white/5 rounded-xl border border-black/5 dark:border-white/5 border-dashed">
-											<p className="text-on-surface-variant italic text-sm">You don't own any pages yet.</p>
-										</div>
-									) : (
-										<div className="space-y-6">
-											{paginatedPages.map((doc: any) => {
-												const members = doc.page_members || []
-
-												return (
-													<div
-														key={doc.id}
-														className="border border-black/10 dark:border-outline/10 rounded-xl p-5 bg-white/50 dark:bg-surface-dim/30 hover:bg-white dark:hover:bg-surface-dim/50 transition-all shadow-sm"
-													>
-														<div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
-															<h3 className="font-title-lg font-semibold text-primary-container">{doc.title || 'Untitled Page'}</h3>
-															<span className="text-xs font-bold px-3 py-1 bg-black/5 dark:bg-white/10 rounded-full text-on-surface-variant inline-block w-fit">
-																{members.length} {members.length === 1 ? 'collaborator' : 'collaborators'}
-															</span>
-														</div>
-
-														{members.length === 0 ? (
-															<p className="text-xs text-on-surface-variant italic ml-1">No collaborators added yet.</p>
-														) : (
-															<ul className="space-y-2 mt-2">
-																{members.map((member: { user_id: string; role: string; profiles?: { full_name?: string; email: string } }) => (
-<li
-													key={member.user_id}
-													className="flex justify-between items-center bg-black/5 dark:bg-surface-variant/10 p-3 rounded-lg border border-black/5 dark:border-white/5 group"
-												>
-													<div className="flex items-center gap-3">
-														<div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs uppercase shrink-0">
-															{(member.profiles?.full_name || member.profiles?.email || '?').charAt(0)}
-														</div>
-														<div className="min-w-0">
-															<div className="text-on-surface text-xs font-semibold truncate">
-																{member.profiles?.full_name || member.profiles?.email}
-															</div>
-															<div className="text-[11px] text-on-surface-variant/80 mt-0.5 truncate">
-																{member.profiles?.email} • <span className="capitalize font-medium text-primary">{member.role}</span>
-															</div>
-														</div>
-													</div>
-													{member.role !== 'owner' && (
-														<div className="flex items-center gap-2 shrink-0">
-															<CustomSelect
-																value={member.role as 'editor' | 'viewer'}
-																onValueChange={(val) => handleRoleChange(doc.id, member.user_id, val as 'editor' | 'viewer')}
-																options={[
-																	{ label: 'Editor', value: 'editor' },
-																	{ label: 'Viewer', value: 'viewer' },
-																]}
-																triggerClassName="h-7 w-[100px] bg-transparent border border-black/10 dark:border-white/10 rounded-lg text-[10px] font-medium text-on-surface px-2 focus:ring-0"
-																contentClassName="w-[100px]"
-															/>
-															<button
-																onClick={() => handleRemoveMember(doc.id, member.user_id)}
-																className="text-error hover:text-error/80 text-xs font-bold px-3 py-1.5 border border-error/30 rounded-md hover:bg-error/10 transition-colors shrink-0"
-															>
-																Remove
-															</button>
-														</div>
-													)}
-												</li>
-																))}
-															</ul>
-														)}
-													</div>
-												)
-											})}
-
-											{totalPages > 1 && (
-												<div className="flex items-center justify-between pt-4 border-t border-black/10 dark:border-white/10">
-													<button
-														onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-														disabled={currentPage === 1}
-														className="px-4 py-2 text-xs font-semibold rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 disabled:pointer-events-none transition-colors"
-													>
-														Previous
-													</button>
-													<span className="text-xs text-on-surface-variant">
-														Page {currentPage} of {totalPages}
+										return (
+											<div
+												key={doc.id}
+												className="border border-black/10 dark:border-outline/10 rounded-xl p-5 bg-white/50 dark:bg-surface-dim/30 hover:bg-white dark:hover:bg-surface-dim/50 transition-all shadow-sm"
+											>
+												<div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-2">
+													<h3 className="font-title-lg font-semibold text-primary-container">{doc.title || 'Untitled Page'}</h3>
+													<span className="text-xs font-bold px-3 py-1 bg-black/5 dark:bg-white/10 rounded-full text-on-surface-variant inline-block w-fit">
+														{members.length} {members.length === 1 ? 'collaborator' : 'collaborators'}
 													</span>
+												</div>
+
+												{members.length === 0 ? (
+													<p className="text-xs text-on-surface-variant italic ml-1">No collaborators added yet.</p>
+												) : (
+													<ul className="space-y-2 mt-2">
+														{members.map((member: { user_id: string; role: string; profiles?: { full_name?: string; email: string } }) => (
+<li
+											key={member.user_id}
+											className="flex justify-between items-center bg-black/5 dark:bg-surface-variant/10 p-3 rounded-lg border border-black/5 dark:border-white/5 group"
+										>
+											<div className="flex items-center gap-3">
+												<div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs uppercase shrink-0">
+													{(member.profiles?.full_name || member.profiles?.email || '?').charAt(0)}
+												</div>
+												<div className="min-w-0">
+													<div className="text-on-surface text-xs font-semibold truncate">
+														{member.profiles?.full_name || member.profiles?.email}
+													</div>
+													<div className="text-[11px] text-on-surface-variant/80 mt-0.5 truncate">
+														{member.profiles?.email} • <span className="capitalize font-medium text-primary">{member.role}</span>
+													</div>
+												</div>
+											</div>
+											{member.role !== 'owner' && (
+												<div className="flex items-center gap-2 shrink-0">
+													<CustomSelect
+														value={member.role as 'editor' | 'viewer'}
+														onValueChange={(val) => handleRoleChange(doc.id, member.user_id, val as 'editor' | 'viewer')}
+														options={[
+															{ label: 'Editor', value: 'editor' },
+															{ label: 'Viewer', value: 'viewer' },
+														]}
+														triggerClassName="h-7 w-[100px] bg-transparent border border-black/10 dark:border-white/10 rounded-lg text-[10px] font-medium text-on-surface px-2 focus:ring-0"
+														contentClassName="w-[100px]"
+													/>
 													<button
-														onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-														disabled={currentPage === totalPages}
-														className="px-4 py-2 text-xs font-semibold rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 disabled:pointer-events-none transition-colors"
+														onClick={() => handleRemoveMember(doc.id, member.user_id)}
+														className="text-error hover:text-error/80 text-xs font-bold px-3 py-1.5 border border-error/30 rounded-md hover:bg-error/10 transition-colors shrink-0"
 													>
-														Next
+														Remove
 													</button>
 												</div>
 											)}
+										</li>
+														))}
+													</ul>
+												)}
+											</div>
+										)
+									})}
+
+									{totalPages > 1 && (
+										<div className="flex items-center justify-between pt-4 border-t border-black/10 dark:border-white/10">
+											<button
+												onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+												disabled={currentPage === 1}
+												className="px-4 py-2 text-xs font-semibold rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 disabled:pointer-events-none transition-colors"
+											>
+												Previous
+											</button>
+											<span className="text-xs text-on-surface-variant">
+												Page {currentPage} of {totalPages}
+											</span>
+											<button
+												onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+												disabled={currentPage === totalPages}
+												className="px-4 py-2 text-xs font-semibold rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 disabled:opacity-50 disabled:pointer-events-none transition-colors"
+											>
+												Next
+											</button>
 										</div>
 									)}
-								</section>
-							</div>
-						)}
-
-						{/* AI access & usage — no credit meter exists any more (T12). */}
-						{activeTab === 'usage' && (
-							<div id="settings-panel-usage" role="tabpanel" aria-labelledby="settings-tab-usage" className="space-y-8 max-w-3xl">
-								<section className="bg-white/5 dark:bg-surface-container-low border border-black/10 dark:border-white/10 rounded-2xl p-6 md:p-8 backdrop-blur-md shadow-sm space-y-4">
-									<div className="flex justify-between items-start gap-3">
-										<div>
-											<h2 className="text-2xl font-display-lg text-on-surface mb-1">AI access</h2>
-											<p className="text-xs text-on-surface-variant leading-relaxed">
-												Lekhan never meters AI. Bring your own key (BYOK), run local models (BYOL), or use the free-key on-ramp — free models may change or be slower.
-											</p>
-										</div>
-										<span className="px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-bold capitalize shrink-0">
-											{entitlement?.tier ?? 'free'} plan
-										</span>
-									</div>
-									<ul className="text-xs text-on-surface-variant space-y-2">
-										<li className="flex items-start gap-2"><Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />Your provider key is used directly; provider usage is billed by that provider, not by Lekhan.</li>
-										<li className="flex items-start gap-2"><Bot className="w-4 h-4 text-primary shrink-0 mt-0.5" />No plan bundles an AI allowance, and no AI action is blocked by a Lekhan quota.</li>
-									</ul>
-								</section>
-
-								{/* BYOK Settings Card inside Usage Tab */}
-								<BYOKSettings />
-							</div>
-						)}
-
-						{/* Real billing states + plan matrix (T12). */}
-						{activeTab === 'billing' && (
-							<div id="settings-panel-billing" role="tabpanel" aria-labelledby="settings-tab-billing" className="space-y-8 max-w-5xl">
-								<BillingSettings
-									entitlement={entitlement}
-									referral={referral}
-									loading={billingLoading}
-									error={billingError}
-									isFounding={entitlement?.isFounding ?? false}
-									defaultCurrency={defaultCurrency}
-									busyAction={billingAction}
-									onManageBilling={() => void handleManageBilling()}
-									onCancel={() => void handleCancel()}
-									onResubscribe={() => void handleResubscribe()}
-									onRefresh={() => void loadBilling('refresh')}
-								/>
-							</div>
-						)}
+								</div>
+							)}
+						</section>
 					</div>
-				</div>
-			</main>
-		</WorkbenchShell>
+				)}
+
+				{/* Real billing states + plan matrix (T12). */}
+				{activeTab === 'billing' && (
+					<div id="settings-panel-billing" role="tabpanel" aria-labelledby="settings-tab-billing" className="space-y-8 max-w-5xl">
+						<BillingSettings
+							entitlement={entitlement}
+							referral={referral}
+							loading={billingLoading}
+							error={billingError}
+							isFounding={entitlement?.isFounding ?? false}
+							defaultCurrency={defaultCurrency}
+							busyAction={billingAction}
+							onManageBilling={() => void handleManageBilling()}
+							onCancel={() => void handleCancel()}
+							onResubscribe={() => void handleResubscribe()}
+							onRefresh={() => void loadBilling('refresh')}
+						/>
+					</div>
+				)}
+			</div>
+		</div>
 	)
 }

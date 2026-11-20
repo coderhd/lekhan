@@ -1,0 +1,66 @@
+/* Keep nested billing and transfer confirmations above the settings window. */
+:global(body):has(.dialog) { --alert-dialog-layer: 9992; }
+.scrim {
+	position: fixed;
+	inset: 0;
+	z-index: 9991;
+	background: rgb(12 16 25 / 55%);
+}
+.dialog {
+	position: fixed;
+	z-index: 9991;
+	inset: 50% auto auto 50%;
+	transform: translate(-50%, -50%);
+	width: min(1000px, calc(100vw - 48px));
+	height: min(740px, calc(100dvh - 64px));
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	border: 1px solid hsl(var(--outline-variant));
+	border-radius: 16px;
+	background: hsl(var(--background));
+	color: hsl(var(--on-surface));
+	box-shadow: 0 22px 80px rgb(0 0 0 / 28%);
+}
+.header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-shrink: 0;
+	padding: 10px 16px 10px 24px;
+	border-bottom: 1px solid hsl(var(--outline-variant));
+	font-size: 18px;
+	font-weight: 600;
+}
+.close, .nav button {
+	display: flex;
+	align-items: center;
+	cursor: pointer;
+	border-radius: 8px;
+}
+.close { justify-content: center; width: 44px; height: 44px; }
+.close svg { width: 18px; }
+.settings { flex: 1; min-height: 0; display: grid; grid-template-columns: 216px minmax(0, 1fr); }
+.nav {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 16px 10px;
+	border-right: 1px solid hsl(var(--outline-variant));
+	background: hsl(var(--surface-container-low));
+	overflow: auto;
+}
+.nav button { justify-content: flex-start; gap: 10px; flex-shrink: 0; padding: 8px 12px; min-height: 44px; text-align: left; font-size: 13px; }
+.nav svg { width: 17px; height: 17px; flex-shrink: 0; }
+.nav button:hover, .close:hover { background: hsl(var(--surface-container-high)); }
+.nav button[aria-selected=true] { background: hsl(var(--surface-container-high)); color: hsl(var(--primary-ink)); font-weight: 600; }
+.nav button:focus-visible, .close:focus-visible { outline: 2px solid hsl(var(--primary-ink)); outline-offset: -2px; }
+.panel { min-width: 0; overflow: auto; overscroll-behavior: contain; padding: 24px clamp(16px, 3vw, 36px); }
+.panel section { box-shadow: none; }
+.message { padding: 24px; }
+@media (max-width: 680px) {
+	.dialog { width: calc(100vw - 16px); height: calc(100dvh - 16px); border-radius: 12px; }
+	.settings { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+	.nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-right: 0; border-bottom: 1px solid hsl(var(--outline-variant)); padding: 6px; }
+	.nav button { gap: 6px; padding-inline: 8px; }
+}
