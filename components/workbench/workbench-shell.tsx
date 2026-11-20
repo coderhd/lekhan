@@ -19,6 +19,7 @@ import {
 	X
 } from 'lucide-react'
 import { useGlobalHeaderSlots } from '@/components/layout/global-header-context'
+import { detectShortcutPlatform } from '@/lib/shortcuts'
 import type { WorkbenchShellProps } from './types'
 
 export default function WorkbenchShell({
@@ -36,10 +37,12 @@ export default function WorkbenchShell({
 }: WorkbenchShellProps) {
 	const openSettings = useOpenSettings()
 	const [navigationOpen, setNavigationOpen] = useState(false)
+	const [shortcutPlatform, setShortcutPlatform] = useState<'mac' | 'other'>('other')
 	const pendingAction = useRef<(() => void) | null>(null)
 	const navigationTrigger = useRef<HTMLButtonElement>(null)
 	const { registerWorkbenchChrome } = useGlobalHeaderSlots()
 	useEffect(() => registerWorkbenchChrome(), [registerWorkbenchChrome])
+	useEffect(() => setShortcutPlatform(detectShortcutPlatform()), [])
 
 	const runAction = (action: () => void, mobile: boolean) => {
 		if (mobile) {
@@ -55,6 +58,12 @@ export default function WorkbenchShell({
 				</span>
 				<span>{workspaceName}</span>
 			</div>
+			<button type="button" className="wb-rail-search" aria-haspopup="dialog" aria-keyshortcuts="Meta+K Control+K"
+				onClick={() => runAction(onSearch, mobile)}>
+				<Search aria-hidden="true" />
+				<span>Search</span>
+				<kbd aria-hidden="true">{shortcutPlatform === 'mac' ? '⌘ K' : 'Ctrl K'}</kbd>
+			</button>
 			<nav className="wb-nav" aria-label="Main navigation">
 				<Link
 					href="/"
@@ -67,10 +76,6 @@ export default function WorkbenchShell({
 				{mobile && onBrowse && (
 					<button type="button" onClick={() => runAction(onBrowse, mobile)}>Browse workspace pages</button>
 				)}
-				<button type="button" onClick={() => runAction(onSearch, mobile)}>
-					<Search aria-hidden="true" />
-					Search
-				</button>
 				<Link
 					href="/graph"
 					aria-current={active === 'graph' ? 'page' : undefined}
@@ -98,7 +103,7 @@ export default function WorkbenchShell({
 							onClick={() => setNavigationOpen(false)}
 						>
 							<FileText aria-hidden="true" />
-							<span>{page.title}</span>
+							<span title={page.title}>{page.title}</span>
 						</Link>
 					))}
 				</nav>

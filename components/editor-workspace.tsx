@@ -1286,13 +1286,7 @@ export default function EditorWorkspace({	pageId,
 			headerActions={<><SyncIndicator connectionState={connectionState} isSynced={isSynced} hasUnsyncedChanges={hasUnsyncedChanges} isLocalSynced={isLocalSynced} /><ThemeToggle /><ProfileMenu user={currentUser} size="sm" /></>}>
 		<div className={styles.workspace} data-context={wideContext && isBacklinksOpen}>
 
-			{/* Redesigned Top Header and Integrated Toolbar */}
 			<header className={styles.pageHeader}>
-				{/* Row 1: App Controls & Document Title */}
-				                        <h1 className={styles.title}>
-							{!isViewer ? <InlineEdit initialValue={title} onSave={handleSaveTitle}
-								textClassName={styles.titleText} inputClassName={styles.titleInput} /> : title}
-						</h1>
 				<div className={styles.pageActions}>
 					<div className="flex items-center gap-md">
                         {anonVisitor && <Link href="/" className={styles.publicLogo}>Lekhan</Link>}
@@ -1376,11 +1370,13 @@ export default function EditorWorkspace({	pageId,
 						{!anonVisitor && (
 							<button
 								onClick={() => { setIsAIPanelOpen(!isAIPanelOpen); setIsHistoryOpen(false); setIsBacklinksOpen(false); }}
+								aria-expanded={isAIPanelOpen}
+								aria-label="AI preferences"
 								className={`hidden md:flex items-center justify-center h-8 gap-xs px-2 lg:px-3 rounded-lg border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-all text-on-surface text-sm font-medium ${isAIPanelOpen ? 'bg-primary/10 dark:bg-primary/20 text-primary border-primary/30' : 'bg-surface-container-low'}`}
-								title="Settings"
+								title="AI preferences"
 							>
-								<span className="material-symbols-outlined text-primary-container text-lg">settings</span>
-								<span className="hidden lg:inline">Settings</span>
+								<span className="material-symbols-outlined text-primary-container text-lg" aria-hidden="true">settings</span>
+								<span className="hidden lg:inline">AI preferences</span>
 							</button>
 						)}
 
@@ -1499,7 +1495,6 @@ export default function EditorWorkspace({	pageId,
 			</header>
 
 			<div className={styles.writingArea}>
-				{/* Main Workspace (Expanded, Dark Continuous Canvas) */}
 				<main className={styles.main}>
 
 					{!isViewer && editor && (
@@ -1509,11 +1504,14 @@ export default function EditorWorkspace({	pageId,
 					)}
 
 					<div className={`editor-canvas ${styles.canvas}`}>
-
+						<h1 className={styles.title}>
+							{!isViewer ? <InlineEdit initialValue={title} onSave={handleSaveTitle}
+								textClassName={styles.titleText} inputClassName={styles.titleInput} /> : title}
+						</h1>
 						{!isViewer && editor && <DragContextMenu editor={editor} />}
 
 						{previewVersionName && (
-							<div className='absolute top-4 left-4 flex items-center justify-between bg-primary/20 border border-primary/50 px-4 py-2 rounded-lg text-xs text-primary font-semibold backdrop-blur-md z-10'>
+							<div className='mb-4 flex flex-wrap items-center justify-between gap-2 bg-primary/20 border border-primary/50 px-4 py-2 rounded-lg text-xs text-primary font-semibold'>
 								<span>Previewing checkpoint: <span className='text-on-surface'>"{previewVersionName}"</span> (Read-Only)</span>
 								<button onClick={() => { setPreviewDoc(null); setPreviewVersionName(null) }} className='flex items-center gap-1 hover:text-on-surface transition ml-4'>
 									<EyeOff className='h-3.5 w-3.5' /> <span>Exit</span>

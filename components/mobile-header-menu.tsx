@@ -143,10 +143,11 @@ export default function MobileHeaderMenu({
 							setIsBacklinksOpen(false)
 							setIsOpen(false)
 						}}
+						aria-expanded={isAIPanelOpen}
 						className={`flex items-center gap-3 px-4 py-3 text-sm font-medium hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${isAIPanelOpen ? 'text-primary' : 'text-on-surface'}`}
 					>
-						<span className="material-symbols-outlined text-[20px]">settings</span>
-						Settings
+						<span className="material-symbols-outlined text-[20px]" aria-hidden="true">settings</span>
+						AI preferences
 					</button>
                     
 					<div className="border-t border-black/5 dark:border-white/5 my-1" />
