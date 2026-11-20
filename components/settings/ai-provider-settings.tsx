@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Activity, Lock, Eye, EyeOff, CheckCircle2, AlertTriangle, CloudOff, KeyRound, Cpu, Loader2, Zap, DollarSign } from 'lucide-react'
+import { Activity, Eye, EyeOff, CheckCircle2, AlertTriangle, ChevronDown, Cpu, Loader2 } from 'lucide-react'
 import { AIRegistryState, AIProviderType, ModelCard } from '../../lib/ai/types'
 import { getDefaultAIRegistryState } from '../../lib/ai/catalog'
 import { HardwareProfile, detectHardwareProfile } from '../../lib/ai/hardware'
 import { LocalProbeResult, probeLocalRuntime } from '../../lib/ai/prober'
-import { providerRegistry, formatModelDescription, isModelCompatible } from '../../lib/ai/provider-registry'
+import { providerRegistry, isModelCompatible } from '../../lib/ai/provider-registry'
 import { getHardwareRecommendation } from '../../lib/ai/hardware'
-import { Button } from '../ui/button'
+import styles from './ai-controls.module.css'
 import { toast } from 'sonner'
 
 interface AIProviderSettingsProps {
+	children?: React.ReactNode
 	registryState?: AIRegistryState
 	onSaveRegistry?: (state: AIRegistryState) => Promise<void>
 	user?: { id?: string; email?: string }
@@ -28,7 +29,7 @@ const BYOK_PROVIDERS: Array<{ id: AIProviderType; label: string; note?: string }
 	{ id: 'custom', label: 'Custom (OpenAI-compatible)' },
 ]
 
-export function AIProviderSettings({ registryState, onSaveRegistry }: AIProviderSettingsProps) {
+export function AIProviderSettings({ registryState, onSaveRegistry, children }: AIProviderSettingsProps) {
 	const defaultState = useMemo(() => getDefaultAIRegistryState(), [])
 	const state = registryState ?? defaultState
 	const [hardware, setHardware] = useState<HardwareProfile | null>(null)
@@ -156,10 +157,10 @@ export function AIProviderSettings({ registryState, onSaveRegistry }: AIProvider
 
 	const models = providerRegistry.catalog as ModelCard[]
 	const optionKey = (model: ModelCard) => `${model.provider}:${model.id}`
+	const activeModel = models.find(model => model.id === state.activeModelId && model.provider === state.activeProviderId)
 	const selectedModel = models.find(model => optionKey(model) === modelChoice)
-		?? models.find(model => model.id === state.activeModelId && model.provider === state.activeProviderId)
+		?? activeModel
 		?? models[0]
-
 
 	const getDetectedPlatform = () => {
 		if (typeof navigator === 'undefined') return 'macos'
@@ -172,173 +173,126 @@ export function AIProviderSettings({ registryState, onSaveRegistry }: AIProvider
 	const corsCommand = localProbe?.osCommand[platform as keyof typeof localProbe.osCommand] || localProbe?.osCommand.macos || ''
 
 	const hasKey = (id: string) => Boolean(state.providers[id]?.apiKey)
+	const provider = BYOK_PROVIDERS.find(item => item.id === selectedProvider)!
+	const providerName = (id: string) => BYOK_PROVIDERS.find(item => item.id === id)?.label ?? state.providers[id]?.name ?? id
+	const selectedIsActive = selectedModel && selectedModel === activeModel
 
 	return (
-		<div className="space-y-6 max-w-5xl w-full">
-			<section className="rounded-2xl border border-black/5 dark:border-white/10 bg-primary-container text-on-primary-container p-5 md:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
-				<div className="min-w-0">
-					<p className="text-[11px] font-bold uppercase tracking-widest opacity-70">Active model</p>
-					<h2 className="text-xl font-bold tracking-tight truncate">{state.activeModelId}</h2>
-					<p className="text-xs opacity-80 capitalize">Provider: {state.activeProviderId} {pingResult?.success ? `· ${pingResult.latencyMs}ms` : ''}</p>
+		<div className={styles.stack}>
+			<section className={styles.summary}>
+				<div>
+					<p className={styles.hint}>Active model</p>
+					<h3>{activeModel?.name ?? state.activeModelId}</h3>
+					<p className={styles.hint}>{providerName(state.activeProviderId)}{pingResult?.success && ` · ${pingResult.latencyMs} ms`}</p>
 				</div>
-				<Button onClick={handleLivePing} disabled={isPingTesting} className="bg-[#191713] text-white hover:bg-black dark:bg-white dark:text-black font-semibold rounded-xl px-5 h-9 gap-2 shrink-0">
-					{isPingTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />} Test active
-				</Button>
+				<button className={styles.secondary} onClick={handleLivePing} disabled={isPingTesting}>
+					{isPingTesting ? <Loader2 className="animate-spin" /> : <Activity />} Test active
+				</button>
 			</section>
 
-			{hardware && (
-				<section className="rounded-xl border border-black/10 dark:border-white/10 bg-white/60 dark:bg-white/[0.04] backdrop-blur px-4 py-3 flex items-center justify-between gap-3">
-					<div className="flex items-center gap-2.5 min-w-0">
-						<span className="w-8 h-8 rounded-lg bg-black/5 dark:bg-white/10 grid place-items-center"><Cpu className="w-4 h-4" /></span>
-						<div className="min-w-0">
-							<div className="text-xs font-semibold leading-none">Hardware · {hardware.label}</div>
-							<div className="text-[11px] text-black/60 dark:text-white/60">{hardware.ramGb} GB · {hardware.cpuCores} cores {hardware.hasWebGPU ? '· WebGPU' : ''}</div>
+			<section className={styles.section}>
+				<h3>Providers &amp; Keys</h3>
+				<label className={styles.field}>Provider
+					<span className={styles.selectWrap}>
+						<select value={selectedProvider} onChange={event => {
+							setSelectedProvider(event.target.value as AIProviderType)
+							setShowKeys({})
+						}}>
+							{BYOK_PROVIDERS.map(item => (
+								<option key={item.id} value={item.id}>{item.label}{item.note && ` · ${item.note}`}{hasKey(item.id) && ' · Configured'}</option>
+							))}
+						</select>
+						<ChevronDown aria-hidden="true" />
+					</span>
+				</label>
+				{provider.id === 'custom' && (
+					<label className={styles.field}>Custom base URL
+						<input className={styles.input} placeholder="https://api.example.com/v1"
+							value={customBaseUrls[provider.id] || ''}
+							onChange={event => setCustomBaseUrls(prev => ({ ...prev, [provider.id]: event.target.value }))} />
+					</label>
+				)}
+				<div className={styles.field}>
+					<label htmlFor="provider-api-key">{provider.label} API key</label>
+					<div className={styles.controlRow}>
+						<div className={styles.secret}>
+							<input id="provider-api-key" type={showKeys[provider.id] ? 'text' : 'password'} autoComplete="off"
+								placeholder={`${provider.label} API key`} value={apiKeys[provider.id] || ''}
+								onChange={event => handleKeyChange(provider.id, event.target.value)} />
+							<button type="button" className={styles.eye} aria-label={`${showKeys[provider.id] ? 'Hide' : 'Show'} ${provider.label} API key`}
+								onClick={() => setShowKeys(prev => ({ ...prev, [provider.id]: !prev[provider.id] }))}>
+								{showKeys[provider.id] ? <EyeOff /> : <Eye />}
+							</button>
+						</div>
+						<div className={styles.actions}>
+							<button className={styles.secondary} disabled={testingKey[provider.id]} onClick={() => handleTestKey(provider.id)}>
+								{testingKey[provider.id] ? 'Testing…' : 'Test'}
+							</button>
+							<button className={styles.primary} onClick={() => handleSaveKey(provider.id)}>Save</button>
 						</div>
 					</div>
-					<span className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-black/5 dark:bg-white/10 shrink-0">{hardware.recommendedMaxLocalModelSize}</span>
-				</section>
-			)}
+				</div>
+			</section>
 
-			<section className="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 space-y-4">
-				<div className="flex items-center justify-between gap-3">
-					<h3 className="text-sm font-bold flex items-center gap-2">Local models <span className="text-[11px] font-normal text-black/50 dark:text-white/50">BYOL · Ollama / LM Studio</span></h3>
-					{localProbe?.status === 'connected' && <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Connected</span>}
-					{localProbe?.status === 'cors_blocked' && <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-700 border border-amber-500/20 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> CORS</span>}
-					{localProbe?.status === 'offline' && <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-red-500/10 text-red-600 border border-red-500/20 flex items-center gap-1"><CloudOff className="w-3 h-3" /> Offline</span>}
+			<section className={styles.section}>
+				<h3>All models</h3>
+				<label className={styles.field}>Model
+					<span className={styles.selectWrap}>
+						<select value={selectedModel ? optionKey(selectedModel) : ''} onChange={event => setModelChoice(event.target.value)}>
+							{models.map(model => (
+								<option key={optionKey(model)} value={optionKey(model)}>{model.name} · {providerName(model.provider)}</option>
+							))}
+						</select>
+						<ChevronDown aria-hidden="true" />
+					</span>
+				</label>
+				{selectedModel ? (
+					<div className={styles.details}>
+						<p className={styles.hint}>
+							{(selectedModel.contextWindow / 1000).toLocaleString()}k context · {selectedModel.speedTokPerSec} tokens/s · {selectedModel.costTier} · {selectedModel.category} · {selectedModel.hardwareTier}
+						</p>
+						{hardware && selectedModel.costTier === 'local' && <p className={styles.hint}>{getHardwareRecommendation(hardware).badgeText}</p>}
+						{!isModelCompatible(selectedModel, hardware) && <p className={styles.hint}>Heavy for this device</p>}
+						{selectedModel.costTier !== 'local' && !hasKey(selectedModel.provider) && (
+							<p className={styles.notice}><AlertTriangle aria-hidden="true" /> Add an API key for {providerName(selectedModel.provider)} to use this model.</p>
+						)}
+						{selectedIsActive
+							? <span className={styles.status}><CheckCircle2 />Active</span>
+							: <button className={styles.primary} onClick={() => handleSelectModel(selectedModel.id, selectedModel.provider)}>Use this model</button>}
+					</div>
+				) : <p className={styles.hint}>No models available.</p>}
+			</section>
+
+			{children}
+
+			<section className={styles.section}>
+				<div className={styles.sectionHeader}>
+					<h3>Local models</h3>
+					{localProbe && <span className={styles.hint}>{{ connected: 'Connected', cors_blocked: 'CORS blocked', offline: 'Offline' }[localProbe.status]}</span>}
 				</div>
 				{localProbe?.status === 'cors_blocked' && (
-					<div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3">
-						<div className="text-xs font-semibold text-amber-800 dark:text-amber-200">Fix CORS — {platform}</div>
-						<code className="mt-1 block rounded-lg bg-black/5 dark:bg-black/30 px-3 py-2 text-[11px] font-mono break-all select-all">{corsCommand}</code>
+					<div className={styles.details}>
+						<p className={styles.notice}><AlertTriangle /> Allow browser connections on {platform}</p>
+						<code className={styles.command}>{corsCommand}</code>
 					</div>
 				)}
-				{localProbe?.models && localProbe.models.length > 0 ? (
-					<div className="flex flex-wrap gap-2">
-						{localProbe.models.map(m => (
-							<span key={m} className="inline-flex items-center gap-2 rounded-full border border-black/10 dark:border-white/10 bg-black/[0.03] dark:bg-white/5 px-3 py-1.5 text-xs">
-								<span className="font-medium">{m}</span>
-								<button onClick={() => handleSelectModel(m, 'ollama')} className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#191713] text-white dark:bg-white dark:text-black">Use</button>
-							</span>
-						))}
+				{localProbe?.models.length ? localProbe.models.map(model => (
+					<div key={model} className={styles.sectionHeader}>
+						<span>{model}</span>
+						{model === state.activeModelId && state.activeProviderId === 'ollama'
+							? <span className={styles.status}><CheckCircle2 />Active</span>
+							: <button className={styles.secondary} onClick={() => handleSelectModel(model, 'ollama')}>Use</button>}
 					</div>
-				) : (
-					<p className="text-xs text-black/50 dark:text-white/50">No local models detected. Start Ollama and pull a model, then refresh.</p>
+				)) : <p className={styles.hint}>{localProbe ? 'No local models detected. Start Ollama and pull a model, then refresh.' : 'Checking for local models…'}</p>}
+				{hardware && (
+					<div className={styles.hardware}>
+						<Cpu aria-hidden="true" />
+						<div>
+							<strong>Hardware · {hardware.label}</strong>
+							<p className={styles.hint}>{hardware.ramGb} GB · {hardware.cpuCores} cores{hardware.hasWebGPU && ' · WebGPU'} · {hardware.recommendedMaxLocalModelSize}</p>
+						</div>
+					</div>
 				)}
-			</section>
-
-			<section className="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 space-y-4">
-				<div className="flex items-center gap-2">
-					<Lock className="w-4 h-4 text-black/60 dark:text-white/60" />
-					<h3 className="text-sm font-bold">Providers & Keys</h3>
-					<span className="text-[11px] text-black/50 dark:text-white/50">BYOK — keys stay encrypted on your device</span>
-				</div>
-				<label className="grid gap-2 text-sm">
-					Provider
-					<select value={selectedProvider}
-						onChange={event => {
-							const provider = BYOK_PROVIDERS.find(item => item.id === event.target.value)
-							if (provider) setSelectedProvider(provider.id)
-							setShowKeys({})
-						}}
-						className="min-h-11 w-full max-w-sm rounded-md border border-outline-variant bg-background px-3 text-on-surface">
-						{BYOK_PROVIDERS.map(provider => (
-							<option key={provider.id} value={provider.id}>
-								{provider.label}{hasKey(provider.id) ? ' · Configured' : ''}
-							</option>
-						))}
-					</select>
-				</label>
-				<div className="grid gap-3">
-					{BYOK_PROVIDERS.filter(provider => provider.id === selectedProvider).map(p => {
-						const configured = hasKey(p.id)
-						const isCustom = p.id === 'custom'
-						return (
-							<div key={p.id} className={`flex flex-col gap-3 rounded-xl border p-3 ${configured ? 'bg-emerald-500/[0.04] border-emerald-500/20' : 'bg-black/[0.02] dark:bg-white/[0.02] border-black/10 dark:border-white/10'}`}>
-								<div className="flex flex-col sm:flex-row sm:items-center gap-3">
-									<div className="sm:w-36 shrink-0 flex items-center gap-2">
-										<span className={`w-2 h-2 rounded-full ${configured ? 'bg-emerald-500' : 'bg-black/20 dark:bg-white/20'}`} />
-										<span className="text-xs font-semibold">{p.label}</span>
-										{p.note && <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10">{p.note}</span>}
-									</div>
-									<div className="flex-1 flex gap-2">
-										<div className="relative flex-1">
-											<KeyRound className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-black/30 dark:text-white/30" />
-											<input
-												type={showKeys[p.id] ? 'text' : 'password'}
-												aria-label={`${p.label} API key`}
-												placeholder={`${p.label} API key`}
-												value={apiKeys[p.id] || ''}
-												onChange={e => handleKeyChange(p.id, e.target.value)}
-												className="w-full pl-8 pr-8 py-2 rounded-lg bg-white dark:bg-black/20 border border-black/10 dark:border-white/10 text-xs focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:ring-white/10"
-											/>
-											<button type="button" aria-label={`Toggle ${p.label}`} onClick={() => setShowKeys(prev => ({ ...prev, [p.id]: !prev[p.id] }))} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-black/5 dark:hover:bg-white/10">
-												{showKeys[p.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-											</button>
-										</div>
-										<Button variant="secondary" size="sm" disabled={!!testingKey[p.id]} onClick={() => handleTestKey(p.id)} className="h-8 text-xs px-3 shrink-0">{testingKey[p.id] ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Test'}</Button>
-										<Button size="sm" onClick={() => handleSaveKey(p.id)} className="h-8 text-xs px-3 shrink-0 bg-[#191713] text-white dark:bg-white dark:text-black">Save</Button>
-									</div>
-								</div>
-								{isCustom && (
-									<div className="flex items-center gap-2 pl-0 sm:pl-40">
-										<input
-											type="text"
-											placeholder="Custom base URL (https://api.example.com/v1)"
-											value={customBaseUrls[p.id] || ''}
-											onChange={e => setCustomBaseUrls(prev => ({ ...prev, [p.id]: e.target.value }))}
-											className="flex-1 py-2 px-3 rounded-lg bg-white dark:bg-black/20 border border-black/10 dark:border-white/10 text-xs focus:outline-none focus:ring-2 focus:ring-black/10"
-										/>
-									</div>
-								)}
-							</div>
-						)
-					})}
-				</div>
-				<p className="text-[11px] leading-4 text-black/50 dark:text-white/50">Save a key for the provider you want to use. Use the model list below to choose a supported model.</p>
-			</section>
-
-			<section className="rounded-2xl border border-black/10 dark:border-white/10 bg-white dark:bg-white/[0.03] p-5 space-y-4">
-				<h3 className="text-sm font-bold">All models</h3>
-				<label className="grid gap-2 text-sm">
-					Model
-					<select value={selectedModel ? optionKey(selectedModel) : ''}
-						onChange={event => setModelChoice(event.target.value)}
-						className="min-h-11 w-full max-w-sm rounded-md border border-outline-variant bg-background px-3 text-on-surface">
-						{models.map(model => (
-							<option key={optionKey(model)} value={optionKey(model)}>{model.name} · {model.provider}</option>
-						))}
-					</select>
-				</label>
-				<div>
-					{selectedModel && [selectedModel].map(model => {
-						const isActive = state.activeModelId === model.id && state.activeProviderId === model.provider
-						const hwBadge = hardware && model.costTier === 'local' ? (() => { const r = getHardwareRecommendation(hardware); return { text: r.badgeText, variant: r.badgeVariant } })() : null
-						const compatible = isModelCompatible(model, hardware)
-						const keyConfigured = hasKey(model.provider)
-						const needsKey = model.costTier !== 'local' && !keyConfigured
-						return (
-							<div key={model.id} className={`rounded-2xl border p-4 flex flex-col gap-3 ${isActive ? 'border-black dark:border-white bg-black/[0.02] dark:bg-white/[0.06] ring-1 ring-black/5' : 'border-black/10 dark:border-white/10 bg-white dark:bg-white/[0.02] hover:bg-black/[0.02] dark:hover:bg-white/[0.04]'}`}>
-								<div className="flex items-start justify-between gap-2">
-									<div className="min-w-0">
-										<div className="text-sm font-semibold leading-none flex items-center gap-1.5 truncate">{model.name} {isActive && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}</div>
-										<div className="text-[11px] leading-4 text-black/60 dark:text-white/60 mt-1 line-clamp-2">{formatModelDescription(model)}</div>
-									</div>
-									<span className="shrink-0 text-[10px] font-bold uppercase tracking-wider px-1.5 py-1 rounded bg-black/5 dark:bg-white/10">{model.provider}</span>
-								</div>
-								<div className="flex flex-wrap gap-1.5">
-									<span className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full bg-black/5 dark:bg-white/10"><Cpu className="w-3 h-3" />{Math.round(model.contextWindow/1000)}k</span>
-									<span className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full bg-black/5 dark:bg-white/10"><Zap className="w-3 h-3" />{model.speedTokPerSec} t/s</span>
-									<span className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full ${model.costTier==='free' ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' : model.costTier==='local' ? 'bg-amber-500/10 text-amber-700' : 'bg-black/5 dark:bg-white/10'}`}><DollarSign className="w-3 h-3" />{model.costTier}</span>
-									{hwBadge && <span className={`text-[11px] px-2 py-1 rounded-full font-medium ${hwBadge.variant==='destructive' ? 'bg-red-500/10 text-red-600' : hwBadge.variant==='secondary' ? 'bg-amber-500/10 text-amber-700' : 'bg-black/5 dark:bg-white/10'}`}>{hwBadge.text}</span>}
-									{!compatible && <span className="text-[11px] px-2 py-1 rounded-full bg-red-500/10 text-red-600">Heavy for this device</span>}
-								</div>
-								{needsKey && <div className="text-[11px] text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1.5">Add a {model.provider} key above to use this model</div>}
-								<Button variant={isActive ? 'secondary' : 'default'} className={`w-full h-8 text-xs font-semibold mt-auto ${isActive ? '' : 'bg-[#191713] text-white dark:bg-white dark:text-black hover:bg-black dark:hover:bg-white/90'}`} disabled={isActive} onClick={() => handleSelectModel(model.id, model.provider)}>{isActive ? 'Active' : 'Use this model'}</Button>
-							</div>
-						)
-					})}
-					{!selectedModel && <p className="text-sm text-on-surface-variant">No models available.</p>}
-				</div>
 			</section>
 		</div>
 	)

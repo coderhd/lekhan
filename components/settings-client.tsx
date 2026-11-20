@@ -326,15 +326,18 @@ export default function SettingsClient({
 			{/* Main Tab Content */}
 			<div key={activeTab} className={styles.panel}>
 				{activeTab === 'ai' && (
-					<div id="settings-panel-ai" role="tabpanel" aria-labelledby="settings-tab-ai" className="space-y-8 w-full max-w-4xl">
-						<h2 className="text-2xl font-display-lg text-on-surface mb-2">AI & Models</h2>
-						<p className="text-sm text-on-surface-variant mb-6">Choose a provider and model. Connect your own API key or a supported local runtime.</p>
+					<div id="settings-panel-ai" role="tabpanel" aria-labelledby="settings-tab-ai" className="space-y-5 w-full max-w-4xl">
+						<header className="space-y-1">
+							<h2 className="text-2xl font-display-lg text-on-surface">AI &amp; Models</h2>
+							<p className="text-sm text-on-surface-variant">Choose a provider and model. Connect your own API key or a supported local runtime.</p>
+						</header>
 						<AIProviderSettings
 							user={user}
 							registryState={registryState}
 							onSaveRegistry={handleSaveRegistry}
-						/>
-						<BYOKSettings />
+						>
+							<BYOKSettings />
+						</AIProviderSettings>
 					</div>
 				)}
 
