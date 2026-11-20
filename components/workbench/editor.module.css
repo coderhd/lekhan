@@ -6,7 +6,16 @@
 .pageActions button:focus-visible { outline: 2px solid hsl(var(--primary-ink)); outline-offset: 2px; }
 .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding-block: 8px; border-block: 1px solid hsl(var(--outline-variant)); }
 .toolbar > div { border: 0; padding-inline: 0; height: auto; flex-wrap: wrap; }
+.toolbar > div > div { max-inline-size: 100%; height: auto; flex-wrap: wrap; }
 .toolbar button { min-width: 44px; min-height: 44px; }
+/* Reserve a glyph-sized box while the ligature font loads. */
+.toolbar button > :global(.material-symbols-outlined) {
+	display: block;
+	flex: none;
+	inline-size: 1em;
+	overflow: hidden;
+	white-space: nowrap;
+}
 /* Existing toolbar menus portal at 9999 and the link prompt at 50. Keep
    this parent dialog below both so nested controls remain visible. */
 .formattingScrim { --scrim-layer: 39; }

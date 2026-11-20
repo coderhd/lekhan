@@ -375,6 +375,20 @@
 	gap: 8px;
 	font-size: 17px;
 }
+@media (max-width: 389px) {
+	.wb-topbar {
+		flex-wrap: wrap;
+		gap: 4px;
+		padding-inline: 12px;
+	}
+	.wb-topbar-start,
+	.wb-topbar-actions {
+		gap: 4px;
+	}
+	.wb-topbar-actions {
+		margin-inline-start: auto;
+	}
+}
 @media (min-width: 414px) {
 	.wb-topbar {
 		padding-inline: 24px;
