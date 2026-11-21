@@ -1,6 +1,6 @@
 import { createTranslator } from 'next-intl'
 import { describe, expect, it } from 'vitest'
-import { getCatalog, withEnglishFallback } from '../lib/i18n/catalog'
+import { getCatalog, loadRawCatalog, withEnglishFallback } from '../lib/i18n/catalog'
 import { localeDirection, locales, resolveLocale } from '../lib/i18n/locales'
 
 describe('workspace locale', () => {
@@ -20,8 +20,8 @@ describe('workspace locale', () => {
 
 describe('workspace catalogs', () => {
   it.each(locales)('ships complete, nonempty %s catalogs with no extra keys', async (locale) => {
-    const source = await getCatalog('en')
-    const translated = await getCatalog(locale)
+    const source = await loadRawCatalog('en')
+    const translated = await loadRawCatalog(locale)
     expect(Object.keys(translated).sort()).toEqual(Object.keys(source).sort())
     for (const namespace of Object.keys(source) as (keyof typeof source)[]) {
       expect(Object.keys(translated[namespace]).sort()).toEqual(Object.keys(source[namespace]).sort())

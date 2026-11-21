@@ -100,5 +100,30 @@
   "metadata": {
     "title": "Lekhan — Arbeitsbereich",
     "description": "Schreibe, organisiere und verknüpfe deine Seiten in Lekhan."
+  },
+  "auth": {
+    "login": "Anmelden",
+    "signup": "Konto erstellen",
+    "forgot": "Passwort vergessen",
+    "reset": "Passwort zurücksetzen",
+    "forgotIntro": "Gib die E-Mail-Adresse ein, die du für Lekhan verwendest.",
+    "email": "E-Mail",
+    "password": "Passwort",
+    "newPassword": "Neues Passwort",
+    "confirmPassword": "Passwort bestätigen",
+    "sendReset": "Link zum Zurücksetzen senden",
+    "savePassword": "Passwort speichern",
+    "working": "Wird verarbeitet…",
+    "unavailable": "Die Anmeldung ist hier nicht verfügbar.",
+    "invalid": "Prüfe die E-Mail-Adresse und das Passwort.",
+    "loginError": "Anmeldung fehlgeschlagen. Prüfe E-Mail-Adresse und Passwort.",
+    "signupError": "Das Konto konnte nicht erstellt werden. Versuche es erneut.",
+    "resetError": "Das Passwort konnte nicht gespeichert werden. Fordere bei Bedarf einen neuen Link an.",
+    "confirmEmail": "Prüfe deine E-Mails, um dein Konto zu bestätigen.",
+    "resetEmail": "Wenn die Adresse registriert ist, erhältst du in Kürze einen Link.",
+    "localWorkspace": "Lokalen Arbeitsbereich öffnen",
+    "confirmError": "Der Link konnte nicht bestätigt werden. Fordere einen neuen an.",
+    "signout": "Abmelden",
+    "signoutError": "Abmeldung fehlgeschlagen. Versuche es erneut."
   }
 }

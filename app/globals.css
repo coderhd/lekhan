@@ -538,3 +538,18 @@ kbd {
 .page-tags { display: flex; flex-wrap: wrap; gap: 5px; }
 .page-tags button { padding: 4px 7px; border: 1px solid var(--line); border-radius: 5px; font-size: 12px; color: var(--pine); background: var(--overlay); overflow-wrap: anywhere; }
 .page-tags button:hover { background: var(--soft-pine); }
+
+.account-screen { min-height: 100dvh; padding: clamp(20px, 4vw, 48px); }
+.account-header { display: flex; justify-content: space-between; align-items: center; gap: 18px; max-width: 1200px; margin: auto; }
+.account-brand { display: inline-flex; align-items: center; gap: 9px; text-decoration: none; color: var(--ink); font-size: 17px; font-weight: 850; }
+.account-card { width: min(100%, 415px); margin: clamp(42px, 10dvh, 115px) auto; padding: clamp(21px, 4vw, 32px); border: 1px solid var(--line); border-radius: 13px; background: var(--overlay); }
+.account-card h1 { font: 620 clamp(32px, 5.4vw, 47px)/1.05 var(--serif); margin: 0 0 15px; }
+.account-card p { color: var(--muted); margin: 0 0 15px; }
+.account-form { display: grid; gap: 13px; }
+.account-form label { display: grid; gap: 5px; font-weight: 750; }
+.account-form input { min-width: 0; width: 100%; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); padding: 8px; }
+.account-card .account-error { margin: 0; color: var(--danger); }
+.account-card .account-feedback { color: var(--pine-dark); }
+.account-links { display: flex; flex-wrap: wrap; gap: 8px 13px; margin-top: 16px; font-size: 12px; }
+.account-links a, .account-link { color: var(--pine-dark); }
+.account-link { text-decoration: none; }

@@ -24,4 +24,14 @@ describe('workspace persistence', () => {
     expect(await loadWorkspace()).toMatchObject({ revision: 2 })
     expect((await loadWorkspace())?.pages).toHaveLength(2)
   })
+
+  it('separates browser replicas for different signed-in accounts', async () => {
+    const empty = { pages: [], activePageId: null, revision: 0 }
+    const left = createPage(empty, { title: 'Private account A page' })
+    const right = createPage(empty, { title: 'Private account B page' })
+    await Promise.all([saveWorkspace(left, 0, 'account:a'), saveWorkspace(right, 0, 'account:b')])
+    expect((await loadWorkspace('account:a'))?.pages.map(page => page.title)).toEqual(['Private account A page'])
+    expect((await loadWorkspace('account:b'))?.pages.map(page => page.title)).toEqual(['Private account B page'])
+    expect((await loadWorkspace())?.pages.some(page => page.title.startsWith('Private account'))).toBe(false)
+  })
 })

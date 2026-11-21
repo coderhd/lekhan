@@ -9,15 +9,15 @@ import { endpointFor, FREE_PRESETS, PROVIDERS, providerDefinition, type Provider
 import { createProviderVault, unlockProviderVault } from '@/lib/ai/vault'
 import { Dialog } from './workspace-dialogs'
 
-const vaultKey = 'lekhan:provider-vault:v1'
+const defaultVaultKey = 'lekhan:provider-vault:v1'
 const newConnection = (): ProviderConfig => ({ id: crypto.randomUUID(), provider: 'ollama', model: '' })
 type VaultSession = Awaited<ReturnType<typeof createProviderVault>>
 
-function readVault() {
+function readVault(vaultKey: string) {
   try { return localStorage.getItem(vaultKey) } catch { return null }
 }
 
-async function storeVault(previous: string | null, encrypted: string, signal: AbortSignal) {
+async function storeVault(vaultKey: string, previous: string | null, encrypted: string, signal: AbortSignal) {
   const write = () => {
     signal.throwIfAborted()
     if (localStorage.getItem(vaultKey) !== previous) {
@@ -29,12 +29,14 @@ async function storeVault(previous: string | null, encrypted: string, signal: Ab
   else write()
 }
 
-export default function AssistantDialog({ page, onInsert, onClose }: {
+export default function AssistantDialog({ page, storageScope, onInsert, onClose }: {
   page: Page
+  storageScope: string
   onInsert: (text: string) => void
   onClose: () => void
 }) {
-  const [envelope, setEnvelope] = useState(readVault)
+  const vaultKey = storageScope === 'personal' ? defaultVaultKey : defaultVaultKey + ':' + storageScope
+  const [envelope, setEnvelope] = useState(() => readVault(vaultKey))
   const [vault, setVault] = useState<VaultSession | null>(null)
   const [configs, setConfigs] = useState<ProviderConfig[]>([])
   const [active, setActive] = useState('')
@@ -82,7 +84,7 @@ export default function AssistantDialog({ page, onInsert, onClose }: {
       if (!envelope) {
         const encrypted = await opened.seal()
         if (signal.aborted) return
-        await storeVault(null, encrypted, signal)
+        await storeVault(vaultKey, null, encrypted, signal)
         setEnvelope(encrypted)
       }
       setPassphrase('')
@@ -97,7 +99,7 @@ export default function AssistantDialog({ page, onInsert, onClose }: {
     if (!vault) return
     const encrypted = await vault.seal(next)
     if (signal.aborted) return
-    await storeVault(envelope, encrypted, signal)
+    await storeVault(vaultKey, envelope, encrypted, signal)
     setEnvelope(encrypted)
     setConfigs(next)
     setActive(currentId)

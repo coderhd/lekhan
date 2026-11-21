@@ -16,12 +16,17 @@ export function withEnglishFallback<T extends Record<string, string>>(source: T,
   ])) as T
 }
 
+export function loadRawCatalog(locale: Locale) {
+  return load[locale]()
+}
+
 export async function getCatalog(locale: Locale): Promise<Catalog> {
-  const translated = await load[locale]()
+  const translated = await loadRawCatalog(locale)
   return {
     'app-shell': withEnglishFallback(en['app-shell'], translated['app-shell']),
     'editor-chrome': withEnglishFallback(en['editor-chrome'], translated['editor-chrome']),
     settings: withEnglishFallback(en.settings, translated.settings),
     metadata: withEnglishFallback(en.metadata, translated.metadata),
+    auth: withEnglishFallback(en.auth, translated.auth),
   }
 }

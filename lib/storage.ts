@@ -35,12 +35,12 @@ function openDatabase(): Promise<IDBDatabase> {
   })
 }
 
-export async function loadWorkspace(): Promise<Workspace | undefined> {
+export async function loadWorkspace(key = workspaceKey): Promise<Workspace | undefined> {
   const database = await openDatabase()
   try {
     return await new Promise((resolve, reject) => {
       const transaction = database.transaction(storeName, 'readonly')
-      const request = transaction.objectStore(storeName).get(workspaceKey)
+      const request = transaction.objectStore(storeName).get(key)
       transaction.oncomplete = () => resolve(request.result)
       transaction.onabort = () => reject(transaction.error ?? new Error('Could not read the workspace.'))
     })
@@ -49,13 +49,13 @@ export async function loadWorkspace(): Promise<Workspace | undefined> {
   }
 }
 
-export async function saveWorkspace(workspace: Workspace, expectedRevision: number): Promise<Workspace> {
+export async function saveWorkspace(workspace: Workspace, expectedRevision: number, key = workspaceKey): Promise<Workspace> {
   const database = await openDatabase()
   try {
     return await new Promise((resolve, reject) => {
       const transaction = database.transaction(storeName, 'readwrite', { durability: 'strict' })
       const store = transaction.objectStore(storeName)
-      const request = store.get(workspaceKey)
+      const request = store.get(key)
       let failure: unknown
       const snapshot = { ...workspace, revision: expectedRevision + 1 }
 
@@ -67,7 +67,7 @@ export async function saveWorkspace(workspace: Workspace, expectedRevision: numb
           return
         }
         try {
-          store.put(snapshot, workspaceKey)
+          store.put(snapshot, key)
         } catch (error) {
           failure = error
           transaction.abort()

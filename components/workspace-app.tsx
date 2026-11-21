@@ -3,8 +3,10 @@
 import {
   ArrowDownToLine, ArrowUpFromLine, BookOpen, CalendarDays, Check, ChevronDown,
   ChevronRight, CircleAlert, FileText, FolderClosed, List, LoaderCircle, Menu, MoreHorizontal,
-  PanelRight, Plus, Search, Star, X, Link2, MoveRight, Trash2, Pencil, CornerDownRight, NotebookPen, Sparkles,
+  LogIn, LogOut, PanelRight, Plus, Search, Star, X, Link2, MoveRight, Trash2, Pencil, CornerDownRight, NotebookPen, Sparkles,
 } from 'lucide-react'
+import Link from 'next/link'
+import { signOut } from '@/app/auth/actions'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import type { Page } from '@/lib/types'
@@ -40,12 +42,15 @@ function scrollToHeading(target: HTMLElement) {
   target.scrollIntoView({ block: 'start' })
 }
 
-export default function WorkspaceApp() {
+export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled = false, signedIn = false }: {
+  storageScope?: string; cloudEnabled?: boolean; signedIn?: boolean
+}) {
   const t = useTranslations('app-shell')
+  const accountText = useTranslations('auth')
   const editorText = useTranslations('editor-chrome')
   const locale = useLocale()
   const dateLabel = useMemo(() => new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', year: 'numeric' }), [locale])
-  const { workspace, status, change, retry, reload } = useWorkspace()
+  const { workspace, status, change, retry, reload } = useWorkspace(storageScope)
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [vaultOpen, setVaultOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -371,6 +376,9 @@ export default function WorkspaceApp() {
             setVaultOpen(true)
           }}><FolderClosed size={15} /> Import vault</button>
           <LocaleSwitcher />
+          {cloudEnabled && (signedIn
+            ? <form action={signOut}><button className="nav-action" type="submit"><LogOut size={15} /> {accountText('signout')}</button></form>
+            : <Link className="nav-action account-link" href="/login"><LogIn size={15}/> {accountText('login')}</Link>) }
         </div>
       </aside>
 
@@ -546,7 +554,7 @@ export default function WorkspaceApp() {
       </aside>
 
       <input hidden type="file" multiple ref={importInput} accept=".md,.markdown,.txt,text/markdown,text/plain" onChange={importFiles} />
-      {assistantOpen && page && <AssistantDialog page={page} onClose={() => setAssistantOpen(false)} onInsert={text => {
+      {assistantOpen && page && <AssistantDialog page={page} storageScope={storageScope} onClose={() => setAssistantOpen(false)} onInsert={text => {
         change(state => {
           const current = state.pages.find(item => item.id === page.id)
           return current ? updatePage(state, current.id, { markdown: [current.markdown, text].filter(Boolean).join('\n\n') }) : state

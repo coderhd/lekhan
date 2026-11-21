@@ -100,5 +100,30 @@
   "metadata": {
     "title": "Lekhan — Espacio de trabajo",
     "description": "Escribe, organiza y conecta tus páginas en Lekhan."
+  },
+  "auth": {
+    "login": "Iniciar sesión",
+    "signup": "Crear una cuenta",
+    "forgot": "Olvidé mi contraseña",
+    "reset": "Restablecer la contraseña",
+    "forgotIntro": "Introduce el correo que usas para Lekhan.",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "newPassword": "Nueva contraseña",
+    "confirmPassword": "Confirmar contraseña",
+    "sendReset": "Enviar enlace de recuperación",
+    "savePassword": "Guardar contraseña",
+    "working": "En curso…",
+    "unavailable": "El acceso a cuentas no está disponible aquí.",
+    "invalid": "Comprueba los campos de correo y contraseña.",
+    "loginError": "No se pudo iniciar sesión. Comprueba el correo y la contraseña.",
+    "signupError": "No se pudo crear la cuenta. Inténtalo de nuevo.",
+    "resetError": "No se pudo guardar la contraseña. Si el enlace caducó, solicita otro.",
+    "confirmEmail": "Revisa tu correo para confirmar tu cuenta.",
+    "resetEmail": "Si el correo está registrado, recibirás un enlace en breve.",
+    "localWorkspace": "Abrir el espacio de trabajo local",
+    "confirmError": "No se pudo verificar el enlace. Solicita uno nuevo.",
+    "signout": "Cerrar sesión",
+    "signoutError": "No se pudo cerrar la sesión. Inténtalo de nuevo."
   }
 }

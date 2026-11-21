@@ -100,5 +100,30 @@
   "metadata": {
     "title": "Lekhan — Workspace",
     "description": "Write, organize, and connect your pages in Lekhan."
+  },
+  "auth": {
+    "login": "Sign in",
+    "signup": "Create an account",
+    "forgot": "Forgot password",
+    "reset": "Reset your password",
+    "forgotIntro": "Enter the email address you use for Lekhan.",
+    "email": "Email",
+    "password": "Password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm password",
+    "sendReset": "Send reset link",
+    "savePassword": "Save password",
+    "working": "Working…",
+    "unavailable": "Account access is unavailable here.",
+    "invalid": "Check the email and password fields.",
+    "loginError": "Couldn’t sign in. Check your email and password.",
+    "signupError": "Couldn’t create the account. Try again.",
+    "resetError": "Couldn’t save the password. Request a new reset link if it expired.",
+    "confirmEmail": "Check your email for a link to confirm your account.",
+    "resetEmail": "If the email is registered, a reset link will arrive shortly.",
+    "localWorkspace": "Open the local workspace",
+    "confirmError": "The link couldn’t be verified. Request a new one.",
+    "signout": "Sign out",
+    "signoutError": "Couldn’t sign out. Try again."
   }
 }

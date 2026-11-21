@@ -100,5 +100,30 @@
   "metadata": {
     "title": "Lekhan — 工作区",
     "description": "在 Lekhan 中编写、整理并连接你的页面。"
+  },
+  "auth": {
+    "login": "登录",
+    "signup": "创建账户",
+    "forgot": "忘记密码",
+    "reset": "重置密码",
+    "forgotIntro": "请输入你在 Lekhan 使用的邮箱地址。",
+    "email": "邮箱",
+    "password": "密码",
+    "newPassword": "新密码",
+    "confirmPassword": "确认密码",
+    "sendReset": "发送重置链接",
+    "savePassword": "保存密码",
+    "working": "正在处理…",
+    "unavailable": "此处无法访问账户。",
+    "invalid": "请检查邮箱和密码。",
+    "loginError": "登录失败。请检查邮箱和密码。",
+    "signupError": "无法创建账户。请重试。",
+    "resetError": "无法保存密码。如果链接已过期，请申请新的重置链接。",
+    "confirmEmail": "请查收确认账户的邮件。",
+    "resetEmail": "如果该邮箱已注册，你很快会收到重置链接。",
+    "localWorkspace": "打开本地工作区",
+    "confirmError": "无法验证链接，请申请新链接。",
+    "signout": "退出登录",
+    "signoutError": "无法退出登录，请重试。"
   }
 }

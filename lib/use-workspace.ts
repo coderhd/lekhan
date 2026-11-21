@@ -7,7 +7,7 @@ import type { Workspace } from './types'
 
 export type SaveStatus = 'loading' | 'saving' | 'saved' | 'error' | 'conflict'
 
-export function useWorkspace() {
+export function useWorkspace(scope = 'personal') {
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [status, setStatus] = useState<SaveStatus>('loading')
   const current = useRef<Workspace | null>(null)
@@ -23,7 +23,7 @@ export function useWorkspace() {
       while (current.current && current.current !== persisted.current) {
         const snapshot: Workspace = current.current
         setStatus('saving')
-        const saved = await saveWorkspace(snapshot, revision.current)
+        const saved = await saveWorkspace(snapshot, revision.current, scope)
         revision.current = saved.revision
         persisted.current = snapshot
       }
@@ -34,7 +34,7 @@ export function useWorkspace() {
     } finally {
       busy.current = false
     }
-  }, [])
+  }, [scope])
 
   const hydrate = useCallback((saved?: Workspace) => {
     const initial = saved ?? starterWorkspace()
@@ -49,13 +49,13 @@ export function useWorkspace() {
 
   useEffect(() => {
     const controller = new AbortController()
-    void loadWorkspace().then(saved => {
+    void loadWorkspace(scope).then(saved => {
       if (!controller.signal.aborted) hydrate(saved)
     }).catch(() => {
       if (!controller.signal.aborted) setStatus('error')
     })
     return () => controller.abort()
-  }, [hydrate])
+  }, [hydrate, scope])
 
   useEffect(() => {
     if (!workspace || status === 'saved' || status === 'loading') return
@@ -80,11 +80,11 @@ export function useWorkspace() {
   const reload = useCallback(async () => {
     setStatus('loading')
     try {
-      hydrate(await loadWorkspace())
+      hydrate(await loadWorkspace(scope))
     } catch {
       setStatus('error')
     }
-  }, [hydrate])
+  }, [hydrate, scope])
 
   return {
     workspace,
