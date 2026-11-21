@@ -1,4 +1,6 @@
+import { lexer, type Token, type Tokens } from 'marked'
 import type { Page, PageChoice, Workspace } from './types'
+import { hasYamlFrontmatter } from './markdown'
 
 type PageInput = Partial<Pick<Page, 'title' | 'parentId' | 'markdown'>>
 type PagePatch = PageInput & Partial<Pick<Page, 'favorite'>>
@@ -329,24 +331,23 @@ export function searchPages(pages: Page[], query: string): Page[] {
     .map(({ page }) => page)
 }
 
-export function pageHeadings(markdown: string): { text: string; level: number }[] {
-  return proseRanges(markdown).flatMap(({ start, end }) => {
-    const lines = markdown.slice(start, end).split(/\r?\n/)
-    const headings = []
-    for (let i = 0; i < lines.length; i++) {
-      const heading = /^ {0,3}(#{1,6})[ \t]+(.+)$/.exec(lines[i])
-      if (heading) {
-        headings.push({ level: heading[1].length, text: heading[2].replace(/[ \t]+#+[ \t]*$/, '').trim() })
-        continue
-      }
-      const underline = /^ {0,3}(=+|-+)[ \t]*$/.exec(lines[i + 1] ?? '')
-      if (underline && /^ {0,3}[^\s#>*+-]/.test(lines[i])) {
-        headings.push({ level: underline[1][0] === '=' ? 1 : 2, text: lines[i].trim() })
-        i++
-      }
-    }
-    return headings
-  })
+function inlineText(tokens: Token[]): string {
+  return tokens.map(token => {
+    if ('tokens' in token && Array.isArray(token.tokens)) return inlineText(token.tokens)
+    if (!('text' in token) || typeof token.text !== 'string') return ''
+    if (token.type !== 'text') return token.text
+    return token.text.replace(/\[\[([^|\]]+)(?:\|([^\]]+))?\]\]/g, (_, target, label) => label ?? target)
+  }).join('')
+}
+
+export function pageHeadings(markdown: string) {
+  let cursor = 0
+  return lexer(markdown).filter((token): token is Tokens.Heading => token.type === 'heading')
+    .map(token => {
+      const offset = markdown.indexOf(token.raw.trimEnd(), cursor)
+      if (offset >= 0) cursor = offset + token.raw.trimEnd().length
+      return { text: inlineText(token.tokens).trim(), level: token.depth, offset }
+    })
 }
 
 export function fromMarkdownFile(filename: string, source: string) {
@@ -360,5 +361,5 @@ export function fromMarkdownFile(filename: string, source: string) {
 }
 
 export function exportPage(page: Page) {
-  return `# ${page.title}\n\n${page.markdown}`
+  return hasYamlFrontmatter(page.markdown) ? page.markdown : `# ${page.title}\n\n${page.markdown}`
 }

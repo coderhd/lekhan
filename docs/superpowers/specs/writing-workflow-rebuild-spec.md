@@ -8,7 +8,7 @@ The rebuild starts at the first H0–H3 roadmap commit, `cffafe9`. The first mil
 - Write in a rich editor. Use keyboard input or visible controls to add headings, lists, tasks, quotes, and code. Typing `/` offers block commands and typing `[[` offers pages to link. Both menus support keyboard selection and dismissal.
 - Navigate between pages with the sidebar, breadcrumbs, keyboard search, and inline links. Search matches titles and Markdown body text. Page context shows the outline and inbound links, and updates as pages change.
 - Save locally and show the status of the durable write. Reopening the same browser restores pages. Prevent a second tab from silently overwriting a more recent workspace revision.
-- Import Markdown files into the workspace and export a page or the complete workspace as Markdown. Preserve the supported block types and wikilinks. Imported files start with their original Markdown.
+- Import Markdown files into the workspace and export a page or the complete workspace as Markdown. Preserve the supported block types and wikilinks. Imported files start with their original Markdown. Edit source directly when the visual editor cannot preserve an imported construct.
 - Make all essential actions usable by keyboard and on a narrow display. Test actual navigation, creation, editing, links, search, reload recovery, and import/export in Chromium.
 
 ## Reference behavior

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { type Editor, EditorContent, useEditor } from '@tiptap/react'
 import { FileText, Link2 } from 'lucide-react'
 import type { PageChoice } from '@/lib/types'
@@ -8,6 +8,7 @@ import { blockCommands } from './editor/block-commands'
 import { CommandMenu, type CommandItem } from './editor/command-menu'
 import { type CommandMatch, findCommand, validWikiLink } from './editor/editor-commands'
 import { FormatToolbar } from './editor/format-toolbar'
+import { requiresMarkdownSource } from './editor/source-mode'
 import { writingExtensions } from './editor/writing-extensions'
 import './editor/editor.css'
 
@@ -95,7 +96,68 @@ function getItems(choices: PageChoice[], pageId: string, match: CommandMatch): C
 }
 
 export default function PageEditor(props: PageEditorProps) {
-  return <PageEditorSession key={props.pageId} {...props} />
+  return <PageEditorView key={props.pageId} {...props} />
+}
+
+function PageEditorView(props: PageEditorProps) {
+  const { markdown, onChange, editable = true, focusOnMount = false } = props
+  const sourceOnly = useMemo(() => requiresMarkdownSource(markdown), [markdown])
+  const [preferSource, setPreferSource] = useState(sourceOnly)
+  const [focusAfterSwitch, setFocusAfterSwitch] = useState(false)
+  const source = sourceOnly || preferSource
+  const hintId = useId()
+
+  function selectMode(nextSource: boolean) {
+    if (source === nextSource) return
+    setFocusAfterSwitch(true)
+    setPreferSource(nextSource)
+  }
+
+  const modePicker = (
+    <div className="writer-mode-picker" role="group" aria-label="Editor mode">
+      <button
+        type="button"
+        aria-pressed={!source}
+        disabled={sourceOnly}
+        onClick={() => selectMode(false)}
+      >
+        Write
+      </button>
+      <button type="button" aria-pressed={source} onClick={() => selectMode(true)}>
+        Markdown
+      </button>
+    </div>
+  )
+
+  const focusBody = focusOnMount || focusAfterSwitch
+  if (!source) return <PageEditorSession {...props} focusOnMount={focusBody} modePicker={modePicker} />
+
+  return (
+    <div className="writer-editor">
+      <div className="writer-toolbar">{modePicker}</div>
+      {sourceOnly && (
+        <p id={hintId} className="writer-source-hint">
+          Edit the Markdown below to keep this page’s formatting. Write mode is available for plain text and supported blocks.
+        </p>
+      )}
+      <textarea
+        className="writer-source"
+        aria-label="Markdown source"
+        aria-describedby={sourceOnly ? hintId : undefined}
+        autoFocus={focusBody}
+        value={markdown}
+        readOnly={!editable}
+        spellCheck={false}
+        placeholder="Start writing in Markdown."
+        onChange={(event) => {
+          setPreferSource(true)
+          const value = event.target.value
+          const windowsLineEndings = markdown.includes('\r\n') && !/(?<!\r)\n/.test(markdown)
+          onChange(windowsLineEndings ? value.replaceAll('\n', '\r\n') : value)
+        }}
+      />
+    </div>
+  )
 }
 
 function PageEditorSession({
@@ -106,7 +168,8 @@ function PageEditorSession({
   onOpenLink,
   editable = true,
   focusOnMount = false,
-}: PageEditorProps) {
+  modePicker,
+}: PageEditorProps & { modePicker: ReactNode }) {
   const menuId = useId()
   const [menu, setMenu] = useState<MenuState | null>(null)
   const menuState = useRef<MenuState | null>(null)
@@ -224,6 +287,16 @@ function PageEditorSession({
   const items = menu ? getItems(choices, pageId, menu.match) : []
   const activeItem = Math.max(0, Math.min(menu?.active ?? 0, items.length - 1))
 
+  function activatePageLink(event: MouseEvent | KeyboardEvent) {
+    if (event instanceof KeyboardEvent && (event.key !== 'Enter' || event.isComposing)) return false
+    if (!(event.target instanceof Element)) return false
+    const target = event.target.closest('[data-page-link]')?.getAttribute('data-page-link')
+    if (!target) return false
+    event.preventDefault()
+    onOpenLink(target)
+    return true
+  }
+
   const editor: Editor | null = useEditor({
     immediatelyRender: false,
     shouldRerenderOnTransaction: false,
@@ -244,15 +317,8 @@ function PageEditorSession({
       },
       handleKeyDown: (_view, event) => editor ? handleMenuKey(editor, event) : false,
       handleDOMEvents: {
-        click: (_view, event) => {
-          if (!(event.target instanceof Element)) return false
-          const link = event.target.closest('[data-page-link]')
-          const target = link?.getAttribute('data-page-link')
-          if (!target) return false
-          event.preventDefault()
-          onOpenLink(target)
-          return true
-        },
+        click: (_view, event) => activatePageLink(event),
+        keydown: (_view, event) => activatePageLink(event),
       },
     },
     onUpdate: ({ editor: current }) => {
@@ -336,8 +402,11 @@ function PageEditorSession({
           openPageLinks={() => openManual('page')}
           openMenu={menu?.match.type}
           menuId={menuId}
-        />
+        >
+          {modePicker}
+        </FormatToolbar>
       )}
+      {(!editor || !editable) && <div className="writer-toolbar">{modePicker}</div>}
       <EditorContent editor={editor} />
       {editor && menu && (
         <CommandMenu

@@ -125,11 +125,16 @@ describe('page content', () => {
 
   it('extracts headings while ignoring fenced code and removes closing hashes', () => {
     const markdown = '## Brief ##\n\n```md\n# Example\n```\n   ### Details\n\nConclusion\n----------'
-    expect(pageHeadings(markdown)).toEqual([
+    expect(pageHeadings(markdown).map(({ text, level }) => ({ text, level }))).toEqual([
       { text: 'Brief', level: 2 },
       { text: 'Details', level: 3 },
       { text: 'Conclusion', level: 2 },
     ])
+  })
+
+  it('keeps YAML metadata at the very start of the Markdown export', () => {
+    const source = '---\ntags: [writing]\n---\n\nA paragraph.'
+    expect(exportPage(page('a', 'Writing', null, source))).toBe(source)
   })
 
   it('preserves Markdown on import and avoids duplicating an exported title', () => {

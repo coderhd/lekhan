@@ -57,6 +57,17 @@ export function useWorkspace() {
     return () => controller.abort()
   }, [hydrate])
 
+  useEffect(() => {
+    if (!workspace || status === 'saved' || status === 'loading') return
+    function confirmUnsavedChanges(event: BeforeUnloadEvent) {
+      if (current.current === persisted.current) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', confirmUnsavedChanges)
+    return () => window.removeEventListener('beforeunload', confirmUnsavedChanges)
+  }, [status, workspace])
+
   const change = useCallback((update: (previous: Workspace) => Workspace) => {
     if (!current.current) return
     const next = update(current.current)

@@ -30,7 +30,7 @@ test('writes, links, finds, renames, reloads, and exports a nested page', async 
   await expect(page.getByRole('complementary', { name: 'Page context' }).getByRole('button', { name: /Test notebook/ })).toBeVisible()
 
   await page.keyboard.press('Control+k')
-  const query = page.getByRole('searchbox', { name: 'Search pages' })
+  const query = page.getByRole('combobox', { name: 'Search pages' })
   await query.fill('useful sentence')
   await query.press('Enter')
   await expect(title).toHaveValue('Test notebook')
@@ -97,4 +97,61 @@ test('surfaces a stale tab and reloads its latest saved copy only after confirma
   await secondTab.getByRole('button', { name: 'Open saved copy' }).click()
   await dialog.getByRole('button', { name: 'Open saved copy' }).click()
   await expect(secondTab.getByRole('textbox', { name: 'Page title' })).toHaveValue('Newer title')
+})
+
+test('saves title edits while the title still has focus', async ({ page }) => {
+  await page.goto('/')
+  const title = page.getByRole('textbox', { name: 'Page title' })
+  await title.fill('Draft title')
+  await expect(title).toBeFocused()
+  await expect(page.getByRole('status')).toHaveText('Saved locally')
+  await page.reload()
+  await expect(title).toHaveValue('Draft title')
+  await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Draft title')
+})
+
+test('opens an inline page link with the keyboard', async ({ page }) => {
+  await page.goto('/')
+  const link = page.getByRole('textbox', { name: 'Page content' }).getByRole('link', { name: 'Quick capture' })
+  await link.focus()
+  await expect(link).toBeFocused()
+  await link.press('Enter')
+  await expect(page.getByRole('textbox', { name: 'Page title' })).toHaveValue('Quick capture')
+})
+
+test('keeps table and image syntax after editing imported Markdown', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('status')).toHaveText('Saved locally')
+  const source = '## Notes\n\n| Column | Value |\n| --- | --- |\n| First | 42 |\n\n![Field sketch](https://example.test/sketch.png)'
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'Field research.md', mimeType: 'text/markdown', buffer: Buffer.from(source),
+  })
+  const markdown = page.getByRole('textbox', { name: 'Markdown source' })
+  await expect(markdown).toHaveValue(source)
+  await markdown.fill(source.replace('## Notes', '## Field notes'))
+  await expect(page.getByRole('status').filter({ hasText: 'Saved locally' })).toBeVisible()
+  await page.reload()
+  await expect(markdown).toHaveValue(source.replace('## Notes', '## Field notes'))
+  await page.locator('summary[aria-label="Page actions"]').click()
+  const exported = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export Markdown' }).click()
+  expect(await readFile(await (await exported).path(), 'utf8')).toContain(source.replace('## Notes', '## Field notes'))
+})
+
+test('shows formatted headings in the outline and follows their wikilink anchors', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('status')).toHaveText('Saved locally')
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'With outline.md',
+    mimeType: 'text/markdown',
+    buffer: Buffer.from('Go to [[#Overview]].\n\n## **Overview**\n\nA heading with formatting.'),
+  })
+  const heading = page.getByRole('heading', { name: 'Overview', exact: true })
+  const outline = page.getByRole('complementary', { name: 'Page context' })
+  await expect(outline.getByRole('button', { name: 'Overview', exact: true })).toBeVisible()
+  await page.getByRole('link', { name: '#Overview' }).click()
+  await expect.poll(() => heading.evaluate(element => {
+    const anchor = document.getSelection()?.anchorNode
+    return !!anchor && element.contains(anchor)
+  })).toBe(true)
 })

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { type Editor, useEditorState } from '@tiptap/react'
 import { Bold, Code2, Italic, Link2, Plus, Strikethrough } from 'lucide-react'
 
@@ -7,9 +8,10 @@ interface FormatToolbarProps {
   openPageLinks: () => void
   openMenu: 'block' | 'page' | undefined
   menuId: string
+  children: ReactNode
 }
 
-export function FormatToolbar({ editor, openBlocks, openPageLinks, openMenu, menuId }: FormatToolbarProps) {
+export function FormatToolbar({ editor, openBlocks, openPageLinks, openMenu, menuId, children }: FormatToolbarProps) {
   const marks = useEditorState({
     editor,
     selector: ({ editor: currentEditor }) => ({
@@ -72,6 +74,7 @@ export function FormatToolbar({ editor, openBlocks, openPageLinks, openMenu, men
       >
         <Link2 size={17} aria-hidden="true" />
       </button>
+      {children}
     </div>
   )
 }

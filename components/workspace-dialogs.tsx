@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { CornerDownLeft, FileText, Search, X } from 'lucide-react'
 import type { Page } from '@/lib/types'
@@ -52,6 +52,7 @@ export function SearchDialog({
   onOpen: (id: string) => void
   onClose: () => void
 }) {
+  const resultsId = useId()
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState(0)
   const results = searchPages(pages, query).slice(0, 30)
@@ -69,7 +70,12 @@ export function SearchDialog({
         <input
           autoFocus
           type="search"
+          role="combobox"
           aria-label="Search pages"
+          aria-autocomplete="list"
+          aria-expanded="true"
+          aria-controls={resultsId}
+          aria-activedescendant={selected >= 0 ? `${resultsId}-${results[selected].id}` : undefined}
           placeholder="Find a page or a phrase…"
           value={query}
           onChange={event => {
@@ -95,13 +101,18 @@ export function SearchDialog({
       </div>
       <div className="search-results">
         <p className="section-label">{query.trim() ? 'Results' : 'Recent pages'}</p>
+        <div id={resultsId} role="listbox" aria-label="Matching pages">
         {results.map((page, index) => {
           const ancestors = pagePath(pages, page.id).slice(0, -1)
           return (
             <button
               key={page.id}
               ref={index === selected ? row : undefined}
+              id={`${resultsId}-${page.id}`}
               className="search-result"
+              role="option"
+              tabIndex={-1}
+              aria-selected={index === selected}
               data-selected={index === selected}
               onPointerMove={() => setHighlight(index)}
               onClick={() => onOpen(page.id)}
@@ -115,7 +126,8 @@ export function SearchDialog({
             </button>
           )
         })}
-        {results.length === 0 && <p className="dialog-empty">No pages found.</p>}
+        </div>
+        {results.length === 0 && <p className="dialog-empty" role="status">No pages found.</p>}
       </div>
       <div className="search-help">
         <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>

@@ -478,8 +478,11 @@ kbd {
   .document { padding: 37px 20px 55px; }
   .document-meta { margin-bottom: 14px; }
   .document-title { font-size: clamp(42px, 11vw, 58px); margin-bottom: 12px; }
-  .writer-toolbar { margin-bottom: 19px; }
+  .writer-toolbar { margin-bottom: 19px; gap: 1px; }
   .writer-icon-button { height: 39px; min-width: 34px; }
+  .writer-icon-button.writer-add-block { width: 34px; padding: 0; }
+  .writer-add-block > span { display: none; }
+  .writer-toolbar-divider { margin-inline: 2px; }
   .editor-footer { padding-inline: 13px; }
 }
 

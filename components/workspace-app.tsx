@@ -32,6 +32,16 @@ function statusText(status: SaveStatus) {
 
 type PageAction = { kind: 'move' | 'delete'; id: string } | { kind: 'link'; target: string } | { kind: 'reload' }
 
+function renderedHeadings(container: ParentNode) {
+  return Array.from(container.querySelectorAll<HTMLElement>('.writer-content > :is(h1,h2,h3,h4,h5,h6)'))
+}
+
+function scrollToHeading(target: HTMLElement) {
+  target.closest<HTMLElement>('.writer-content')?.focus({ preventScroll: true })
+  window.getSelection()?.collapse(target, 0)
+  target.scrollIntoView({ block: 'start' })
+}
+
 export default function WorkspaceApp() {
   const { workspace, status, change, retry, reload } = useWorkspace()
   const [searchOpen, setSearchOpen] = useState(false)
@@ -43,6 +53,7 @@ export default function WorkspaceApp() {
   const [focusTitle, setFocusTitle] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
   const [titleFocusRequest, setTitleFocusRequest] = useState(0)
+  const [titleDraft, setTitleDraft] = useState<{id: string; value: string} | null>(null)
   const importInput = useRef<HTMLInputElement>(null)
   const titleInput = useRef<HTMLTextAreaElement>(null)
   const pageMenu = useRef<HTMLDetailsElement>(null)
@@ -139,8 +150,8 @@ export default function WorkspaceApp() {
     }
     const anchor = target.split('#')[1]?.trim()
     if (anchor && match.id === page?.id) {
-      const index = headings.findIndex(heading => heading.text.toLowerCase() === anchor.toLowerCase())
-      if (index >= 0) jumpToHeading(index)
+      const target = renderedHeadings(document).find(heading => heading.textContent.trim().toLowerCase() === anchor.toLowerCase())
+      if (target) scrollToHeading(target)
     } else {
       anchorToOpen.current = anchor || null
       open(match.id)
@@ -213,13 +224,32 @@ export default function WorkspaceApp() {
   }
 
   function jumpToHeading(index: number) {
-    const target = document.querySelectorAll<HTMLElement>('.writer-content > :is(h1,h2,h3,h4,h5,h6)')[index]
-    if (target) {
-      target.tabIndex = -1
-      target.focus({ preventScroll: true })
-      target.scrollIntoView({ block: 'start' })
+    const moveFocus = () => {
+      const target = renderedHeadings(document)[index]
+      if (target) {
+        scrollToHeading(target)
+        return
+      }
+      const source = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Markdown source"]')
+      const heading = headings[index]
+      if (!source || !heading || heading.offset < 0) return
+      source.focus({ preventScroll: true })
+      source.setSelectionRange(heading.offset, heading.offset)
+      const before = source.value.slice(0, heading.offset).split('\n').length - 1
+      const lineHeight = Number.parseFloat(getComputedStyle(source).lineHeight)
+      const offset = before * lineHeight
+      if (source.scrollHeight > source.clientHeight) source.scrollTop = offset
+      else {
+        const panel = source.closest('.document-scroll')
+        if (panel) panel.scrollBy(0, source.getBoundingClientRect().top - panel.getBoundingClientRect().top + offset - 24)
+      }
     }
-    setMobileContext(false)
+    if (mobileContext) {
+      setMobileContext(false)
+      requestAnimationFrame(moveFocus)
+    } else {
+      moveFocus()
+    }
   }
 
   useEffect(() => {
@@ -235,12 +265,13 @@ export default function WorkspaceApp() {
     if (!anchor) return
     const container = document.querySelector('.document-scroll')
     if (!container) return
-    function findAnchor() {
-      const target = Array.from(container!.querySelectorAll<HTMLElement>('.writer-content > :is(h1,h2,h3,h4,h5,h6)'))
-        .find(heading => heading.textContent.trim().toLowerCase() === anchor?.toLowerCase())
+    const match = anchor.toLowerCase()
+    const findAnchor = () => {
+      const target = renderedHeadings(container)
+        .find(heading => heading.textContent.trim().toLowerCase() === match)
       if (!target) return false
       anchorToOpen.current = null
-      target.scrollIntoView({ block: 'start' })
+      scrollToHeading(target)
       return true
     }
     if (findAnchor()) return
@@ -370,21 +401,24 @@ export default function WorkspaceApp() {
                 <time dateTime={page.updatedAt}>{dateLabel.format(new Date(page.updatedAt))}</time>
               </div>
               <textarea
-                key={`${page.id}:${page.title}`}
                 ref={titleInput}
                 rows={1}
                 maxLength={160}
                 className="document-title"
                 aria-label="Page title"
-                defaultValue={displayPage}
+                value={titleDraft?.id === page.id ? titleDraft.value : displayPage}
                 autoFocus={focusTitle === page.id}
                 spellCheck={false}
                 onFocus={event => {
                   if (focusTitle === page.id) event.currentTarget.select()
                 }}
-                onBlur={event => {
-                  const title = event.currentTarget.value.trim() || 'Untitled'
-                  if (title !== page.title) change(state => updatePage(state, page.id, { title }))
+                onChange={event => {
+                  const title = event.currentTarget.value
+                  setTitleDraft({ id: page.id, value: title })
+                  change(state => updatePage(state, page.id, { title }))
+                }}
+                onBlur={() => {
+                  setTitleDraft(null)
                   if (focusTitle === page.id) setFocusTitle(null)
                 }}
                 onKeyDown={event => {
