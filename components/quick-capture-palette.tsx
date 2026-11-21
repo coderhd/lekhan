@@ -92,6 +92,7 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 
 	const openPalette = useCallback(() => {
 		if (!userId || isLocked || submittingRef.current) return
+		if (document.querySelector('[role="dialog"][data-modal="settings"]')) return
 		returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
 		reset()
 		setOpen(true)

@@ -47,6 +47,12 @@ export function SessionReauthProvider({ children }: { children: React.ReactNode 
 	const [error, setError] = useState<string | null>(null)
 	const [verifying, setVerifying] = useState(false)
 	
+	const passwordInput = useRef<HTMLInputElement>(null)
+	useEffect(() => {
+		// A background dialog releases its focus trap during the same commit.
+		if (isLocked) passwordInput.current?.focus()
+	}, [isLocked])
+
 	const activityTimer = useRef<NodeJS.Timeout | null>(null)
 	const isChecking = useRef(false)
 
@@ -293,7 +299,7 @@ export function SessionReauthProvider({ children }: { children: React.ReactNode 
 										required
 										className="w-full bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-lg py-3 px-4 font-body-md text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30 transition-all text-sm"
 										placeholder="Enter your password"
-										autoFocus
+										ref={passwordInput}
 									/>
 								</div>
 							</div>

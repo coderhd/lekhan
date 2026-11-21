@@ -40,7 +40,7 @@ export function ColorHighlightPopover({ editor }: { editor: Editor | null }) {
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger asChild>
 					<button className="p-1 rounded transition-colors flex items-center justify-center text-on-surface hover:bg-black/5 dark:hover:bg-white/10" title="Text Color & Highlight">
-						<span className="material-symbols-outlined text-[18px]">format_color_text</span>
+						<span aria-hidden="true" className="material-symbols-outlined text-[18px]">format_color_text</span>
 					</button>
 				</DropdownMenu.Trigger>
 

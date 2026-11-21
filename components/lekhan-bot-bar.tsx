@@ -1,5 +1,6 @@
 'use client'
 
+import { useOpenSettings } from '@/components/settings/settings-provider'
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
@@ -71,6 +72,10 @@ export default function LekhanBotBar({
 		setMounted(true)
 	}, [])
 
+	useEffect(() => {
+		if (isVisible && mounted) inputRef.current?.focus()
+	}, [isVisible, mounted])
+
 	const getSelectedText = (): string => {
 		if (!editor) return ''
 		const { from, to } = editor.state.selection
@@ -82,7 +87,6 @@ export default function LekhanBotBar({
 			setShowPresets(true)
 			setShowTranslatePicker(false)
 			setShowTransliteratePicker(false)
-			setTimeout(() => inputRef.current?.focus(), 100)
 
 			const loadUser = async () => {
 				try {
@@ -101,6 +105,7 @@ export default function LekhanBotBar({
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if (e.key === 'Escape' && isVisible) {
+				if (e.defaultPrevented || document.querySelector('[data-modal="settings"]')) return
 				onClose()
 			}
 		}
@@ -268,11 +273,12 @@ export default function LekhanBotBar({
 		)
 	}
 
+	const openSettings = useOpenSettings()
 	const handleOpenSettings = () => {
 		if (onOpenSettings) {
 			onOpenSettings()
-		} else if (typeof window !== 'undefined') {
-			window.location.href = '/settings'
+		} else {
+			openSettings('ai')
 		}
 	}
 

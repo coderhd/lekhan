@@ -116,7 +116,7 @@ export default function LoginPage() {
 							disabled={!mounted || loading}
 							aria-busy={loading}
 							aria-describedby={error ? 'login-error' : undefined}
-							className="mt-4 w-full bg-primary-container text-on-primary-fixed font-bold py-3 rounded-lg shadow-lg hover:shadow-primary-container/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 disabled:opacity-50"
+							className="ax-auth-submit"
 						>
 							{loading ? 'Signing In...' : 'Sign In'}
 						</button>

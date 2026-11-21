@@ -63,9 +63,9 @@ const contactChannels = [
 export default function ContactPage () {
 	return (
 		<div className="bg-background text-on-surface min-h-screen flex flex-col">
-			<div className="max-w-[800px] mx-auto px-6 md:px-10 pt-8 pb-24 flex-1">
+			<div className="ax-reading">
 				{/* Header */}
-				<div className="text-center mb-16">
+				<div className="ax-reading-head">
 					<h1 className="public-reading-title text-on-surface mb-4">
 						Get in Touch
 					</h1>

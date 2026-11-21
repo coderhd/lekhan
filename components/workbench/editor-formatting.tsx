@@ -1,4 +1,5 @@
 'use client'
+import { Button } from '@astryxdesign/core/Button'
 
 import { useEffect, useState, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
@@ -34,7 +35,7 @@ export default function EditorFormatting({ editor, onLink, disabled, children }:
    <Dialog.Portal>
     <Dialog.Overlay className={`${overlay.scrim} ${styles.formattingScrim}`} />
     <Dialog.Content className={`${overlay.sheet} ${styles.formattingSheet}`}>
-     <div className={overlay.heading}><Dialog.Title>More formatting</Dialog.Title><Dialog.Close aria-label="Close formatting">✕</Dialog.Close></div>
+     <div className={overlay.heading}><Dialog.Title>More formatting</Dialog.Title><Dialog.Close asChild><Button label="Close formatting" variant="ghost" isIconOnly icon={<span aria-hidden>✕</span>} /></Dialog.Close></div>
      <Dialog.Description className="sr-only">All page formatting commands.</Dialog.Description>
      <div className={styles.toolbar}>{children}</div>
     </Dialog.Content>

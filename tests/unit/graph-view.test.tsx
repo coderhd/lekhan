@@ -244,7 +244,7 @@ describe('GraphView', () => {
 
 		await waitFor(() => expect(screen.queryByRole('link', { name: 'Alpha' })).not.toBeInTheDocument())
 		expect(screen.getByRole('link', { name: 'Beta' })).toBeInTheDocument()
-		expect(screen.getByRole('status')).toHaveTextContent('1 of 2 pages')
+		expect(screen.getByText('1 of 2 pages')).toHaveAttribute('role', 'status')
 	})
 
 	it('filters nodes by tag facet', async () => {
