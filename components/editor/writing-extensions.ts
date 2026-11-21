@@ -1,8 +1,12 @@
+import Image from '@tiptap/extension-image'
+import Paragraph from '@tiptap/extension-paragraph'
 import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { Markdown } from '@tiptap/markdown'
 import { InputRule, Node } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { validWikiLink } from './editor-commands'
+import { isEmbeddedRaster } from '../../lib/markdown'
+import { Callout } from './callout'
 
 const wikiLinkPattern = /^(\[\[([^\[\]\n\r|\\]+)(?:\|([^\[\]\n\r|\\]+))?\]\])/
 const typedWikiLinkPattern = /(?<!\\)\[\[([^\[\]\n\r|\\]+)(?:\|([^\[\]\n\r|\\]+))?\]\]$/
@@ -90,6 +94,28 @@ const PageLink = Node.create({
   },
 })
 
+const VaultImage = Image.extend({
+  addInputRules() { return [] },
+  parseHTML() {
+    return [{ tag: 'img[src]', getAttrs: element => isEmbeddedRaster(element.getAttribute('src')) ? null : false }]
+  },
+  renderHTML({ HTMLAttributes }) {
+    const { src, alt, title } = HTMLAttributes
+    if (!isEmbeddedRaster(src)) return ['span', {}, String(alt || '')]
+    const size = typeof title === 'string' ? /^lekhan-size:(\d{1,4})(?:x(\d{1,4}))?$/.exec(title) : null
+    return ['img', { src, alt, loading: 'lazy', width: size?.[1], height: size?.[2], title: size ? undefined : title }]
+  },
+}).configure({ inline: true, allowBase64: true })
+
+const InlineImageParagraph = Paragraph.extend({
+  parseMarkdown(token, helpers) {
+    if (token.tokens?.length === 1 && token.tokens[0].type === 'image') {
+      return helpers.createNode('paragraph', undefined, helpers.parseInline(token.tokens))
+    }
+    return this.parent?.(token, helpers) ?? helpers.createNode('paragraph')
+  },
+})
+
 export const writingExtensions = [
   StarterKit.configure({
     link: {
@@ -97,6 +123,7 @@ export const writingExtensions = [
       HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
     },
     underline: false,
+    paragraph: false,
   }),
   TaskList,
   TaskItem.configure({
@@ -104,5 +131,8 @@ export const writingExtensions = [
     a11y: { checkboxLabel: (node) => `Complete ${node.textContent || 'task'}` },
   }),
   PageLink,
+  VaultImage,
+  InlineImageParagraph,
+  Callout,
   Markdown,
 ]

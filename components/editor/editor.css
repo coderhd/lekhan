@@ -5,7 +5,7 @@
 }
 
 .writer-content > p:only-child:has(> br.ProseMirror-trailingBreak:only-child)::before {
-  content: "Start writing, or type / for blocks.";
+  content: var(--writer-placeholder, "Start writing, or type / for blocks.");
   position: absolute;
   color: var(--muted, #657066);
   pointer-events: none;

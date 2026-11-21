@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { CornerDownLeft, FileText, Search, X } from 'lucide-react'
+import { useTranslations } from '@/lib/i18n/client'
 import type { Page } from '@/lib/types'
 import { pagePath, searchPages } from '@/lib/workspace'
 
@@ -52,6 +53,7 @@ export function SearchDialog({
   onOpen: (id: string) => void
   onClose: () => void
 }) {
+  const t = useTranslations('app-shell')
   const resultsId = useId()
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState(0)
@@ -64,19 +66,19 @@ export function SearchDialog({
   }, [selected])
 
   return (
-    <Dialog title="Search pages" onClose={onClose} className="search-dialog">
+    <Dialog title={t('searchPages')} onClose={onClose} className="search-dialog">
       <div className="search-input-row">
         <Search size={19} aria-hidden="true" />
         <input
           autoFocus
           type="search"
           role="combobox"
-          aria-label="Search pages"
+          aria-label={t('searchPages')}
           aria-autocomplete="list"
           aria-expanded="true"
           aria-controls={resultsId}
           aria-activedescendant={selected >= 0 ? `${resultsId}-${results[selected].id}` : undefined}
-          placeholder="Find a page or a phrase…"
+          placeholder={t('findPageOrPhrase')}
           value={query}
           onChange={event => {
             setQuery(event.target.value)
@@ -95,13 +97,13 @@ export function SearchDialog({
             }
           }}
         />
-        <button type="button" className="icon-button" aria-label="Close search" onClick={onClose}>
+        <button type="button" className="icon-button" aria-label={t('closeSearch')} onClick={onClose}>
           <X size={17} />
         </button>
       </div>
       <div className="search-results">
-        <p className="section-label">{query.trim() ? 'Results' : 'Recent pages'}</p>
-        <div id={resultsId} role="listbox" aria-label="Matching pages">
+        <p className="section-label">{query.trim() ? t('results') : t('recentPages')}</p>
+        <div id={resultsId} role="listbox" aria-label={t('matchingPages')}>
         {results.map((page, index) => {
           const ancestors = pagePath(pages, page.id).slice(0, -1)
           return (
@@ -127,12 +129,12 @@ export function SearchDialog({
           )
         })}
         </div>
-        {results.length === 0 && <p className="dialog-empty" role="status">No pages found.</p>}
+        {results.length === 0 && <p className="dialog-empty" role="status">{t('noResults')}</p>}
       </div>
       <div className="search-help">
-        <span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
-        <span><kbd>↵</kbd> Open</span>
-        <span><kbd>esc</kbd> Close</span>
+        <span><kbd>↑</kbd><kbd>↓</kbd> {t('navigate')}</span>
+        <span><kbd>↵</kbd> {t('open')}</span>
+        <span><kbd>esc</kbd> {t('close')}</span>
       </div>
     </Dialog>
   )

@@ -1,8 +1,9 @@
 import { lexer, type Token, type Tokens } from 'marked'
 import type { Page, PageChoice, Workspace } from './types'
 import { hasYamlFrontmatter } from './markdown'
+import type { ImportReport, VaultImportPlan } from './vault-import'
 
-type PageInput = Partial<Pick<Page, 'title' | 'parentId' | 'markdown'>>
+type PageInput = Partial<Pick<Page, 'title' | 'parentId' | 'markdown' | 'frontmatter' | 'properties'>>
 type PagePatch = PageInput & Partial<Pick<Page, 'favorite'>>
 
 interface WikiLink {
@@ -10,6 +11,7 @@ interface WikiLink {
   end: number
   target: string
   alias: string | undefined
+  embed: boolean
 }
 
 function normalize(text: string) {
@@ -166,9 +168,9 @@ function escaped(text: string, offset: number) {
   return (offset - previous) % 2 === 0
 }
 
-function wikiLinks(markdown: string): WikiLink[] {
+function wikiLinks(markdown: string, includeEmbeds = false): WikiLink[] {
   const links: WikiLink[] = []
-  const pattern = /(?<code>`+)|\[\[(?<target>[^|\]\r\n]+)(?:\|(?<alias>[^\]\r\n]+))?\]\]/g
+  const pattern = /(?<code>`+)|(?<embed>!)?\[\[(?<target>[^|\]\r\n]+)(?:\|(?<alias>[^\]\r\n]+))?\]\]/g
 
   for (const { start, end } of proseRanges(markdown)) {
     const prose = markdown.slice(start, end)
@@ -188,8 +190,9 @@ function wikiLinks(markdown: string): WikiLink[] {
         continue
       }
       const target = groups.target?.trim()
-      if (!target || prose[match.index - 1] === '!') continue
-      links.push({ target, alias: groups.alias, start: start + match.index, end: start + pattern.lastIndex })
+      const embed = !!groups.embed
+      if (!target || (embed && !includeEmbeds)) continue
+      links.push({ target, embed, alias: groups.alias, start: start + match.index, end: start + pattern.lastIndex })
     }
   }
   return links
@@ -226,22 +229,123 @@ function keepResolvedLinks(previous: Page[], next: Page[], now: string) {
   })
 }
 
-export function createPage(workspace: Workspace, input: PageInput = {}): Workspace {
-  const { pages } = workspace
-  const parentId = pages.some((page) => page.id === input.parentId) ? input.parentId ?? null : null
-  const now = new Date().toISOString()
-  const page: Page = {
+function newPage(pages: Page[], input: PageInput, parentId: string | null, now: string): Page {
+  return {
     id: crypto.randomUUID
       ? crypto.randomUUID()
       : Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join(''),
     parentId,
     title: uniqueTitle(pages, parentId, input.title ?? 'Untitled'),
     markdown: input.markdown ?? '',
+    ...(input.properties ? { properties: input.properties } : {}),
+    ...(input.frontmatter ? { frontmatter: input.frontmatter } : {}),
     favorite: false,
     createdAt: now,
     updatedAt: now,
   }
+}
+
+export function createPage(workspace: Workspace, input: PageInput = {}): Workspace {
+  const { pages } = workspace
+  const parentId = pages.some((page) => page.id === input.parentId) ? input.parentId ?? null : null
+  const now = new Date().toISOString()
+  const page = newPage(pages, input, parentId, now)
   return { ...workspace, pages: keepResolvedLinks(pages, [...pages, page], now), activePageId: page.id }
+}
+
+function findVaultTarget<T>(index: Map<string, T>, target: string, sourcePath: string) {
+  const key = normalize(target)
+  if (!key) return undefined
+  const folder = normalize(sourcePath).split('/').slice(0, -1)
+  const segments = key.startsWith('/') ? [] : [...folder]
+  for (const part of key.split('/').filter(Boolean)) {
+    if (part === '..') segments.pop()
+    else if (part !== '.') segments.push(part)
+  }
+  const relativeMatch = index.get(segments.join('/'))
+  if (relativeMatch !== undefined) return relativeMatch
+  if (key.startsWith('/') || key.startsWith('.')) return undefined
+
+  const absoluteMatch = index.get(key)
+  if (absoluteMatch !== undefined) return absoluteMatch
+  const usable = [...index].filter(([path]) => path.endsWith('/' + key))
+  return usable.length === 1 ? usable[0][1] : undefined
+}
+
+export function applyVaultImport(workspace: Workspace, plan: VaultImportPlan): { workspace: Workspace; report: ImportReport } {
+  const previous = workspace.vaultImports?.[plan.fingerprint]
+  if (previous) {
+    const activePageId = workspace.pages.some(page => page.id === previous.firstPageId)
+      ? previous.firstPageId : workspace.activePageId
+    return { workspace: activePageId === workspace.activePageId ? workspace : { ...workspace, activePageId }, report: { ...previous.report, repeated: true } }
+  }
+
+  const now = new Date().toISOString()
+  const pages = [...workspace.pages]
+  const folders = new Map<string, string>()
+  const directoryOf = (path: string) => path.split('/').slice(0, -1).join('/')
+  for (const folder of plan.directories) {
+    const title = folder.split('/').at(-1) ?? folder
+    const created = newPage(pages, { title }, folders.get(directoryOf(folder)) ?? null, now)
+    pages.push(created)
+    folders.set(folder, created.id)
+  }
+
+  const importedNotes = plan.notes.map(note => {
+    const page = newPage(pages, note, folders.get(directoryOf(note.sourcePath)) ?? null, now)
+    pages.push(page)
+    return { note, page }
+  })
+  const firstPageId = importedNotes[0].page.id
+  const { canonicalPath, resolveTarget } = buildResolver(pages)
+  const pathWithoutExtension = (path: string) => normalize(path).replace(/\.(md|markdown)$/i, '')
+  const notePaths = new Map(importedNotes.map(({ note, page }) => [pathWithoutExtension(note.sourcePath), page]))
+  const images = new Map([...plan.images].map(([path, data]) => [normalize(path), data]))
+  const usedImages = new Set<string>()
+  const report: ImportReport = {
+    notes: importedNotes.length, folders: folders.size, images: 0,
+    resolved: 0, unresolved: 0, degraded: 0, invalidProperties: plan.invalidProperties,
+  }
+  let outputSize = 0
+  for (const { page, note } of importedNotes) {
+    let body = ''
+    let cursor = 0
+    for (const link of wikiLinks(note.markdown, true)) {
+      const [path] = link.target.split('#', 1)
+      const anchor = link.target.slice(path.length)
+      const picture = link.embed ? findVaultTarget(images, path, note.sourcePath) : undefined
+      body += note.markdown.slice(cursor, link.start)
+      if (picture) {
+        usedImages.add(picture)
+        const label = path.split('/').at(-1)?.replace(/[\[\]\\]/g, '') || 'Imported image'
+        const width = /^\d{1,4}(?:x\d{1,4})?$/.test(link.alias ?? '') ? ' "lekhan-size:' + link.alias + '"' : ''
+        body += '![' + label + '](' + picture + width + ')'
+      } else {
+        if (link.embed) report.degraded++
+        const target = findVaultTarget(notePaths, pathWithoutExtension(path), note.sourcePath)
+          ?? resolveTarget(link.target, page.id)
+        if (target) report.resolved++
+        else report.unresolved++
+        const parsedTarget = target && path ? canonicalPath(target, true) + anchor : link.target
+        body += '[[' + parsedTarget + (link.alias === undefined ? '' : '|' + link.alias) + ']]'
+      }
+      if (outputSize + body.length > 140_000_000) throw new Error('Embedded images make this vault too large to import.')
+      cursor = link.end
+    }
+    page.markdown = body + note.markdown.slice(cursor)
+    outputSize += page.markdown.length
+    if (outputSize > 140_000_000) throw new Error('Embedded images make this vault too large to import.')
+  }
+  report.images = usedImages.size
+  return {
+    workspace: {
+      ...workspace,
+      pages: keepResolvedLinks(workspace.pages, pages, now),
+      activePageId: firstPageId,
+      vaultImports: { ...workspace.vaultImports, [plan.fingerprint]: { firstPageId, report } },
+    },
+    report,
+  }
 }
 
 export function updatePage(workspace: Workspace, id: string, patch: PagePatch): Workspace {
@@ -312,7 +416,7 @@ export function searchPages(pages: Page[], query: string): Page[] {
   const terms = term.split(/\s+/)
   const ranked = pages.map((page) => {
     const title = normalize(page.title)
-    const body = normalize(page.markdown)
+    const body = normalize(page.markdown + ' ' + (page.frontmatter ?? ''))
     if (!term) return { page, score: 1 }
     if (title === term) return { page, score: 5 }
     if (title.startsWith(term)) return { page, score: 4 }
@@ -361,5 +465,6 @@ export function fromMarkdownFile(filename: string, source: string) {
 }
 
 export function exportPage(page: Page) {
+  if (page.frontmatter) return page.frontmatter + page.markdown
   return hasYamlFrontmatter(page.markdown) ? page.markdown : `# ${page.title}\n\n${page.markdown}`
 }

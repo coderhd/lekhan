@@ -14,7 +14,9 @@
   "dependencies": {
     "@fontsource-variable/manrope": "5.2.8",
     "@fontsource-variable/newsreader": "5.2.10",
+    "@tiptap/extension-image": "^3.35.0",
     "@tiptap/extension-list": "3.35.0",
+    "@tiptap/extension-paragraph": "^3.35.0",
     "@tiptap/markdown": "3.35.0",
     "@tiptap/pm": "3.35.0",
     "@tiptap/react": "3.35.0",
@@ -23,8 +25,10 @@
     "lucide-react": "0.400.0",
     "marked": "^17.0.6",
     "next": "16.4.6",
+    "next-intl": "^4.15.3",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1",

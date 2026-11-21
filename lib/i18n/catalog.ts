@@ -1,0 +1,27 @@
+import en from './messages/en.json'
+import type { Locale } from './locales'
+
+type Catalog = typeof en
+const load = {
+  en: async () => en,
+  hi: async () => (await import('./messages/hi.json')).default,
+  zh: async () => (await import('./messages/zh.json')).default,
+  es: async () => (await import('./messages/es.json')).default,
+  de: async () => (await import('./messages/de.json')).default,
+} satisfies Record<Locale, () => Promise<Catalog>>
+
+export function withEnglishFallback<T extends Record<string, string>>(source: T, translated: Partial<T>): T {
+  return Object.fromEntries(Object.entries(source).map(([key, fallback]) => [
+    key, translated[key]?.trim() ? translated[key] : fallback,
+  ])) as T
+}
+
+export async function getCatalog(locale: Locale): Promise<Catalog> {
+  const translated = await load[locale]()
+  return {
+    'app-shell': withEnglishFallback(en['app-shell'], translated['app-shell']),
+    'editor-chrome': withEnglishFallback(en['editor-chrome'], translated['editor-chrome']),
+    settings: withEnglishFallback(en.settings, translated.settings),
+    metadata: withEnglishFallback(en.metadata, translated.metadata),
+  }
+}

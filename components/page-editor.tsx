@@ -3,6 +3,7 @@
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { type Editor, EditorContent, useEditor } from '@tiptap/react'
 import { FileText, Link2 } from 'lucide-react'
+import { useTranslations } from '@/lib/i18n/client'
 import type { PageChoice } from '@/lib/types'
 import { blockCommands } from './editor/block-commands'
 import { CommandMenu, type CommandItem } from './editor/command-menu'
@@ -100,6 +101,7 @@ export default function PageEditor(props: PageEditorProps) {
 }
 
 function PageEditorView(props: PageEditorProps) {
+  const editorText = useTranslations('editor-chrome')
   const { markdown, onChange, editable = true, focusOnMount = false } = props
   const sourceOnly = useMemo(() => requiresMarkdownSource(markdown), [markdown])
   const [preferSource, setPreferSource] = useState(sourceOnly)
@@ -114,17 +116,17 @@ function PageEditorView(props: PageEditorProps) {
   }
 
   const modePicker = (
-    <div className="writer-mode-picker" role="group" aria-label="Editor mode">
+    <div className="writer-mode-picker" role="group" aria-label={editorText('editorMode')}>
       <button
         type="button"
         aria-pressed={!source}
         disabled={sourceOnly}
         onClick={() => selectMode(false)}
       >
-        Write
+        {editorText('write')}
       </button>
       <button type="button" aria-pressed={source} onClick={() => selectMode(true)}>
-        Markdown
+        {editorText('markdown')}
       </button>
     </div>
   )
@@ -137,18 +139,18 @@ function PageEditorView(props: PageEditorProps) {
       <div className="writer-toolbar">{modePicker}</div>
       {sourceOnly && (
         <p id={hintId} className="writer-source-hint">
-          Edit the Markdown below to keep this page’s formatting. Write mode is available for plain text and supported blocks.
+          {editorText('sourceHint')}
         </p>
       )}
       <textarea
         className="writer-source"
-        aria-label="Markdown source"
+        aria-label={editorText('markdownSource')}
         aria-describedby={sourceOnly ? hintId : undefined}
         autoFocus={focusBody}
         value={markdown}
         readOnly={!editable}
         spellCheck={false}
-        placeholder="Start writing in Markdown."
+        placeholder={editorText('markdownPlaceholder')}
         onChange={(event) => {
           setPreferSource(true)
           const value = event.target.value
@@ -170,6 +172,7 @@ function PageEditorSession({
   focusOnMount = false,
   modePicker,
 }: PageEditorProps & { modePicker: ReactNode }) {
+  const editorText = useTranslations('editor-chrome')
   const menuId = useId()
   const [menu, setMenu] = useState<MenuState | null>(null)
   const menuState = useRef<MenuState | null>(null)
@@ -309,9 +312,10 @@ function PageEditorSession({
       attributes: {
         class: 'writer-content',
         role: 'textbox',
-        'aria-label': 'Page content',
+        'aria-label': editorText('pageContent'),
         'aria-multiline': 'true',
-        'aria-placeholder': 'Start writing, or type / for blocks.',
+        'aria-placeholder': editorText('writePlaceholder'),
+        style: '--writer-placeholder: ' + JSON.stringify(editorText('writePlaceholder')),
         ...(menuOpen ? { 'aria-controls': menuId } : {}),
         ...(items.length ? { 'aria-activedescendant': `${menuId}-${activeItem}` } : {}),
       },

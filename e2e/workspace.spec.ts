@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { unzipSync, strFromU8 } from 'fflate'
+import { unzipSync, strFromU8, zipSync, strToU8 } from 'fflate'
 import { readFile } from 'node:fs/promises'
 
 test('writes, links, finds, renames, reloads, and exports a nested page', async ({ page }) => {
@@ -154,4 +154,40 @@ test('shows formatted headings in the outline and follows their wikilink anchors
     const anchor = document.getSelection()?.anchorNode
     return !!anchor && element.contains(anchor)
   })).toBe(true)
+})
+
+test('imports an Obsidian ZIP with nested pages, properties, callouts and local images', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('status')).toHaveText('Saved locally')
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jQ1sAAAAASUVORK5CYII=', 'base64')
+  const archive = zipSync({
+    'Vault/Index.md': strToU8('> [!note] Read this first\n> Link to [[Guide/Notes|the field notes]].\n\n![[stamp.png]]'),
+    'Vault/Guide/Notes.md': strToU8('---\ntitle: Field notes\ntags: [fieldwork]\n---\n\nBody text.'),
+    'Vault/stamp.png': png,
+    'Vault/.obsidian/config.md': strToU8('Do not import.'),
+  })
+  await page.getByRole('button', { name: 'Import vault' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Import an Obsidian vault' })
+  await dialog.locator('input[type=file]').first().setInputFiles({
+    name: 'vault.zip', mimeType: 'application/zip', buffer: Buffer.from(archive),
+  })
+  await expect(dialog.getByRole('status')).toHaveText('Import saved locally')
+  await dialog.getByRole('button', { name: 'Open workspace' }).click()
+  await page.getByRole('button', { name: 'Index', exact: true }).click()
+  await expect(page.locator('aside[data-vault-callout=note]')).toContainText('Read this first')
+  await expect(page.getByRole('img', { name: 'stamp.png' })).toBeVisible()
+  await page.getByRole('link', { name: 'the field notes' }).click()
+  await expect(page.getByRole('textbox', { name: 'Page title' })).toHaveValue('Field notes')
+  await expect(page.getByRole('complementary', { name: 'Page context' })).toContainText('fieldwork')
+  await expect(page.getByRole('button', { name: 'config', exact: true })).toHaveCount(0)
+})
+
+test('keeps the selected workspace language across reload', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('combobox', { name: 'Language' }).selectOption('es')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+  await expect(page.getByRole('textbox', { name: 'Título de la página' })).toHaveValue('Field guide')
+  await page.reload()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+  await expect(page.getByRole('textbox', { name: 'Título de la página' })).toHaveValue('Field guide')
 })

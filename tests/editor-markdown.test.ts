@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { MarkdownManager } from '@tiptap/markdown'
+import { getSchema } from '@tiptap/react'
 import { writingExtensions } from '../components/editor/writing-extensions'
 import { findCommand, validWikiLink } from '../components/editor/editor-commands'
 
@@ -21,6 +22,15 @@ describe('writing Markdown', () => {
     const document = markdown.parse(source)
     expect(JSON.stringify(document)).not.toContain('"pageLink"')
     expect(markdown.serialize(document).trim()).toBe(source)
+  })
+
+  it('preserves vault callouts and places inline image nodes in valid paragraph content', () => {
+    const source = '> [!note] Read this first\n> See [[Field notes]].\n\n![stamp.png](data:image/png;base64,iVBORw0KGgo=)'
+    const document = markdown.parse(source)
+    expect(document.content?.[0]).toMatchObject({ type: 'vaultCallout', attrs: { title: 'Read this first' } })
+    expect(document.content?.[1]).toMatchObject({ type: 'paragraph', content: [{ type: 'image' }] })
+    getSchema(writingExtensions).nodeFromJSON(document).check()
+    expect(markdown.serialize(document)).toContain('> [!note] Read this first')
   })
 
   it('retains headings, tasks, quotes, formatting, and code together', () => {
