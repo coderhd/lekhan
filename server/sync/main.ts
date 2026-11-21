@@ -1,12 +1,13 @@
 import { siteOrigin } from '../../lib/auth/config.ts'
-import { createSyncAdmin, relayedPageAccess } from '../../lib/sync/authority.ts'
+import { createServerAdmin } from '../../lib/auth/admin.ts'
+import { relayedPageAccess } from '../../lib/sync/authority.ts'
 import { getTicketSecret } from '../../lib/sync/ticket.ts'
 import { createSyncHub } from './hub.ts'
 import { snapshotCipher } from './snapshot.ts'
 import { cloudSnapshots } from './supabase.ts'
 import { encryptedWal } from './wal.ts'
 
-const client = createSyncAdmin()
+const client = createServerAdmin()
 const origin = siteOrigin()
 const secret = getTicketSecret()
 const encryptionKey = process.env.LEKHAN_ENCRYPTION_KEY?.trim()

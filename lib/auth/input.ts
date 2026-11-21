@@ -4,6 +4,10 @@ export type AuthResult =
   | { outcome: 'confirmEmail' | 'resetEmail' }
   | null
 
+export function invitationPath(token: string | undefined | null) {
+  return token && /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(token) ? '/invite/' + token : null
+}
+
 export function readCredentials(form: FormData, mode: AuthMode) {
   const email = form.get('email')
   const password = form.get('password')

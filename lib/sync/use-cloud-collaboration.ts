@@ -96,10 +96,14 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
           shouldReconnect: () => false,
         })
         provider = connection
-        const onClose = () => {
+        const onClose = (event: CloseEvent | null) => {
           if (cancel.signal.aborted) return
           const remote = [...awareness.getStates().keys()].filter(id => id !== document.clientID)
           removeAwarenessStates(awareness, remote, connection)
+          if (event?.code === 4003) {
+            cachedPermission = undefined
+            void cache.del(cachedKey).catch(() => undefined)
+          }
           offline()
         }
         const onSync = (synced: boolean) => {

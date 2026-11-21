@@ -562,7 +562,7 @@ kbd {
 .cloud-search-trigger kbd { color: var(--muted); margin-inline-start: 4px; }
 .cloud-library { width: min(100%, 740px); margin: clamp(35px, 8vh, 90px) auto 50px; }
 .cloud-library h1 { font: 610 clamp(40px, 7vw, 67px)/1 var(--serif); letter-spacing: -.035em; margin: 17px 0; }
-.cloud-navigation { display: flex; align-items: center; gap: 8px; border-block: 1px solid var(--line); padding-block: 6px; }
+.cloud-navigation { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-block: 1px solid var(--line); padding-block: 6px; }
 .cloud-navigation a, .cloud-pages a { display: flex; align-items: center; gap: 8px; padding: 7px 9px; color: var(--pine); text-decoration: none; border-radius: 5px; }
 .cloud-navigation a[aria-current=page], .cloud-pages a:hover { background: var(--soft-pine); }
 .cloud-create { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-block: 20px 12px; }
@@ -577,5 +577,15 @@ kbd {
 .cloud-editor-status button { margin-inline-start: auto; min-height: 32px; }
 .cloud-page-actions { margin-top: 30px; padding-block: 12px; border-top: 1px solid var(--line); }
 .cloud-page-actions summary { color: var(--pine); font-weight: 760; }
+.sharing > section { margin-block: 24px; border-top: 1px solid var(--line); }
+.sharing h2 { margin-block: 14px 8px; font: 620 27px/1.1 var(--serif); }
+.sharing-list { padding: 0; list-style: none; margin-top: 8px; }
+.sharing-list li { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; min-height: 48px; padding-block: 9px; border-bottom: 1px solid var(--line); }
+.sharing-list li > div { min-width: 0; overflow-wrap: anywhere; }
+.sharing-list form, .invite-link, .invitation-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.sharing-list span, .invite-link { color: var(--muted); }
+.invite-link { margin-top: 6px; }
+.sharing select, .invite-link input { min-height: 35px; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; color: var(--ink); background: var(--overlay); }
+.invite-link input { max-width: 100%; }
 .collaboration-carets__caret { border-inline-start: 2px solid; margin-inline-start: -1px; position: relative; pointer-events: none; }
 .collaboration-carets__label { border-radius: 4px; color: white; font: 750 10px/1.2 var(--ui); left: -1px; padding: 3px 4px; position: absolute; top: -1.35em; white-space: nowrap; }

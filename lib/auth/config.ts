@@ -23,10 +23,11 @@ export function siteOrigin() {
   return configuredOrigin(process.env.LEKHAN_PUBLIC_URL)
 }
 
-export function confirmationTarget(type: 'email' | 'recovery') {
+export function confirmationTarget(type: 'email' | 'recovery', invite?: string) {
   const origin = siteOrigin()
   if (!origin) return null
   const url = new URL('/auth/confirm', origin)
   if (type === 'recovery') url.searchParams.set('flow', 'recovery')
+  else if (invite) url.searchParams.set('invite', invite)
   return url.toString()
 }

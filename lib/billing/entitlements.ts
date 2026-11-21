@@ -207,6 +207,15 @@ export async function resolveWorkspaceEntitlement(
 	return entitlementFromRow(data as WorkspacePlanRowLike, options)
 }
 
+export async function workspaceEntitlementOrFree(workspaceId: string, client: SupabaseClient) {
+	try {
+		return await resolveWorkspaceEntitlement(workspaceId, client)
+	} catch (failure) {
+		if (!(failure instanceof EntitlementResolutionError) || failure.stage !== 'plan-missing') throw failure
+		return null
+	}
+}
+
 /**
  * Owner id → workspace id → `workspace_plans` row. Returns `null` when the
  * owner has no workspace yet (or RLS hides it, e.g. an invitee resolving the

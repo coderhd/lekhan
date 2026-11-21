@@ -28,4 +28,17 @@ test('private cloud routes and sync tickets require an authenticated session', a
   const ticket = await page.request.get('/api/sync/session?pageId=' + id)
   expect(ticket.status()).toBe(401)
   expect(ticket.headers()['cache-control']).toContain('no-store')
+  const search = await page.request.get('/api/search?q=private')
+  expect(search.status()).toBe(401)
+  expect(search.headers()['cache-control']).toContain('no-store')
+})
+
+test('an invitation survives the sign-in and sign-up screens', async ({ page }) => {
+  const invite = 'e6a3a67a-bf74-4f17-b013-95eb59b2e937'
+  await page.goto('/invite/' + invite)
+  await expect(page).toHaveURL('/login?invite=' + invite)
+  await page.getByRole('link', { name: 'Create an account' }).click()
+  await expect(page).toHaveURL('/signup?invite=' + invite)
+  await page.getByRole('link', { name: 'Sign in' }).click()
+  await expect(page).toHaveURL('/login?invite=' + invite)
 })

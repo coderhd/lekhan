@@ -5,9 +5,9 @@ import { useTranslations } from '@/lib/i18n/client'
 import type { AuthMode } from '@/lib/auth/input'
 import { submitAuth } from '@/app/auth/actions'
 
-export function AccountForm({ mode }: { mode: AuthMode }) {
+export function AccountForm({ mode, invite }: { mode: AuthMode; invite?: string }) {
   const t = useTranslations('auth')
-  const [state, action, pending] = useActionState(submitAuth.bind(null, mode), null)
+  const [state, action, pending] = useActionState(submitAuth.bind(null, mode, invite), null)
   if (state && 'outcome' in state) return <p className="account-feedback" role="status">{t(state.outcome)}</p>
 
   const password = mode !== 'forgot'

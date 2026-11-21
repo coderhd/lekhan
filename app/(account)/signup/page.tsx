@@ -1,2 +1,5 @@
 import AccountScreen from '@/components/account-screen'
-export default function SignupPage() { return <AccountScreen mode="signup" /> }
+
+export default async function SignupPage({ searchParams }: { searchParams: Promise<{ invite?: string }> }) {
+  return <AccountScreen mode="signup" invite={(await searchParams).invite} />
+}

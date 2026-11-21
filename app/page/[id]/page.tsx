@@ -33,6 +33,7 @@ export default async function CloudPageRoute({ params, searchParams }: {
         <Link className="account-brand" href="/cloud"><span className="brand-mark" aria-hidden="true">L</span> Cloud workspace</Link>
         <div className="cloud-header-actions">
           {access.page.parent_id && <Link className="account-link" href={'/page/' + access.page.parent_id}>Parent page</Link>}
+          {access.role === 'owner' && <Link className="account-link" href={'/page/' + id + '/share'}>Share</Link>}
           <CloudSearch />
         </div>
       </header>

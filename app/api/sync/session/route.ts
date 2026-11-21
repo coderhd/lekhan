@@ -1,7 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { accountContext } from '@/lib/auth/server'
+import { createServerAdmin } from '@/lib/auth/admin'
 import { pageAccess, uuidPattern } from '@/lib/cloud/graph'
-import { createSyncAdmin, relayedPageAccess } from '@/lib/sync/authority'
+import { relayedPageAccess } from '@/lib/sync/authority'
 import { syncUrl } from '@/lib/sync/config'
 import { getTicketSecret, issueSyncTicket } from '@/lib/sync/ticket'
 
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
   if (!account) return NextResponse.json({ error: 'sign_in_required' }, { status: 401, headers })
   const endpoint = syncUrl()
   const secret = getTicketSecret()
-  const admin = createSyncAdmin()
+  const admin = createServerAdmin()
   if (!endpoint || !secret || !admin) return NextResponse.json({ error: 'sync_unavailable' }, { status: 503, headers })
 
   try {
