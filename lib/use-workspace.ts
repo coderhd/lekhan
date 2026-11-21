@@ -1,0 +1,85 @@
+'use client'
+
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { loadWorkspace, saveWorkspace, WorkspaceConflictError } from './storage'
+import { starterWorkspace } from './starter-workspace'
+import type { Workspace } from './types'
+
+export type SaveStatus = 'loading' | 'saving' | 'saved' | 'error' | 'conflict'
+
+export function useWorkspace() {
+  const [workspace, setWorkspace] = useState<Workspace | null>(null)
+  const [status, setStatus] = useState<SaveStatus>('loading')
+  const current = useRef<Workspace | null>(null)
+  const revision = useRef(0)
+  const persisted = useRef<Workspace | null>(null)
+  const busy = useRef(false)
+  const conflict = useRef(false)
+
+  const flush = useCallback(async () => {
+    if (busy.current || conflict.current) return
+    busy.current = true
+    try {
+      while (current.current && current.current !== persisted.current) {
+        const snapshot: Workspace = current.current
+        setStatus('saving')
+        const saved = await saveWorkspace(snapshot, revision.current)
+        revision.current = saved.revision
+        persisted.current = snapshot
+      }
+      setStatus('saved')
+    } catch (error) {
+      conflict.current = error instanceof WorkspaceConflictError
+      setStatus(conflict.current ? 'conflict' : 'error')
+    } finally {
+      busy.current = false
+    }
+  }, [])
+
+  const hydrate = useCallback((saved?: Workspace) => {
+    const initial = saved ?? starterWorkspace()
+    persisted.current = saved ?? null
+    current.current = initial
+    revision.current = initial.revision
+    conflict.current = false
+    setWorkspace(initial)
+    if (saved) setStatus('saved')
+    else void flush()
+  }, [flush])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    void loadWorkspace().then(saved => {
+      if (!controller.signal.aborted) hydrate(saved)
+    }).catch(() => {
+      if (!controller.signal.aborted) setStatus('error')
+    })
+    return () => controller.abort()
+  }, [hydrate])
+
+  const change = useCallback((update: (previous: Workspace) => Workspace) => {
+    if (!current.current) return
+    const next = update(current.current)
+    if (next === current.current) return
+    current.current = next
+    setWorkspace(next)
+    void flush()
+  }, [flush])
+
+  const reload = useCallback(async () => {
+    setStatus('loading')
+    try {
+      hydrate(await loadWorkspace())
+    } catch {
+      setStatus('error')
+    }
+  }, [hydrate])
+
+  return {
+    workspace,
+    status,
+    change,
+    retry: workspace ? flush : reload,
+    reload,
+  }
+}

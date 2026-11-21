@@ -1,0 +1,157 @@
+.writer-content {
+  word-break: break-word;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.writer-content > p:only-child:has(> br.ProseMirror-trailingBreak:only-child)::before {
+  content: "Start writing, or type / for blocks.";
+  position: absolute;
+  color: var(--muted, #657066);
+  pointer-events: none;
+  user-select: none;
+}
+
+.writer-content > p:only-child {
+  position: relative;
+}
+
+.writer-content pre {
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.writer-content :where(a[href]) {
+  text-underline-offset: .18em;
+}
+
+.writer-content :where([data-type='taskList']) {
+  list-style: none;
+  padding-inline-start: 0;
+}
+
+.writer-content :where([data-type='taskItem']) {
+  display: flex;
+  align-items: flex-start;
+  gap: .65em;
+}
+
+.writer-content :where([data-type='taskItem']) > label {
+  flex: none;
+  line-height: inherit;
+}
+
+.writer-content :where([data-type='taskItem']) > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.writer-content :where([data-type='taskItem']) > div > p:first-child {
+  margin-top: 0;
+}
+
+.writer-content :where([data-type='taskItem'][data-checked='true']) > div > p:first-child {
+  color: var(--muted, #657066);
+  text-decoration: line-through;
+}
+
+.writer-content :where([data-type='taskItem']) input {
+  width: 1em;
+  height: 1em;
+  margin: 0;
+  accent-color: var(--accent, #3f5f49);
+  vertical-align: middle;
+}
+
+.writer-command-menu {
+  position: fixed;
+  z-index: 50;
+  width: min(300px, calc(100vw - 16px));
+  border: 1px solid var(--line, #dce1d8);
+  border-radius: 12px;
+  background: var(--paper, #fcfcf8);
+  color: var(--ink, #232d25);
+  box-shadow: 0 14px 36px #263a2826, 0 2px 6px #263a2810;
+  padding: 6px;
+  font-size: 13px;
+}
+
+.writer-command-menu[data-above='true'] {
+  transform: translateY(-100%);
+}
+
+.writer-command-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted, #657066);
+  font-size: 11px;
+  font-weight: 650;
+  padding: 6px 8px 8px;
+}
+
+.writer-command-header kbd,
+.writer-command-option kbd {
+  font: inherit;
+  color: var(--muted, #657066);
+}
+
+.writer-command-items {
+  max-height: min(236px, 40vh);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.writer-command-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 33px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  background: transparent;
+  text-align: start;
+  font: inherit;
+  cursor: pointer;
+}
+
+.writer-command-option:is([aria-selected='true'], :hover) {
+  background: var(--wash, #edf2eb);
+}
+
+.writer-command-option > svg {
+  flex: none;
+  color: var(--accent, #3f5f49);
+}
+
+.writer-command-option > span {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.writer-command-option strong,
+.writer-command-option small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.writer-command-option strong {
+  font-weight: 640;
+}
+
+.writer-command-option small,
+.writer-command-empty {
+  color: var(--muted, #657066);
+}
+
+.writer-command-empty {
+  font-size: 12px;
+  padding: 7px 8px 10px;
+}

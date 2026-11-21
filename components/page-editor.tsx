@@ -1,0 +1,356 @@
+'use client'
+
+import { useEffect, useId, useRef, useState } from 'react'
+import { type Editor, EditorContent, useEditor } from '@tiptap/react'
+import { FileText, Link2 } from 'lucide-react'
+import type { PageChoice } from '@/lib/types'
+import { blockCommands } from './editor/block-commands'
+import { CommandMenu, type CommandItem } from './editor/command-menu'
+import { type CommandMatch, findCommand, validWikiLink } from './editor/editor-commands'
+import { FormatToolbar } from './editor/format-toolbar'
+import { writingExtensions } from './editor/writing-extensions'
+import './editor/editor.css'
+
+interface PageEditorProps {
+  markdown: string
+  pageId: string
+  choices: PageChoice[]
+  onChange: (markdown: string) => void
+  onOpenLink: (target: string) => void
+  editable?: boolean
+  focusOnMount?: boolean
+}
+
+interface MenuState {
+  match: CommandMatch
+  active: number
+  manual: boolean
+  left: number
+  top: number
+  above: boolean
+}
+
+function isSameMatch(a: CommandMatch | null | undefined, b: CommandMatch) {
+  return a?.type === b.type && a.from === b.from && a.to === b.to && a.query === b.query
+}
+
+function menuPosition(editor: Editor, position: number) {
+  const caret = editor.view.coordsAtPos(position)
+  const above = window.innerHeight - caret.bottom < 290 && caret.top >= 220
+  return {
+    left: Math.max(8, Math.min(caret.left, window.innerWidth - 300 - 8)),
+    top: above ? caret.top - 8 : caret.bottom + 8,
+    above,
+  }
+}
+
+function currentMatch(editor: Editor) {
+  const { selection } = editor.state
+  const { $from } = selection
+  if (!selection.empty || !$from.parent.isTextblock || $from.parent.type.spec.code || editor.isActive('code')) {
+    return null
+  }
+
+  const text = $from.parent.textBetween(0, $from.parentOffset, undefined, '\uFFFC')
+  const match = findCommand(text, $from.start())
+  if (match?.type === 'block' && ($from.parent.type.name !== 'paragraph' || $from.depth !== 1)) {
+    return null
+  }
+  return match
+}
+
+function getItems(choices: PageChoice[], pageId: string, match: CommandMatch): CommandItem[] {
+  const query = match.query.trim().toLowerCase()
+  if (match.type === 'block') {
+    return blockCommands
+      .filter((command) => `${command.label} ${command.aliases}`.toLowerCase().includes(query))
+      .map((command) => ({
+        id: command.label,
+        title: command.label,
+        icon: command.icon,
+      }))
+  }
+
+  const items = choices
+    .filter((page) => page.id !== pageId && validWikiLink(page.title) && validWikiLink(page.path))
+    .filter((page) => page.title.toLowerCase().includes(query) || page.path.toLowerCase().includes(query))
+    .slice(0, 12)
+    .map((page): CommandItem => ({
+      id: page.id,
+      title: page.title,
+      description: page.path !== page.title ? page.path : undefined,
+      icon: FileText,
+    }))
+
+  const unresolved = match.query.trim()
+  if (items.length === 0 && validWikiLink(unresolved)) {
+    items.push({
+      id: 'unresolved',
+      title: unresolved,
+      description: 'Link to an unwritten page',
+      icon: Link2,
+    })
+  }
+  return items
+}
+
+export default function PageEditor(props: PageEditorProps) {
+  return <PageEditorSession key={props.pageId} {...props} />
+}
+
+function PageEditorSession({
+  markdown,
+  pageId,
+  choices,
+  onChange,
+  onOpenLink,
+  editable = true,
+  focusOnMount = false,
+}: PageEditorProps) {
+  const menuId = useId()
+  const [menu, setMenu] = useState<MenuState | null>(null)
+  const menuState = useRef<MenuState | null>(null)
+  const dismissed = useRef<CommandMatch | null>(null)
+  const currentMarkdown = useRef(markdown)
+  const wrapper = useRef<HTMLDivElement>(null)
+
+  function updateMenu(next: MenuState | null) {
+    menuState.current = next
+    setMenu(next)
+  }
+
+  function dismissMenu() {
+    const activeMenu = menuState.current
+    dismissed.current = activeMenu?.manual ? null : activeMenu?.match ?? null
+    updateMenu(null)
+  }
+
+  function syncMenu(editor: Editor) {
+    if (!editor.isFocused || !editor.isEditable) return
+
+    const active = menuState.current
+    if (active?.manual) return
+    const match = currentMatch(editor)
+
+    if (!match) {
+      dismissed.current = null
+      if (active) updateMenu(null)
+      return
+    }
+    if (isSameMatch(dismissed.current, match)) return
+    dismissed.current = null
+    if (isSameMatch(active?.match, match)) return
+    updateMenu({ match, active: 0, manual: false, ...menuPosition(editor, match.to) })
+  }
+
+  function chooseBlock(editor: Editor, state: MenuState, command: typeof blockCommands[number]) {
+    dismissMenu()
+    const chain = editor.chain().focus()
+    if (state.manual) {
+      const cursor = editor.state.doc.resolve(state.match.to)
+      const inEmptyParagraph =
+        state.match.from === state.match.to &&
+        cursor.depth === 1 &&
+        cursor.parent.type.name === 'paragraph' &&
+        cursor.parent.content.size === 0
+      if (!inEmptyParagraph) {
+        const insertAt = cursor.depth ? cursor.after(1) : editor.state.doc.content.size
+        chain.insertContentAt(insertAt, { type: 'paragraph' }).setTextSelection(insertAt + 1)
+      }
+    } else {
+      chain.deleteRange({ from: state.match.from, to: state.match.to })
+    }
+
+    command.apply(chain).run()
+  }
+
+  function chooseLink(editor: Editor, state: MenuState, target: string, label: string) {
+    dismissMenu()
+    editor.chain().focus().insertContentAt(
+      { from: state.match.from, to: state.match.to },
+      [{ type: 'pageLink', attrs: { target, label } }, { type: 'text', text: ' ' }],
+    ).run()
+  }
+
+  function selectItem(editor: Editor, state: MenuState, item: CommandItem) {
+    if (state.match.type === 'block') {
+      const command = blockCommands.find((candidate) => candidate.label === item.id)
+      if (command) chooseBlock(editor, state, command)
+      return
+    }
+
+    const page = choices.find((candidate) => candidate.id === item.id)
+    chooseLink(editor, state, page?.path ?? item.title, item.title)
+  }
+
+  function handleMenuKey(editor: Editor, event: KeyboardEvent) {
+    const active = menuState.current
+    if (!active || event.isComposing) return false
+
+    if (event.key === 'Escape') {
+      event.stopPropagation()
+      dismissMenu()
+      return true
+    }
+    if (event.key === 'Tab') {
+      dismissMenu()
+      return false
+    }
+
+    const items = getItems(choices, pageId, active.match)
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      const direction = event.key === 'ArrowDown' ? 1 : -1
+      const index = (active.active + direction + items.length) % Math.max(items.length, 1)
+      updateMenu({ ...active, active: index })
+      return true
+    }
+    if (event.key === 'Enter' && items.length) {
+      selectItem(editor, active, items[Math.min(active.active, items.length - 1)])
+      return true
+    }
+    if (active.manual && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      const key = event.key
+      if (key === 'Backspace' || (key.length === 1 && (key === ' ' || validWikiLink(key)))) {
+        const query = key === 'Backspace' ? active.match.query.slice(0, -1) : active.match.query + key
+        updateMenu({ ...active, active: 0, match: { ...active.match, query } })
+        return true
+      }
+    }
+    if (active.manual || event.key === 'Enter') dismissMenu()
+    return false
+  }
+
+  const menuOpen = menu !== null
+  const items = menu ? getItems(choices, pageId, menu.match) : []
+  const activeItem = Math.max(0, Math.min(menu?.active ?? 0, items.length - 1))
+
+  const editor: Editor | null = useEditor({
+    immediatelyRender: false,
+    shouldRerenderOnTransaction: false,
+    extensions: writingExtensions,
+    content: markdown,
+    contentType: 'markdown',
+    editable,
+    autofocus: focusOnMount ? 'end' : false,
+    editorProps: {
+      attributes: {
+        class: 'writer-content',
+        role: 'textbox',
+        'aria-label': 'Page content',
+        'aria-multiline': 'true',
+        'aria-placeholder': 'Start writing, or type / for blocks.',
+        ...(menuOpen ? { 'aria-controls': menuId } : {}),
+        ...(items.length ? { 'aria-activedescendant': `${menuId}-${activeItem}` } : {}),
+      },
+      handleKeyDown: (_view, event) => editor ? handleMenuKey(editor, event) : false,
+      handleDOMEvents: {
+        click: (_view, event) => {
+          if (!(event.target instanceof Element)) return false
+          const link = event.target.closest('[data-page-link]')
+          const target = link?.getAttribute('data-page-link')
+          if (!target) return false
+          event.preventDefault()
+          onOpenLink(target)
+          return true
+        },
+      },
+    },
+    onUpdate: ({ editor: current }) => {
+      const value = current.getMarkdown()
+      currentMarkdown.current = value
+      onChange(value)
+    },
+    onTransaction: ({ editor: current }) => {
+      if (!current.isDestroyed && current.isInitialized) syncMenu(current)
+    },
+    onBlur: () => {
+      if (menuState.current) dismissMenu()
+    },
+  })
+
+  useEffect(() => {
+    if (!editor || editor.isEditable === editable) return
+    editor.setEditable(editable, false)
+  }, [editor, editable])
+
+  useEffect(() => {
+    if (!editor) return
+    if (currentMarkdown.current === markdown) return
+
+    currentMarkdown.current = markdown
+    if (editor.getMarkdown() !== markdown) {
+      editor.chain()
+        .setMeta('addToHistory', false)
+        .setContent(markdown, { contentType: 'markdown', emitUpdate: false })
+        .run()
+    }
+  }, [editor, markdown])
+
+  useEffect(() => {
+    if (!editor || !menuOpen) return
+
+    const closeOutside = (event: PointerEvent) => {
+      if (!(event.target instanceof Element)) return
+      if (wrapper.current?.contains(event.target)) return
+      if (event.target.closest('[data-writer-command-menu]')?.getAttribute('data-writer-command-menu') === menuId) return
+      const current = menuState.current
+      if (!current) return
+      dismissed.current = current.manual ? null : current.match
+      menuState.current = null
+      setMenu(null)
+    }
+    const move = (event: Event) => {
+      if (event.target instanceof Element && event.target.closest('[data-writer-command-menu]')) return
+      const current = menuState.current
+      if (!current || editor.isDestroyed) return
+      const position = menuPosition(editor, current.match.to)
+      if (position.left === current.left && position.top === current.top && position.above === current.above) return
+      const next = { ...current, ...position }
+      menuState.current = next
+      setMenu(next)
+    }
+    document.addEventListener('pointerdown', closeOutside)
+    window.addEventListener('resize', move)
+    window.addEventListener('scroll', move, true)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      window.removeEventListener('resize', move)
+      window.removeEventListener('scroll', move, true)
+    }
+  }, [editor, menuOpen, menuId])
+
+  function openManual(type: CommandMatch['type']) {
+    if (!editor) return
+    const { from, to } = editor.state.selection
+    const match = { type, query: '', from, to }
+    editor.commands.focus(undefined, { scrollIntoView: false })
+    updateMenu({ match, active: 0, manual: true, ...menuPosition(editor, match.to) })
+  }
+
+  return (
+    <div className="writer-editor" ref={wrapper}>
+      {editor && editable && (
+        <FormatToolbar
+          editor={editor}
+          openBlocks={() => openManual('block')}
+          openPageLinks={() => openManual('page')}
+          openMenu={menu?.match.type}
+          menuId={menuId}
+        />
+      )}
+      <EditorContent editor={editor} />
+      {editor && menu && (
+        <CommandMenu
+          id={menuId}
+          title={menu.match.type === 'block' ? 'Blocks' : 'Link a page'}
+          items={items}
+          active={activeItem}
+          left={menu.left}
+          top={menu.top}
+          above={menu.above}
+          select={(item) => selectItem(editor, menu, item)}
+        />
+      )}
+    </div>
+  )
+}
