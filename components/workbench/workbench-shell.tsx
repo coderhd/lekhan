@@ -1,4 +1,5 @@
 'use client'
+import { useOpenSettings } from '@/components/settings/settings-provider'
 import { Button as AstryxButton } from '@astryxdesign/core/Button'
 
 import { useEffect, useRef, useState } from 'react'
@@ -18,6 +19,7 @@ import {
 	X
 } from 'lucide-react'
 import { useGlobalHeaderSlots } from '@/components/layout/global-header-context'
+import { detectShortcutPlatform } from '@/lib/shortcuts'
 import type { WorkbenchShellProps } from './types'
 
 export default function WorkbenchShell({
@@ -33,11 +35,14 @@ export default function WorkbenchShell({
 	headerActions,
 	children
 }: WorkbenchShellProps) {
+	const openSettings = useOpenSettings()
 	const [navigationOpen, setNavigationOpen] = useState(false)
+	const [shortcutPlatform, setShortcutPlatform] = useState<'mac' | 'other'>('other')
 	const pendingAction = useRef<(() => void) | null>(null)
 	const navigationTrigger = useRef<HTMLButtonElement>(null)
 	const { registerWorkbenchChrome } = useGlobalHeaderSlots()
 	useEffect(() => registerWorkbenchChrome(), [registerWorkbenchChrome])
+	useEffect(() => setShortcutPlatform(detectShortcutPlatform()), [])
 
 	const runAction = (action: () => void, mobile: boolean) => {
 		if (mobile) {
@@ -53,6 +58,12 @@ export default function WorkbenchShell({
 				</span>
 				<span>{workspaceName}</span>
 			</div>
+			<button type="button" className="wb-rail-search" aria-haspopup="dialog" aria-keyshortcuts="Meta+K Control+K"
+				onClick={() => runAction(onSearch, mobile)}>
+				<Search aria-hidden="true" />
+				<span>Search</span>
+				<kbd aria-hidden="true">{shortcutPlatform === 'mac' ? '⌘ K' : 'Ctrl K'}</kbd>
+			</button>
 			<nav className="wb-nav" aria-label="Main navigation">
 				<Link
 					href="/"
@@ -65,10 +76,6 @@ export default function WorkbenchShell({
 				{mobile && onBrowse && (
 					<button type="button" onClick={() => runAction(onBrowse, mobile)}>Browse workspace pages</button>
 				)}
-				<button type="button" onClick={() => runAction(onSearch, mobile)}>
-					<Search aria-hidden="true" />
-					Search
-				</button>
 				<Link
 					href="/graph"
 					aria-current={active === 'graph' ? 'page' : undefined}
@@ -77,14 +84,13 @@ export default function WorkbenchShell({
 					<Network aria-hidden="true" />
 					Graph
 				</Link>
-				<Link
-					href="/settings"
-					aria-current={active === 'settings' ? 'page' : undefined}
-					onClick={() => setNavigationOpen(false)}
-				>
+				<button type="button" aria-haspopup="dialog" onClick={event => {
+					const trigger = mobile ? navigationTrigger.current : event.currentTarget
+					runAction(() => openSettings('profile', trigger), mobile)
+				}}>
 					<Settings aria-hidden="true" />
 					Settings
-				</Link>
+				</button>
 			</nav>
 			{pages.length > 0 && (
 				<nav className="wb-pages" aria-label="Pages">
@@ -97,7 +103,7 @@ export default function WorkbenchShell({
 							onClick={() => setNavigationOpen(false)}
 						>
 							<FileText aria-hidden="true" />
-							<span>{page.title}</span>
+							<span title={page.title}>{page.title}</span>
 						</Link>
 					))}
 				</nav>
@@ -188,7 +194,7 @@ export default function WorkbenchShell({
 				</div>
 				<div className="wb-topbar-actions">
 					<AstryxButton label="Search pages" variant="ghost" isIconOnly
-						className="wb-header-search ax-touch" tooltip="Search (⌘ K)"
+						className="wb-header-search ax-touch" tooltip={shortcutPlatform === 'mac' ? 'Search (⌘ K)' : 'Search (Ctrl K)'}
 						icon={<Search aria-hidden="true" />} onClick={onSearch} />
 					{headerActions}
 				</div>

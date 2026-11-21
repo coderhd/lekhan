@@ -1,3 +1,4 @@
+import { useOpenSettings } from '@/components/settings/settings-provider'
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -26,6 +27,8 @@ function getInitials(nameOrEmail: string) {
 
 export default function ProfileMenu({ user, size = 'md' }: ProfileMenuProps) {
 	const router = useRouter()
+	const openSettings = useOpenSettings()
+	const trigger = useRef<HTMLButtonElement>(null)
 	const [isOpen, setIsOpen] = useState(false)
 	const menuRef = useRef<HTMLDivElement>(null)
 
@@ -58,6 +61,7 @@ export default function ProfileMenu({ user, size = 'md' }: ProfileMenuProps) {
 	return (
 		<div className="relative flex items-center" ref={menuRef}>
 			<button
+				ref={trigger}
 				onClick={() => setIsOpen(!isOpen)}
 				className={triggerClasses}
 				aria-label={`Account menu (${displayName})`}
@@ -81,7 +85,7 @@ export default function ProfileMenu({ user, size = 'md' }: ProfileMenuProps) {
 							</span>
 						</div>
 					</div>
-					<button onClick={() => router.push('/settings')} className="w-full flex items-center gap-md px-4 py-2 hover:bg-black/5 dark:hover:bg-white/5 text-on-surface premium-transition text-left">
+					<button onClick={() => { setIsOpen(false); openSettings('profile', trigger.current) }} className="w-full flex items-center gap-md px-4 py-2 hover:bg-black/5 dark:hover:bg-white/5 text-on-surface premium-transition text-left">
 						<span className="material-symbols-outlined text-xl">settings</span>
 						<span>Settings</span>
 					</button>

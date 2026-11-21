@@ -58,25 +58,21 @@ export default function AISettingsPanel({
 	}
 
 	return (
-		<aside className='absolute right-0 top-0 bottom-0 w-80 bg-background border-l border-black/10 dark:border-white/10 p-6 flex flex-col z-[60] shadow-md backdrop-blur-xl animate-in slide-in-from-right duration-200'>
+		<aside aria-label="AI preferences" className='absolute right-0 top-0 bottom-0 w-80 max-w-full bg-background border-l border-black/10 dark:border-white/10 p-4 sm:p-6 flex flex-col z-[60] shadow-md backdrop-blur-xl animate-in slide-in-from-right duration-200'>
 			<div className='flex items-center justify-between border-b border-black/10 dark:border-white/10 pb-4 mb-6'>
 				<div className='flex items-center gap-sm'>
 					<div className='w-8 h-8 rounded-lg bg-primary-container/20 flex items-center justify-center'>
-						<span className="material-symbols-outlined text-primary-container">settings</span>
+						<span className="material-symbols-outlined text-primary-container" aria-hidden="true">settings</span>
 					</div>
-					<div>
-						<div className="flex items-center gap-2">
-							<h3 className="font-title-lg text-title-lg text-on-surface">Settings</h3>
-						</div>
-						<p className="text-[10px] text-primary-container/80 uppercase tracking-widest font-bold">AI Preferences</p>
-					</div>
+					<h2 className="font-title-lg text-title-lg text-on-surface">AI preferences</h2>
 				</div>
 				<button
+					type="button"
 					onClick={onClose}
-					className='w-8 h-8 rounded-lg flex items-center justify-center hover:bg-black/10 dark:hover:bg-white/10 text-on-surface-variant hover:text-on-surface transition shrink-0'
-					title="Close Settings"
+					className='h-11 w-11 rounded-lg flex items-center justify-center hover:bg-black/10 dark:hover:bg-white/10 text-on-surface-variant hover:text-on-surface transition shrink-0'
+					aria-label="Close AI preferences"
 				>
-					<span className="material-symbols-outlined text-lg">close</span>
+					<span className="material-symbols-outlined text-lg" aria-hidden="true">close</span>
 				</button>
 			</div>
 
@@ -105,12 +101,7 @@ export default function AISettingsPanel({
 					</div>
 				</div>
 
-				{/* AI Preferences */}
 				<div className='space-y-4'>
-					<p className='text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60'>
-						AI Preferences
-					</p>
-
 					<div>
 						<label className='block text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60 mb-1.5'>
 							Default translate target

@@ -65,12 +65,6 @@
 .wb-header-search {
 	display: none;
 }
-.wb-header-search kbd {
-	border: 1px solid hsl(var(--outline-variant));
-	border-radius: 4px;
-	padding: 3px 5px;
-	font-size: 11px;
-}
 .wb-body {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr);
@@ -78,7 +72,7 @@
 }
 .wb-sidebar {
 	display: none;
-	padding: 24px 12px;
+	padding: 20px 12px;
 	background: var(--color-background-muted, hsl(var(--surface-container-low)));
 	border-right: 1px solid hsl(var(--outline-variant));
 }
@@ -103,44 +97,73 @@
 }
 .wb-nav {
 	display: grid;
-	gap: 4px;
-	margin-top: 24px;
+	gap: 2px;
 }
+.wb-rail-search,
 .wb-nav :is(a, button),
 .wb-pages a,
 .wb-rail-actions button {
 	display: flex;
-	gap: 12px;
+	gap: 8px;
 	align-items: center;
 	min-height: 44px;
 	padding: 8px;
 	border-radius: 8px;
-	font-size: 14px;
+	font-size: 13px;
 	text-align: left;
 	overflow-wrap: anywhere;
+}
+.wb-rail-search {
+	width: 100%;
+	margin-block: 14px 10px;
+	border: 1px solid hsl(var(--outline-variant));
+	background: hsl(var(--background));
+	font-weight: 550;
+}
+.wb-rail-search kbd {
+	margin-inline-start: auto;
+	padding: 2px 4px;
+	border-radius: 4px;
+	background: hsl(var(--surface-container));
+	color: hsl(var(--on-surface-variant));
+	font-size: 11px;
+	white-space: nowrap;
+}
+:is(.wb-nav, .wb-pages, .wb-rail-actions, .wb-rail-search) svg {
+	width: 16px;
+	height: 16px;
+	color: hsl(var(--on-surface-variant));
 }
 .wb-nav [aria-current],
 .wb-pages [aria-current] {
 	background: hsl(var(--surface-container-high));
-	color: hsl(var(--primary-ink));
+	color: hsl(var(--on-surface));
+	font-weight: 600;
 }
 .wb-pages {
 	display: grid;
-	margin-top: 32px;
+	margin-top: 20px;
+	min-width: 0;
 }
 .wb-pages p {
-	margin: 16px 8px;
+	margin: 0 8px 6px;
 	font-size: 12px;
+	font-weight: 550;
 	color: hsl(var(--on-surface-variant));
 }
 .wb-pages a {
-	font-size: 13px;
-	align-items: flex-start;
+	min-width: 0;
+}
+.wb-pages a span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .wb-rail-actions {
 	display: grid;
-	margin-top: 48px;
-	padding-top: 16px;
+	margin-top: 20px;
+	padding-top: 8px;
 	border-top: 1px solid hsl(var(--outline-variant));
 }
 .wb-content {
@@ -352,6 +375,20 @@
 	gap: 8px;
 	font-size: 17px;
 }
+@media (max-width: 389px) {
+	.wb-topbar {
+		flex-wrap: wrap;
+		gap: 4px;
+		padding-inline: 12px;
+	}
+	.wb-topbar-start,
+	.wb-topbar-actions {
+		gap: 4px;
+	}
+	.wb-topbar-actions {
+		margin-inline-start: auto;
+	}
+}
 @media (min-width: 414px) {
 	.wb-topbar {
 		padding-inline: 24px;
@@ -399,6 +436,7 @@
 }
 @media (hover: hover) {
 	.wb-icon-button:hover,
+	.wb-rail-search:hover,
 	.wb-nav :is(a, button):hover,
 	.wb-pages a:hover,
 	.wb-rail-actions button:hover {
@@ -409,6 +447,12 @@
 	}
 	.wb-button:hover {
 		border-color: hsl(var(--outline));
+	}
+}
+@media (min-width: 768px) and (pointer: fine) {
+	.wb-sidebar :is(.wb-nav, .wb-pages, .wb-rail-actions) :is(a, button) {
+		min-height: 34px;
+		padding-block: 6px;
 	}
 }
 @media (prefers-reduced-motion: reduce) {

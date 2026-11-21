@@ -34,7 +34,7 @@ export function ImageUploadButton({ onUpload }: { onUpload: (url: string) => voi
 				className="p-1 rounded transition-colors flex items-center justify-center text-on-surface hover:bg-black/5 dark:hover:bg-white/10"
 				title="Upload Image"
 			>
-				<span className="material-symbols-outlined text-[18px]">image</span>
+				<span aria-hidden="true" className="material-symbols-outlined text-[18px]">image</span>
 			</button>
 		</>
 	)

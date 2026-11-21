@@ -104,6 +104,24 @@ describe('GlobalSearchPalette', () => {
 		expect(screen.getByText('Recent Page')).toBeTruthy()
 	})
 
+	it('focuses the search field and exposes the active result while navigating', async () => {
+		fetchRecentPages.mockResolvedValue(['First', 'Second'].map(title => ({
+			id: title, title, updated_at: '2026-08-14T00:00:00Z',
+		})))
+		renderPalette()
+		await openViaKey()
+		const input = screen.getByRole('combobox', { name: 'Search pages' })
+		expect(document.activeElement).toBe(input)
+		await act(async () => { await vi.advanceTimersByTimeAsync(210) })
+		fireEvent.keyDown(input, { key: 'ArrowDown' })
+		const selected = screen.getByRole('option', { selected: true })
+		expect(selected.textContent).toContain('Second')
+		expect(input.getAttribute('aria-activedescendant')).toBe(selected.id)
+		expect(document.activeElement).toBe(input)
+		fireEvent.keyDown(input, { key: 'Enter' })
+		expect(push).toHaveBeenCalledWith('/page/Second')
+	})
+
 	it('navigates to the selected page on Enter', async () => {
 		renderPalette()
 		await openViaKey()

@@ -283,17 +283,6 @@ body {
 	outline: none;
 }
 
-.ProseMirror>h1:first-child {
-	font-size: 2.5rem !important;
-	font-weight: 800 !important;
-	line-height: 1.2 !important;
-	margin-top: 1rem !important;
-	margin-bottom: 2rem !important;
-	color: hsl(var(--primary)) !important;
-	border: none !important;
-	outline: none !important;
-}
-
 .ProseMirror h1 {
 	font-size: 2rem;
 	font-weight: 700;

@@ -75,8 +75,10 @@ describe('OwnershipTransferCard (T13)', () => {
 	it('cancels nomination without a request and retains the selected collaborator after failure', async () => {
 		render(<OwnershipTransferCard candidates={[{ id: 'u-2', email: 'maya@example.com' }]} />)
 		fireEvent.change(screen.getByLabelText('New owner'), { target: { value: 'u-2' } })
-		fireEvent.click(screen.getByRole('button', { name: /Prepare transfer/i }))
+		const trigger = screen.getByRole('button', { name: /Prepare transfer/i })
+		fireEvent.click(trigger)
 		fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+		await waitFor(() => expect(trigger).toHaveFocus())
 		expect(fetchMock).not.toHaveBeenCalled()
 		fetchMock.mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'Try later' }) })
 		fireEvent.click(screen.getByRole('button', { name: /Prepare transfer/i }))
@@ -84,6 +86,23 @@ describe('OwnershipTransferCard (T13)', () => {
 		await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Try later'))
 		expect(screen.getByLabelText('New owner')).toHaveValue('u-2')
 		expect(screen.queryByText('Transfer prepared')).toBeNull()
+	})
+
+	it.each([
+		{ path: '/settings', trigger: 'Prepare transfer', confirm: 'Confirm preparation', pending: 'Preparing…', heading: 'Workspace ownership' },
+		{ path: '/settings?transfer=signed-token', trigger: 'Accept ownership', confirm: 'Confirm acceptance', pending: 'Accepting…', heading: 'Accept workspace ownership' },
+	])('returns focus to the card heading while $pending', async ({ path, trigger, confirm, pending, heading }) => {
+		window.history.replaceState({}, '', path)
+		fetchMock.mockImplementation(() => new Promise(() => {}))
+		render(<OwnershipTransferCard candidates={[{ id: 'u-2', email: 'maya@example.com' }]} />)
+		const candidate = screen.queryByLabelText('New owner')
+		if (candidate) fireEvent.change(candidate, { target: { value: 'u-2' } })
+
+		fireEvent.click(screen.getByRole('button', { name: trigger }))
+		fireEvent.click(screen.getByRole('button', { name: confirm }))
+
+		expect(screen.getByRole('button', { name: pending })).toBeDisabled()
+		await waitFor(() => expect(screen.getByRole('heading', { name: heading })).toHaveFocus())
 	})
 
 })

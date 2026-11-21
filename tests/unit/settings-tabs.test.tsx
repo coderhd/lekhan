@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import { describe, it, expect, vi } from 'vitest'
 import SettingsClient from '@/components/settings-client'
@@ -25,7 +25,7 @@ describe('SettingsClient Tabbed Navigation', () => {
 	const user = { email: 'test@example.com', full_name: 'Test User' }
 	const documents: any[] = []
 
-	it('renders tab buttons and switches between tabs', () => {
+	it('renders tab buttons and switches between tabs', async () => {
 		render(
 			<GlobalHeaderProvider>
 				<SettingsClient user={user} token="mock" pages={documents} setPages={vi.fn()} />
@@ -33,19 +33,19 @@ describe('SettingsClient Tabbed Navigation', () => {
 		)
 		expect(screen.getByRole('tab', { name: /Profile & Security/i })).toBeInTheDocument()
 		expect(screen.getByRole('tab', { name: /Collaborators & Access/i })).toBeInTheDocument()
-		expect(screen.getByRole('tab', { name: /AI Usage/i })).toBeInTheDocument()
+		expect(screen.queryByRole('tab', { name: /AI Usage/i })).not.toBeInTheDocument()
 		expect(screen.getByRole('tab', { name: /Billing & Subscription/i })).toBeInTheDocument()
 
 		fireEvent.click(screen.getByRole('tab', { name: /Billing & Subscription/i }))
 		expect(screen.getByText(/Subscription & Plan/i)).toBeInTheDocument()
 		const billing = screen.getByRole('tab', { name: /Billing & Subscription/i })
 		billing.focus()
-		fireEvent.keyDown(billing, { key: 'ArrowRight' })
+		await act(async () => { fireEvent.keyDown(billing, { key: 'ArrowRight' }) })
 		expect(screen.getByRole('tab', { name: /AI & Models/i })).toHaveFocus()
 		expect(screen.getByRole('tab', { name: /AI & Models/i })).toHaveAttribute('tabindex', '0')
 		expect(billing).toHaveAttribute('tabindex', '-1')
 		expect(screen.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', 'settings-tab-ai')
-		expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page')
+		expect(screen.getByRole('heading', { name: /Sarvam AI Key/i })).toBeInTheDocument()
 	})
 })
 

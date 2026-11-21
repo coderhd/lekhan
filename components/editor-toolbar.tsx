@@ -170,26 +170,26 @@ function EditorToolbarImpl ({ editor, onOpenLinkPrompt, disabled = false, workbe
 			</div>
 
 			<div className='flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6'>
-				<button onClick={() => editor?.chain().focus().undo().run()} className='p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded transition-colors text-on-surface-variant hover:text-on-surface flex items-center justify-center' title='Undo'><span className='material-symbols-outlined text-[18px]'>undo</span></button>
-				<button onClick={() => editor?.chain().focus().redo().run()} className='p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded transition-colors text-on-surface-variant hover:text-on-surface flex items-center justify-center' title='Redo'><span className='material-symbols-outlined text-[18px]'>redo</span></button>
+				<button onClick={() => editor?.chain().focus().undo().run()} className='p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded transition-colors text-on-surface-variant hover:text-on-surface flex items-center justify-center' title='Undo'><span aria-hidden='true' className='material-symbols-outlined text-[18px]'>undo</span></button>
+				<button onClick={() => editor?.chain().focus().redo().run()} className='p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded transition-colors text-on-surface-variant hover:text-on-surface flex items-center justify-center' title='Redo'><span aria-hidden='true' className='material-symbols-outlined text-[18px]'>redo</span></button>
 			</div>
 			<div className='flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6'>
-				<button onClick={() => editor?.chain().focus().toggleBold().run()} className={buttonClass(state.bold)} title='Bold'><span className='material-symbols-outlined text-[18px]'>format_bold</span></button>
-				<button onClick={() => editor?.chain().focus().toggleItalic().run()} className={buttonClass(state.italic)} title='Italic'><span className='material-symbols-outlined text-[18px]'>format_italic</span></button>
-				<button onClick={() => editor?.chain().focus().toggleUnderline().run()} className={buttonClass(state.underline)} title='Underline'><span className='material-symbols-outlined text-[18px]'>format_underlined</span></button>
-				<button onClick={() => editor?.chain().focus().toggleStrike().run()} className={buttonClass(state.strike)} title='Strike'><span className='material-symbols-outlined text-[18px]'>format_strikethrough</span></button>
+				<button onClick={() => editor?.chain().focus().toggleBold().run()} className={buttonClass(state.bold)} title='Bold'><span aria-hidden='true' className='material-symbols-outlined text-[18px]'>format_bold</span></button>
+				<button onClick={() => editor?.chain().focus().toggleItalic().run()} className={buttonClass(state.italic)} title='Italic'><span aria-hidden='true' className='material-symbols-outlined text-[18px]'>format_italic</span></button>
+				<button onClick={() => editor?.chain().focus().toggleUnderline().run()} className={buttonClass(state.underline)} title='Underline'><span aria-hidden='true' className='material-symbols-outlined text-[18px]'>format_underlined</span></button>
+				<button onClick={() => editor?.chain().focus().toggleStrike().run()} className={buttonClass(state.strike)} title='Strike'><span aria-hidden='true' className='material-symbols-outlined text-[18px]'>format_strikethrough</span></button>
 			</div>
 			<div className='flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6'>
-				<button onClick={() => editor?.chain().focus().setTextAlign('left').run()} className={buttonClass(state.align === 'left')} title='Align Left'><span className='material-symbols-outlined text-[18px]'>format_align_left</span></button>
-				<button onClick={() => editor?.chain().focus().setTextAlign('center').run()} className={buttonClass(state.align === 'center')} title='Align Center'><span className='material-symbols-outlined text-[18px]'>format_align_center</span></button>
-				<button onClick={() => editor?.chain().focus().setTextAlign('right').run()} className={buttonClass(state.align === 'right')} title='Align Right'><span className='material-symbols-outlined text-[18px]'>format_align_right</span></button>
+				<button onClick={() => editor?.chain().focus().setTextAlign('left').run()} className={buttonClass(state.align === 'left')} title='Align Left'><span aria-hidden='true' className='material-symbols-outlined text-[18px]'>format_align_left</span></button>
+				<button onClick={() => editor?.chain().focus().setTextAlign('center').run()} className={buttonClass(state.align === 'center')} title='Align Center'><span aria-hidden='true' className='material-symbols-outlined text-[18px]'>format_align_center</span></button>
+				<button onClick={() => editor?.chain().focus().setTextAlign('right').run()} className={buttonClass(state.align === 'right')} title='Align Right'><span aria-hidden='true' className='material-symbols-outlined text-[18px]'>format_align_right</span></button>
 			</div>
 			<div className='flex shrink-0 items-center gap-xs px-md border-r border-black/10 dark:border-white/10 h-6'>
-				<button onClick={() => editor?.chain().focus().toggleBulletList().run()} className={buttonClass(state.bulletList)} title='Bullet List'><span className='material-symbols-outlined text-[18px]'>format_list_bulleted</span></button>
-				<button onClick={() => editor?.chain().focus().toggleOrderedList().run()} className={buttonClass(state.orderedList)} title='Ordered List'><span className='material-symbols-outlined text-[18px]'>format_list_numbered</span></button>
-				<button onClick={() => editor?.chain().focus().toggleTaskList().run()} className={buttonClass(state.taskList)} title='Task List'><span className='material-symbols-outlined text-[18px]'>check_box</span></button>
-				<button onClick={() => editor?.chain().focus().toggleBlockquote().run()} className={buttonClass(state.blockquote)} title='Blockquote'><span className='material-symbols-outlined text-[18px]'>format_quote</span></button>
-				<button onClick={() => editor?.chain().focus().toggleCodeBlock().run()} className={buttonClass(state.codeBlock)} title='Code Block'><span className='material-symbols-outlined text-[18px]'>code_blocks</span></button>
+				<button onClick={() => editor?.chain().focus().toggleBulletList().run()} className={buttonClass(state.bulletList)} title='Bullet List'><span aria-hidden='true' className='material-symbols-outlined text-[18px]'>format_list_bulleted</span></button>
+				<button onClick={() => editor?.chain().focus().toggleOrderedList().run()} className={buttonClass(state.orderedList)} title='Ordered List'><span aria-hidden='true' className='material-symbols-outlined text-[18px]'>format_list_numbered</span></button>
+				<button onClick={() => editor?.chain().focus().toggleTaskList().run()} className={buttonClass(state.taskList)} title='Task List'><span aria-hidden='true' className='material-symbols-outlined text-[18px]'>check_box</span></button>
+				<button onClick={() => editor?.chain().focus().toggleBlockquote().run()} className={buttonClass(state.blockquote)} title='Blockquote'><span aria-hidden='true' className='material-symbols-outlined text-[18px]'>format_quote</span></button>
+				<button onClick={() => editor?.chain().focus().toggleCodeBlock().run()} className={buttonClass(state.codeBlock)} title='Code Block'><span aria-hidden='true' className='material-symbols-outlined text-[18px]'>code_blocks</span></button>
 			</div>
 			<div className='flex shrink-0 items-center gap-xs px-md h-6 border-r border-black/10 dark:border-white/10'>
 				<button
@@ -197,7 +197,7 @@ function EditorToolbarImpl ({ editor, onOpenLinkPrompt, disabled = false, workbe
 					className={buttonClass(state.link)}
 					title='Link'
 				>
-					<span className='material-symbols-outlined text-[18px]'>link</span>
+					<span aria-hidden='true' className='material-symbols-outlined text-[18px]'>link</span>
 				</button>
 				<ImageUploadButton onUpload={(url) => editor?.chain().focus().setImage({ src: url }).run()} />
 				<button
@@ -205,7 +205,7 @@ function EditorToolbarImpl ({ editor, onOpenLinkPrompt, disabled = false, workbe
 					className={buttonClass(state.table)}
 					title='Insert Table'
 				>
-					<span className='material-symbols-outlined text-[18px]'>table</span>
+					<span aria-hidden='true' className='material-symbols-outlined text-[18px]'>table</span>
 				</button>
 			</div>
 			<div className='flex shrink-0 items-center gap-xs px-md h-6'>

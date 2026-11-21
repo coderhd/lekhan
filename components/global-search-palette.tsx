@@ -1,8 +1,9 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import * as Dialog from '@radix-ui/react-dialog'
+import { Search, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { fetchRecentPages, searchPages } from '@/services/search'
 import { useSessionReauth } from '@/components/session-reauth-provider'
@@ -54,6 +55,8 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 	const [reloadKey, setReloadKey] = useState(0)
 	const [loading, setLoading] = useState(false)
 	const [selectedIndex, setSelectedIndex] = useState(0)
+	const inputRef = useRef<HTMLInputElement>(null)
+	const resultsId = useId()
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const requestIdRef = useRef(0)
 	// Focus target captured before the first modal in a handoff chain opens.
@@ -189,12 +192,14 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 	}, [router, userId, open, isLocked, loading, loadError])
 
 	const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-		if (e.key === 'ArrowDown') {
+		if (e.nativeEvent.isComposing || rows.length === 0) return
+
+		if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
 			e.preventDefault()
-			setSelectedIndex(prev => Math.min(prev + 1, rows.length - 1))
-		} else if (e.key === 'ArrowUp') {
-			e.preventDefault()
-			setSelectedIndex(prev => Math.max(prev - 1, 0))
+			const offset = e.key === 'ArrowDown' ? 1 : -1
+			const nextIndex = Math.max(0, Math.min(selectedIndex + offset, rows.length - 1))
+			setSelectedIndex(nextIndex)
+			document.getElementById(`${resultsId}-${nextIndex}`)?.scrollIntoView?.({ block: 'nearest' })
 		} else if (e.key === 'Enter') {
 			e.preventDefault()
 			const row = rows[selectedIndex]
@@ -211,33 +216,41 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 				<Dialog.Root open={open} onOpenChange={setOpen}>
 					<Dialog.Portal>
 						<Dialog.Overlay className={styles.scrim} />
-						<Dialog.Content data-modal="palette" className={styles.sheet} onCloseAutoFocus={(event) => {
+						<Dialog.Content data-modal="palette" className={`${styles.sheet} ${styles.searchSheet}`} onOpenAutoFocus={(event) => {
+							event.preventDefault()
+							inputRef.current?.focus()
+						}} onCloseAutoFocus={(event) => {
 							event.preventDefault()
 							if (!helpOpen) modalOpenerRef.current?.focus()
 						}}>
-							<div className={styles.heading}>
+							<div className={styles.searchHeading}>
 								<Dialog.Title>Search pages</Dialog.Title>
-								<Dialog.Close className={styles.close} aria-label="Close search">×</Dialog.Close>
+								<Dialog.Close className={styles.close} aria-label="Close search"><X size={18} aria-hidden="true" /></Dialog.Close>
 							</div>
 							<Dialog.Description className="sr-only">Search your pages or open a recent page.</Dialog.Description>
-							<div className="flex items-center gap-xs px-4 py-3 border-b border-black/5 dark:border-white/5">
-								<span className="material-symbols-outlined text-on-surface-variant shrink-0">search</span>
+							<div className={styles.searchField}>
+								<Search size={18} aria-hidden="true" />
 								<input
+									ref={inputRef}
 									type="text"
-									autoFocus
+									role="combobox"
+									autoComplete="off"
 									value={query}
 									onChange={(e) => { setRows([]); setQuery(e.target.value) }}
 									onKeyDown={onInputKeyDown}
 									aria-label="Search pages"
-									className="w-full bg-transparent outline-none text-on-surface placeholder:text-on-surface-variant/50"
+									aria-autocomplete="list"
+									aria-expanded={rows.length > 0}
+									aria-controls={resultsId}
+									aria-activedescendant={rows[selectedIndex] ? `${resultsId}-${selectedIndex}` : undefined}
 									placeholder="Search pages, tags, links…"
 								/>
 							</div>
-							<div className="max-h-[50vh] overflow-y-auto py-2">
+							<div className={styles.searchResults}>
 								{loading ? (
-									<div className="px-4 py-3 text-sm text-on-surface-variant">Searching…</div>
+									<div className={styles.searchMessage} role="status">Searching…</div>
 								) : loadError ? (
-									<div className="px-4 py-3 text-sm text-on-surface-variant">
+									<div className={styles.searchMessage}>
 										<span className="block font-medium text-on-surface">
 											{query.trim() ? 'Couldn’t search right now.' : 'Couldn’t load recent pages.'}
 										</span>
@@ -251,7 +264,7 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 										</button>
 									</div>
 								) : rows.length === 0 ? (
-									<div className="px-4 py-3 text-sm text-on-surface-variant">
+									<div className={styles.searchMessage} role="status">
 										{query.trim() ? (
 											<>
 												<span className="block font-medium text-on-surface">No pages match “{echoedQuery}”.</span>
@@ -264,35 +277,43 @@ export default function GlobalSearchPalette ({ children }: { children: ReactNode
 											</>
 										)}
 									</div>
-								) : (
-									rows.map((row, idx) => (
+								) : null}
+								<div id={resultsId} role="listbox" aria-label={query.trim() ? 'Search results' : 'Recent pages'} hidden={rows.length === 0}>
+									{rows.map((row, idx) => (
 										<button
 											key={row.id}
+											id={`${resultsId}-${idx}`}
 											type="button"
+											role="option"
+											tabIndex={-1}
+											aria-selected={idx === selectedIndex}
+											onMouseDown={(event) => event.preventDefault()}
 											onClick={() => handleSelect(row)}
 											onMouseEnter={() => setSelectedIndex(idx)}
-											className={`w-full flex items-center gap-sm px-4 py-2 text-left premium-transition ${
-												idx === selectedIndex ? 'bg-primary/10 text-on-primary' : 'text-on-surface'
-											}`}
+											className={styles.searchOption}
 										>
-											<span className="material-symbols-outlined text-base shrink-0">{row.icon || 'description'}</span>
+											<span className="material-symbols-outlined text-base shrink-0 text-on-surface-variant" aria-hidden="true">{row.icon || 'description'}</span>
 											<span className="flex-1 min-w-0">
 												<span className="block truncate text-sm font-medium">{row.title}</span>
 												{row.context && <span className="block truncate text-xs text-on-surface-variant">{row.context}</span>}
 											</span>
 											<span className="text-xs text-on-surface-variant shrink-0">{new Date(row.updated_at).toLocaleDateString()}</span>
 										</button>
-									))
-								)}
+									))}
+								</div>
 							</div>
-							<div className="px-4 py-2 border-t border-black/5 dark:border-white/5 flex items-center justify-between gap-sm text-xs text-on-surface-variant">
-								<span>↑↓ navigate · Enter open · Esc close</span>
+							<div className={styles.searchFooter}>
+								<div className={styles.searchKeys}>
+									<span><kbd>↑</kbd><kbd>↓</kbd> Navigate</span>
+									<span><kbd>Enter</kbd> Open</span>
+									<span><kbd>Esc</kbd> Close</span>
+								</div>
 								<button
 									type="button"
 									onClick={openHelp}
 									className="flex min-h-11 items-center gap-1.5 rounded-md px-2 font-medium transition-colors hover:bg-black/5 hover:text-on-surface dark:hover:bg-white/10"
 								>
-									<kbd className="inline-flex min-w-[1.4rem] items-center justify-center rounded border border-black/10 bg-surface-container-high px-1 font-mono text-[11px] font-semibold dark:border-white/15">?</kbd>
+									<kbd aria-hidden="true">?</kbd>
 									Shortcuts
 								</button>
 							</div>
