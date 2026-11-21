@@ -1,13 +1,14 @@
 'use client'
 
 import { useCallback, useState, useSyncExternalStore } from 'react'
-import { Cloud, CloudOff, Download, LoaderCircle, LockKeyhole } from 'lucide-react'
+import { Cloud, CloudOff, Download, History, LoaderCircle, LockKeyhole } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import type { PageChoice } from '@/lib/types'
 import type { CloudPage } from '@/lib/cloud/graph'
 import { useCloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
 import { downloadPage } from '@/lib/downloads'
 import PageEditor from './page-editor'
+import CheckpointDialog from './checkpoint-dialog'
 
 function useReplicaSource(document: ReturnType<typeof useCloudCollaboration>['session']) {
   const subscribe = useCallback((changed: () => void) => {
@@ -34,6 +35,7 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
   const [markdown, setMarkdown] = useState<string | null>(null)
   const [schemaError, setSchemaError] = useState(false)
   const [linkMissing, setLinkMissing] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const editable = replica.writable && !schemaError
   const networkLabel = !enabled ? 'Cloud sync unavailable' : replica.status === 'live' ? 'Live'
     : replica.status === 'offline' ? replica.session ? 'Offline copy' : 'Waiting for sync'
@@ -82,6 +84,9 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
           {networkLabel}
         </span>
         {replica.session && !editable && <span><LockKeyhole size={15} /> View only</span>}
+        {replica.session && <button type="button" className="secondary-button" onClick={() => setHistoryOpen(true)}>
+          <History size={15} /> Version history
+        </button>}
         {exportable && <button type="button" className="secondary-button" onClick={() => downloadPage({
           id: page.id, parentId: page.parent_id, title: page.title, markdown: source ?? markdown ?? '',
           favorite: false, createdAt: page.updated_at, updatedAt: page.updated_at,
@@ -99,6 +104,8 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
         collaboration={replica.session}
         editable={editable}
       /> : <textarea className="writer-source" aria-label="Markdown source" value={source} readOnly={!editable} onChange={event => writeSource(event.target.value)} />)}
+      {replica.session && historyOpen && <CheckpointDialog pageId={page.id} session={replica.session}
+        live={replica.status === 'live'} writable={editable} onClose={() => setHistoryOpen(false)} />}
     </div>
   )
 }

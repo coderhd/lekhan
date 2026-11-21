@@ -6,6 +6,7 @@ import { createSyncHub } from './hub.ts'
 import { snapshotCipher } from './snapshot.ts'
 import { cloudSnapshots } from './supabase.ts'
 import { encryptedWal } from './wal.ts'
+import { pruneExpiredCheckpoints } from './prune-checkpoints.ts'
 
 const client = createServerAdmin()
 const origin = siteOrigin()
@@ -29,11 +30,26 @@ const hub = createSyncHub({
 })
 
 hub.server.listen(port, () => console.log('[sync] listening on port ' + port))
+let ongoingPrune: Promise<unknown> | undefined
+let pruneTimer: ReturnType<typeof setInterval> | undefined
+const prune = () => {
+  if (ongoingPrune) return
+  ongoingPrune = pruneExpiredCheckpoints(client).then(({ pruned, failures }) => {
+    if (pruned || failures) console.log('[checkpoints] pruned=' + pruned + ' failures=' + failures)
+  }).catch(() => { console.error('[checkpoints] retention failed') }).finally(() => { ongoingPrune = undefined })
+}
+if (process.env.LEKHAN_PRUNE_CHECKPOINTS === '1') {
+  prune()
+  pruneTimer = setInterval(prune, 6 * 60 * 60 * 1000)
+  pruneTimer.unref()
+}
+
 let terminating = false
 function shutdown() {
   if (terminating) return
   terminating = true
-  void hub.close().then(saved => {
+  if (pruneTimer) clearInterval(pruneTimer)
+  void Promise.all([hub.close(), ongoingPrune]).then(([saved]) => {
     if (!saved) process.exitCode = 1
   }).catch(() => { process.exitCode = 1 })
 }

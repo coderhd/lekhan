@@ -1,0 +1,36 @@
+import * as Y from 'yjs'
+
+export const checkpointMaxBytes = 20 * 1024 * 1024
+
+export interface Checkpoint {
+  id: string
+  version_name: string
+  created_at: string
+}
+
+export function checkpointName(value: string | null) {
+  const name = value?.trim() ?? ''
+  return name.length > 0 && name.length <= 200 && !/[\u0000-\u001f\u007f]/.test(name) ? name : null
+}
+
+export function replaceCheckpointContent(target: Y.Doc, snapshot: Y.Doc, origin: unknown) {
+  const source = snapshot.getMap('lekhan').get('mode') === 'source'
+  const rich = snapshot.getXmlFragment('default').toArray().map(node => {
+    if (node instanceof Y.XmlElement || node instanceof Y.XmlText) return node.clone()
+    throw new Error('This checkpoint contains unsupported blocks.')
+  })
+  const text = snapshot.getText('source').toString()
+  target.transact(() => {
+    const mode = target.getMap('lekhan')
+    if (source) mode.set('mode', 'source')
+    else mode.delete('mode')
+
+    const fragment = target.getXmlFragment('default')
+    if (fragment.length) fragment.delete(0, fragment.length)
+    if (rich.length) fragment.insert(0, rich)
+
+    const markdown = target.getText('source')
+    if (markdown.length) markdown.delete(0, markdown.length)
+    if (text) markdown.insert(0, text)
+  }, origin)
+}

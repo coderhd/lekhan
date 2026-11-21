@@ -6,11 +6,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as Y from 'yjs'
 import { WebSocket } from 'ws'
 import { WebsocketProvider } from 'y-websocket'
+import { createClient } from '@supabase/supabase-js'
 import { issueSyncTicket, verifySyncTicket } from '../lib/sync/ticket'
 import { syncProtocol } from '../lib/sync/wire'
 import { createSyncHub } from '../server/sync/hub'
 import { snapshotCipher } from '../server/sync/snapshot'
 import { encryptedWal } from '../server/sync/wal'
+import { replaceCheckpointContent } from '../lib/cloud/checkpoints'
+import { getExpirationCutoffDate } from '../lib/tier-limits'
+import { pruneExpiredCheckpoints } from '../server/sync/prune-checkpoints'
 
 const pageId = 'e6a3a67a-bf74-4f17-b013-95eb59b2e937'
 const owner = 'dc885a37-7b5a-4897-8d83-3cca664c0251'
@@ -60,6 +64,92 @@ describe('sync capabilities and storage', () => {
     await wal.append(pageId, bytes('second edit'))
     await wal.replay(pageId, update => result.push(Buffer.from(update).toString()))
     expect(result).toEqual(['first private edit', 'first private edit', 'second edit'])
+  })
+})
+
+describe('cloud checkpoints', () => {
+  it('restores formatted blocks as a replica update and supports source-only snapshots', () => {
+    const checkpoint = new Y.Doc()
+    const active = new Y.Doc()
+    const peer = new Y.Doc()
+    for (const doc of [checkpoint, active, peer]) cleanup.push(() => doc.destroy())
+    const paragraph = new Y.XmlElement('paragraph')
+    const text = new Y.XmlText()
+    paragraph.insert(0, [text])
+    checkpoint.getXmlFragment('default').insert(0, [paragraph])
+    text.insert(0, 'A previous draft', { bold: {} })
+
+    active.getMap('lekhan').set('mode', 'source')
+    active.getText('source').insert(0, 'Working draft')
+    Y.applyUpdate(peer, Y.encodeStateAsUpdate(active))
+    const backup = new Y.Doc()
+    cleanup.push(() => backup.destroy())
+    Y.applyUpdate(backup, Y.encodeStateAsUpdate(active))
+
+    replaceCheckpointContent(active, checkpoint, 'test restore')
+    Y.applyUpdate(peer, Y.encodeStateAsUpdate(active, Y.encodeStateVector(peer)))
+    const restored = peer.getXmlFragment('default').get(0) as Y.XmlElement
+    expect((restored.get(0) as Y.XmlText).toDelta()).toEqual([{ insert: 'A previous draft', attributes: { bold: {} } }])
+    expect(peer.getMap('lekhan').has('mode')).toBe(false)
+    expect(peer.getText('source').length).toBe(0)
+
+    replaceCheckpointContent(active, backup, 'test backup restore')
+    Y.applyUpdate(peer, Y.encodeStateAsUpdate(active, Y.encodeStateVector(peer)))
+    expect(peer.getText('source').toString()).toBe('Working draft')
+    expect(peer.getXmlFragment('default').length).toBe(0)
+  })
+
+  it('uses elapsed retention days for every tier', () => {
+    const clock = new Date('2026-03-09T04:30:00.000Z')
+    expect(getExpirationCutoffDate('free', clock).toISOString()).toBe('2026-03-08T04:30:00.000Z')
+    expect(getExpirationCutoffDate('plus', clock).toISOString()).toBe('2025-12-09T04:30:00.000Z')
+    expect(getExpirationCutoffDate('pro', clock).toISOString()).toBe('2025-03-09T04:30:00.000Z')
+  })
+
+  it('removes storage before expired metadata and leaves failed deletions available for retry', async () => {
+    const freeId = '1c9b8375-1596-4572-aaa5-605fcfa5c015'
+    const legacyId = '331cc0ec-e28f-4f78-851a-7ddb5c5ce508'
+    const plusId = '4f788c16-53d1-43af-ac24-b0eeec69cfd9'
+    const expiredAt = '2026-01-12T00:00:00.000Z'
+    const calls: string[] = []
+    const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const raw = typeof input === 'string' || input instanceof URL ? input : input.url
+      const url = new URL(raw)
+      let data: unknown
+      if (url.pathname.endsWith('/document_versions') && init?.method === 'DELETE') {
+        calls.push('delete:' + url.searchParams.get('id')?.slice(3))
+        return new Response(null, { status: 204 })
+      }
+      if (url.pathname.endsWith('/document_versions')) data = [
+        { id: freeId, page_id: pageId, created_at: expiredAt },
+        { id: legacyId, document_id: viewer, created_at: expiredAt },
+        { id: plusId, page_id: owner, created_at: expiredAt },
+      ]
+      else if (url.pathname.endsWith('/pages')) data = [{ workspace_id: url.searchParams.get('id')?.slice(3) }]
+      else if (url.pathname.endsWith('/documents') && url.pathname.startsWith('/rest/')) data = [{ owner_id: viewer }]
+      else if (url.pathname.endsWith('/workspaces')) data = [{ id: viewer }]
+      else if (url.pathname.endsWith('/workspace_plans')) {
+        const workspace = url.searchParams.get('workspace_id')?.slice(3)
+        data = [{ workspace_id: workspace, tier: workspace === owner ? 'plus' : 'free' }]
+      } else if (url.pathname.startsWith('/storage/')) {
+        const { prefixes }: { prefixes: string[] } = JSON.parse(String(init?.body))
+        const storagePath = prefixes[0]
+        calls.push('remove:' + storagePath)
+        if (storagePath.endsWith(legacyId + '.bin')) return Response.json({ message: 'Storage unavailable' }, { status: 503 })
+        data = []
+      } else throw new Error('Unexpected fixture path ' + url.pathname)
+      return Response.json(data)
+    }
+    const client = createClient('http://127.0.0.1:3323', 'sb_secret_fixture', {
+      global: { fetch: fetcher as typeof fetch }, auth: { persistSession: false, autoRefreshToken: false },
+    })
+    const result = await pruneExpiredCheckpoints(client, new Date('2026-01-30T04:30:00.000Z'))
+    expect(result).toEqual({ pruned: 1, failures: 1 })
+    expect(calls).toEqual([
+      'remove:' + pageId + '/versions/' + freeId + '.bin',
+      'delete:' + freeId,
+      'remove:' + viewer + '/versions/' + legacyId + '.bin',
+    ])
   })
 })
 
