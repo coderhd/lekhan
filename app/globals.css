@@ -566,6 +566,8 @@ kbd {
 .cloud-navigation a, .cloud-pages a { display: flex; align-items: center; gap: 8px; padding: 7px 9px; color: var(--pine); text-decoration: none; border-radius: 5px; }
 .cloud-navigation a[aria-current=page], .cloud-pages a:hover { background: var(--soft-pine); }
 .cloud-create { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-block: 20px 12px; }
+.cloud-create-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-block: 20px 12px; }
+.cloud-create-row .cloud-create { margin: 0; }
 .cloud-create label { display: grid; gap: 4px; min-width: min(100%, 230px); font-weight: 730; }
 .cloud-create input { width: 100%; height: 38px; padding: 7px; color: var(--ink); background: var(--overlay); border: 1px solid var(--line); border-radius: 7px; }
 .cloud-pages { list-style: none; padding: 0; margin: 10px 0 14px; }
@@ -584,6 +586,10 @@ kbd {
 .checkpoint-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .cloud-page-actions { margin-top: 30px; padding-block: 12px; border-top: 1px solid var(--line); }
 .cloud-page-actions summary { color: var(--pine); font-weight: 760; }
+.cloud-subpages { margin-top: 30px; }
+.cloud-subpages h2 { font: 620 26px/1.1 var(--serif); }
+.cloud-references ul { display: grid; gap: 4px; padding-inline-start: 18px; }
+.cloud-references button { min-height: 33px; text-align: start; }
 .sharing > section { margin-block: 24px; border-top: 1px solid var(--line); }
 .sharing h2 { margin-block: 14px 8px; font: 620 27px/1.1 var(--serif); }
 .sharing-list { padding: 0; list-style: none; margin-top: 8px; }

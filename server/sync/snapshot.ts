@@ -6,6 +6,12 @@ const ivSize = 12
 const tagSize = 16
 const headerSize = version.length + ivSize + tagSize
 
+export function configuredSnapshotCipher() {
+  const primary = process.env.LEKHAN_ENCRYPTION_KEY?.trim()
+  if (!primary || primary.length < 32) return null
+  return snapshotCipher(primary, (process.env.LEKHAN_ENCRYPTION_PREVIOUS_KEYS ?? '').split(',').map(value => value.trim()).filter(Boolean))
+}
+
 export function snapshotCipher(primary: string, previous: string[] = []) {
   if (primary.length < 32) throw new Error('Set a strong LEKHAN_ENCRYPTION_KEY before starting sync.')
   const keys = [primary, ...previous].map(secret => createHash('sha256').update(secret).digest())

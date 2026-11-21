@@ -32,13 +32,20 @@ const hub = createSyncHub({
 hub.server.listen(port, () => console.log('[sync] listening on port ' + port))
 let ongoingPrune: Promise<unknown> | undefined
 let pruneTimer: ReturnType<typeof setInterval> | undefined
+const pruneCheckpoints = process.env.LEKHAN_PRUNE_CHECKPOINTS === '1'
+const pruneImportReceipts = process.env.LEKHAN_PRUNE_IMPORT_RECEIPTS === '1'
 const prune = () => {
   if (ongoingPrune) return
-  ongoingPrune = pruneExpiredCheckpoints(client).then(({ pruned, failures }) => {
+  const checkpoints = pruneCheckpoints ? pruneExpiredCheckpoints(client).then(({ pruned, failures }) => {
     if (pruned || failures) console.log('[checkpoints] pruned=' + pruned + ' failures=' + failures)
-  }).catch(() => { console.error('[checkpoints] retention failed') }).finally(() => { ongoingPrune = undefined })
+  }).catch(() => { console.error('[checkpoints] retention failed') }) : null
+  const receipts = pruneImportReceipts ? client.rpc('cleanup_import_batches', { retain_days: 30 }).then(({ data, error }) => {
+    if (error) console.error('[imports] receipt retention failed')
+    else if (data) console.log('[imports] removed receipts=' + data)
+  }) : null
+  ongoingPrune = Promise.allSettled([checkpoints, receipts]).finally(() => { ongoingPrune = undefined })
 }
-if (process.env.LEKHAN_PRUNE_CHECKPOINTS === '1') {
+if (pruneCheckpoints || pruneImportReceipts) {
   prune()
   pruneTimer = setInterval(prune, 6 * 60 * 60 * 1000)
   pruneTimer.unref()

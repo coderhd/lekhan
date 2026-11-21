@@ -24,6 +24,7 @@ interface PageEditorProps {
   focusOnMount?: boolean
   collaboration?: CloudCollaboration
   onSchemaError?: () => void
+  showModePicker?: boolean
 }
 
 interface MenuState {
@@ -106,7 +107,7 @@ export default function PageEditor(props: PageEditorProps) {
 
 function PageEditorView(props: PageEditorProps) {
   const editorText = useTranslations('editor-chrome')
-  const { markdown, onChange, editable = true, focusOnMount = false } = props
+  const { markdown, onChange, editable = true, focusOnMount = false, showModePicker = true } = props
   const sourceOnly = useMemo(() => requiresMarkdownSource(markdown), [markdown])
   const [preferSource, setPreferSource] = useState(sourceOnly)
   const [focusAfterSwitch, setFocusAfterSwitch] = useState(false)
@@ -119,7 +120,7 @@ function PageEditorView(props: PageEditorProps) {
     setPreferSource(nextSource)
   }
 
-  const modePicker = (
+  const modePicker = showModePicker ? (
     <div className="writer-mode-picker" role="group" aria-label={editorText('editorMode')}>
       <button
         type="button"
@@ -133,7 +134,7 @@ function PageEditorView(props: PageEditorProps) {
         {editorText('markdown')}
       </button>
     </div>
-  )
+  ) : null
 
   const focusBody = focusOnMount || focusAfterSwitch
   if (!source) return <PageEditorSession {...props} focusOnMount={focusBody} modePicker={modePicker} />

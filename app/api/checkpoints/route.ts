@@ -7,7 +7,8 @@ import { workspaceEntitlementOrFree } from '@/lib/billing/entitlements'
 import { checkpointMaxBytes, checkpointName, type Checkpoint } from '@/lib/cloud/checkpoints'
 import { pageAccess, uuidPattern } from '@/lib/cloud/graph'
 import { getExpirationCutoffDate } from '@/lib/tier-limits'
-import { snapshotCipher } from '@/server/sync/snapshot'
+import { readBoundedBody } from '@/lib/server/read-body'
+import { configuredSnapshotCipher } from '@/server/sync/snapshot'
 
 const headers = { 'Cache-Control': 'private, no-store' }
 const fields = 'id,version_name,created_at'
@@ -31,9 +32,9 @@ async function checkpointAccess(request: NextRequest) {
 }
 
 function cipher() {
-  const primary = process.env.LEKHAN_ENCRYPTION_KEY?.trim()
-  if (!primary) throw new Error('Checkpoint encryption is unavailable.')
-  return snapshotCipher(primary, (process.env.LEKHAN_ENCRYPTION_PREVIOUS_KEYS ?? '').split(',').map(value => value.trim()).filter(Boolean))
+  const configured = configuredSnapshotCipher()
+  if (!configured) throw new Error('Checkpoint encryption is unavailable.')
+  return configured
 }
 
 function objectPath(pageId: string, versionId: string) {
@@ -66,24 +67,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function boundedSnapshot(request: NextRequest) {
-  const source = request.body?.getReader()
-  if (!source) return null
-  let size = 0
-  const chunks: Uint8Array[] = []
-  while (true) {
-    const { done, value } = await source.read()
-    if (done) break
-    size += value.byteLength
-    if (size > checkpointMaxBytes) {
-      await source.cancel()
-      return null
-    }
-    chunks.push(value)
-  }
-  return Buffer.concat(chunks, size)
-}
-
 export async function POST(request: NextRequest) {
   try {
     const context = await checkpointAccess(request)
@@ -92,7 +75,7 @@ export async function POST(request: NextRequest) {
     const { account, admin, pageId } = context
     const name = checkpointName(request.nextUrl.searchParams.get('name'))
     if (!name || request.headers.get('content-type') !== 'application/octet-stream') return failure(400, 'invalid_checkpoint')
-    const snapshot = await boundedSnapshot(request)
+    const snapshot = await readBoundedBody(request, checkpointMaxBytes)
     if (!snapshot) return failure(413, 'checkpoint_too_large')
     const doc = new Y.Doc()
     try {

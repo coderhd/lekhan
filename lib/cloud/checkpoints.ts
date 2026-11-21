@@ -14,7 +14,9 @@ export function checkpointName(value: string | null) {
 }
 
 export function replaceCheckpointContent(target: Y.Doc, snapshot: Y.Doc, origin: unknown) {
-  const source = snapshot.getMap('lekhan').get('mode') === 'source'
+  const metadata = snapshot.getMap('lekhan')
+  const source = metadata.get('mode') === 'source'
+  const frontmatter = metadata.get('frontmatter')
   const rich = snapshot.getXmlFragment('default').toArray().map(node => {
     if (node instanceof Y.XmlElement || node instanceof Y.XmlText) return node.clone()
     throw new Error('This checkpoint contains unsupported blocks.')
@@ -24,6 +26,8 @@ export function replaceCheckpointContent(target: Y.Doc, snapshot: Y.Doc, origin:
     const mode = target.getMap('lekhan')
     if (source) mode.set('mode', 'source')
     else mode.delete('mode')
+    if (typeof frontmatter === 'string') mode.set('frontmatter', frontmatter)
+    else mode.delete('frontmatter')
 
     const fragment = target.getXmlFragment('default')
     if (fragment.length) fragment.delete(0, fragment.length)

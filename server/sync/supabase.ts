@@ -3,15 +3,15 @@ import type { JSONContent } from '@tiptap/react'
 import { yDocToProsemirrorJSON } from '@tiptap/y-tiptap'
 import * as Y from 'yjs'
 import { wikiLinks } from '../../lib/markdown-references.ts'
+import { scanTags, toTitleKey, withoutEmbeddedImages } from '../../lib/cloud/graph-index.ts'
 import type { snapshotCipher } from './snapshot.ts'
 
 const maxStoredBytes = 64 * 1024 * 1024
 const maxIndexSize = 2_000_000
-const toTitleKey = (text: string) => text.trim().replace(/\s+/g, ' ').normalize('NFC').toLowerCase()
 
 export function indexedDocument(doc: Y.Doc) {
   const source = doc.getMap('lekhan').get('mode') === 'source'
-  if (source) return doc.getText('source').toString().slice(0, maxIndexSize)
+  if (source) return withoutEmbeddedImages(doc.getText('source').toString()).slice(0, maxIndexSize)
 
   const json = yDocToProsemirrorJSON(doc, 'default') as JSONContent
   const stack: (JSONContent | string)[] = [json]
@@ -44,19 +44,6 @@ export function indexedDocument(doc: Y.Doc) {
   return parts.join('').slice(0, maxIndexSize)
 }
 
-function scanTags(raw: string, properties: Record<string, unknown> | null) {
-  const propertyTags = properties?.tags
-  const input = Array.isArray(propertyTags) ? propertyTags : typeof propertyTags === 'string' ? propertyTags.split(/[\s,]+/) : []
-  const body = raw.replace(/^`{3,}[^\n]*\n[\s\S]*?^\x60{3,}[^\n]*$/gm, '').replace(/`[^`\n]+`/g, '')
-  const tags = new Set<string>()
-  for (const item of input.concat(Array.from(body.matchAll(/(?:^|[\s(,;])#([\p{L}\p{M}\p{N}_/-]+)/gu), match => match[1]))) {
-    if (typeof item !== 'string') continue
-    const tag = toTitleKey(item).replace(/^#/, '')
-    if (/^[\p{L}\p{M}\p{N}_/-]{1,125}$/u.test(tag) && !/^\p{N}+$/u.test(tag)) tags.add(tag)
-  }
-  return [...tags]
-}
-
 async function syncGraph(client: SupabaseClient, pageId: string, text: string) {
   const { data: page, error } = await client.from('pages').select('workspace_id,properties').eq('id', pageId).maybeSingle()
   if (error) throw error
@@ -64,10 +51,16 @@ async function syncGraph(client: SupabaseClient, pageId: string, text: string) {
   const links = new Map<string, string>()
   for (const { target } of wikiLinks(text)) {
     const title = target.split('#')[0].trim()
-    if (title && title.length <= 160 && !links.has(toTitleKey(title))) links.set(toTitleKey(title), title)
+    if (title && Buffer.byteLength(title) <= 2048 && !links.has(toTitleKey(title))) links.set(toTitleKey(title), title)
   }
   const exact = new Map<string, string | null>()
-  const names = [...links.values()].filter(title => !title.includes('/'))
+  if (links.size) {
+    const { data: indexed, error: linkError } = await client.from('page_links').select('to_title,to_page_id')
+      .eq('from_page_id', pageId).not('to_page_id', 'is', null).limit(4000)
+    if (linkError) throw linkError
+    for (const link of indexed) exact.set(toTitleKey(link.to_title), link.to_page_id)
+  }
+  const names = [...links.values()].filter(title => !title.includes('/') && !exact.has(toTitleKey(title)))
   for (let index = 0; index < names.length; index += 35) {
     const response = await client.from('pages').select('id,title').eq('workspace_id', page.workspace_id).in('title', names.slice(index, index + 35))
     if (response.error) throw response.error

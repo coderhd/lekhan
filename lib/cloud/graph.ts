@@ -62,6 +62,15 @@ export async function listCloudPages(client: SupabaseClient, subject: string, sh
   return { pages, next: data.length > batchSize ? pages.at(-1)?.id : undefined }
 }
 
+export async function listCloudChildren(client: SupabaseClient, parentId: string, after?: string) {
+  let query = client.from('pages').select(fields).eq('parent_id', parentId)
+  if (after && uuidPattern.test(after)) query = query.gt('id', after)
+  const { data, error } = await query.order('id').limit(batchSize + 1).returns<CloudPage[]>()
+  if (error) throw error
+  const pages = data.slice(0, batchSize)
+  return { pages, next: data.length > batchSize ? pages.at(-1)?.id : undefined }
+}
+
 export async function ensureCloudWorkspace(client: SupabaseClient, subject: string): Promise<string> {
   async function findWorkspace() {
     const { data, error } = await client.from('workspaces').select('id').eq('owner_id', subject).maybeSingle()

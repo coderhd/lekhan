@@ -1,24 +1,69 @@
 'use client'
 
-import { AlertCircle, Archive, Check, FolderOpen, LoaderCircle } from 'lucide-react'
+import { AlertCircle, Archive, Check, FileText, FolderOpen, LoaderCircle } from 'lucide-react'
 import { useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { Dialog } from './workspace-dialogs'
 import type { ImportReport, VaultImportPlan } from '@/lib/vault-import'
 import type { SaveStatus } from '@/lib/use-workspace'
 import { pickVaultFolder, readVaultFiles, readVaultZip, type VaultContents } from '@/lib/vault-reader'
+import type { cloudImportPlan, CloudImportReceipt } from '@/lib/cloud/import-plan'
 
-export function VaultImportDialog({ onClose, onImport, saveStatus }: {
-  onClose: () => void
-  onImport: (plan: VaultImportPlan) => ImportReport | null
-  saveStatus: SaveStatus
-}) {
+type Destination = { cloud: true; onOpenPage: (id: string) => void }
+  | { cloud?: false; onImport: (plan: VaultImportPlan) => ImportReport | null; saveStatus: SaveStatus }
+
+export function VaultImportDialog(props: Destination & { onClose: () => void }) {
+  const { onClose } = props
   const zip = useRef<HTMLInputElement>(null)
   const directory = useRef<HTMLInputElement>(null)
+  const markdown = useRef<HTMLInputElement>(null)
   const busy = useRef(false)
+  const [draft, setDraft] = useState<ReturnType<typeof cloudImportPlan> | null>(null)
   const [reading, setReading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [progress, setProgress] = useState<{ saved: number; resumed: number; total: number } | null>(null)
+  const [firstPage, setFirstPage] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [report, setReport] = useState<ImportReport | null>(null)
+
+  async function upload(plan: ReturnType<typeof cloudImportPlan>) {
+    setUploading(true)
+    setError('')
+    const total = plan.report.notes + plan.report.folders
+    let saved = 0
+    let resumed = 0
+    setProgress({ saved, resumed, total })
+    try {
+      for (const batch of plan.batches) {
+        const result = await fetch('/api/import', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(batch),
+          signal: AbortSignal.timeout(120_000),
+        })
+        if (result.status === 413) throw new Error('The cloud host rejected the size of this batch. Earlier batches are still saved.')
+        if (result.status === 400) throw new Error('A note has a title, path, or property that the cloud workspace could not accept.')
+        if (result.status === 409) throw new Error('This batch conflicts with a saved import. Select the original files to continue.')
+        if (!result.ok) throw new Error('Could not finish the cloud upload. Resume to continue from the saved batches.')
+        const receipt: CloudImportReceipt = await result.json()
+        const firstIndex = batch.pages.findIndex(page => page.ordinal === plan.firstNote)
+        if (firstIndex >= 0 && receipt.pages[firstIndex]) setFirstPage(receipt.pages[firstIndex].id)
+        saved += receipt.importedCount
+        if (receipt.replayed) resumed += receipt.importedCount
+        setProgress({ saved, resumed, total })
+      }
+      setReport({ ...plan.report, repeated: saved === resumed })
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Could not finish the cloud upload.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  function resume() {
+    const plan = draft
+    if (busy.current || !plan) return
+    busy.current = true
+    void upload(plan).finally(() => { busy.current = false })
+  }
 
   async function run(read: () => Promise<VaultContents | null>) {
     if (busy.current) return
@@ -30,7 +75,16 @@ export function VaultImportDialog({ onClose, onImport, saveStatus }: {
       const contents = await read()
       if (!contents) return
       const { planVaultImport } = await import('@/lib/vault-import')
-      const result = onImport(await planVaultImport(contents))
+      const plan = await planVaultImport(contents)
+      if (props.cloud) {
+        const { cloudImportPlan } = await import('@/lib/cloud/import-plan')
+        const cloudPlan = cloudImportPlan(plan)
+        setDraft(cloudPlan)
+        setReading(false)
+        await upload(cloudPlan)
+        return
+      }
+      const result = props.onImport(plan)
       if (!result) throw new Error('The workspace is still opening. Try again when it is ready.')
       setReport(result)
     } catch (failure) {
@@ -55,17 +109,20 @@ export function VaultImportDialog({ onClose, onImport, saveStatus }: {
     if (files.length) void run(() => readVaultFiles(files))
   }
 
-  const saved = report && saveStatus === 'saved'
-  const saveFailed = report && (saveStatus === 'error' || saveStatus === 'conflict')
+  const saved = report && (props.cloud || props.saveStatus === 'saved')
+  const saveFailed = report && !props.cloud && (props.saveStatus === 'error' || props.saveStatus === 'conflict')
+  const title = props.cloud ? 'Import to cloud workspace' : 'Import an Obsidian vault'
 
   return (
-    <Dialog title="Import an Obsidian vault" onClose={() => { if (!busy.current) onClose() }}>
+    <Dialog title={title} onClose={() => { if (!busy.current) onClose() }}>
       <div className="form-dialog vault-dialog">
-        <h2>Import an Obsidian vault</h2>
-        <p>Choose a ZIP archive or vault folder. Lekhan keeps your note hierarchy, properties, and page links.</p>
+        <h2>{title}</h2>
+        <p>{props.cloud ? 'Upload Markdown files or an Obsidian vault to your private cloud workspace.'
+          : 'Choose a ZIP archive or vault folder. Lekhan keeps your note hierarchy, properties, and page links.'}</p>
         <input ref={zip} type="file" accept=".zip,application/zip" hidden aria-label="Vault ZIP" onChange={selectZip} />
         <input ref={directory} type="file" {...{ webkitdirectory: "" }} multiple hidden aria-label="Vault folder" onChange={selectFolder} />
-        {!report && <div className="vault-options">
+        {props.cloud && <input ref={markdown} type="file" accept=".md,.markdown,text/markdown" multiple hidden aria-label="Markdown files" onChange={selectFolder} />}
+        {!report && !draft && <div className="vault-options">
           <button className="secondary-button" disabled={reading} onClick={() => zip.current?.click()}><Archive size={17} /> Choose ZIP</button>
           <button className="secondary-button" disabled={reading} onClick={() => {
             if (!('showDirectoryPicker' in window) || !window.isSecureContext) {
@@ -74,13 +131,19 @@ export function VaultImportDialog({ onClose, onImport, saveStatus }: {
               void run(pickVaultFolder)
             }
           }}><FolderOpen size={17} /> Choose folder</button>
+          {props.cloud && <button className="secondary-button" disabled={reading} onClick={() => markdown.current?.click()}><FileText size={17} /> Choose Markdown</button>}
         </div>}
         {reading && <div role="status" className="vault-status"><LoaderCircle size={16} className="spin" /> Reading vault…</div>}
+        {progress && <div role="status" className="vault-status">
+          {uploading && <LoaderCircle size={16} className="spin" />}
+          {progress.saved} of {progress.total} pages saved{progress.resumed ? ` · ${progress.resumed} already imported` : ''}
+        </div>}
         {error && <div role="alert" className="vault-status vault-error"><AlertCircle size={16} /> {error}</div>}
         {report && <>
           <div role="status" className="vault-status">
             {saved ? <Check size={16} /> : saveFailed ? <AlertCircle size={16} /> : <LoaderCircle size={16} className="spin" />}
-            {saved ? report.repeated ? 'Vault already imported' : 'Import saved locally' : saveFailed ? 'Import is open but could not be saved' : 'Saving imported pages…'}
+            {saved ? report.repeated ? 'Vault already imported' : props.cloud ? 'Import saved to cloud workspace' : 'Import saved locally'
+              : saveFailed ? 'Import is open but could not be saved' : 'Saving imported pages…'}
           </div>
           <dl className="vault-report">
             {[
@@ -93,9 +156,11 @@ export function VaultImportDialog({ onClose, onImport, saveStatus }: {
           {report.invalidProperties > 0 && <p>Some properties could not be read. Their original YAML is still in the page source.</p>}
         </>}
         <div className="dialog-actions">
-          <button className={saved ? 'primary-button' : 'secondary-button'} onClick={onClose} disabled={reading}>
-            {report ? 'Open workspace' : 'Cancel'}
+          <button className={saved && !props.cloud ? 'primary-button' : 'secondary-button'} onClick={onClose} disabled={reading || uploading}>
+            {report ? props.cloud ? 'Done' : 'Open workspace' : 'Cancel'}
           </button>
+          {props.cloud && error && draft && <button className="primary-button" disabled={uploading} onClick={resume}>Resume import</button>}
+          {props.cloud && report && firstPage && <button className="primary-button" onClick={() => props.onOpenPage(firstPage)}>Open first note</button>}
         </div>
       </div>
     </Dialog>

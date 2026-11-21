@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Cloud, FileText, Plus } from 'lucide-react'
 import CloudSearch from '@/components/cloud-search'
+import CloudVaultImport from '@/components/cloud-vault-import'
 import { accountContext } from '@/lib/auth/server'
 import { listCloudPages } from '@/lib/cloud/graph'
 import type { SharedRole } from '@/lib/cloud/sharing'
@@ -37,10 +38,13 @@ export default async function CloudWorkspace({ searchParams }: {
           <Link href="/cloud?view=invitations" aria-current={tab === 'invitations' ? 'page' : undefined}>Invitations</Link>
         </nav>
         {error && <p className="account-error" role="alert">{error === 'title' ? 'Enter a page title up to 160 characters.' : 'The page could not be created.'}</p>}
-        {tab === 'mine' && <form action={addCloudPage} className="cloud-create">
-          <label>Page title <input name="title" required maxLength={160} placeholder="Name your page" /></label>
-          <button className="primary-button"><Plus size={16} /> New page</button>
-        </form>}
+        {tab === 'mine' && <div className="cloud-create-row">
+          <form action={addCloudPage} className="cloud-create">
+            <label>Page title <input name="title" required maxLength={160} placeholder="Name your page" /></label>
+            <button className="primary-button"><Plus size={16} /> New page</button>
+          </form>
+          <CloudVaultImport />
+        </div>}
         {tab === 'invitations' ? <>
           {notice === 'declined' && <p role="status">Invitation declined.</p>}
           {invitations?.error ? <p role="alert">Could not load invitations.</p> : invitations?.data.length ?

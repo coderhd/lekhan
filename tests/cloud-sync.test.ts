@@ -80,6 +80,7 @@ describe('cloud checkpoints', () => {
     text.insert(0, 'A previous draft', { bold: {} })
 
     active.getMap('lekhan').set('mode', 'source')
+    active.getMap('lekhan').set('frontmatter', '---\ntags: [lab]\n---\n')
     active.getText('source').insert(0, 'Working draft')
     Y.applyUpdate(peer, Y.encodeStateAsUpdate(active))
     const backup = new Y.Doc()
@@ -91,11 +92,13 @@ describe('cloud checkpoints', () => {
     const restored = peer.getXmlFragment('default').get(0) as Y.XmlElement
     expect((restored.get(0) as Y.XmlText).toDelta()).toEqual([{ insert: 'A previous draft', attributes: { bold: {} } }])
     expect(peer.getMap('lekhan').has('mode')).toBe(false)
+    expect(peer.getMap('lekhan').has('frontmatter')).toBe(false)
     expect(peer.getText('source').length).toBe(0)
 
     replaceCheckpointContent(active, backup, 'test backup restore')
     Y.applyUpdate(peer, Y.encodeStateAsUpdate(active, Y.encodeStateVector(peer)))
     expect(peer.getText('source').toString()).toBe('Working draft')
+    expect(peer.getMap('lekhan').get('frontmatter')).toBe('---\ntags: [lab]\n---\n')
     expect(peer.getXmlFragment('default').length).toBe(0)
   })
 

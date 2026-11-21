@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import CloudPageEditor from '@/components/cloud-page-editor'
 import CloudSearch from '@/components/cloud-search'
 import { accountContext } from '@/lib/auth/server'
-import { listCloudPages, pageAccess } from '@/lib/cloud/graph'
+import { listCloudChildren, listCloudPages, pageAccess } from '@/lib/cloud/graph'
 import { syncUrl } from '@/lib/sync/config'
 import { getTicketSecret } from '@/lib/sync/ticket'
 import { addCloudPage } from '@/app/cloud/actions'
@@ -11,7 +11,7 @@ import { renameCloudPage } from '@/app/cloud/page-actions'
 
 export default async function CloudPageRoute({ params, searchParams }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ error?: string }>
+  searchParams: Promise<{ error?: string; children?: string }>
 }) {
   const { id } = await params
   const account = await accountContext()
@@ -19,10 +19,11 @@ export default async function CloudPageRoute({ params, searchParams }: {
   const access = await pageAccess(account.client, id, account.subject)
   if (!access?.privateAccess) notFound()
 
-  const [owned, shared, { error }] = await Promise.all([
+  const { error, children: after } = await searchParams
+  const [owned, shared, children] = await Promise.all([
     listCloudPages(account.client, account.subject, false).catch(() => null),
     listCloudPages(account.client, account.subject, true).catch(() => null),
-    searchParams,
+    listCloudChildren(account.client, id, after).catch(() => null),
   ])
   const choices = [...(owned?.pages ?? []), ...(shared?.pages ?? [])].filter(page => page.id !== id)
     .map(page => ({ id: page.id, title: page.title, path: page.title }))
@@ -46,6 +47,13 @@ export default async function CloudPageRoute({ params, searchParams }: {
           key={account.subject + ':' + id} page={access.page} choices={choices}
           subject={account.subject} enabled={!!syncUrl() && !!getTicketSecret()}
         />
+        {children && children.pages.length > 0 && <section aria-label="Subpages" className="cloud-subpages">
+          <h2>Subpages</h2>
+          <ul className="cloud-pages">{children.pages.map(child => <li key={child.id}>
+            <Link href={'/page/' + child.id}>{child.title}</Link>
+          </li>)}</ul>
+          {children.next && <Link href={'/page/' + id + '?children=' + children.next}>More subpages</Link>}
+        </section>}
         {access.role === 'owner' && <details className="cloud-page-actions">
           <summary>Page settings</summary>
           <form className="cloud-create" action={renameCloudPage.bind(null, id)}>
