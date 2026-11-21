@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { Cloud, FileText, Plus } from 'lucide-react'
+import CloudSearch from '@/components/cloud-search'
 import { accountContext } from '@/lib/auth/server'
 import { listCloudPages } from '@/lib/cloud/graph'
 import { addCloudPage } from './actions'
@@ -18,7 +19,10 @@ export default async function CloudWorkspace({ searchParams }: {
     <main className="cloud-screen">
       <header className="account-header">
         <Link className="account-brand" href="/"><span className="brand-mark" aria-hidden="true">L</span> Lekhan</Link>
-        <Link className="account-link" href="/">Local workspace</Link>
+        <div className="cloud-header-actions">
+          <Link className="account-link" href="/">Local workspace</Link>
+          <CloudSearch />
+        </div>
       </header>
       <section className="cloud-library" aria-labelledby="cloud-heading">
         <span className="page-emblem"><Cloud size={22} /></span>

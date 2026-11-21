@@ -6,6 +6,7 @@ import {
   Cloud, LogIn, LogOut, PanelRight, Plus, Search, Star, X, Link2, MoveRight, Trash2, Pencil, CornerDownRight, NotebookPen, Sparkles,
 } from 'lucide-react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { signOut } from '@/app/auth/actions'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
@@ -46,6 +47,7 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
   storageScope?: string; cloudEnabled?: boolean; signedIn?: boolean
 }) {
   const t = useTranslations('app-shell')
+  const router = useRouter()
   const accountText = useTranslations('auth')
   const editorText = useTranslations('editor-chrome')
   const locale = useLocale()
@@ -562,7 +564,13 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
         })
       }} />}
       {vaultOpen && <VaultImportDialog onClose={() => setVaultOpen(false)} onImport={importVault} saveStatus={status} />}
-      {searchOpen && <SearchDialog pages={pages} initialQuery={searchQuery} onOpen={open} onClose={() => { setSearchOpen(false); setSearchQuery('') }} />}
+      {searchOpen && <SearchDialog pages={pages} initialQuery={searchQuery} onOpen={open}
+        onOpenCloud={signedIn ? id => {
+          setSearchOpen(false)
+          setSearchQuery('')
+          router.push('/page/' + id)
+        } : undefined}
+        onClose={() => { setSearchOpen(false); setSearchQuery('') }} />}
       {action?.kind === 'move' && actionPage && (
         <Dialog title={t('movePage')} onClose={() => setAction(null)}>
           <form className="form-dialog" onSubmit={(event: FormEvent<HTMLFormElement>) => {

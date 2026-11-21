@@ -423,6 +423,9 @@ kbd {
 }
 .search-input-row input { flex: 1; min-width: 0; height: 38px; padding: 0 4px; border: 0; color: var(--ink); background: transparent; border-radius: 5px; font-size: 15px; }
 .search-input-row input:focus-visible { outline-offset: 2px; }
+.search-scope { display: flex; gap: 5px; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+.search-scope button { padding: 5px 10px; border-radius: 5px; font-weight: 730; color: var(--muted); }
+.search-scope button[aria-pressed=true] { background: var(--soft-pine); color: var(--pine); }
 .search-results { padding: 9px; max-height: min(375px, 47dvh); overflow: auto; }
 .section-label { margin: 2px 8px 5px; font-size: 11px; color: var(--muted); font-weight: 800; }
 .search-result { display: flex; width: 100%; align-items: center; gap: 9px; border-radius: 6px; padding: 8px; text-align: left; min-height: 38px; }
@@ -555,6 +558,8 @@ kbd {
 .account-link { text-decoration: none; }
 
 .cloud-screen { min-height: 100dvh; padding: clamp(20px, 4vw, 48px); }
+.cloud-screen .account-header, .cloud-header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.cloud-search-trigger kbd { color: var(--muted); margin-inline-start: 4px; }
 .cloud-library { width: min(100%, 740px); margin: clamp(35px, 8vh, 90px) auto 50px; }
 .cloud-library h1 { font: 610 clamp(40px, 7vw, 67px)/1 var(--serif); letter-spacing: -.035em; margin: 17px 0; }
 .cloud-navigation { display: flex; align-items: center; gap: 8px; border-block: 1px solid var(--line); padding-block: 6px; }

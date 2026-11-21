@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import CloudPageEditor from '@/components/cloud-page-editor'
+import CloudSearch from '@/components/cloud-search'
 import { accountContext } from '@/lib/auth/server'
 import { listCloudPages, pageAccess } from '@/lib/cloud/graph'
 import { syncUrl } from '@/lib/sync/config'
@@ -30,7 +31,10 @@ export default async function CloudPageRoute({ params, searchParams }: {
     <main className="cloud-screen">
       <header className="account-header">
         <Link className="account-brand" href="/cloud"><span className="brand-mark" aria-hidden="true">L</span> Cloud workspace</Link>
-        {access.page.parent_id && <Link className="account-link" href={'/page/' + access.page.parent_id}>Parent page</Link>}
+        <div className="cloud-header-actions">
+          {access.page.parent_id && <Link className="account-link" href={'/page/' + access.page.parent_id}>Parent page</Link>}
+          <CloudSearch />
+        </div>
       </header>
       <article className="cloud-library">
         <h1>{access.page.title}</h1>
