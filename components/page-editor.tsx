@@ -4,13 +4,14 @@ import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'rea
 import { type Editor, EditorContent, useEditor } from '@tiptap/react'
 import { FileText, Link2 } from 'lucide-react'
 import { useTranslations } from '@/lib/i18n/client'
+import type { CloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
 import type { PageChoice } from '@/lib/types'
 import { blockCommands } from './editor/block-commands'
 import { CommandMenu, type CommandItem } from './editor/command-menu'
 import { type CommandMatch, findCommand, validWikiLink } from './editor/editor-commands'
 import { FormatToolbar } from './editor/format-toolbar'
 import { requiresMarkdownSource } from './editor/source-mode'
-import { writingExtensions } from './editor/writing-extensions'
+import { collaborativeWritingExtensions, writingExtensions } from './editor/writing-extensions'
 import './editor/editor.css'
 
 interface PageEditorProps {
@@ -21,6 +22,8 @@ interface PageEditorProps {
   onOpenLink: (target: string) => void
   editable?: boolean
   focusOnMount?: boolean
+  collaboration?: CloudCollaboration
+  onSchemaError?: () => void
 }
 
 interface MenuState {
@@ -97,6 +100,7 @@ function getItems(choices: PageChoice[], pageId: string, match: CommandMatch): C
 }
 
 export default function PageEditor(props: PageEditorProps) {
+  if (props.collaboration) return <PageEditorSession key={props.pageId} {...props} modePicker={null} />
   return <PageEditorView key={props.pageId} {...props} />
 }
 
@@ -171,6 +175,8 @@ function PageEditorSession({
   editable = true,
   focusOnMount = false,
   modePicker,
+  collaboration,
+  onSchemaError,
 }: PageEditorProps & { modePicker: ReactNode }) {
   const editorText = useTranslations('editor-chrome')
   const menuId = useId()
@@ -300,12 +306,17 @@ function PageEditorSession({
     return true
   }
 
+  const extensions = useMemo(() => collaboration ? collaborativeWritingExtensions(collaboration) : writingExtensions, [collaboration])
+
   const editor: Editor | null = useEditor({
     immediatelyRender: false,
     shouldRerenderOnTransaction: false,
-    extensions: writingExtensions,
-    content: markdown,
-    contentType: 'markdown',
+    extensions,
+    ...(collaboration ? { enableContentCheck: true } : { content: markdown, contentType: 'markdown' as const }),
+    onContentError: ({ disableCollaboration }) => {
+      disableCollaboration()
+      onSchemaError?.()
+    },
     editable,
     autofocus: focusOnMount ? 'end' : false,
     editorProps: {
@@ -324,6 +335,9 @@ function PageEditorSession({
         click: (_view, event) => activatePageLink(event),
         keydown: (_view, event) => activatePageLink(event),
       },
+    },
+    onCreate: ({ editor: current }) => {
+      if (collaboration) onChange(current.getMarkdown())
     },
     onUpdate: ({ editor: current }) => {
       const value = current.getMarkdown()
@@ -344,7 +358,7 @@ function PageEditorSession({
   }, [editor, editable])
 
   useEffect(() => {
-    if (!editor) return
+    if (!editor || collaboration) return
     if (currentMarkdown.current === markdown) return
 
     currentMarkdown.current = markdown
@@ -354,7 +368,7 @@ function PageEditorSession({
         .setContent(markdown, { contentType: 'markdown', emitUpdate: false })
         .run()
     }
-  }, [editor, markdown])
+  }, [collaboration, editor, markdown])
 
   useEffect(() => {
     if (!editor || !menuOpen) return

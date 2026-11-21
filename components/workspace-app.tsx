@@ -3,7 +3,7 @@
 import {
   ArrowDownToLine, ArrowUpFromLine, BookOpen, CalendarDays, Check, ChevronDown,
   ChevronRight, CircleAlert, FileText, FolderClosed, List, LoaderCircle, Menu, MoreHorizontal,
-  LogIn, LogOut, PanelRight, Plus, Search, Star, X, Link2, MoveRight, Trash2, Pencil, CornerDownRight, NotebookPen, Sparkles,
+  Cloud, LogIn, LogOut, PanelRight, Plus, Search, Star, X, Link2, MoveRight, Trash2, Pencil, CornerDownRight, NotebookPen, Sparkles,
 } from 'lucide-react'
 import Link from 'next/link'
 import { signOut } from '@/app/auth/actions'
@@ -376,6 +376,7 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
             setVaultOpen(true)
           }}><FolderClosed size={15} /> Import vault</button>
           <LocaleSwitcher />
+          {cloudEnabled && signedIn && <Link className="nav-action account-link" href="/cloud"><Cloud size={15} /> Cloud workspace</Link>}
           {cloudEnabled && (signedIn
             ? <form action={signOut}><button className="nav-action" type="submit"><LogOut size={15} /> {accountText('signout')}</button></form>
             : <Link className="nav-action account-link" href="/login"><LogIn size={15}/> {accountText('login')}</Link>) }

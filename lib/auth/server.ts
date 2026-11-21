@@ -22,9 +22,14 @@ export async function createAuthClient() {
   })
 }
 
-export async function accountSubject() {
+export async function accountContext() {
   const client = await createAuthClient()
   if (!client) return null
   const { data, error } = await client.auth.getClaims()
-  return !error && typeof data?.claims.sub === 'string' ? data.claims.sub : null
+  const subject = data?.claims.sub
+  return !error && typeof subject === 'string' ? { client, subject } : null
+}
+
+export async function accountSubject() {
+  return (await accountContext())?.subject ?? null
 }

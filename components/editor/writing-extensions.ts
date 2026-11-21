@@ -1,3 +1,6 @@
+import Collaboration from '@tiptap/extension-collaboration'
+import CollaborationCaret from '@tiptap/extension-collaboration-caret'
+import type { CloudCollaboration } from '../../lib/sync/use-cloud-collaboration'
 import Image from '@tiptap/extension-image'
 import Paragraph from '@tiptap/extension-paragraph'
 import { TaskItem, TaskList } from '@tiptap/extension-list'
@@ -116,15 +119,18 @@ const InlineImageParagraph = Paragraph.extend({
   },
 })
 
-export const writingExtensions = [
-  StarterKit.configure({
+const baseStarter = {
     link: {
-      openOnClick: false,
+      openOnClick: false as const,
       HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
     },
-    underline: false,
-    paragraph: false,
-  }),
+    underline: false as const,
+    paragraph: false as const,
+}
+
+
+export const writingExtensions = [
+  StarterKit.configure(baseStarter),
   TaskList,
   TaskItem.configure({
     nested: true,
@@ -136,3 +142,33 @@ export const writingExtensions = [
   Callout,
   Markdown,
 ]
+
+export function collaborativeWritingExtensions(session: CloudCollaboration) {
+  return [
+    StarterKit.configure({ ...baseStarter, undoRedo: false }),
+    ...writingExtensions.slice(1),
+    Collaboration.configure({ document: session.document, field: 'default' }),
+    CollaborationCaret.configure({
+      provider: { awareness: session.awareness },
+      user: { name: 'Collaborator ' + session.subject.slice(0, 4), color: cursorColor(session.subject) },
+      render: user => {
+        const marker = document.createElement('span')
+        marker.className = 'collaboration-carets__caret'
+        marker.setAttribute('aria-hidden', 'true')
+        const color = typeof user.color === 'string' && /^#[\da-f]{6}$/i.test(user.color) ? user.color : '#575799'
+        marker.style.borderColor = color
+        const label = document.createElement('span')
+        label.className = 'collaboration-carets__label'
+        label.style.backgroundColor = color
+        label.textContent = typeof user.name === 'string' ? user.name.slice(0, 40) : 'Collaborator'
+        marker.append(label)
+        return marker
+      },
+    }),
+  ]
+}
+
+function cursorColor(subject: string) {
+  const palette = ['#7b4e72', '#235e85', '#346946', '#9a4e3d', '#8a5e19', '#575799']
+  return palette[Number.parseInt(subject.slice(0, 6), 16) % palette.length] ?? palette[0]
+}

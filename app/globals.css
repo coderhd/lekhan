@@ -553,3 +553,24 @@ kbd {
 .account-links { display: flex; flex-wrap: wrap; gap: 8px 13px; margin-top: 16px; font-size: 12px; }
 .account-links a, .account-link { color: var(--pine-dark); }
 .account-link { text-decoration: none; }
+
+.cloud-screen { min-height: 100dvh; padding: clamp(20px, 4vw, 48px); }
+.cloud-library { width: min(100%, 740px); margin: clamp(35px, 8vh, 90px) auto 50px; }
+.cloud-library h1 { font: 610 clamp(40px, 7vw, 67px)/1 var(--serif); letter-spacing: -.035em; margin: 17px 0; }
+.cloud-navigation { display: flex; align-items: center; gap: 8px; border-block: 1px solid var(--line); padding-block: 6px; }
+.cloud-navigation a, .cloud-pages a { display: flex; align-items: center; gap: 8px; padding: 7px 9px; color: var(--pine); text-decoration: none; border-radius: 5px; }
+.cloud-navigation a[aria-current=page], .cloud-pages a:hover { background: var(--soft-pine); }
+.cloud-create { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-block: 20px 12px; }
+.cloud-create label { display: grid; gap: 4px; min-width: min(100%, 230px); font-weight: 730; }
+.cloud-create input { width: 100%; height: 38px; padding: 7px; color: var(--ink); background: var(--overlay); border: 1px solid var(--line); border-radius: 7px; }
+.cloud-pages { list-style: none; padding: 0; margin: 10px 0 14px; }
+.cloud-pages li { border-bottom: 1px solid var(--line); }
+.cloud-pages a { min-height: 44px; }
+
+.cloud-editor-status { display: flex; flex-wrap: wrap; align-items: center; min-height: 44px; gap: 12px; margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+.cloud-editor-status > span { display: inline-flex; gap: 6px; align-items: center; }
+.cloud-editor-status button { margin-inline-start: auto; min-height: 32px; }
+.cloud-page-actions { margin-top: 30px; padding-block: 12px; border-top: 1px solid var(--line); }
+.cloud-page-actions summary { color: var(--pine); font-weight: 760; }
+.collaboration-carets__caret { border-inline-start: 2px solid; margin-inline-start: -1px; position: relative; pointer-events: none; }
+.collaboration-carets__label { border-radius: 4px; color: white; font: 750 10px/1.2 var(--ui); left: -1px; padding: 3px 4px; position: absolute; top: -1.35em; white-space: nowrap; }
