@@ -100,7 +100,7 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
             ? <LoaderCircle size={16} className="spin" /> : <CloudOff size={16} />}
           {networkLabel}
         </span>
-        {replica.session && !editable && <span><LockKeyhole size={15} /> View only</span>}
+        {replica.session && !editable && <span><LockKeyhole size={15} /> Viewing access</span>}
         {source !== null && <button type="button" className="secondary-button" aria-pressed={preview} onClick={() => setPreview(value => !value)}>
           Preview Markdown
         </button>}
@@ -114,7 +114,7 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
             ...(typeof raw === 'string' ? { frontmatter: raw } : {}),
             favorite: false, createdAt: page.updated_at, updatedAt: page.updated_at,
           })
-        }}><Download size={15} /> Export Markdown</button>}
+        }}><Download size={15} /> Export page</button>}
       </div>
       {linkMissing && <p className="account-error" role="status">There is no matching page in this link picker. Find the page in your cloud workspace.</p>}
       {schemaError && <p className="account-error" role="alert">This page contains blocks the editor cannot open safely. Editing and export are paused for this page.</p>}

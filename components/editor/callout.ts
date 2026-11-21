@@ -1,4 +1,4 @@
-import { Node } from '@tiptap/react'
+import { Node } from '@tiptap/core'
 
 const calloutHeading = /^ {0,3}>[ \t]*\[!([\w-]+)\]([+-]?)[ \t]*([^\n\r]*)(?:\r?\n|$)/
 

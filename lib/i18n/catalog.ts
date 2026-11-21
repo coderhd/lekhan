@@ -28,5 +28,6 @@ export async function getCatalog(locale: Locale): Promise<Catalog> {
     settings: withEnglishFallback(en.settings, translated.settings),
     metadata: withEnglishFallback(en.metadata, translated.metadata),
     auth: withEnglishFallback(en.auth, translated.auth),
+    'public-page': withEnglishFallback(en['public-page'], translated['public-page']),
   }
 }

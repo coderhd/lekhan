@@ -129,5 +129,19 @@
     "confirmError": "No se pudo verificar el enlace. Solicita uno nuevo.",
     "signout": "Cerrar sesión",
     "signoutError": "No se pudo cerrar la sesión. Inténtalo de nuevo."
+  },
+  "public-page": {
+    "theme": "Cambiar tema de lectura",
+    "viewOnly": "Pública · solo lectura",
+    "linkNotice": "Cualquiera con el enlace puede ver esta página.",
+    "subpages": "Subpáginas",
+    "temporarilyUnavailable": "El contenido de esta página no está disponible temporalmente.",
+    "poweredBy": "Con tecnología de Lekhan",
+    "createWorkspace": "Crea tu propio espacio de trabajo",
+    "unavailable": "Esta página no está disponible",
+    "memberHint": "Comprueba el enlace o pide acceso a la persona propietaria.",
+    "visitorHint": "Comprueba el enlace o inicia sesión con la cuenta invitada.",
+    "backHome": "Volver al inicio",
+    "login": "Iniciar sesión"
   }
 }

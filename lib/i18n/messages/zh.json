@@ -129,5 +129,19 @@
     "confirmError": "无法验证链接，请申请新链接。",
     "signout": "退出登录",
     "signoutError": "无法退出登录，请重试。"
+  },
+  "public-page": {
+    "theme": "切换阅读主题",
+    "viewOnly": "公开 · 仅供查看",
+    "linkNotice": "任何拥有链接的人都可以查看此页面。",
+    "subpages": "子页面",
+    "temporarilyUnavailable": "此页面的内容暂时无法查看。",
+    "poweredBy": "由 Lekhan 提供支持",
+    "createWorkspace": "创建你自己的工作区",
+    "unavailable": "此页面不可用",
+    "memberHint": "请检查链接，或向页面所有者申请访问权限。",
+    "visitorHint": "请检查链接，或使用收到邀请的账号登录。",
+    "backHome": "返回首页",
+    "login": "登录"
   }
 }

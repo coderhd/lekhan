@@ -19,7 +19,11 @@ export async function updateSharing(pageId: string, form: FormData) {
   const target = form.get('target')
   let outcome = 'unavailable'
   try {
-    if (change === 'invite') {
+    if (change === 'publish' || change === 'unpublish') {
+      const { data, error } = await account.client.from('pages').update({ is_public: change === 'publish' })
+        .eq('id', pageId).eq('owner_id', account.subject).select('id').maybeSingle()
+      if (!error && data) outcome = 'saved'
+    } else if (change === 'invite') {
       const email = invitationEmail(form.get('email'))
       const admin = createServerAdmin()
       if (!email || !role) outcome = 'invalid'

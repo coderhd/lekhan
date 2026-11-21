@@ -600,5 +600,66 @@ kbd {
 .invite-link { margin-top: 6px; }
 .sharing select, .invite-link input { min-height: 35px; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; color: var(--ink); background: var(--overlay); }
 .invite-link input { max-width: 100%; }
+
+.public-reading {
+  --reader-paper: #fcfaf4;
+  --reader-ink: #282b24;
+  --reader-muted: #5c6456;
+  --reader-accent: #28503b;
+  --reader-line: #d9ddd0;
+  --reader-code: #eeeee6;
+  min-height: 100dvh;
+  background: var(--reader-paper);
+  color: var(--reader-ink);
+}
+.public-reading[data-reading-theme=dark] {
+  color-scheme: dark;
+  --reader-paper: #1a211c;
+  --reader-ink: #eeeae0;
+  --reader-muted: #b7c2b2;
+  --reader-accent: #b7d0bb;
+  --reader-line: #414d43;
+  --reader-code: #272f28;
+}
+@media (prefers-color-scheme: dark) {
+  .public-reading:not([data-reading-theme]) {
+    color-scheme: dark;
+    --reader-paper: #1a211c;
+    --reader-ink: #eeeae0;
+    --reader-muted: #b7c2b2;
+    --reader-accent: #b7d0bb;
+    --reader-line: #414d43;
+    --reader-code: #272f28;
+  }
+  .public-reading:not([data-reading-theme]) .public-theme-moon { display: none; }
+  .public-reading:not([data-reading-theme]) .public-theme-sun { display: block; }
+}
+.public-reading-inner { position: relative; width: min(100% - 36px, 725px); margin-inline: auto; padding-block: 28px 40px; }
+.public-theme { position: absolute; inset-block-start: 23px; inset-inline-end: 0; color: var(--reader-accent); }
+.public-theme:hover { background: var(--reader-code); color: var(--reader-accent); }
+.public-theme-sun, .public-reading[data-reading-theme=dark] .public-theme-moon { display: none; }
+.public-reading[data-reading-theme=dark] .public-theme-sun { display: block; }
+.public-reader-header { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 18px; padding-inline-end: 48px; }
+.public-reader-header .account-brand, .public-prose a, .public-reader-children a, .public-reader-footer a { color: var(--reader-accent); }
+.public-reader-badge { display: inline-flex; align-items: center; gap: 5px; color: var(--reader-muted); font-size: 12px; font-weight: 750; }
+.public-reader-article { margin-block: clamp(45px, 10vw, 90px) 55px; overflow-wrap: anywhere; }
+.public-reader-article h1 { margin: 0; font: 610 clamp(43px, 8vw, 74px)/.98 var(--serif); letter-spacing: -.045em; }
+.public-reader-notice { margin-block: 16px 30px; padding-block: 9px; border-block-end: 1px solid var(--reader-line); color: var(--reader-muted); font-size: 13px; }
+.public-prose { font: 500 18px/1.68 var(--serif); }
+.public-prose :is(h2,h3,h4,h5,h6), .public-reader-children h2 { margin-block: 1.3em .35em; line-height: 1.18; }
+.public-prose blockquote { margin-inline: 0; padding-inline-start: 15px; border-inline-start: 2px solid var(--reader-accent); }
+.public-callout { background: var(--reader-code); border-inline-start: 2px solid var(--reader-accent); padding: 9px 14px; border-radius: 4px; margin-block: 14px; }
+.public-callout p { margin-block: 4px; }
+.public-prose code { padding: 2px 4px; border-radius: 3px; background: var(--reader-code); font-size: .86em; }
+.public-prose pre { overflow-x: auto; border-radius: 6px; padding: 12px; background: var(--reader-code); }
+.public-prose pre code { padding: 0; }
+.public-prose img { max-width: 100%; height: auto; border-radius: 5px; }
+.public-table { overflow-x: auto; }
+.public-table table { border-collapse: collapse; margin-block: 10px; }
+.public-table :is(td,th) { padding: 6px 9px; border: 1px solid var(--reader-line); text-align: start; }
+.public-reader-footer { border-block-start: 1px solid var(--reader-line); padding-block-start: 14px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; color: var(--reader-muted); font-size: 13px; }
+.public-reader-footer a { display: inline-flex; align-items: center; gap: 5px; font-weight: 760; }
+.public-unavailable .account-links { align-items: center; }
+.public-unavailable .account-links .primary-button { color: white; text-decoration: none; }
 .collaboration-carets__caret { border-inline-start: 2px solid; margin-inline-start: -1px; position: relative; pointer-events: none; }
 .collaboration-carets__label { border-radius: 4px; color: white; font: 750 10px/1.2 var(--ui); left: -1px; padding: 3px 4px; position: absolute; top: -1.35em; white-space: nowrap; }

@@ -129,5 +129,19 @@
     "confirmError": "The link couldn’t be verified. Request a new one.",
     "signout": "Sign out",
     "signoutError": "Couldn’t sign out. Try again."
+  },
+  "public-page": {
+    "theme": "Toggle reading theme",
+    "viewOnly": "Public · view only",
+    "linkNotice": "Anyone with the link can view this page.",
+    "subpages": "Subpages",
+    "temporarilyUnavailable": "This page’s content is temporarily unavailable.",
+    "poweredBy": "Powered by Lekhan",
+    "createWorkspace": "Create your own workspace",
+    "unavailable": "This page isn’t available",
+    "memberHint": "Check the link or ask the owner for access.",
+    "visitorHint": "Check the link or sign in with the account that was invited.",
+    "backHome": "Back home",
+    "login": "Log in"
   }
 }

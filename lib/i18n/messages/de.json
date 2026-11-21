@@ -129,5 +129,19 @@
     "confirmError": "Der Link konnte nicht bestätigt werden. Fordere einen neuen an.",
     "signout": "Abmelden",
     "signoutError": "Abmeldung fehlgeschlagen. Versuche es erneut."
+  },
+  "public-page": {
+    "theme": "Lesedesign wechseln",
+    "viewOnly": "Öffentlich · nur lesen",
+    "linkNotice": "Alle mit dem Link können diese Seite ansehen.",
+    "subpages": "Unterseiten",
+    "temporarilyUnavailable": "Der Inhalt dieser Seite ist vorübergehend nicht verfügbar.",
+    "poweredBy": "Bereitgestellt von Lekhan",
+    "createWorkspace": "Eigenen Arbeitsbereich erstellen",
+    "unavailable": "Diese Seite ist nicht verfügbar",
+    "memberHint": "Überprüfe den Link oder bitte die Eigentümerin oder den Eigentümer um Zugriff.",
+    "visitorHint": "Überprüfe den Link oder melde dich mit dem eingeladenen Konto an.",
+    "backHome": "Zur Startseite",
+    "login": "Anmelden"
   }
 }

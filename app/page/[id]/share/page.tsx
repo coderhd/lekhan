@@ -60,6 +60,17 @@ export default async function SharePage({ params, searchParams }: {
       <p>{access.page.title}</p>
       {message && <p role={ok ? 'status' : 'alert'} className={ok ? 'account-feedback' : 'account-error'}>{message}</p>}
 
+      <section aria-labelledby="public-access-heading">
+        <h2 id="public-access-heading">Link access</h2>
+        <p>{access.page.is_public ? 'Anyone with the link can view this page.' : 'Only invited collaborators can view or edit.'}</p>
+        {access.page.is_public && <InviteLink path={'/page/' + id} origin={siteOrigin()} label="Public page link" />}
+        <form action={action} className="cloud-create">
+          <button className="secondary-button" name="change" value={access.page.is_public ? 'unpublish' : 'publish'}>
+            {access.page.is_public ? 'Turn off public link' : 'Make link public'}
+          </button>
+        </form>
+      </section>
+
       <section aria-labelledby="invite-heading">
         <h2 id="invite-heading">Invite by email</h2>
         <form action={action} className="cloud-create">

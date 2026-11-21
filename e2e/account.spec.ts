@@ -22,7 +22,9 @@ test('a password reset requires an authenticated session', async ({ page }) => {
 test('private cloud routes and sync tickets require an authenticated session', async ({ page }) => {
   const id = 'e6a3a67a-bf74-4f17-b013-95eb59b2e937'
   await page.goto('/doc/' + id)
-  await expect(page).toHaveURL(/\/login$/)
+  await expect(page).toHaveURL('/page/' + id)
+  await expect(page.getByRole('heading', { name: 'This page isn’t available' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Log in' })).toHaveAttribute('href', '/login')
   await page.goto('/cloud')
   await expect(page).toHaveURL(/\/login$/)
   const ticket = await page.request.get('/api/sync/session?pageId=' + id)

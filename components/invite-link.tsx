@@ -2,7 +2,9 @@
 
 import { useRef, useState } from 'react'
 
-export default function InviteLink({ path, origin }: { path: string; origin: string | null }) {
+export default function InviteLink({ path, origin, label = 'Invitation link' }: {
+  path: string; origin: string | null; label?: string
+}) {
   const [result, setResult] = useState('')
   const input = useRef<HTMLInputElement>(null)
   async function copy() {
@@ -14,12 +16,12 @@ export default function InviteLink({ path, origin }: { path: string; origin: str
       if (input.current) input.current.value = url
       input.current?.focus()
       input.current?.select()
-      setResult('Select and copy the invitation link.')
+      setResult('Select and copy the link.')
     }
   }
 
   return <div className="invite-link">
-    <input ref={input} readOnly aria-label="Invitation link" defaultValue={origin ? new URL(path, origin).href : path} />
+    <input ref={input} readOnly aria-label={label} defaultValue={origin ? new URL(path, origin).href : path} />
     <button type="button" className="secondary-button" onClick={copy}>Copy link</button>
     <span role="status">{result}</span>
   </div>

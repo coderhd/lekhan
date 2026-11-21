@@ -1,13 +1,15 @@
 import Link from 'next/link'
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import CloudPageEditor from '@/components/cloud-page-editor'
 import CloudSearch from '@/components/cloud-search'
-import { accountContext } from '@/lib/auth/server'
+import { accountContext, createAuthClient } from '@/lib/auth/server'
 import { listCloudChildren, listCloudPages, pageAccess } from '@/lib/cloud/graph'
 import { syncUrl } from '@/lib/sync/config'
 import { getTicketSecret } from '@/lib/sync/ticket'
 import { addCloudPage } from '@/app/cloud/actions'
 import { renameCloudPage } from '@/app/cloud/page-actions'
+import { getPublicPage, readPublicContent } from '@/lib/cloud/public-page'
+import { PublicPage } from '@/components/public-page'
 
 export default async function CloudPageRoute({ params, searchParams }: {
   params: Promise<{ id: string }>
@@ -15,9 +17,15 @@ export default async function CloudPageRoute({ params, searchParams }: {
 }) {
   const { id } = await params
   const account = await accountContext()
-  if (!account) redirect('/login')
-  const access = await pageAccess(account.client, id, account.subject)
-  if (!access?.privateAccess) notFound()
+  const access = account && await pageAccess(account.client, id, account.subject)
+  if (!account || !access?.privateAccess) {
+    const client = account?.client ?? await createAuthClient()
+    if (!client) notFound()
+    const publicPage = await getPublicPage(client, id)
+    if (!publicPage) notFound()
+    const content = await readPublicContent(client, publicPage).catch(() => null)
+    return <PublicPage title={publicPage.title} content={content} />
+  }
 
   const { error, children: after } = await searchParams
   const [owned, shared, children] = await Promise.all([
