@@ -7,7 +7,7 @@ The goal covers everything specced in H0. GitHub issue status records work acros
 | Spec or issue | Current rebuild evidence | Remaining verification |
 |---|---|---|
 | [#8 Pages graph](https://github.com/coderhd/lekhan/issues/8), [#9 client cutover](https://github.com/coderhd/lekhan/issues/9) | Local pages have stable identities and hierarchy. | Workspace membership, legacy/sync cutover, durable graph index, page-scoped authorization, invites and versions. |
-| [#25 Global search](https://github.com/coderhd/lekhan/issues/25), [#79 UX parity](https://github.com/coderhd/lekhan/issues/79) | Keyboard search, backlinks, and IndexedDB reload tested in Chromium in the writing milestone. | Incremental indexes and scale measurements, sync states, shortcut help, and full parity matrix. |
+| [#25 Global search](https://github.com/coderhd/lekhan/issues/25), [#79 UX parity](https://github.com/coderhd/lekhan/issues/79) | Local trigram search ranks titles, tags, wikilink targets, and page text. The palette and tag-to-search path are exercised in Chromium. | Incremental durable indexing and scale measurements, the server-side permission matrix, sync states, shortcut help, and full parity matrix. |
 | [#26 Markdown](https://github.com/coderhd/lekhan/issues/26), [#27 Obsidian](https://github.com/coderhd/lekhan/issues/27), [#87 import retries](https://github.com/coderhd/lekhan/issues/87) | Markdown source preserves unsupported blocks. Vault ingestion builds nested pages in one local write, resolves original filenames, retains YAML and supported images, and records a retry fingerprint. | Full format and attachment fidelity, sync-side vault IR authorization and idempotency, and export compatibility. |
 | [#28 Provider Registry](https://github.com/coderhd/lekhan/issues/28) | Registry, browser-direct streaming, local discovery, and the encrypted provider setup and writing assistant are implemented. | Local runner and Model Library, remaining editor actions, and live provider connections on the launch matrix. |
 | [#29 Billing](https://github.com/coderhd/lekhan/issues/29), [#82 tier enforcement](https://github.com/coderhd/lekhan/issues/82) | Prior integration and specs exist on repository history. | Rebuild integration, workspace subscription entitlements, USD/INR pricing, Stripe/Razorpay checkout, webhook and lifecycle verification. |
@@ -27,6 +27,6 @@ Reverse Engineer Anything captured the published Obsidian callout examples in `e
 ## Verified on the rebuild
 
 - `npm run typecheck`, `npm run lint`, and `npm run build` succeeded.
-- 78 unit tests cover the writer, graph model, IndexedDB, bounded vault ingestion, locale catalogs, and provider adapters.
+- 81 unit tests cover the writer, graph model, IndexedDB, bounded vault ingestion, locale catalogs, and provider adapters.
 - Ten Chromium tests passed. The new flows cover vault ZIP import, language persistence across reload, and encrypted provider configuration with explicit per-request page sharing.
 - The provider browser test used an intercepted OpenAI response. Provider credentials, production billing, the hosted docs site, and the cloud sync stack still need live verification.

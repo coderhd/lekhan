@@ -5,7 +5,8 @@ import type { ReactNode } from 'react'
 import { CornerDownLeft, FileText, Search, X } from 'lucide-react'
 import { useTranslations } from '@/lib/i18n/client'
 import type { Page } from '@/lib/types'
-import { pagePath, searchPages } from '@/lib/workspace'
+import { pagePath } from '@/lib/workspace'
+import { workspaceSearch } from '@/lib/workspace-search'
 
 export function Dialog({
   title,
@@ -46,18 +47,20 @@ export function Dialog({
 
 export function SearchDialog({
   pages,
+  initialQuery = '',
   onOpen,
   onClose,
 }: {
   pages: Page[]
+  initialQuery?: string
   onOpen: (id: string) => void
   onClose: () => void
 }) {
   const t = useTranslations('app-shell')
   const resultsId = useId()
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(initialQuery)
   const [highlight, setHighlight] = useState(0)
-  const results = searchPages(pages, query).slice(0, 30)
+  const results = workspaceSearch(pages).query(query, query.trim() ? 15 : 8)
   const selected = Math.min(highlight, results.length - 1)
   const row = useRef<HTMLButtonElement>(null)
 
@@ -77,7 +80,7 @@ export function SearchDialog({
           aria-autocomplete="list"
           aria-expanded="true"
           aria-controls={resultsId}
-          aria-activedescendant={selected >= 0 ? `${resultsId}-${results[selected].id}` : undefined}
+          aria-activedescendant={selected >= 0 ? `${resultsId}-${results[selected].page.id}` : undefined}
           placeholder={t('findPageOrPhrase')}
           value={query}
           onChange={event => {
@@ -93,7 +96,7 @@ export function SearchDialog({
             }
             if (event.key === 'Enter') {
               event.preventDefault()
-              onOpen(results[selected].id)
+              onOpen(results[selected].page.id)
             }
           }}
         />
@@ -104,7 +107,7 @@ export function SearchDialog({
       <div className="search-results">
         <p className="section-label">{query.trim() ? t('results') : t('recentPages')}</p>
         <div id={resultsId} role="listbox" aria-label={t('matchingPages')}>
-        {results.map((page, index) => {
+        {results.map(({ page, context }, index) => {
           const ancestors = pagePath(pages, page.id).slice(0, -1)
           return (
             <button
@@ -122,6 +125,7 @@ export function SearchDialog({
               <FileText size={17} aria-hidden="true" />
               <span>
                 <strong>{page.title}</strong>
+                {context && <small>{context}</small>}
                 {ancestors.length > 0 && <small>{ancestors.map(item => item.title).join(' / ')}</small>}
               </span>
               {index === selected && <CornerDownLeft className="search-enter" size={16} aria-hidden="true" />}

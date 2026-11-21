@@ -179,6 +179,10 @@ test('imports an Obsidian ZIP with nested pages, properties, callouts and local 
   await page.getByRole('link', { name: 'the field notes' }).click()
   await expect(page.getByRole('textbox', { name: 'Page title' })).toHaveValue('Field notes')
   await expect(page.getByRole('complementary', { name: 'Page context' })).toContainText('fieldwork')
+  await page.getByRole('button', { name: '#fieldwork', exact: true }).click()
+  const palette = page.getByRole('dialog', { name: 'Search pages' })
+  await expect(palette.getByRole('combobox')).toHaveValue('#fieldwork')
+  await expect(palette.getByRole('option', { name: /Field notes.*#fieldwork/ })).toBeVisible()
   await expect(page.getByRole('button', { name: 'config', exact: true })).toHaveCount(0)
 })
 

@@ -534,3 +534,7 @@ kbd {
 .assistant-thread button { margin-top: 8px; }
 .assistant-form .assistant-share { display: flex; align-items: center; }
 .assistant-dialog .assistant-error { color: var(--danger); margin: 12px 0 0; }
+
+.page-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+.page-tags button { padding: 4px 7px; border: 1px solid var(--line); border-radius: 5px; font-size: 12px; color: var(--pine); background: var(--overlay); overflow-wrap: anywhere; }
+.page-tags button:hover { background: var(--soft-pine); }

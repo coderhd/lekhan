@@ -12,6 +12,7 @@ import {
   applyVaultImport, createPage, deletePage, getBacklinks, pageChoices, pageHeadings,
   pagePath, resolvePage, updatePage,
 } from '@/lib/workspace'
+import { pageTags, workspaceSearch } from '@/lib/workspace-search'
 import { downloadPage, downloadWorkspace } from '@/lib/downloads'
 import { useWorkspace } from '@/lib/use-workspace'
 import type { SaveStatus } from '@/lib/use-workspace'
@@ -48,6 +49,7 @@ export default function WorkspaceApp() {
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [vaultOpen, setVaultOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const [navigationOpen, setNavigationOpen] = useState(false)
   const [contextOpen, setContextOpen] = useState(true)
   const [mobileContext, setMobileContext] = useState(false)
@@ -72,7 +74,14 @@ export default function WorkspaceApp() {
   const links = useMemo(() => page ? getBacklinks(pages, page.id) : [], [pages, page])
   const headings = useMemo(() => page ? pageHeadings(page.markdown) : [], [page])
   const choices = useMemo(() => pageChoices(pages).filter(item => item.id !== page?.id), [pages, page?.id])
+  const tags = useMemo(() => page ? pageTags(page) : [], [page])
   const favorites = pages.filter(item => item.favorite)
+
+  useEffect(() => {
+    if (!pages.length) return
+    const timer = setTimeout(() => { workspaceSearch(pages) }, 650)
+    return () => clearTimeout(timer)
+  }, [pages])
 
   useEffect(() => {
     if (titleFocusRequest) titleInput.current?.focus()
@@ -91,6 +100,7 @@ export default function WorkspaceApp() {
     change(state => state.activePageId === id ? state : { ...state, activePageId: id })
     setFocusTitle(null)
     setSearchOpen(false)
+    setSearchQuery('')
     setNavigationOpen(false)
     setMobileContext(false)
     if (pageMenu.current) pageMenu.current.open = false
@@ -107,6 +117,7 @@ export default function WorkspaceApp() {
     setFocusTitle(createdId)
     setNavigationOpen(false)
     setSearchOpen(false)
+    setSearchQuery('')
     setAction(null)
   }, [change])
 
@@ -124,6 +135,7 @@ export default function WorkspaceApp() {
       if (!(event.metaKey || event.ctrlKey) || event.altKey) return
       if (event.key.toLowerCase() === 'k' && !event.shiftKey && !event.defaultPrevented) {
         event.preventDefault()
+        setSearchQuery('')
         setSearchOpen(previous => !previous)
       }
       if (event.shiftKey && event.key.toLowerCase() === 'n' && workspace) {
@@ -498,6 +510,18 @@ export default function WorkspaceApp() {
                 </dl>
               </section>
             )}
+            {tags.length > 0 && (
+              <section className="context-section">
+                <h3><span aria-hidden="true">#</span> Tags</h3>
+                <div className="page-tags">
+                  {tags.map(tag => <button key={tag} onClick={() => {
+                    setMobileContext(false)
+                    setSearchQuery('#' + tag)
+                    setSearchOpen(true)
+                  }}>#{tag}</button>)}
+                </div>
+              </section>
+            )}
             <section className="context-section">
               <h3><List size={16} /> {t('onThisPage')}</h3>
               {headings.length ? (
@@ -529,7 +553,7 @@ export default function WorkspaceApp() {
         })
       }} />}
       {vaultOpen && <VaultImportDialog onClose={() => setVaultOpen(false)} onImport={importVault} saveStatus={status} />}
-      {searchOpen && <SearchDialog pages={pages} onOpen={open} onClose={() => setSearchOpen(false)} />}
+      {searchOpen && <SearchDialog pages={pages} initialQuery={searchQuery} onOpen={open} onClose={() => { setSearchOpen(false); setSearchQuery('') }} />}
       {action?.kind === 'move' && actionPage && (
         <Dialog title={t('movePage')} onClose={() => setAction(null)}>
           <form className="form-dialog" onSubmit={(event: FormEvent<HTMLFormElement>) => {

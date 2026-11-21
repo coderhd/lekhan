@@ -1,18 +1,12 @@
 import { lexer, type Token, type Tokens } from 'marked'
 import type { Page, PageChoice, Workspace } from './types'
+import { wikiLinks } from './markdown-references'
+export { searchPages } from './workspace-search'
 import { hasYamlFrontmatter } from './markdown'
 import type { ImportReport, VaultImportPlan } from './vault-import'
 
 type PageInput = Partial<Pick<Page, 'title' | 'parentId' | 'markdown' | 'frontmatter' | 'properties'>>
 type PagePatch = PageInput & Partial<Pick<Page, 'favorite'>>
-
-interface WikiLink {
-  start: number
-  end: number
-  target: string
-  alias: string | undefined
-  embed: boolean
-}
 
 function normalize(text: string) {
   return text.trim().normalize('NFC').toLowerCase()
@@ -115,87 +109,6 @@ export function resolvePage(pages: Page[], target: string, sourceId?: string) {
 export function pageChoices(pages: Page[]): PageChoice[] {
   const { canonicalPath } = buildResolver(pages)
   return pages.map((page) => ({ id: page.id, title: page.title, path: canonicalPath(page) }))
-}
-
-function proseRanges(markdown: string): { start: number; end: number }[] {
-  const ranges = []
-  let fence: string | undefined
-  let indentedCode = false
-  let startsParagraph = true
-  let listIndent = 0
-  let start = 0
-  let end = 0
-
-  for (const line of markdown.split('\n')) {
-    const offset = end
-    end += line.length + 1
-    const unquoted = line.replace(/^(?: {0,3}>[ \t]?)+/, '')
-    const blank = !unquoted.trim()
-    const spaces = /^[ \t]*/.exec(unquoted)?.[0].replace(/\t/g, '    ').length ?? 0
-    const relativeIndent = spaces >= listIndent ? spaces - listIndent : spaces
-    const marker = /^(`{3,}|~{3,})([^\n]*)/.exec(unquoted.trimStart())
-
-    if (fence) {
-      if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim()) {
-        fence = undefined
-      }
-      start = end
-      continue
-    }
-
-    if (!blank && spaces < listIndent) listIndent = 0
-    const isIndentedCode: boolean = (indentedCode && blank) || ((indentedCode || startsParagraph) && relativeIndent >= 4)
-    const opensFence = relativeIndent < 4 && marker && !(marker[1][0] === '`' && marker[2].includes('`'))
-
-    if (blank || isIndentedCode || opensFence) {
-      if (offset > start) ranges.push({ start, end: offset })
-      start = end
-    }
-    if (opensFence) fence = marker[1]
-    indentedCode = isIndentedCode
-    startsParagraph = blank || Boolean(opensFence) || isIndentedCode
-
-    const listMarker = /^( *)(?:[-+*]|\d{1,9}[.)])([ \t]+)/.exec(unquoted)
-    if (listMarker) listIndent = listMarker[0].length
-  }
-  if (start < markdown.length) ranges.push({ start, end: markdown.length })
-  return ranges
-}
-
-function escaped(text: string, offset: number) {
-  let previous = offset - 1
-  while (previous >= 0 && text[previous] === '\\') previous--
-  return (offset - previous) % 2 === 0
-}
-
-function wikiLinks(markdown: string, includeEmbeds = false): WikiLink[] {
-  const links: WikiLink[] = []
-  const pattern = /(?<code>`+)|(?<embed>!)?\[\[(?<target>[^|\]\r\n]+)(?:\|(?<alias>[^\]\r\n]+))?\]\]/g
-
-  for (const { start, end } of proseRanges(markdown)) {
-    const prose = markdown.slice(start, end)
-    pattern.lastIndex = 0
-    for (let match = pattern.exec(prose); match; match = pattern.exec(prose)) {
-      const groups = match.groups
-      if (!groups || escaped(prose, match.index)) continue
-      if (groups.code) {
-        const delimiter = /`+/g
-        delimiter.lastIndex = pattern.lastIndex
-        for (let closing = delimiter.exec(prose); closing; closing = delimiter.exec(prose)) {
-          if (closing[0].length === groups.code.length) {
-            pattern.lastIndex = delimiter.lastIndex
-            break
-          }
-        }
-        continue
-      }
-      const target = groups.target?.trim()
-      const embed = !!groups.embed
-      if (!target || (embed && !includeEmbeds)) continue
-      links.push({ target, embed, alias: groups.alias, start: start + match.index, end: start + pattern.lastIndex })
-    }
-  }
-  return links
 }
 
 function keepResolvedLinks(previous: Page[], next: Page[], now: string) {
@@ -409,30 +322,6 @@ export function getBacklinks(pages: Page[], id: string) {
     const excerpt = line.replace(/\[\[([^|\]]+)(?:\|([^\]]+))?\]\]/g, (_, target, alias) => alias ?? target.split('/').at(-1))
     return [{ page, excerpt: excerpt.length > 155 ? `${excerpt.slice(0, 152).trimEnd()}…` : excerpt }]
   })
-}
-
-export function searchPages(pages: Page[], query: string): Page[] {
-  const term = normalize(query)
-  const terms = term.split(/\s+/)
-  const ranked = pages.map((page) => {
-    const title = normalize(page.title)
-    const body = normalize(page.markdown + ' ' + (page.frontmatter ?? ''))
-    if (!term) return { page, score: 1 }
-    if (title === term) return { page, score: 5 }
-    if (title.startsWith(term)) return { page, score: 4 }
-    if (title.includes(term)) return { page, score: 3 }
-    if (terms.every((word) => title.includes(word) || body.includes(word))) return { page, score: 2 }
-
-    let matched = 0
-    for (const character of title) {
-      if (character === term[matched]) matched++
-    }
-    return { page, score: matched === term.length ? 1 : 0 }
-  })
-
-  return ranked.filter(({ score }) => score > 0)
-    .sort((left, right) => right.score - left.score || right.page.updatedAt.localeCompare(left.page.updatedAt))
-    .map(({ page }) => page)
 }
 
 function inlineText(tokens: Token[]): string {
