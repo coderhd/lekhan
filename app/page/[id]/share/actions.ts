@@ -5,6 +5,7 @@ import { createServerAdmin } from '@/lib/auth/admin'
 import { accountContext } from '@/lib/auth/server'
 import { pageAccess, uuidPattern } from '@/lib/cloud/graph'
 import { collaboratorLimit, invitationEmail, sharingRole } from '@/lib/cloud/sharing'
+import { recordAnalyticsReceipt } from '@/lib/server/analytics'
 
 export async function updateSharing(pageId: string, form: FormData) {
   if (!uuidPattern.test(pageId)) redirect('/cloud')
@@ -51,5 +52,6 @@ export async function updateSharing(pageId: string, form: FormData) {
     outcome = 'unavailable'
   }
 
+  if (outcome === 'limit') await recordAnalyticsReceipt('collaborators')
   redirect(path + '?result=' + outcome)
 }

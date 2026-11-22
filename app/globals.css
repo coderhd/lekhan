@@ -682,7 +682,9 @@ kbd {
 .early-pictures figure { margin: 0; }
 .early-pictures img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 7px; }
 .early-pictures figcaption { margin-block-start: 7px; font-weight: 740; font-size: 13px; color: var(--muted); }
-.early-analytics { display: inline-flex; align-items: center; gap: 7px; margin-block-start: 22px; font-size: 12px; min-height: 35px; color: var(--muted); }
+.analytics-control { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; min-height: 35px; color: var(--muted); cursor: pointer; }
+.early-analytics { margin-block-start: 22px; }
+.analytics-control input { accent-color: var(--pine); }
 @media (max-width: 780px) {
   .early-hero { grid-template-columns: 1fr; }
   .early-signup { border-inline-start: 0; border-block-start: 1px solid var(--line); padding-inline-start: 0; padding-block-start: 18px; }

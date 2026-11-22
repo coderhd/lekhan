@@ -7,6 +7,7 @@ import type { Page } from '@/lib/types'
 import { detectLocalProviders, streamChat, testProviderConnection, type ChatMessage } from '@/lib/ai/client'
 import { endpointFor, FREE_PRESETS, PROVIDERS, providerDefinition, type ProviderConfig, type ProviderId } from '@/lib/ai/provider-registry'
 import { createProviderVault, unlockProviderVault } from '@/lib/ai/vault'
+import { track } from '@/lib/analytics'
 import { Dialog } from './workspace-dialogs'
 
 const defaultVaultKey = 'lekhan:provider-vault:v1'
@@ -113,12 +114,17 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose 
   function saveProvider(event: FormEvent) {
     event.preventDefault()
     void run(async signal => {
-      endpointFor(draft)
+      const endpoint = endpointFor(draft)
       const config = { ...draft, model: draft.model.trim(), apiKey: draft.apiKey?.trim() || undefined }
       if (!config.model) throw new Error('Choose a model to save.')
       if (definition.requiresKey && !config.apiKey) throw new Error('Add your API key to save this connection.')
       const existing = configs.some(item => item.id === config.id)
       await persist(existing ? configs.map(item => item.id === config.id ? config : item) : [...configs, config], config.id, signal)
+      if (!existing) {
+        const local = ['localhost', '127.0.0.1', '[::1]'].includes(new URL(endpoint).hostname)
+        const preset = FREE_PRESETS.some(item => item.provider === config.provider && item.model === config.model)
+        track('ai_provider_connected', local ? 'byol' : preset ? 'free_preset' : 'byok')
+      }
       setDraft(newConnection())
       setModels([])
       setFeedback('Connection saved.')
@@ -148,6 +154,7 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose 
         signal,
         onText: part => setReply(previous => previous + part),
       })
+      track('ai_message_sent')
       setMessages([...outgoing, { role: 'assistant', content: result.text }])
       setReply('')
       setPrompt('')

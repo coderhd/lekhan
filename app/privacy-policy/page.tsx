@@ -52,7 +52,7 @@ export default function PrivacyPolicyPage () {
 								</div>
 								<div>
 									<h3>Usage Data</h3>
-									<p>We collect basic usage analytics (page views, feature usage) to improve the product. This data is aggregated and does not include your document content.</p>
+									<p>If you opt in, we use Google Analytics and PostHog to understand how people discover Lekhan and use features such as the editor, imports, and the writing assistant. Our usage events include feature names and coarse counts. They exclude account identifiers, page titles and content, filenames, AI prompts, and provider credentials.</p>
 								</div>
 							</div>
 						</section>
@@ -95,6 +95,8 @@ export default function PrivacyPolicyPage () {
 							<ul>
 								<li><span>Supabase</span> — Database, authentication, and real-time sync</li>
 								<li><span>Vercel</span> — Application hosting and deployment</li>
+								<li><span>Google Analytics</span> — Optional usage measurement</li>
+								<li><span>PostHog</span> — Optional feature usage measurement, hosted in the EU</li>
 							</ul>
 							<p>
 								Each of these services has their own privacy policies that govern their handling of your data.
@@ -106,7 +108,7 @@ export default function PrivacyPolicyPage () {
 								Cookies
 							</h2>
 							<p>
-								Lekhan uses essential cookies only — for authentication sessions and theme preferences. We do not use tracking cookies, advertising cookies, or third-party analytics cookies.
+								Lekhan uses essential cookies for functions such as signing in and remembering your preferences. If you select Share usage analytics, Google Analytics may set analytics cookies, and PostHog may store a random browser identifier in local storage. You can turn off future analytics collection using the same checkbox in the workspace sidebar or the website footer.
 							</p>
 						</section>
 

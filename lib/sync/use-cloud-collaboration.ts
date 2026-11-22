@@ -5,6 +5,7 @@ import { IndexeddbPersistence } from 'y-indexeddb'
 import { WebsocketProvider } from 'y-websocket'
 import { Awareness, removeAwarenessStates } from 'y-protocols/awareness'
 import * as Y from 'yjs'
+import { track } from '../analytics'
 import { syncProtocol } from './wire'
 
 type SyncState = 'opening' | 'live' | 'offline' | 'denied'
@@ -33,7 +34,7 @@ async function requestTicket(pageId: string, signal: AbortSignal) {
   if (typeof result.ticket !== 'string' || typeof result.endpoint !== 'string' || typeof result.writable !== 'boolean') {
     throw new Error('Invalid sync session.')
   }
-  return result as { ticket: string; endpoint: string; writable: boolean }
+  return result as { ticket: string; endpoint: string; writable: boolean; planRestricted?: boolean }
 }
 
 export function useCloudCollaboration(pageId: string, subject: string, enabled: boolean): CloudStatus {
@@ -53,6 +54,7 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
     let retryTimer: ReturnType<typeof setTimeout> | undefined
     let connecting = false
     let ready = false
+    let reportedLimit = false
 
     function retry() {
       if (cancel.signal.aborted || retryTimer) return
@@ -84,6 +86,7 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
           return
         }
         const allowed = response.writable ? 'write' : 'read'
+        if (response.planRestricted && !reportedLimit) reportedLimit = track('paywall_hit', 'sync')
         if (!response.writable && cachedPermission === 'write') {
           setState({ session, status: 'opening', writable: false })
           cachedPermission = 'read'

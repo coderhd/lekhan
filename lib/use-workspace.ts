@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { loadWorkspace, saveWorkspace, WorkspaceConflictError } from './storage'
 import { starterWorkspace } from './starter-workspace'
 import type { Workspace } from './types'
+import { analyticsAllowed, track } from './analytics'
 
 export type SaveStatus = 'loading' | 'saving' | 'saved' | 'error' | 'conflict'
 
@@ -15,6 +16,7 @@ export function useWorkspace(scope = 'personal') {
   const persisted = useRef<Workspace | null>(null)
   const busy = useRef(false)
   const conflict = useRef(false)
+  const saveCallbacks = useRef<(() => void)[]>([])
 
   const flush = useCallback(async () => {
     if (busy.current || conflict.current) return
@@ -22,10 +24,12 @@ export function useWorkspace(scope = 'personal') {
     try {
       while (current.current && current.current !== persisted.current) {
         const snapshot: Workspace = current.current
+        const pendingCallbacks = saveCallbacks.current.length
         setStatus('saving')
         const saved = await saveWorkspace(snapshot, revision.current, scope)
         revision.current = saved.revision
         persisted.current = snapshot
+        for (const saved of saveCallbacks.current.splice(0, pendingCallbacks)) saved()
       }
       setStatus('saved')
     } catch (error) {
@@ -39,12 +43,16 @@ export function useWorkspace(scope = 'personal') {
   const hydrate = useCallback((saved?: Workspace) => {
     const initial = saved ?? starterWorkspace()
     persisted.current = saved ?? null
+    saveCallbacks.current = []
     current.current = initial
     revision.current = initial.revision
     conflict.current = false
     setWorkspace(initial)
     if (saved) setStatus('saved')
-    else void flush()
+    else {
+      if (analyticsAllowed()) saveCallbacks.current.push(() => track('workspace_created', 'local'))
+      void flush()
+    }
   }, [flush])
 
   useEffect(() => {
@@ -68,11 +76,12 @@ export function useWorkspace(scope = 'personal') {
     return () => window.removeEventListener('beforeunload', confirmUnsavedChanges)
   }, [status, workspace])
 
-  const change = useCallback((update: (previous: Workspace) => Workspace) => {
+  const change = useCallback((update: (previous: Workspace) => Workspace, onSaved?: () => void) => {
     if (!current.current) return
     const next = update(current.current)
     if (next === current.current) return
     current.current = next
+    if (onSaved && analyticsAllowed()) saveCallbacks.current.push(onSaved)
     setWorkspace(next)
     void flush()
   }, [flush])

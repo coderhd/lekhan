@@ -5,6 +5,7 @@ import { ensureCloudWorkspace } from '@/lib/cloud/graph'
 import { MAX_IMPORT_BATCH_BYTES } from '@/lib/cloud/import-plan'
 import { validateCloudImport, writeCloudBatch } from '@/lib/cloud/import-server'
 import { readBoundedBody } from '@/lib/server/read-body'
+import { recordAnalyticsReceipt } from '@/lib/server/analytics'
 import { configuredSnapshotCipher } from '@/server/sync/snapshot'
 
 const headers = { 'Cache-Control': 'private, no-store' }
@@ -27,7 +28,8 @@ export async function POST(request: Request) {
     try { input = JSON.parse(raw.toString('utf8')) } catch { return failure('invalid_import', 400) }
     const batch = validateCloudImport(input)
     if (!batch) return failure('invalid_import', 400)
-    const workspaceId = await ensureCloudWorkspace(account.client, account.subject)
+    const { id: workspaceId, created } = await ensureCloudWorkspace(account.client, account.subject)
+    if (created) await recordAnalyticsReceipt('workspace')
     try {
       const receipt = await writeCloudBatch(admin, cipher, workspaceId, account.subject, batch)
       return NextResponse.json(receipt, { headers })

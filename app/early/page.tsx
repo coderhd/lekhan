@@ -5,6 +5,7 @@ import { cookies } from 'next/headers'
 import { ArrowRight, Check, MoveUpRight } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
 import EarlyAccessAnalytics from '@/components/early-access-analytics'
+import { analyticsConfigured } from '@/lib/analytics-settings'
 import { authConfig } from '@/lib/auth/config'
 import { FOUNDING_CAP, WAITLIST_RECEIPT } from '@/lib/waitlist/input'
 import { receiptSecret, readWaitlistReceipt } from '@/lib/waitlist/receipt'
@@ -22,7 +23,6 @@ export default async function EarlyAccess({ searchParams }: {
   const raw = jar.get(WAITLIST_RECEIPT)?.value
   const receipt = raw && secret && query.joined === '1' ? readWaitlistReceipt(secret, raw) : null
   const configured = !!authConfig() && !!secret && !!(process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)
-  const measurement = process.env.NEXT_PUBLIC_GA4_ID?.trim() ?? ''
   const actionQuery = new URLSearchParams()
   if (typeof query.ref === 'string') actionQuery.set('ref', query.ref.slice(0, 100))
   if (typeof query.utm_source === 'string') actionQuery.set('utm_source', query.utm_source.slice(0, 100))
@@ -68,7 +68,7 @@ export default async function EarlyAccess({ searchParams }: {
           </figure>)}
         </div>
       </section>
-      {/^G-[A-Z0-9]+$/.test(measurement) && <footer><EarlyAccessAnalytics id={measurement} signup={receipt ? receipt.event : null} /></footer>}
+      {analyticsConfigured && <footer><EarlyAccessAnalytics signup={receipt ? receipt.event : null} /></footer>}
     </div>
   </main>
 }

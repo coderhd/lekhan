@@ -6,6 +6,7 @@ import { X } from 'lucide-react'
 import * as Y from 'yjs'
 import { Awareness } from 'y-protocols/awareness'
 import { checkpointMaxBytes, replaceCheckpointContent, type Checkpoint } from '@/lib/cloud/checkpoints'
+import { track } from '@/lib/analytics'
 import { useLocale } from '@/lib/i18n/client'
 import type { CloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
 import { Dialog } from './workspace-dialogs'
@@ -14,6 +15,7 @@ import PageEditor from './page-editor'
 interface History {
   checkpoints: Checkpoint[]
   writable: boolean
+  olderHistoryLimited: boolean
 }
 
 interface Preview {
@@ -53,6 +55,7 @@ export default function CheckpointDialog({ pageId, session, live, writable, onCl
   const mayChange = live && writable && !!history?.writable
   const controller = useRef<AbortController | null>(null)
   const active = useRef({ session, live, writable })
+  const reportedLimit = useRef(false)
   const date = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' })
 
   useEffect(() => { active.current = { session, live, writable } }, [session, live, writable])
@@ -63,7 +66,10 @@ export default function CheckpointDialog({ pageId, session, live, writable, onCl
       .then(async reply => {
         if (!reply.ok) throw new Error('Could not load checkpoints.')
         const result: History = await reply.json()
-        if (!abort.signal.aborted) setHistory(result)
+        if (!abort.signal.aborted) {
+          setHistory(result)
+          if (result.olderHistoryLimited && !reportedLimit.current) reportedLimit.current = track('paywall_hit', 'history')
+        }
       }).catch(() => {
         if (!abort.signal.aborted) setFailure('Could not load checkpoints.')
       })
@@ -157,6 +163,7 @@ export default function CheckpointDialog({ pageId, session, live, writable, onCl
     </div>
     {failure && <p className="account-error" role="alert">{failure}</p>}
     {message && <p role="status">{message}</p>}
+    {history?.olderHistoryLimited && !preview && <p>Some older checkpoints are outside this workspace’s history window.</p>}
     {mayChange && !preview && <form onSubmit={save} className="cloud-create">
       <label>Checkpoint name <input value={name} onChange={event => setName(event.target.value)} maxLength={200} required /></label>
       <button className="primary-button" disabled={busy}>Save checkpoint</button>
@@ -170,7 +177,7 @@ export default function CheckpointDialog({ pageId, session, live, writable, onCl
             <span><strong>{record.version_name}</strong><small>{date.format(new Date(record.created_at))}</small></span>
           </button>
         </li>)}
-      </ul> : <p>No checkpoints yet.</p>)}
+      </ul> : <p>{history.olderHistoryLimited ? 'No checkpoints in the current history window.' : 'No checkpoints yet.'}</p>)}
     {preview && <section aria-label="Checkpoint preview" className="checkpoint-preview">
       <h3>{preview.record.version_name}</h3>
       {previewFault === preview.record.id && <p role="alert">This checkpoint contains unsupported blocks. Restore is unavailable.</p>}

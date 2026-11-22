@@ -49,9 +49,12 @@ export async function GET(request: NextRequest) {
     const version = request.nextUrl.searchParams.get('version')
     const query = account.client.from('document_versions').select(fields).eq('page_id', pageId).gte('created_at', cutoff)
     if (!version) {
-      const { data, error } = await query.order('created_at', { ascending: false }).limit(50).returns<Checkpoint[]>()
-      if (error) throw error
-      return NextResponse.json({ checkpoints: data, writable }, { headers })
+      const [history, older] = await Promise.all([
+        query.order('created_at', { ascending: false }).limit(50).returns<Checkpoint[]>(),
+        account.client.from('document_versions').select('id').eq('page_id', pageId).lt('created_at', cutoff).limit(1),
+      ])
+      if (history.error) throw history.error
+      return NextResponse.json({ checkpoints: history.data, writable, olderHistoryLimited: !!older.data?.length }, { headers })
     }
     if (!uuidPattern.test(version)) return failure(400, 'invalid_checkpoint')
     const { data: record, error: recordError } = await query.eq('id', version).maybeSingle<Checkpoint>()

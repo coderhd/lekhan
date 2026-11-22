@@ -8,6 +8,7 @@ import type { CloudPage } from '@/lib/cloud/graph'
 import { useCloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
 import { downloadPage } from '@/lib/downloads'
 import { wikiLinks } from '@/lib/markdown-references'
+import { trackWritingEdit } from '@/lib/analytics'
 import PageEditor from './page-editor'
 import CheckpointDialog from './checkpoint-dialog'
 
@@ -77,6 +78,7 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
     if (!document || !editable) return
     const text = document.getText('source')
     const current = text.toString()
+    if (current === next) return
     let start = 0
     let suffix = 0
     while (start < current.length && start < next.length && current[start] === next[start]) start++
@@ -90,6 +92,7 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
       const inserted = next.slice(start, next.length - suffix)
       if (inserted) text.insert(start, inserted)
     })
+    trackWritingEdit(current, next)
   }
 
   return (

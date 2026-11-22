@@ -1,13 +1,14 @@
 'use client'
 
 import { AlertCircle, Archive, Check, FileText, FolderOpen, LoaderCircle } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { Dialog } from './workspace-dialogs'
 import type { ImportReport, VaultImportPlan } from '@/lib/vault-import'
 import type { SaveStatus } from '@/lib/use-workspace'
 import { pickVaultFolder, readVaultFiles, readVaultZip, type VaultContents } from '@/lib/vault-reader'
 import type { cloudImportPlan, CloudImportReceipt } from '@/lib/cloud/import-plan'
+import { consumeAnalyticsReceipts, track } from '@/lib/analytics'
 
 type Destination = { cloud: true; onOpenPage: (id: string) => void }
   | { cloud?: false; onImport: (plan: VaultImportPlan) => ImportReport | null; saveStatus: SaveStatus }
@@ -25,6 +26,11 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
   const [firstPage, setFirstPage] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [report, setReport] = useState<ImportReport | null>(null)
+  const source = useRef<'obsidian' | 'markdown'>('obsidian')
+
+  useEffect(() => {
+    if (report) track('import_report_viewed', source.current, report.degraded)
+  }, [report])
 
   async function upload(plan: ReturnType<typeof cloudImportPlan>) {
     setUploading(true)
@@ -44,6 +50,7 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
         if (result.status === 409) throw new Error('This batch conflicts with a saved import. Select the original files to continue.')
         if (!result.ok) throw new Error('Could not finish the cloud upload. Resume to continue from the saved batches.')
         const receipt: CloudImportReceipt = await result.json()
+        consumeAnalyticsReceipts()
         const firstIndex = batch.pages.findIndex(page => page.ordinal === plan.firstNote)
         if (firstIndex >= 0 && receipt.pages[firstIndex]) setFirstPage(receipt.pages[firstIndex].id)
         saved += receipt.importedCount
@@ -51,6 +58,7 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
         setProgress({ saved, resumed, total })
       }
       setReport({ ...plan.report, repeated: saved === resumed })
+      if (saved > resumed) track('import_completed', source.current, plan.report.notes)
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Could not finish the cloud upload.')
     } finally {
@@ -65,9 +73,10 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
     void upload(plan).finally(() => { busy.current = false })
   }
 
-  async function run(read: () => Promise<VaultContents | null>) {
+  async function run(read: () => Promise<VaultContents | null>, format: 'obsidian' | 'markdown' = 'obsidian') {
     if (busy.current) return
     busy.current = true
+    source.current = format
     setReading(true)
     setError('')
     setReport(null)
@@ -103,10 +112,10 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
     if (file) void run(() => readVaultZip(file))
   }
 
-  function selectFolder(event: ChangeEvent<HTMLInputElement>) {
+  function selectFolder(event: ChangeEvent<HTMLInputElement>, format?: 'markdown') {
     const files = Array.from(event.currentTarget.files ?? [])
     event.currentTarget.value = ''
-    if (files.length) void run(() => readVaultFiles(files))
+    if (files.length) void run(() => readVaultFiles(files), format)
   }
 
   const saved = report && (props.cloud || props.saveStatus === 'saved')
@@ -121,7 +130,7 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
           : 'Choose a ZIP archive or vault folder. Lekhan keeps your note hierarchy, properties, and page links.'}</p>
         <input ref={zip} type="file" accept=".zip,application/zip" hidden aria-label="Vault ZIP" onChange={selectZip} />
         <input ref={directory} type="file" {...{ webkitdirectory: "" }} multiple hidden aria-label="Vault folder" onChange={selectFolder} />
-        {props.cloud && <input ref={markdown} type="file" accept=".md,.markdown,text/markdown" multiple hidden aria-label="Markdown files" onChange={selectFolder} />}
+        {props.cloud && <input ref={markdown} type="file" accept=".md,.markdown,text/markdown" multiple hidden aria-label="Markdown files" onChange={event => selectFolder(event, 'markdown')} />}
         {!report && !draft && <div className="vault-options">
           <button className="secondary-button" disabled={reading} onClick={() => zip.current?.click()}><Archive size={17} /> Choose ZIP</button>
           <button className="secondary-button" disabled={reading} onClick={() => {

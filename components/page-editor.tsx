@@ -2,8 +2,10 @@
 
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { type Editor, EditorContent, useEditor } from '@tiptap/react'
+import { isChangeOrigin } from '@tiptap/extension-collaboration'
 import { FileText, Link2 } from 'lucide-react'
 import { useTranslations } from '@/lib/i18n/client'
+import { trackWritingEdit } from '@/lib/analytics'
 import type { CloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
 import type { PageChoice } from '@/lib/types'
 import { blockCommands } from './editor/block-commands'
@@ -160,7 +162,9 @@ function PageEditorView(props: PageEditorProps) {
           setPreferSource(true)
           const value = event.target.value
           const windowsLineEndings = markdown.includes('\r\n') && !/(?<!\r)\n/.test(markdown)
-          onChange(windowsLineEndings ? value.replaceAll('\n', '\r\n') : value)
+          const next = windowsLineEndings ? value.replaceAll('\n', '\r\n') : value
+          onChange(next)
+          if (editable) trackWritingEdit(markdown, next)
         }}
       />
     </div>
@@ -338,12 +342,17 @@ function PageEditorSession({
       },
     },
     onCreate: ({ editor: current }) => {
-      if (collaboration) onChange(current.getMarkdown())
+      if (collaboration) {
+        currentMarkdown.current = current.getMarkdown()
+        onChange(currentMarkdown.current)
+      }
     },
-    onUpdate: ({ editor: current }) => {
+    onUpdate: ({ editor: current, transaction }) => {
       const value = current.getMarkdown()
+      const previous = currentMarkdown.current
       currentMarkdown.current = value
       onChange(value)
+      if (current.isEditable && !isChangeOrigin(transaction)) trackWritingEdit(previous, value)
     },
     onTransaction: ({ editor: current }) => {
       if (!current.isDestroyed && current.isInitialized) syncMenu(current)

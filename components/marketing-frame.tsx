@@ -4,6 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import type { ReactNode } from 'react'
 import { docsOrigin } from '@/lib/auth/config'
 import LocaleSwitcher from './locale-switcher'
+import { UsageAnalyticsControl } from './usage-analytics'
 
 const marketingLinks = { about: '/about', faq: '/faq', contact: '/contact' } as const
 
@@ -30,6 +31,7 @@ export default async function MarketingFrame({ children, current }: { children: 
         <Link href="/terms-of-service">{t('terms')}</Link>
       </nav>
       <LocaleSwitcher />
+      <UsageAnalyticsControl />
     </footer>
   </div>
 }

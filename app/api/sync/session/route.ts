@@ -25,7 +25,8 @@ export async function GET(request: NextRequest) {
     if (!relay) return NextResponse.json({ error: 'sync_access_denied' }, { status: 403, headers })
     const role = relay === 'read' ? 'viewer' : access.role
     const ticket = issueSyncTicket(secret, { pageId, subject: account.subject, role })
-    return NextResponse.json({ ticket, endpoint, role, writable: relay === 'write' }, { headers })
+    return NextResponse.json({ ticket, endpoint, role, writable: relay === 'write',
+      planRestricted: relay === 'read' && access.role !== 'viewer' }, { headers })
   } catch {
     return NextResponse.json({ error: 'sync_unavailable' }, { status: 503, headers })
   }

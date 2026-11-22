@@ -5,6 +5,7 @@ import { accountContext } from '@/lib/auth/server'
 import { pageAccess } from '@/lib/cloud/graph'
 import type { SharedRole } from '@/lib/cloud/sharing'
 import InviteLink from '@/components/invite-link'
+import { UsageAnalyticsReceipts } from '@/components/usage-analytics'
 import { updateSharing } from './actions'
 
 interface Member {
@@ -58,6 +59,7 @@ export default async function SharePage({ params, searchParams }: {
     <article className="cloud-library sharing">
       <h1>Share page</h1>
       <p>{access.page.title}</p>
+      {result === 'limit' && <UsageAnalyticsReceipts />}
       {message && <p role={ok ? 'status' : 'alert'} className={ok ? 'account-feedback' : 'account-error'}>{message}</p>}
 
       <section aria-labelledby="public-access-heading">

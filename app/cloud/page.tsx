@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { Cloud, FileText, Plus } from 'lucide-react'
 import CloudSearch from '@/components/cloud-search'
 import CloudVaultImport from '@/components/cloud-vault-import'
+import { UsageAnalyticsControl } from '@/components/usage-analytics'
 import { accountContext } from '@/lib/auth/server'
 import { listCloudPages } from '@/lib/cloud/graph'
 import type { SharedRole } from '@/lib/cloud/sharing'
@@ -59,6 +60,7 @@ export default async function CloudWorkspace({ searchParams }: {
             : <p>{tab === 'shared' ? 'No pages have been shared with you.' : 'Create a page to start your cloud workspace.'}</p>}
         {result?.next && <Link href={'/cloud?' + new URLSearchParams({ ...(tab === 'shared' ? { view: 'shared' } : {}), after: result.next })}>More pages</Link>}
       </section>
+      <UsageAnalyticsControl />
     </main>
   )
 }

@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation'
 import { accountContext } from '@/lib/auth/server'
 import { createCloudPage, pageTitle, uuidPattern } from '@/lib/cloud/graph'
+import { recordAnalyticsReceipt } from '@/lib/server/analytics'
 
 export async function addCloudPage(form: FormData) {
   const account = await accountContext()
@@ -13,11 +14,13 @@ export async function addCloudPage(form: FormData) {
     redirect('/cloud?error=title')
   }
 
-  let id: string
+  let page: Awaited<ReturnType<typeof createCloudPage>>
   try {
-    id = await createCloudPage(account.client, account.subject, title, typeof parentId === 'string' ? parentId : undefined)
+    page = await createCloudPage(account.client, account.subject, title, typeof parentId === 'string' ? parentId : undefined)
   } catch {
     redirect('/cloud?error=save')
   }
-  redirect('/page/' + id)
+  if (page.workspaceCreated) await recordAnalyticsReceipt('workspace')
+  await recordAnalyticsReceipt('page')
+  redirect('/page/' + page.id)
 }

@@ -4,6 +4,7 @@ import { useActionState } from 'react'
 import { useTranslations } from '@/lib/i18n/client'
 import type { AuthMode } from '@/lib/auth/input'
 import { submitAuth } from '@/app/auth/actions'
+import { track } from '@/lib/analytics'
 
 export function AccountForm({ mode, invite }: { mode: AuthMode; invite?: string }) {
   const t = useTranslations('auth')
@@ -14,7 +15,7 @@ export function AccountForm({ mode, invite }: { mode: AuthMode; invite?: string 
   const newPassword = mode === 'signup' || mode === 'reset'
   const submit = { login: 'login', signup: 'signup', forgot: 'sendReset', reset: 'savePassword' } as const
   return (
-    <form className="account-form" action={action}>
+    <form className="account-form" action={action} onSubmit={mode === 'signup' ? () => track('signup_started', 'email') : undefined}>
       {mode !== 'reset' && <label>{t('email')}
         <input type="email" name="email" autoComplete="email" maxLength={254} required />
       </label>}

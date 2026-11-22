@@ -1,6 +1,7 @@
 import { strToU8, zipSync } from 'fflate'
 import type { Page } from './types'
 import { exportPage, pagePath } from './workspace'
+import { track } from './analytics'
 
 function safeFilename(name: string) {
   const sanitized = name.replace(/[\\/:*?"<>|]/g, ' ').replace(/^[. ]+|[. ]+$/g, '').slice(0, 100)
@@ -18,6 +19,7 @@ function download(filename: string, blob: Blob) {
 
 export function downloadPage(page: Page) {
   download(`${safeFilename(page.title)}.md`, new Blob([exportPage(page)], { type: 'text/markdown' }))
+  track('export_triggered', 'markdown')
 }
 
 export function downloadWorkspace(pages: Page[]) {
@@ -35,4 +37,5 @@ export function downloadWorkspace(pages: Page[]) {
   }
   const archive = zipSync(files)
   download('Lekhan workspace.zip', new Blob([new Uint8Array(archive)], { type: 'application/zip' }))
+  track('export_triggered', 'md_zip')
 }

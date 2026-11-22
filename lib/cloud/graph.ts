@@ -71,26 +71,26 @@ export async function listCloudChildren(client: SupabaseClient, parentId: string
   return { pages, next: data.length > batchSize ? pages.at(-1)?.id : undefined }
 }
 
-export async function ensureCloudWorkspace(client: SupabaseClient, subject: string): Promise<string> {
+export async function ensureCloudWorkspace(client: SupabaseClient, subject: string): Promise<{ id: string; created: boolean }> {
   async function findWorkspace() {
     const { data, error } = await client.from('workspaces').select('id').eq('owner_id', subject).maybeSingle()
     if (error) throw new Error('Could not find your cloud workspace.', { cause: error })
     return data?.id as string | undefined
   }
   const workspace = await findWorkspace()
-  if (workspace) return workspace
+  if (workspace) return { id: workspace, created: false }
 
   const { data, error } = await client.from('workspaces').insert({ owner_id: subject }).select('id').single()
-  if (!error) return data.id
+  if (!error) return { id: data.id, created: true }
   if (error.code === '23505') {
     const concurrent = await findWorkspace()
-    if (concurrent) return concurrent
+    if (concurrent) return { id: concurrent, created: false }
   }
   throw new Error('Could not create your cloud workspace.', { cause: error })
 }
 
 export async function createCloudPage(client: SupabaseClient, subject: string, title: string, parentId?: string) {
-  const workspaceId = await ensureCloudWorkspace(client, subject)
+  const { id: workspaceId, created } = await ensureCloudWorkspace(client, subject)
   if (parentId) {
     const parent = await pageAccess(client, parentId, subject)
     if (!parent || parent.role !== 'owner' || parent.page.workspace_id !== workspaceId) {
@@ -101,5 +101,5 @@ export async function createCloudPage(client: SupabaseClient, subject: string, t
     workspace_id: workspaceId, owner_id: subject, title, parent_id: parentId || null,
   }).select('id').single()
   if (error) throw new Error('Could not create the cloud page.', { cause: error })
-  return data.id as string
+  return { id: data.id as string, workspaceCreated: created }
 }

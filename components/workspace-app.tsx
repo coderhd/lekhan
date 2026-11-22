@@ -26,6 +26,8 @@ import LocaleSwitcher from './locale-switcher'
 import PageEditor from './page-editor'
 import { VaultImportDialog } from './vault-import-dialog'
 import type { ImportReport, VaultImportPlan } from '@/lib/vault-import'
+import { track, trackMilestone } from '@/lib/analytics'
+import { UsageAnalyticsControl } from './usage-analytics'
 
 const statusMessage: Record<SaveStatus, string> = {
   loading: 'openingWorkspace', saving: 'saving', saved: 'savedLocally', error: 'saveUnavailable', conflict: 'unsavedChanges',
@@ -119,7 +121,7 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
       const next = createPage(state, { parentId, title, markdown })
       createdId = next.activePageId
       return next
-    })
+    }, () => trackMilestone('page_created'))
     if (parentId) setCollapsed(previous => previous.filter(id => id !== parentId))
     setFocusTitle(createdId)
     setNavigationOpen(false)
@@ -183,6 +185,7 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
   function createLinkedPage(target: string) {
     const parts = target.split('#')[0].split('/').map(part => part.trim()).filter(Boolean)
     let newId: string | null = null
+    let created = false
     change(state => {
       let next = state
       let parentId: string | null = null
@@ -192,12 +195,13 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
           parentId = existing.id
         } else {
           next = createPage(next, { parentId, title })
+          created = true
           parentId = next.activePageId
         }
       }
       newId = parentId
       return parentId ? { ...next, activePageId: parentId } : next
-    })
+    }, () => { if (created) trackMilestone('page_created') })
     setCollapsed([])
     setFocusTitle(newId)
     setAction(null)
@@ -219,7 +223,8 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
       }
       const { markdownNote } = await import('@/lib/vault-import')
       const imported = await Promise.all(supported.map(async file => markdownNote(file.name, await file.text())))
-      change(state => imported.reduce((next, file) => createPage(next, file), state))
+      change(state => imported.reduce((next, file) => createPage(next, file), state),
+        () => track('import_completed', 'markdown', imported.length))
       setNotice(t('importedPages', { count: imported.length }))
       setNavigationOpen(false)
     } catch {
@@ -233,6 +238,8 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
       const result = applyVaultImport(state, plan)
       report = result.report
       return result.workspace
+    }, () => {
+      if (report && !report.repeated) track('import_completed', 'obsidian', report.notes)
     })
     setCollapsed([])
     return report
@@ -378,6 +385,7 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
             setVaultOpen(true)
           }}><FolderClosed size={15} /> Import vault</button>
           <LocaleSwitcher />
+          <UsageAnalyticsControl />
           {cloudEnabled && signedIn && <Link className="nav-action account-link" href="/cloud"><Cloud size={15} /> Cloud workspace</Link>}
           {cloudEnabled && (signedIn
             ? <form action={signOut}><button className="nav-action" type="submit"><LogOut size={15} /> {accountText('signout')}</button></form>
