@@ -31,7 +31,7 @@ export default async function AccountScreen({ mode, notice, invite }: {
           {mode === 'login' && <Link href="/forgot-password">{t('forgot')}</Link>}
           {mode === 'login' && <Link href={'/signup' + next}>{t('signup')}</Link>}
           {mode !== 'login' && <Link href={'/login' + next}>{t('login')}</Link>}
-          <Link href="/">{t('localWorkspace')}</Link>
+          <Link href="/workspace">{t('localWorkspace')}</Link>
         </div>
       </section>
     </main>

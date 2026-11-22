@@ -25,7 +25,7 @@ export default async function CloudWorkspace({ searchParams }: {
       <header className="account-header">
         <Link className="account-brand" href="/"><span className="brand-mark" aria-hidden="true">L</span> Lekhan</Link>
         <div className="cloud-header-actions">
-          <Link className="account-link" href="/">Local workspace</Link>
+          <Link className="account-link" href="/workspace">Local workspace</Link>
           <CloudSearch />
         </div>
       </header>

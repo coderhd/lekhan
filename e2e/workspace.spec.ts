@@ -3,7 +3,7 @@ import { unzipSync, strFromU8, zipSync, strToU8 } from 'fflate'
 import { readFile } from 'node:fs/promises'
 
 test('writes, links, finds, renames, reloads, and exports a nested page', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/workspace')
   await expect(page.getByRole('textbox', { name: 'Page title' })).toHaveValue('Field guide')
   await page.getByRole('button', { name: 'Projects', exact: true }).click()
   await page.locator('summary[aria-label="Page actions"]').click()
@@ -61,7 +61,7 @@ test('writes, links, finds, renames, reloads, and exports a nested page', async 
 
 test('imports Markdown and keeps mobile navigation and page context reachable', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto('/')
+  await page.goto('/workspace')
   await expect(page.getByRole('textbox', { name: 'Page title' })).toHaveValue('Field guide')
   await page.getByRole('button', { name: 'Open navigation' }).click()
   await expect(page.getByRole('complementary', { name: 'Workspace navigation' })).toBeVisible()
@@ -82,10 +82,10 @@ test('imports Markdown and keeps mobile navigation and page context reachable', 
 })
 
 test('surfaces a stale tab and reloads its latest saved copy only after confirmation', async ({ page, context }) => {
-  await page.goto('/')
+  await page.goto('/workspace')
   const secondTab = await context.newPage()
   await expect(page.getByRole('status')).toHaveText('Saved locally')
-  await secondTab.goto('/')
+  await secondTab.goto('/workspace')
   await expect(secondTab.getByRole('status')).toHaveText('Saved locally')
   await page.getByRole('textbox', { name: 'Page title' }).fill('Newer title')
   await page.getByRole('textbox', { name: 'Page title' }).press('Enter')
@@ -104,7 +104,7 @@ test('surfaces a stale tab and reloads its latest saved copy only after confirma
 })
 
 test('saves title edits while the title still has focus', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/workspace')
   const title = page.getByRole('textbox', { name: 'Page title' })
   await title.fill('Draft title')
   await expect(title).toBeFocused()
@@ -115,7 +115,7 @@ test('saves title edits while the title still has focus', async ({ page }) => {
 })
 
 test('opens an inline page link with the keyboard', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/workspace')
   const link = page.getByRole('textbox', { name: 'Page content' }).getByRole('link', { name: 'Quick capture' })
   await link.focus()
   await expect(link).toBeFocused()
@@ -124,7 +124,7 @@ test('opens an inline page link with the keyboard', async ({ page }) => {
 })
 
 test('keeps table and image syntax after editing imported Markdown', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/workspace')
   await expect(page.getByRole('status')).toHaveText('Saved locally')
   const source = '## Notes\n\n| Column | Value |\n| --- | --- |\n| First | 42 |\n\n![Field sketch](https://example.test/sketch.png)'
   await page.locator('input[type=file]').setInputFiles({
@@ -143,7 +143,7 @@ test('keeps table and image syntax after editing imported Markdown', async ({ pa
 })
 
 test('shows formatted headings in the outline and follows their wikilink anchors', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/workspace')
   await expect(page.getByRole('status')).toHaveText('Saved locally')
   await page.locator('input[type=file]').setInputFiles({
     name: 'With outline.md',
@@ -161,7 +161,7 @@ test('shows formatted headings in the outline and follows their wikilink anchors
 })
 
 test('imports an Obsidian ZIP with nested pages, properties, callouts and local images', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/workspace')
   await expect(page.getByRole('status')).toHaveText('Saved locally')
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jQ1sAAAAASUVORK5CYII=', 'base64')
   const archive = zipSync({
@@ -191,7 +191,7 @@ test('imports an Obsidian ZIP with nested pages, properties, callouts and local 
 })
 
 test('keeps the selected workspace language across reload', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/workspace')
   await page.getByRole('combobox', { name: 'Language' }).selectOption('es')
   await expect(page.locator('html')).toHaveAttribute('lang', 'es')
   await expect(page.getByRole('textbox', { name: 'Título de la página' })).toHaveValue('Field guide')

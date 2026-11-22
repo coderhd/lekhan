@@ -9,7 +9,7 @@ npm ci
 npm run dev
 ```
 
-Open http://localhost:3000. Pages are saved in IndexedDB for that browser and origin. Use the workspace export to make a portable Markdown copy.
+Open [the local workspace](http://localhost:3000/workspace). Pages are saved in IndexedDB for that browser and origin. Use the workspace export to make a portable Markdown copy.
 
 ```sh
 npm run typecheck && npm run lint && npm test && npm run build

@@ -18,7 +18,7 @@ test('saves an encrypted provider connection and shares page content only by cho
       body: 'data: {"choices":[{"delta":{"content":"A short draft."},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
     })
   })
-  await page.goto('/')
+  await page.goto('/workspace')
   const open = page.getByRole('button', { name: 'Writing assistant' })
   const dialog = page.getByRole('dialog', { name: 'Writing assistant' })
   await open.click()

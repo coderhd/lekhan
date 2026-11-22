@@ -17,7 +17,7 @@ export async function submitAuth(mode: AuthMode, invite: string | undefined, _pr
   if (mode === 'login') {
     const { error } = await client.auth.signInWithPassword({ email, password })
     if (error) return { issue: 'loginError' }
-    redirect(next ?? '/')
+    redirect(next ?? '/workspace')
   }
 
   if (mode === 'reset') {
@@ -25,7 +25,7 @@ export async function submitAuth(mode: AuthMode, invite: string | undefined, _pr
     if (sessionError || !data?.claims.sub) return { issue: 'resetError' }
     const { error } = await client.auth.updateUser({ password })
     if (error) return { issue: 'resetError' }
-    redirect('/')
+    redirect('/workspace')
   }
 
   const callback = confirmationTarget(mode === 'forgot' ? 'recovery' : 'email', next && invite ? invite : undefined)
@@ -37,7 +37,7 @@ export async function submitAuth(mode: AuthMode, invite: string | undefined, _pr
 
   const { data, error } = await client.auth.signUp({ email, password, options: { emailRedirectTo: callback } })
   if (error && error.status !== 422) return { issue: 'signupError' }
-  if (data.session) redirect(next ?? '/')
+  if (data.session) redirect(next ?? '/workspace')
   return { outcome: 'confirmEmail' }
 }
 

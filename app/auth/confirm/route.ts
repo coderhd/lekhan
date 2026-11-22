@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     const result = confirmation.method === 'token'
       ? await client.auth.verifyOtp({ token_hash: confirmation.hash, type: confirmation.type })
       : await client.auth.exchangeCodeForSession(confirmation.code)
-    if (!result.error) path = confirmation.recovery ? '/reset-password' : invitationPath(request.nextUrl.searchParams.get('invite')) ?? '/'
+    if (!result.error) path = confirmation.recovery ? '/reset-password' : invitationPath(request.nextUrl.searchParams.get('invite')) ?? '/workspace'
   }
 
   return NextResponse.redirect(new URL(path, origin), {

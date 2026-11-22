@@ -33,7 +33,7 @@ export default async function EarlyAccess({ searchParams }: {
     <div className="early-inner">
       <header className="early-header">
         <Link href="/" className="account-brand"><span className="brand-mark" aria-hidden="true">L</span> Lekhan</Link>
-        <Link className="account-link" href="/">{t('openWorkspace')} <MoveUpRight size={14} aria-hidden="true" /></Link>
+        <Link className="account-link" href="/workspace">{t('openWorkspace')} <MoveUpRight size={14} aria-hidden="true" /></Link>
       </header>
       <section className="early-hero">
         <div className="early-intro">

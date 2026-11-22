@@ -44,7 +44,7 @@ export async function PageUnavailable({ signedIn }: { signedIn: boolean }) {
       <h1 id="unavailable-title">{t('unavailable')}</h1>
       <p>{t(signedIn ? 'memberHint' : 'visitorHint')}</p>
       <div className="account-links">
-        <Link className="primary-button" href={signedIn ? '/' : '/login'}>{t(signedIn ? 'backHome' : 'login')}</Link>
+        <Link className="primary-button" href={signedIn ? '/workspace' : '/login'}>{t(signedIn ? 'backHome' : 'login')}</Link>
         {!signedIn && <Link href="/signup">{t('createWorkspace')}</Link>}
       </div>
     </section>
