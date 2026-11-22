@@ -2,12 +2,14 @@ import Link from 'next/link'
 import { ArrowUpRight } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
 import type { ReactNode } from 'react'
+import { docsOrigin } from '@/lib/auth/config'
 import LocaleSwitcher from './locale-switcher'
 
 const marketingLinks = { about: '/about', faq: '/faq', contact: '/contact' } as const
 
 export default async function MarketingFrame({ children, current }: { children: ReactNode; current?: keyof typeof marketingLinks }) {
   const t = await getTranslations('marketing')
+  const docs = docsOrigin()
   return <div className="marketing-site">
     <a className="marketing-skip" href="#marketing-main">{t('skip')}</a>
     <header className="marketing-header marketing-width">
@@ -23,6 +25,7 @@ export default async function MarketingFrame({ children, current }: { children: 
       <Link href="/" className="account-brand"><span className="brand-mark" aria-hidden="true">L</span> Lekhan</Link>
       <nav aria-label={t('footer')}>
         <Link href="/early">{t('early')}</Link>
+        {docs && <a href={docs}>{t('docs')}</a>}
         <Link href="/privacy-policy">{t('privacy')}</Link>
         <Link href="/terms-of-service">{t('terms')}</Link>
       </nav>

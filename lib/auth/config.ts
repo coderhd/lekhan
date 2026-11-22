@@ -23,6 +23,10 @@ export function siteOrigin() {
   return configuredOrigin(process.env.LEKHAN_PUBLIC_URL)
 }
 
+export function docsOrigin() {
+  return configuredOrigin(process.env.NEXT_PUBLIC_DOCS_URL)
+}
+
 export function confirmationTarget(type: 'email' | 'recovery', invite?: string) {
   const origin = siteOrigin()
   if (!origin) return null

@@ -1,0 +1,39 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+:root {
+  --docs-text: 'Manrope Variable', system-ui, sans-serif;
+  --docs-display: 'Newsreader Variable', Georgia, serif;
+  --color-fd-background: #faf9f4;
+  --color-fd-foreground: #222b24;
+  --color-fd-muted: #edf0e8;
+  --color-fd-muted-foreground: #586459;
+  --color-fd-popover: #fffef9;
+  --color-fd-card: #f5f6ef;
+  --color-fd-border: #dadecf;
+  --color-fd-primary: #294634;
+  --color-fd-primary-foreground: #fffef9;
+  --color-fd-accent: #dce7d8;
+  --color-fd-accent-foreground: #1e3728;
+}
+
+.dark {
+  --color-fd-background: #171f19;
+  --color-fd-foreground: #e8eee4;
+  --color-fd-muted: #222f25;
+  --color-fd-muted-foreground: #b1bfb1;
+  --color-fd-popover: #1d2820;
+  --color-fd-card: #1d2820;
+  --color-fd-border: #3b4e40;
+  --color-fd-primary: #b5d5ba;
+  --color-fd-primary-foreground: #19251d;
+  --color-fd-accent: #324438;
+  --color-fd-accent-foreground: #e8eee4;
+}
+
+body { font-family: var(--docs-text); }
+h1, h2 { font-family: var(--docs-display); letter-spacing: -.03em; }
+h1, h2, h3, td { overflow-wrap: anywhere; }
+:focus-visible { outline: 2px solid var(--color-fd-primary); outline-offset: 3px; }
+code, pre, kbd { font-family: ui-monospace, SFMono-Regular, monospace; }

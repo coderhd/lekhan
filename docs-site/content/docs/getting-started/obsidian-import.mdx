@@ -1,0 +1,21 @@
+---
+title: Import an Obsidian vault
+description: Import an Obsidian folder or ZIP, then check the report for links, properties, and attachments.
+---
+
+1. Open your local workspace and choose **Import vault**. To import directly into cloud storage, sign in and choose **Import files** in **Cloud workspace**.
+2. Choose the folder or ZIP. Leave the source files available until you have checked the imported pages.
+3. Open a note from the import, follow a page link, and check the report for unresolved links and converted embeds.
+4. Export a sample page and reopen it as Markdown to check formatting and properties.
+
+## What comes across
+
+Folders become parent pages and Markdown notes become nested pages. Lekhan resolves supported wikilinks against the imported names and paths. Valid YAML supplies page properties and retains its original text for export. Tags and callouts come across, and supported raster image embeds can be displayed. Other embeds can remain as links. A vault’s Obsidian configuration and plug-ins stay in the source vault.
+
+<Callout title="Check the import report">
+An unresolved link can point to a file outside the selected folder. If Lekhan cannot read a note’s properties, check the original YAML in its source.
+</Callout>
+
+For a cloud interruption, use **Resume import**. Selecting the same unchanged files uses the same import identity. Keep the originals if you need to retry after closing the dialog.
+
+See [Markdown import and export](/docs/getting-started/markdown-import-export).

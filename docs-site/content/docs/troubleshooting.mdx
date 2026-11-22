@@ -1,0 +1,24 @@
+---
+title: Troubleshooting
+description: Resolve local save errors, cloud reconnection problems, and failed AI connections.
+---
+
+## The local workspace can’t save
+
+Export your open edits first. If another tab saved newer data, check your export before choosing **Open saved copy**. If the browser blocks storage or is out of space, free space or open a normal browser window, then retry.
+
+## A cloud page is waiting for sync
+
+Check the connection and sign in with the right account. A previously opened page can have an offline copy. When the connection returns, leave the page open until its status is **Live**. Contact the owner if your access has changed.
+
+## An imported link or embed is missing
+
+Open the import report. Check whether the target file was inside the selected folder and whether Lekhan supports its format. Export a sample and compare to the original Markdown before replacing the source files.
+
+## The assistant connection fails
+
+- For a hosted provider, check the key, model identifier, and provider quota. Select a model listed for your account. A provider can allow generation for a model while limiting model discovery.
+- For a local provider, open its client and make sure its server is listening on the same computer as your browser. Check the endpoint and allow the exact Lekhan browser origin where your server supports an origin list.
+- If the browser asks for local network permission, review the request for your own model endpoint. Keep a local model server bound to loopback.
+
+See [Use your own API key](/docs/ai/byok), [Run AI with Ollama or LM Studio](/docs/ai/byol), and [Markdown import and export](/docs/getting-started/markdown-import-export).

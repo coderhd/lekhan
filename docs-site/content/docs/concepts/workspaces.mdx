@@ -1,0 +1,16 @@
+---
+title: Local and cloud workspaces
+description: Understand where each copy is stored and when it is shared.
+---
+
+| Where you write | Where it is saved | How you use it |
+| --- | --- | --- |
+| Guest local workspace | IndexedDB in the current browser and site origin | Open the workspace without signing in. |
+| Account local workspace | A separate IndexedDB replica for the signed-in account | Sign in, then open the workspace. |
+| Cloud workspace | Cloud pages and an account-scoped browser copy after opening the page | Sign in, open **Cloud workspace**, then create or import a page. |
+
+Your guest notes stay in the guest workspace when you sign in. To move a note from a local workspace into the cloud, export its Markdown and import it as a cloud page.
+
+You can work on a previously opened cloud page offline when its browser copy and writing access are available. The status bar shows when the connection is live again. Keep an export before clearing site data.
+
+See [Markdown import and export](/docs/getting-started/markdown-import-export) and [Collaboration](/docs/guides/collaboration).

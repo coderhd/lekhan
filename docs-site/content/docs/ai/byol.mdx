@@ -1,0 +1,30 @@
+---
+title: Run AI with Ollama or LM Studio
+description: Point the browser-based writing assistant at a model running on your machine.
+---
+
+Start an inference server on the same computer as the browser. The assistant makes requests to that local endpoint. Install and load the model through your inference tool.
+
+## Ollama
+
+1. Start [Ollama](https://ollama.com/) and install a model from its library.
+2. In **Writing assistant → Providers**, choose **Ollama**.
+3. Use the default endpoint `http://localhost:11434`. This connection uses Ollama’s native API.
+4. Enter the model ID, or choose **Find local models** or **Test connection** to discover it. Save the connection and try a short prompt.
+
+If Ollama blocks browser requests, add the exact origin of your Lekhan workspace to Ollama’s allowed origins. [Ollama FAQ](https://docs.ollama.com/faq)
+
+## LM Studio
+
+1. Download a model and start the server in LM Studio’s **Developer** tab. Use its loopback address.
+2. In **Providers**, choose **LM Studio** and use `http://localhost:1234/v1` unless the port changed.
+3. Enter the loaded model’s ID or discover it using **Test connection**. Save the connection.
+4. If LM Studio requires a token, choose **OpenAI-compatible endpoint** with the same local base URL and enter the token in **API key**.
+
+See [LM Studio’s OpenAI-compatible API](https://lmstudio.ai/docs/developer/openai-compat) and [server settings](https://lmstudio.ai/docs/developer/core/server/settings) for its connection and browser access controls.
+
+## llama.cpp
+
+For an existing llama.cpp server, choose **llama.cpp** and enter its OpenAI-compatible base URL. The default is `http://localhost:8080/v1`. Use the identifier advertised by that server.
+
+If discovery fails, check the server and browser permissions in [Troubleshooting](/docs/troubleshooting).
