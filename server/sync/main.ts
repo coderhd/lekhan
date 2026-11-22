@@ -7,6 +7,7 @@ import { snapshotCipher } from './snapshot.ts'
 import { cloudSnapshots } from './supabase.ts'
 import { encryptedWal } from './wal.ts'
 import { pruneExpiredCheckpoints } from './prune-checkpoints.ts'
+import { drainWaitlist } from '../../lib/waitlist/brevo.ts'
 
 const client = createServerAdmin()
 const origin = siteOrigin()
@@ -51,12 +52,26 @@ if (pruneCheckpoints || pruneImportReceipts) {
   pruneTimer.unref()
 }
 
+let waitlistTimer: ReturnType<typeof setInterval> | undefined
+let ongoingDelivery: Promise<void> | undefined
+const deliverWaitlist = () => {
+  if (ongoingDelivery) return
+  ongoingDelivery = drainWaitlist(client).catch(() => { console.error('[waitlist] delivery drain failed') })
+    .finally(() => { ongoingDelivery = undefined })
+}
+if (process.env.LEKHAN_DRAIN_WAITLIST === '1') {
+  deliverWaitlist()
+  waitlistTimer = setInterval(deliverWaitlist, 60_000)
+  waitlistTimer.unref()
+}
+
 let terminating = false
 function shutdown() {
   if (terminating) return
   terminating = true
   if (pruneTimer) clearInterval(pruneTimer)
-  void Promise.all([hub.close(), ongoingPrune]).then(([saved]) => {
+  if (waitlistTimer) clearInterval(waitlistTimer)
+  void Promise.all([hub.close(), ongoingPrune, ongoingDelivery]).then(([saved]) => {
     if (!saved) process.exitCode = 1
   }).catch(() => { process.exitCode = 1 })
 }

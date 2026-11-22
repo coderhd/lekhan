@@ -124,7 +124,13 @@ export function SearchDialog({
             setHighlight(0)
           }}
           onKeyDown={event => {
-            if (event.nativeEvent.isComposing || results.length === 0) return
+            if (event.nativeEvent.isComposing) return
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              onClose()
+              return
+            }
+            if (results.length === 0) return
             if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
               event.preventDefault()
               const offset = event.key === 'ArrowDown' ? 1 : -1
