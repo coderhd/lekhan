@@ -1,6 +1,7 @@
 'use client'
 
 import { wikiLinks } from './markdown-references'
+import type { Currency, Cycle, PaidTier } from './billing/catalog'
 import {
   analyticsConfigured, analyticsConsentCookie, analyticsId as id, analyticsPreference, analyticsReceipts,
   ga4Configured, posthogConfigured,
@@ -27,6 +28,7 @@ type Event =
   | ['ai_provider_connected', ProviderKind]
   | ['ai_message_sent' | 'daily_active_edit']
   | ['paywall_hit', 'history' | 'collaborators' | 'sync']
+  | ['upgrade_clicked' | 'billing_checkout_started', PaidTier, Cycle, Currency]
 
 function browser() {
   return window as Window & { dataLayer?: unknown[]; gtag?: GoogleTag }
@@ -111,7 +113,7 @@ function countBucket(count: number) {
 
 export function track(...event: Event) {
   if (!analyticsAllowed()) return false
-  const [name, detail, count] = event
+  const [name, detail, count, currency] = event
   let path = '/workspace'
   let properties = {}
   switch (name) {
@@ -144,6 +146,11 @@ export function track(...event: Event) {
       break
     case 'paywall_hit':
       properties = { gate: detail }
+      break
+    case 'upgrade_clicked':
+    case 'billing_checkout_started':
+      path = '/billing'
+      properties = { tier: detail, cycle: count, currency }
       break
   }
   const payload = { ...context(path), ...properties }

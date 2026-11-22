@@ -14,6 +14,8 @@ The public footer, early-access page, local workspace sidebar, and cloud library
 | `import_report_viewed` | An import report is displayed | `source`, `degraded_blocks_bucket` |
 | `export_triggered` | A Markdown page or workspace ZIP starts downloading | `format` |
 | `paywall_hit` | A history window hides older checkpoints, an invite reaches the collaborator cap, or billing limits cloud editing to read-only | `gate=history\|collaborators\|sync` |
+| `upgrade_clicked` | A workspace owner selects a paid plan | `tier`, `cycle`, `currency` |
+| `billing_checkout_started` | The billing route returns a hosted checkout URL | `tier`, `cycle`, `currency` |
 | `ai_provider_connected` | A new AI connection is saved | `kind=byok\|byol\|free_preset` |
 | `ai_message_sent` | An AI request returns a complete response | — |
 | `daily_active_edit` | First content edit on this browser each UTC day | — |
@@ -26,4 +28,4 @@ First-event markers record the first opted-in action observed on that browser. S
 2. Run `NEXT_PUBLIC_GA4_ID=G-LEKHANFIXTURE NEXT_PUBLIC_POSTHOG_KEY=phc_LekhanFixture npm run test:e2e -- e2e/analytics.spec.ts`. It intercepts both destinations, checks payload parity, and exercises cross-tab revocation.
 3. In staging, use GA4 DebugView, PostHog live events, and the network inspector to verify collection after consent. Confirm that both destinations receive the intended event properties and fixed paths. Configure the custom dimensions and conversion reports for the activation funnel.
 
-The editor’s dialect-specific paste and copy events depend on the remaining interop work. Upgrade and checkout events depend on billing. Successful payment is a webhook event and should use Measurement Protocol after the verified payment changes the workspace plan. PostHog tier-gate rollout and its offline bootstrap remain part of billing, and the Sean Ellis survey belongs to private beta. [H0 analytics issue](https://github.com/coderhd/lekhan/issues/83)
+The editor’s dialect-specific paste and copy events depend on the remaining interop work. Successful payment is a webhook event and should use Measurement Protocol after the verified payment changes the workspace plan. PostHog tier-gate rollout and its offline bootstrap remain part of billing, and the Sean Ellis survey belongs to private beta. [H0 analytics issue](https://github.com/coderhd/lekhan/issues/83)

@@ -9,6 +9,7 @@ let initialized = false
 const allowedProperties = new Set([
   'page_location', 'page_title', 'page_referrer', 'method', 'kind', 'is_first',
   'source', 'pages_bucket', 'degraded_blocks_bucket', 'format', 'gate',
+  'tier', 'cycle', 'currency',
   'token', 'distinct_id', '$device_id', '$session_id', '$insert_id', '$process_person_profile',
 ])
 
