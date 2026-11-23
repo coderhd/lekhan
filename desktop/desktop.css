@@ -95,3 +95,76 @@
   color: var(--muted);
   font-size: 12px;
 }
+
+.model-library-dialog {
+  width: min(100% - 32px, 660px);
+}
+
+.form-dialog .model-catalog-search {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding-inline: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.model-catalog-search:focus-within {
+  border-color: var(--pine);
+  outline: 1px solid var(--pine);
+}
+
+.model-catalog-search input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  padding: 9px 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+}
+
+.model-catalog-search input:focus-visible {
+  outline: none;
+}
+
+.model-catalog {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.model-catalog-row {
+  display: grid;
+  gap: 7px;
+  padding-block: 12px;
+  border-block-start: 1px solid var(--line);
+}
+
+.model-catalog-heading,
+.model-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.model-catalog-heading {
+  justify-content: space-between;
+}
+
+.model-catalog-row h3,
+.form-dialog .model-catalog-row p {
+  margin: 0;
+}
+
+.model-catalog-meta,
+.model-download-progress {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.model-download-progress progress {
+  width: 100%;
+  accent-color: var(--pine);
+}

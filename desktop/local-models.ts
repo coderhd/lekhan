@@ -3,7 +3,20 @@ import { fromBase64 } from 'lib0/buffer'
 import { readChatStream, type ChatOptions } from '../lib/ai/client'
 
 export type LocalModel = { id: string; label: string; bytes: number }
-export type LocalLibrary = { runtimeAvailable: boolean; models: LocalModel[] }
+export type CatalogModel = LocalModel & {
+  memory: number
+  strength: 'quick' | 'draft' | 'rewrite'
+  repository: string
+  downloaded: number
+  phase: 'ready' | 'downloading' | 'paused' | 'pausing' | 'verifying' | 'failed'
+  error: 'network' | 'invalid_file' | 'storage' | null
+}
+export type LocalLibrary = {
+  runtimeAvailable: boolean
+  models: LocalModel[]
+  catalog: CatalogModel[]
+  capacity: { totalMemory: number | null; freeDisk: number | null }
+}
 
 export async function sendToLocalModel(id: string, chat: ChatOptions) {
   const signal = chat.signal ?? new AbortController().signal

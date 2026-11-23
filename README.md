@@ -49,7 +49,9 @@ npm run desktop:package
 
 The package script defaults to Metal on macOS and CPU on Windows and Linux. Set `LEKHAN_LLAMA_BACKEND` to `cuda` or `vulkan` on a machine with the corresponding build SDK and driver. Build on the target platform. A debug build can also use an installed server via the absolute `LEKHAN_LLAMA_SERVER` path. [Pinned llama.cpp source](https://github.com/ggml-org/llama.cpp/tree/61881b1f7f0b13d9e46d561fc25afcd6bbaec479)
 
-Open **Model Library → Add GGUF model** to copy a model you already have. The writing assistant uses the selected model in **On this device** and keeps the provider vault available in **Providers**. Removing a model frees the space used by the library copy. The curated download catalog and Windows and Linux runtime verification remain open.
+Open **Model Library → Discover** to find a curated model. Each listing shows its download size, estimated memory and intended use. Lekhan keeps paused transfers on disk across app restarts and checks each model against its pinned SHA-256 digest before installation.
+
+Open **Installed** to select a model for the writing assistant, see storage usage, or remove the library copy. **Add GGUF model** copies a model you already have. Discard a partial download from its listing to reclaim the space. Prompts sent through **On this device** go to the local runtime. Windows and Linux runtime verification remains open.
 
 ## Account access
 

@@ -5,7 +5,7 @@
   "permissions": [
     "allow-open-cloud-workspace", "allow-restore-vault", "allow-choose-vault",
     "allow-read-vault", "allow-vault-sequence", "allow-write-vault", "allow-read-vault-attachment", "allow-attach-vault-file",
-    "allow-list-local-models", "allow-import-local-model", "allow-remove-local-model",
+    "allow-list-local-models", "allow-download-local-model", "allow-pause-model-download", "allow-discard-model-download", "allow-import-local-model", "allow-remove-local-model",
     "allow-generate-local-reply", "allow-cancel-local-reply"
   ]
 }

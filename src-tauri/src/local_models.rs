@@ -1,5 +1,7 @@
+mod catalog;
 mod runtime;
 
+use catalog::{Capacity, CatalogItem, Downloads};
 use runtime::Runtime;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -14,6 +16,7 @@ use uuid::Uuid;
 #[derive(Default)]
 pub struct LocalModels {
     runtime: Runtime,
+    downloads: Downloads,
 }
 
 impl LocalModels {
@@ -35,6 +38,8 @@ pub struct Model {
 pub struct ModelLibrary {
     runtime_available: bool,
     models: Vec<Model>,
+    catalog: Vec<CatalogItem>,
+    capacity: Capacity,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -118,7 +123,7 @@ fn list(root: &Path) -> io::Result<Vec<Model>> {
 }
 
 fn import(root: &Path, source: &Path) -> io::Result<Model> {
-    use std::io::{Seek, SeekFrom, Write};
+    use std::io::{Seek, SeekFrom};
     if !fs::symlink_metadata(source)?.is_file() {
         return Err(invalid_model());
     }
@@ -146,29 +151,73 @@ fn import(root: &Path, source: &Path) -> io::Result<Model> {
     }
     output.sync_all()?;
     drop(output);
-    let model = Model {
-        id: Uuid::new_v4(),
-        label,
-        bytes,
-    };
-    let mut descriptor = File::create(staging.path().join("model.json"))?;
+    install_model(
+        root,
+        staging.path(),
+        Model {
+            id: Uuid::new_v4(),
+            label,
+            bytes,
+        },
+    )
+}
+
+fn install_model(root: &Path, stage: &Path, model: Model) -> io::Result<Model> {
+    use std::io::Write;
+    let mut descriptor = tempfile::NamedTempFile::new_in(stage)?;
     descriptor.write_all(&serde_json::to_vec(&model)?)?;
-    descriptor.sync_all()?;
-    drop(descriptor);
+    descriptor.as_file().sync_all()?;
+    descriptor.persist(stage.join("model.json"))?;
     #[cfg(unix)]
-    File::open(staging.path())?.sync_all()?;
-    fs::rename(staging.path(), root.join(model.id.to_string()))?;
+    File::open(stage)?.sync_all()?;
+    fs::rename(stage, root.join(model.id.to_string()))?;
     #[cfg(unix)]
     File::open(root)?.sync_all()?;
+    #[cfg(unix)]
+    if let Some(source) = stage.parent().filter(|source| *source != root) {
+        File::open(source)?.sync_all()?;
+    }
     Ok(model)
 }
 
 #[tauri::command]
-pub async fn list_local_models(app: AppHandle) -> Result<ModelLibrary, String> {
+pub async fn list_local_models(
+    app: AppHandle,
+    state: State<'_, LocalModels>,
+) -> Result<ModelLibrary, String> {
+    let root = model_root(&app)?;
     Ok(ModelLibrary {
         runtime_available: runtime::executable().is_some(),
-        models: list(&model_root(&app)?).map_err(|error| error.to_string())?,
+        models: list(&root).map_err(|error| error.to_string())?,
+        catalog: state.downloads.catalog(&root)?,
+        capacity: catalog::capacity(&root),
     })
+}
+
+#[tauri::command]
+pub async fn download_local_model(
+    app: AppHandle,
+    state: State<'_, LocalModels>,
+    id: Uuid,
+) -> Result<(), String> {
+    if runtime::executable().is_none() {
+        return Err("This desktop build does not include the local model runtime.".into());
+    }
+    state.downloads.start(model_root(&app)?, id)
+}
+
+#[tauri::command]
+pub fn pause_model_download(state: State<'_, LocalModels>, id: Uuid) -> Result<(), String> {
+    state.downloads.pause(id)
+}
+
+#[tauri::command]
+pub async fn discard_model_download(
+    app: AppHandle,
+    state: State<'_, LocalModels>,
+    id: Uuid,
+) -> Result<(), String> {
+    state.downloads.discard(&model_root(&app)?, id)
 }
 
 #[tauri::command]

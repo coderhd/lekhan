@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { Cloud, Cpu, FolderOpen } from 'lucide-react'
 import { NextIntlClientProvider, useTranslations } from 'next-intl'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import '@fontsource-variable/manrope'
 import '@fontsource-variable/newsreader'
@@ -34,6 +34,7 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
   const [opening, setOpening] = useState(false)
   const [preview, setPreview] = useState<Page[]>([])
   const [library, setLibrary] = useState<LocalLibrary>()
+  const libraryRead = useRef(0)
   const [modelLibraryOpen, setModelLibraryOpen] = useState(false)
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem(selectedModelKey))
   const [catalog, setCatalog] = useState<{ token: string; paths: Map<string, string>; assets: VaultAsset[] }>()
@@ -44,12 +45,13 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
     })),
   }), [handle])
   const refreshLibrary = useCallback(async () => {
+    const revision = ++libraryRead.current
     try {
       const next = await invoke<LocalLibrary>('list_local_models')
-      setLibrary(next)
+      if (libraryRead.current === revision) setLibrary(next)
       return next
     } catch {
-      setLibrary(undefined)
+      return undefined
     }
   }, [])
   const model = library?.runtimeAvailable ? library.models.find(item => item.id === selectedModel) : undefined
@@ -67,8 +69,9 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
 
   useEffect(() => {
     let live = true
+    const revision = ++libraryRead.current
     void invoke<LocalLibrary>('list_local_models').then(next => {
-      if (live) setLibrary(next)
+      if (live && libraryRead.current === revision) setLibrary(next)
     }).catch(() => undefined)
     return () => { live = false }
   }, [])
