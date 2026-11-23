@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod vault;
+
 use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, Url, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_deep_link::DeepLinkExt;
@@ -127,7 +129,16 @@ fn main() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![open_cloud_workspace])
+        .plugin(tauri_plugin_dialog::init())
+        .manage(vault::VaultState::default())
+        .invoke_handler(tauri::generate_handler![
+            open_cloud_workspace,
+            vault::restore_vault,
+            vault::choose_vault,
+            vault::read_vault,
+            vault::vault_sequence,
+            vault::write_vault,
+        ])
         .setup(|app| {
             let opener = app.handle().clone();
             let popup_opener = app.handle().clone();

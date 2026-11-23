@@ -2,5 +2,8 @@
   "identifier": "local-writer",
   "description": "Bundled local writer controls",
   "windows": ["writer"],
-  "permissions": ["allow-open-cloud-workspace"]
+  "permissions": [
+    "allow-open-cloud-workspace", "allow-restore-vault", "allow-choose-vault",
+    "allow-read-vault", "allow-vault-sequence", "allow-write-vault"
+  ]
 }

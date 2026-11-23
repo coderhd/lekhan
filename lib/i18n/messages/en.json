@@ -1,4 +1,16 @@
 {
+  "desktop": {
+    "chooseVault": "Open folder",
+    "swapVault": "Change vault",
+    "vaultTitle": "Open a Markdown vault",
+    "vaultBody": "Choose an existing folder or an empty one. Lekhan saves each note as a Markdown file.",
+    "openFailed": "Could not open that folder. Choose another folder or try again.",
+    "cloudWorkspace": "Cloud workspace",
+    "cloudFailed": "Could not open the cloud workspace. Try again.",
+    "exportPreview": "Export notes from the desktop preview",
+    "externalConflict": "A file in this vault changed outside Lekhan. Export your edits before opening the saved copy.",
+    "externalReload": "Opening the saved copy discards unsaved edits. Export them first to keep a copy."
+  },
   "app-shell": {
     "openingWorkspace": "Opening workspace",
     "saving": "Saving…",

@@ -1,4 +1,16 @@
 {
+  "desktop": {
+    "chooseVault": "Abrir carpeta",
+    "swapVault": "Cambiar de bóveda",
+    "vaultTitle": "Abre una bóveda de Markdown",
+    "vaultBody": "Elige una carpeta existente o una vacía. Lekhan guarda cada nota como archivo Markdown.",
+    "openFailed": "No se pudo abrir la carpeta. Elige otra o inténtalo de nuevo.",
+    "cloudWorkspace": "Espacio en la nube",
+    "cloudFailed": "No se pudo abrir el espacio en la nube. Inténtalo de nuevo.",
+    "exportPreview": "Exportar notas de la versión preliminar de escritorio",
+    "externalConflict": "Un archivo de esta bóveda cambió fuera de Lekhan. Exporta tus cambios antes de abrir la copia guardada.",
+    "externalReload": "Al abrir la copia guardada, se perderán los cambios sin guardar. Expórtalos primero para conservarlos."
+  },
   "app-shell": {
     "openingWorkspace": "Abriendo espacio de trabajo",
     "saving": "Guardando…",

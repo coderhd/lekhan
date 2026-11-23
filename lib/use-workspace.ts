@@ -1,14 +1,14 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { loadWorkspace, saveWorkspace, WorkspaceConflictError } from './storage'
+import { loadWorkspace, saveWorkspace, WorkspaceConflictError, type WorkspaceStorage } from './storage'
 import { starterWorkspace } from './starter-workspace'
 import type { Workspace } from './types'
 import { analyticsAllowed, track } from './analytics'
 
 export type SaveStatus = 'loading' | 'saving' | 'saved' | 'error' | 'conflict'
 
-export function useWorkspace(scope = 'personal') {
+export function useWorkspace(scope = 'personal', storage?: WorkspaceStorage) {
   const [workspace, setWorkspace] = useState<Workspace | null>(null)
   const [status, setStatus] = useState<SaveStatus>('loading')
   const current = useRef<Workspace | null>(null)
@@ -18,6 +18,7 @@ export function useWorkspace(scope = 'personal') {
   const conflict = useRef(false)
   const saveCallbacks = useRef<(() => void)[]>([])
   const durableChanges = useRef<{ resolve: () => void; reject: (failure: unknown) => void }[]>([])
+  const load = useCallback(() => storage ? storage.load() : loadWorkspace(scope), [scope, storage])
 
   const flush = useCallback(async () => {
     if (busy.current || conflict.current) return
@@ -28,7 +29,7 @@ export function useWorkspace(scope = 'personal') {
         const pendingCallbacks = saveCallbacks.current.length
         const pendingReceipts = durableChanges.current.length
         setStatus('saving')
-        const saved = await saveWorkspace(snapshot, revision.current, scope)
+        const saved = await (storage ? storage.save(snapshot, revision.current, persisted.current) : saveWorkspace(snapshot, revision.current, scope))
         revision.current = saved.revision
         persisted.current = snapshot
         for (const receipt of durableChanges.current.splice(0, pendingReceipts)) receipt.resolve()
@@ -42,7 +43,7 @@ export function useWorkspace(scope = 'personal') {
     } finally {
       busy.current = false
     }
-  }, [scope])
+  }, [scope, storage])
 
   const hydrate = useCallback((saved?: Workspace) => {
     const initial = saved ?? starterWorkspace()
@@ -62,13 +63,40 @@ export function useWorkspace(scope = 'personal') {
 
   useEffect(() => {
     const controller = new AbortController()
-    void loadWorkspace(scope).then(saved => {
+    void load().then(saved => {
       if (!controller.signal.aborted) hydrate(saved)
     }).catch(() => {
       if (!controller.signal.aborted) setStatus('error')
     })
     return () => controller.abort()
-  }, [hydrate, scope])
+  }, [hydrate, load])
+
+  useEffect(() => {
+    if (!storage?.hasChanges || status !== 'saved') return
+    let stopped = false
+    let checking = false
+    const check = async () => {
+      if (checking || busy.current) return
+      checking = true
+      const before = current.current
+      try {
+        if (!await storage.hasChanges?.(persisted.current) || stopped || busy.current || current.current !== before) return
+        const saved = await load()
+        if (!stopped && saved && !busy.current && current.current === before) hydrate(saved)
+      } catch {
+        if (!stopped && current.current === before && !busy.current) setStatus('error')
+      } finally {
+        checking = false
+      }
+    }
+    const timer = setInterval(() => { if (document.visibilityState === 'visible') void check() }, 1000)
+    window.addEventListener('focus', check)
+    return () => {
+      stopped = true
+      clearInterval(timer)
+      window.removeEventListener('focus', check)
+    }
+  }, [storage, status, hydrate, load, workspace])
 
   useEffect(() => {
     if (!workspace || status === 'saved' || status === 'loading') return
@@ -94,11 +122,11 @@ export function useWorkspace(scope = 'personal') {
   const reload = useCallback(async () => {
     setStatus('loading')
     try {
-      hydrate(await loadWorkspace(scope))
+      hydrate(await load())
     } catch {
       setStatus('error')
     }
-  }, [hydrate, scope])
+  }, [hydrate, load])
 
   const persistChange = useCallback((update: (previous: Workspace) => Workspace) => new Promise<void>((resolve, reject) => {
     if (!current.current || conflict.current) { reject(new Error('Save the current notebook before syncing this page.')); return }

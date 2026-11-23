@@ -4,6 +4,12 @@ const databaseName = 'lekhan-writing-workspace'
 const storeName = 'workspace'
 const workspaceKey = 'personal'
 
+export interface WorkspaceStorage {
+  load: () => Promise<Workspace | undefined>
+  save: (workspace: Workspace, expectedRevision: number, baseline: Workspace | null) => Promise<Workspace>
+  hasChanges?: (baseline: Workspace | null) => Promise<boolean>
+}
+
 export class WorkspaceConflictError extends Error {
   constructor() {
     super('A newer version of this workspace was saved in another tab.')

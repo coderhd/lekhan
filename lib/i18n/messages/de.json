@@ -1,4 +1,16 @@
 {
+  "desktop": {
+    "chooseVault": "Ordner öffnen",
+    "swapVault": "Vault wechseln",
+    "vaultTitle": "Markdown-Vault öffnen",
+    "vaultBody": "Wähle einen vorhandenen oder leeren Ordner. Lekhan speichert jede Notiz als Markdown-Datei.",
+    "openFailed": "Der Ordner konnte nicht geöffnet werden. Wähle einen anderen Ordner oder versuche es erneut.",
+    "cloudWorkspace": "Cloud-Arbeitsbereich",
+    "cloudFailed": "Der Cloud-Arbeitsbereich konnte nicht geöffnet werden. Versuche es erneut.",
+    "exportPreview": "Notizen aus der Desktop-Vorschau exportieren",
+    "externalConflict": "Eine Datei in diesem Vault wurde außerhalb von Lekhan geändert. Exportiere deine Änderungen, bevor du die gespeicherte Kopie öffnest.",
+    "externalReload": "Beim Öffnen der gespeicherten Kopie gehen ungespeicherte Änderungen verloren. Exportiere sie vorher."
+  },
   "app-shell": {
     "openingWorkspace": "Arbeitsbereich wird geöffnet",
     "saving": "Wird gespeichert…",

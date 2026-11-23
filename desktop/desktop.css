@@ -1,3 +1,44 @@
 .desktop-cloud-error {
   margin: 0;
 }
+
+.desktop-vault {
+  display: grid;
+  align-items: center;
+  min-height: 100dvh;
+  padding: 36px clamp(28px, 10vw, 150px);
+}
+
+.desktop-vault-content {
+  max-width: 470px;
+}
+
+.desktop-vault h1 {
+  margin: 22px 0 8px;
+  font: 560 clamp(38px, 6vw, 58px)/0.98 'Newsreader Variable', Georgia, serif;
+  letter-spacing: -0.045em;
+}
+
+.desktop-vault-content > p {
+  margin: 12px 0 22px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.desktop-vault-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 26px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.desktop-writer .workspace-name {
+  display: block;
+  max-width: 145px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

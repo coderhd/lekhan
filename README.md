@@ -31,7 +31,9 @@ npm run desktop -- build
 
 The desktop shell bundles the shared writer. **Cloud workspace** opens the Next.js app in a separate window. Build with `LEKHAN_DESKTOP_CLOUD_ORIGIN` to test against a deployed preview or a local Next.js server. The app defaults to `https://www.lekhan.online`, where the rebuilt workspace requires deployment. The host must be an HTTPS origin or loopback HTTP.
 
-The development shell currently saves local pages in the desktop webview. [The Markdown vault and Yjs storage requirements](docs/adr/0003-desktop-markdown-plus-yjs-sidecar.md) and the [desktop release scope](https://github.com/coderhd/lekhan/issues/88) describe the remaining release work.
+Choose **Open folder** to write directly into an existing or empty vault. The writer opens Markdown files in nested folders and picks up edits made in another app. On a conflict, export the draft before opening the newer disk copy. Lekhan keeps deleted Markdown in the vault’s `.lekhan/trash` directory. The app remembers the last opened vault. Notes from the earlier desktop preview can be exported from the desktop sidebar.
+
+The current desktop vault reads up to 128 MiB of Markdown with a 16 MiB limit per file. [The Markdown vault and Yjs storage decision](docs/adr/0003-desktop-markdown-plus-yjs-sidecar.md) and [desktop release scope](https://github.com/coderhd/lekhan/issues/88) track the remaining journal, attachment, and release work.
 
 ## Account access
 

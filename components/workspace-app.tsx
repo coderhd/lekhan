@@ -16,6 +16,7 @@ import { pageTags, workspaceSearch } from '@/lib/workspace-search'
 import { downloadPage, downloadWorkspace } from '@/lib/downloads'
 import { useWorkspace } from '@/lib/use-workspace'
 import type { SaveStatus } from '@/lib/use-workspace'
+import type { WorkspaceStorage } from '@/lib/storage'
 import { Dialog, SearchDialog } from './workspace-dialogs'
 import { useLocale, useTranslations } from '@/lib/i18n/client'
 import AssistantDialog from './assistant-dialog'
@@ -42,15 +43,17 @@ function scrollToHeading(target: HTMLElement) {
 }
 
 export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled = false, automaticMirror = false,
-  sidebarControls, openCloudPage }: {
+  sidebarControls, openCloudPage, storage, workspaceName }: {
   storageScope?: string; mirrorEnabled?: boolean; automaticMirror?: boolean
-  sidebarControls?: ReactNode; openCloudPage?: (id: string) => void
+  sidebarControls?: ReactNode | ((canSwitch: boolean) => ReactNode); openCloudPage?: (id: string) => void
+  storage?: WorkspaceStorage; workspaceName?: string
 }) {
   const t = useTranslations('app-shell')
+  const desktopText = useTranslations('desktop')
   const editorText = useTranslations('editor-chrome')
   const locale = useLocale()
   const dateLabel = useMemo(() => new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', year: 'numeric' }), [locale])
-  const { workspace, status, change, persistChange, retry, reload } = useWorkspace(storageScope)
+  const { workspace, status, change, persistChange, retry, reload } = useWorkspace(storageScope, storage)
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [vaultOpen, setVaultOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -410,7 +413,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
       <aside className={`sidebar ${navigationOpen ? 'pane-open' : ''}`} aria-label={t('workspaceNavigation')} inert={mobileContext}>
         <div className="identity">
           <span className="brand-mark" aria-hidden="true">L</span>
-          <div><span className="brand-name">Lekhan</span><span className="workspace-name">{t('personalWorkspace')}</span></div>
+          <div><span className="brand-name">Lekhan</span><span className="workspace-name" title={workspaceName}>{workspaceName ?? t('personalWorkspace')}</span></div>
           <button className="icon-button close-sidebar" ref={navClose} aria-label={t('closeNavigation')} onClick={() => { setNavigationOpen(false); requestAnimationFrame(() => navigationToggle.current?.focus()) }}>
             <X size={18} />
           </button>
@@ -460,7 +463,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
             setNavigationOpen(false)
             setVaultOpen(true)
           }}><FolderClosed size={15} /> Import vault</button>
-          {sidebarControls}
+          {typeof sidebarControls === 'function' ? sidebarControls(!workspace || status === 'saved') : sidebarControls}
         </div>
       </aside>
 
@@ -512,7 +515,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
 
         {workspace && (status === 'error' || status === 'conflict') && (
           <div className="save-warning" role="alert">
-            {status === 'conflict' ? t('saveConflict') : t('saveError')}
+            {status === 'conflict' ? storage ? desktopText('externalConflict') : t('saveConflict') : t('saveError')}
             <button onClick={exportAll} disabled={!pages.length}>{t('exportEdits')}</button>
             {status === 'error' ? <button onClick={() => void retry()}>{t('retrySave')}</button> : <button onClick={() => setAction({ kind: 'reload' })}>{t('openSavedCopy')}</button>}
           </div>
@@ -743,7 +746,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
         <Dialog title={t('openSavedCopy')} onClose={() => setAction(null)}>
           <div className="form-dialog">
             <h2>{t('openSavedCopyTitle')}</h2>
-            <p>{t('openSavedCopyHelp')}</p>
+          <p>{storage ? desktopText('externalReload') : t('openSavedCopyHelp')}</p>
             <div className="dialog-actions">
               <button autoFocus className="secondary-button" onClick={() => setAction(null)}>{t('cancel')}</button>
               <button className="primary-button" onClick={() => { setAction(null); void reload() }}>{t('openSavedCopy')}</button>

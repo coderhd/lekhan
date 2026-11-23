@@ -1,4 +1,16 @@
 {
+  "desktop": {
+    "chooseVault": "打开文件夹",
+    "swapVault": "切换笔记库",
+    "vaultTitle": "打开 Markdown 笔记库",
+    "vaultBody": "选择现有文件夹或空文件夹。Lekhan 会将每篇笔记保存为 Markdown 文件。",
+    "openFailed": "无法打开该文件夹。请选择其他文件夹或重试。",
+    "cloudWorkspace": "云端工作区",
+    "cloudFailed": "无法打开云端工作区。请重试。",
+    "exportPreview": "导出桌面预览版的笔记",
+    "externalConflict": "此笔记库中有文件在 Lekhan 之外被修改。请先导出编辑内容，再打开已保存的版本。",
+    "externalReload": "打开已保存的版本会丢弃未保存的编辑。请先导出以保留副本。"
+  },
   "app-shell": {
     "openingWorkspace": "正在打开工作区",
     "saving": "正在保存…",
