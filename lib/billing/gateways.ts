@@ -76,10 +76,15 @@ export function findConfiguredOffer(rail: Rail, priceId: string, seats: number, 
   return null
 }
 
+let stripeConnection: { key: string; client: Stripe } | undefined
+
 export function stripeClient() {
   const key = process.env.STRIPE_SECRET_KEY?.trim()
   if (!key) throw new Error('Stripe is unavailable')
-  return new Stripe(key, { apiVersion: Stripe.API_VERSION, timeout: 12_000, maxNetworkRetries: 1 })
+  if (stripeConnection?.key !== key) {
+    stripeConnection = { key, client: new Stripe(key, { apiVersion: Stripe.API_VERSION, timeout: 12_000, maxNetworkRetries: 1 }) }
+  }
+  return stripeConnection.client
 }
 
 class RazorpayError extends Error {
@@ -177,16 +182,68 @@ export async function startProviderCheckout(checkout: Checkout) {
   return { ref: subscription.id, url: hostedUrl(subscription.short_url, 'razorpay') }
 }
 
-export async function resumeProviderCheckout(rail: Rail, ref: string) {
+interface CheckoutBinding {
+  id: string
+  workspace_id: string
+  expires_at: number
+  created_at: string
+  price_id: string
+}
+
+export async function findProviderCheckout(rail: Rail, binding: CheckoutBinding): Promise<string | null> {
+  const from = Math.floor(Date.parse(binding.created_at) / 1000) - 60
+  const to = Math.min(binding.expires_at + 60, Math.ceil(Date.now() / 1000))
+  const matches = new Set<string>()
+  const belongs = (metadata: Record<string, string> | null | undefined) =>
+    metadata?.lekhan_checkout_id === binding.id && metadata.workspace_id === binding.workspace_id
+
+  if (rail === 'stripe') {
+    const stripe = stripeClient()
+    let cursor: string | undefined
+    for (let page = 0; page < 3; page++) {
+      const result: Stripe.ApiList<Stripe.Checkout.Session> = await stripe.checkout.sessions.list({
+        created: { gte: from, lte: to }, limit: 100, starting_after: cursor,
+      })
+      for (const session of result.data) if (belongs(session.metadata)) matches.add(session.id)
+      if (!result.has_more) return uniqueCheckout(matches)
+      cursor = result.data.at(-1)?.id
+      if (!cursor) break
+    }
+  } else {
+    for (let page = 0; page < 3; page++) {
+      const query = new URLSearchParams({
+        plan_id: binding.price_id, from: String(from), to: String(to), count: '100', skip: String(page * 100),
+      })
+      const result = await razorpay<{ items: RazorpaySubscription[] }>('subscriptions?' + query)
+      for (const subscription of result.items) if (belongs(subscription.notes)) matches.add(subscription.id)
+      if (result.items.length < 100) return uniqueCheckout(matches)
+    }
+  }
+  throw new Error('Provider checkout search exceeded the recovery window')
+}
+
+function uniqueCheckout(matches: Set<string>) {
+  if (matches.size > 1) throw new Error('Multiple provider checkouts share a reservation')
+  return matches.values().next().value ?? null
+}
+
+export async function resumeProviderCheckout(rail: Rail, ref: string, binding?: Pick<CheckoutBinding, 'id' | 'workspace_id'>) {
   if (rail === 'stripe') {
     if (!/^cs_[a-z\d_]+$/i.test(ref)) throw new Error('Invalid checkout reference')
     const session = await stripeClient().checkout.sessions.retrieve(ref)
+    if (binding && (session.id !== ref || session.metadata?.lekhan_checkout_id !== binding.id ||
+      session.metadata.workspace_id !== binding.workspace_id)) throw new Error('Stripe checkout does not match its reservation')
     if (session.status === 'expired') return { closed: true as const }
-    return { closed: false as const, url: session.status === 'open' ? hostedUrl(session.url, rail) : null }
+    return {
+      closed: false as const, url: session.status === 'open' ? hostedUrl(session.url, rail) : null,
+      subscription: typeof session.subscription === 'string' ? session.subscription : session.subscription?.id ?? null,
+    }
   }
   const subscription = await razorpaySubscription(ref)
+  if (binding && (subscription.id !== ref || subscription.notes?.lekhan_checkout_id !== binding.id ||
+    subscription.notes.workspace_id !== binding.workspace_id)) throw new Error('Razorpay checkout does not match its reservation')
   if (['expired', 'cancelled', 'completed'].includes(subscription.status)) return { closed: true as const }
-  return { closed: false as const, url: subscription.status === 'created' ? hostedUrl(subscription.short_url, rail) : null }
+  return { closed: false as const, url: subscription.status === 'created' ? hostedUrl(subscription.short_url, rail) : null, subscription: ref }
 }
 
 function razorpaySubscription(ref: string) {
@@ -204,10 +261,12 @@ export async function readSubscription(rail: Rail, ref: string): Promise<Subscri
     const source = await stripeClient().subscriptions.retrieve(ref)
     const [item] = source.items.data
     if (!item || source.items.data.length !== 1 || source.items.has_more) throw new Error('Unexpected subscription items')
-    let status: ProviderStatus = 'incomplete'
+    let status: ProviderStatus
     if (source.status === 'active' || source.status === 'trialing') status = 'active'
     else if (source.status === 'past_due' || source.status === 'unpaid') status = 'past_due'
     else if (source.status === 'canceled' || source.status === 'incomplete_expired') status = 'canceled'
+    else if (source.status === 'incomplete' || source.status === 'paused') status = 'incomplete'
+    else throw new Error('Unexpected Stripe subscription state')
     return {
       id: source.id,
       customerId: typeof source.customer === 'string' ? source.customer : source.customer.id,
@@ -221,10 +280,12 @@ export async function readSubscription(rail: Rail, ref: string): Promise<Subscri
     }
   }
   const source = await razorpaySubscription(ref)
-  let status: ProviderStatus = 'incomplete'
+  let status: ProviderStatus
   if (source.status === 'active') status = 'active'
   else if (source.status === 'pending' || source.status === 'halted') status = 'past_due'
   else if (['cancelled', 'completed', 'expired'].includes(source.status)) status = 'canceled'
+  else if (['created', 'authenticated', 'paused'].includes(source.status)) status = 'incomplete'
+  else throw new Error('Unexpected Razorpay subscription state')
   return {
     id: source.id,
     customerId: source.customer_id ?? null,

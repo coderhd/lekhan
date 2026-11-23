@@ -36,6 +36,9 @@ test('private cloud routes and sync tickets require an authenticated session', a
   const imported = await page.request.post('/api/import', { data: { importId: id, index: 0, pages: [] } })
   expect(imported.status()).toBe(401)
   expect(imported.headers()['cache-control']).toContain('no-store')
+  const reconcile = await page.request.get('/api/cron/billing-reconcile')
+  expect(reconcile.status()).toBe(401)
+  expect(reconcile.headers()['cache-control']).toContain('no-store')
 })
 
 test('an invitation survives the sign-in and sign-up screens', async ({ page }) => {

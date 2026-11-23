@@ -18,9 +18,17 @@ const plans = [
 const errors: Record<string, string> = {
   price_unavailable: 'Checkout is unavailable for this price. Try another currency or billing period.',
   offer_changed: 'Your workspace pricing changed. Refresh this page for the current price.',
-  checkout_in_progress: 'There’s already a checkout for this workspace. Return to that checkout or try again after it expires.',
+  checkout_in_progress: 'There’s already a checkout for this workspace. Resume it or check the payment status here.',
   subscription_exists: 'This workspace already has a subscription. Open Manage payment to make changes.',
   invalid_offer: 'Choose a valid plan and number of seats.',
+}
+
+const paymentMessages: Record<string, string> = {
+  applied: 'Your payment is confirmed. Your workspace plan has been updated.',
+  closed: 'The payment provider closed this checkout. You can start a new one.',
+  recovered: 'Your checkout is ready to resume.',
+  pending: 'The payment provider is still waiting for confirmation.',
+  unlocated: 'The payment provider hasn’t confirmed this checkout. Contact support if you see a charge.',
 }
 
 export default function BillingSettings({ summary, defaultCurrency, available, returned, paused }: {
@@ -50,7 +58,7 @@ export default function BillingSettings({ summary, defaultCurrency, available, r
     return () => { window.clearInterval(interval); window.clearTimeout(stop) }
   }, [waiting, router])
 
-  async function act(action: 'checkout' | 'portal' | 'cancel', tier?: PaidTier, usePending = false) {
+  async function act(action: 'checkout' | 'portal' | 'cancel' | 'check', tier?: PaidTier, usePending = false) {
     const selected = usePending && pending ? pending : { tier, cycle, currency, seats: Number(seats) }
     const offer = action === 'checkout' ? readOffer(selected) : null
     if (action === 'checkout' && !offer) {
@@ -75,8 +83,12 @@ export default function BillingSettings({ summary, defaultCurrency, available, r
         window.location.assign(result.url)
         return
       }
-      setConfirmCancel(false)
-      setNotice('Cancellation scheduled for the end of the current billing period.')
+      if (action === 'cancel') {
+        setConfirmCancel(false)
+        setNotice('Cancellation scheduled for the end of the current billing period.')
+      } else if (action === 'check') {
+        setNotice(paymentMessages[result.result] ?? 'Check again in a moment if your plan hasn’t updated.')
+      }
       router.refresh()
     } catch (error) {
       setFailure(error instanceof Error ? error.message : 'Could not open billing.')
@@ -121,6 +133,9 @@ export default function BillingSettings({ summary, defaultCurrency, available, r
       {pending && <div className="billing-actions">
         <button className="secondary-button" disabled={!!busy} onClick={() => void act('checkout', pending.tier, true)}>
           Resume {tierNames[pending.tier]} checkout <ArrowUpRight size={15} />
+        </button>
+        <button className="secondary-button" disabled={!!busy} onClick={() => void act('check')}>
+          {busy === 'check' ? 'Checking payment…' : 'Check payment status'}
         </button>
       </div>}
       <div className="billing-controls">

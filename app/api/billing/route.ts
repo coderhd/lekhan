@@ -1,5 +1,6 @@
 import { readBoundedBody } from '@/lib/server/read-body'
 import { readOffer } from '@/lib/billing/catalog'
+import { refreshWorkspaceCheckout } from '@/lib/billing/reconciliation'
 import { BillingError, beginCheckout, billingAccount, manageBilling, ownerWorkspace, readBillingSummary } from '@/lib/billing/workspace'
 
 const headers = { 'Cache-Control': 'private, no-store' }
@@ -38,6 +39,7 @@ export async function POST(request: Request) {
     }
 
     if (input.action === 'portal' || input.action === 'cancel') return respond({ url: await manageBilling(context, input.action) })
+    if (input.action === 'check') return respond({ result: await refreshWorkspaceCheckout(context) })
     if (input.action !== 'checkout') return respond({ error: 'invalid_request' }, 400)
     const offer = readOffer(input)
     if (!offer) return respond({ error: 'invalid_offer' }, 400)

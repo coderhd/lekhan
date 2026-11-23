@@ -24,6 +24,8 @@ interface PlanRow extends WorkspacePlanRowLike {
 
 export interface PendingCheckout {
   id: string
+  workspace_id: string
+  created_at: string
   rail: Rail
   tier: PaidTier
   cycle: Cycle
@@ -35,6 +37,7 @@ export interface PendingCheckout {
   expires_at: number
 }
 
+export const checkoutFields = 'id,workspace_id,created_at,rail,tier,cycle,seats,price_id,founding,provider_ref,status,expires_at'
 const planFields = 'workspace_id,tier,billing_cycle,status,gateway,currency,gateway_customer_id,gateway_subscription_id,current_period_end,cancel_at_period_end,past_due_since,is_founding,seats,rebuild_billing_revision,rebuild_billing_price_id'
 
 export class BillingError extends Error {
@@ -67,7 +70,7 @@ export async function readBillingPlan(admin: SupabaseClient, workspaceId: string
 
 async function pendingCheckout(admin: SupabaseClient, workspaceId: string) {
   const { data, error } = await admin.from('rebuild_billing_checkouts')
-    .select('id,rail,tier,cycle,seats,price_id,founding,provider_ref,status,expires_at')
+    .select(checkoutFields)
     .eq('workspace_id', workspaceId).in('status', ['creating', 'open']).maybeSingle<PendingCheckout>()
   if (error) throw new Error('Pending checkout lookup failed')
   return data
@@ -144,7 +147,8 @@ export async function beginCheckout(context: Awaited<ReturnType<typeof billingAc
     }
     if (typeof reservation.data !== 'string') throw new Error('Missing checkout reservation')
     pending = {
-      id: reservation.data, rail, tier: offer.tier, cycle: offer.cycle, seats: offer.seats, price_id: priceId,
+      id: reservation.data, workspace_id: workspaceId, created_at: new Date().toISOString(),
+      rail, tier: offer.tier, cycle: offer.cycle, seats: offer.seats, price_id: priceId,
       expires_at: expiresAt, founding, status: 'creating', provider_ref: null,
     }
   }
