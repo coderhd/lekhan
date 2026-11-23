@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { createServerAdmin } from '@/lib/auth/admin'
 import { accountContext } from '@/lib/auth/server'
 import { pageAccess, uuidPattern } from '@/lib/cloud/graph'
-import { collaboratorLimit, invitationEmail, sharingRole } from '@/lib/cloud/sharing'
+import { invitationEmail, readCollaboratorCapacity, sharingRole } from '@/lib/cloud/sharing'
 import { recordAnalyticsReceipt } from '@/lib/server/analytics'
 
 export async function updateSharing(pageId: string, form: FormData) {
@@ -29,11 +29,14 @@ export async function updateSharing(pageId: string, form: FormData) {
       const admin = createServerAdmin()
       if (!email || !role) outcome = 'invalid'
       else if (admin) {
-        const limit = await collaboratorLimit(admin, page.page.workspace_id)
+        const capacity = await readCollaboratorCapacity(admin, page.page.workspace_id)
         const { error } = await admin.rpc('rebuild_create_page_invitation', {
-          target_page: pageId, actor: account.subject, email_address: email, access_role: role, collaborator_limit: limit,
+          target_page: pageId, actor: account.subject, email_address: email, access_role: role, ...capacity,
         })
-        outcome = error ? ({ collaborator_limit: 'limit', already_has_access: 'existing', invitation_already_pending: 'pending' }[error.message] ?? 'unavailable') : 'invited'
+        outcome = error ? ({
+          collaborator_limit: 'limit', collaborator_plan_changed: 'plan_changed',
+          already_has_access: 'existing', invitation_already_pending: 'pending',
+        }[error.message] ?? 'unavailable') : 'invited'
       }
     } else if (typeof target === 'string' && uuidPattern.test(target)) {
       if (change === 'cancel') {

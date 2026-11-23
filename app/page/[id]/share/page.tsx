@@ -28,6 +28,7 @@ const messages: Record<string, string> = {
   existing: 'That account already has access.',
   pending: 'An invitation for this address is already pending. Cancel it before changing the role.',
   limit: 'This page has reached its collaborator limit. Cancel a pending invitation or remove a member to make room.',
+  plan_changed: 'The workspace plan changed. Try creating the invitation again.',
   unavailable: 'Could not update page access. Try again in a moment.',
 }
 
@@ -60,7 +61,9 @@ export default async function SharePage({ params, searchParams }: {
       <h1>Share page</h1>
       <p>{access.page.title}</p>
       {result === 'limit' && <UsageAnalyticsReceipts />}
-      {message && <p role={ok ? 'status' : 'alert'} className={ok ? 'account-feedback' : 'account-error'}>{message}</p>}
+      {message && <p role={ok ? 'status' : 'alert'} className={ok ? 'account-feedback' : 'account-error'}>
+        {message}{result === 'limit' && <> <Link className="account-link" href="/billing">Compare plans</Link></>}
+      </p>}
 
       <section aria-labelledby="public-access-heading">
         <h2 id="public-access-heading">Link access</h2>

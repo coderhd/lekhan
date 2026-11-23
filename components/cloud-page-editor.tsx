@@ -45,7 +45,8 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
   const editable = replica.writable && !schemaError
   const networkLabel = !enabled ? 'Cloud sync unavailable' : replica.status === 'live' ? 'Live'
     : replica.status === 'offline' ? replica.session ? 'Offline copy' : 'Waiting for sync'
-    : replica.status === 'denied' ? 'Access expired' : 'Opening cloud page'
+    : replica.status === 'denied' ? 'Access expired'
+    : replica.status === 'limit' ? 'Collaborator limit reached' : 'Opening cloud page'
   const exportable = !!replica.session && !schemaError && (source !== null || markdown !== null)
 
   async function openLink(target: string) {
@@ -120,6 +121,7 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
         }}><Download size={15} /> Export page</button>}
       </div>
       {linkMissing && <p className="account-error" role="status">There is no matching page in this link picker. Find the page in your cloud workspace.</p>}
+      {replica.status === 'limit' && <p>Ask the page owner to review sharing or change the workspace plan.</p>}
       {schemaError && <p className="account-error" role="alert">This page contains blocks the editor cannot open safely. Editing and export are paused for this page.</p>}
       {replica.session && (source === null ? <PageEditor
         pageId={page.id}

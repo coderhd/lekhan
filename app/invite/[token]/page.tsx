@@ -34,7 +34,8 @@ export default async function InvitationPage({ params, searchParams }: {
         <p>{invite.role === 'editor' ? 'You’re invited to edit this page.' : 'You’re invited to view this page.'}</p>
         {result && <p role="alert" className="account-error">{result === 'limit'
           ? 'This page has reached its collaborator limit. Ask the owner to review access.'
-          : 'Could not respond to this invitation. Try again in a moment.'}</p>}
+          : result === 'plan_changed' ? 'The workspace plan changed. Try accepting the invitation again.'
+            : 'Could not respond to this invitation. Try again in a moment.'}</p>}
         <form className="invitation-actions" action={respondToInvitation.bind(null, token)}>
           <button className="primary-button" name="response" value="accepted">Accept invitation</button>
           <button className="secondary-button" name="response" value="declined">Decline</button>

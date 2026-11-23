@@ -1,6 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { workspaceEntitlementOrFree } from '@/lib/billing/entitlements'
-import { getPlanLimits } from '@/lib/tier-limits'
+import { collaboratorCapacity, workspaceEntitlementOrFree } from '@/lib/billing/entitlements'
 
 export type SharedRole = 'viewer' | 'editor'
 
@@ -29,7 +28,6 @@ export async function inspectInvitation(admin: SupabaseClient, token: string, su
   return data
 }
 
-export async function collaboratorLimit(admin: SupabaseClient, workspaceId: string) {
-  const plan = await workspaceEntitlementOrFree(workspaceId, admin)
-  return getPlanLimits(plan?.tier, plan?.seats).maxDistinctCollaborators
+export async function readCollaboratorCapacity(admin: SupabaseClient, workspaceId: string) {
+  return collaboratorCapacity(await workspaceEntitlementOrFree(workspaceId, admin))
 }

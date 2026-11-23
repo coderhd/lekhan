@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
     const access = await pageAccess(account.client, pageId, account.subject)
     if (!access?.privateAccess) return NextResponse.json({ error: 'page_not_found' }, { status: 404, headers })
     const relay = await relayedPageAccess(admin, { pageId, subject: account.subject, role: access.role }, true)
+    if (relay === 'limit') return NextResponse.json({ error: 'collaborator_limit' }, { status: 403, headers })
     if (!relay) return NextResponse.json({ error: 'sync_access_denied' }, { status: 403, headers })
     const role = relay === 'read' ? 'viewer' : access.role
     const ticket = issueSyncTicket(secret, { pageId, subject: account.subject, role })

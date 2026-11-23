@@ -8,7 +8,7 @@ import * as Y from 'yjs'
 import { track } from '../analytics'
 import { syncProtocol } from './wire'
 
-type SyncState = 'opening' | 'live' | 'offline' | 'denied'
+type SyncState = 'opening' | 'live' | 'offline' | 'denied' | 'limit'
 export interface CloudCollaboration {
   document: Y.Doc
   awareness: Awareness
@@ -28,6 +28,7 @@ async function requestTicket(pageId: string, signal: AbortSignal) {
   const response = await fetch('/api/sync/session?' + new URLSearchParams({ pageId }), {
     cache: 'no-store', credentials: 'same-origin', signal,
   })
+  if (response.status === 403 && (await response.json().catch(() => null))?.error === 'collaborator_limit') return 'limit' as const
   if ([401, 403, 404].includes(response.status)) return null
   if (!response.ok) throw new Error('Sync is temporarily unavailable.')
   const result = await response.json()
@@ -79,10 +80,11 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
       try {
         const response = await requestTicket(pageId, AbortSignal.any([cancel.signal, AbortSignal.timeout(12_000)]))
         if (cancel.signal.aborted) return
-        if (!response) {
+        if (!response || response === 'limit') {
+          if (response === 'limit' && !reportedLimit) reportedLimit = track('paywall_hit', 'collaborators')
           cachedPermission = undefined
-          await cache.del(cachedKey)
-          if (!cancel.signal.aborted) setState({ session: null, status: 'denied', writable: false })
+          await cache.del(cachedKey).catch(() => undefined)
+          if (!cancel.signal.aborted) setState({ session: null, status: response === 'limit' ? 'limit' : 'denied', writable: false })
           return
         }
         const allowed = response.writable ? 'write' : 'read'

@@ -1,24 +1,29 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { workspaceEntitlementOrFree } from '../billing/entitlements.ts'
-import { getPlanLimits } from '../tier-limits.ts'
+import { collaboratorCapacity, workspaceEntitlementOrFree } from '../billing/entitlements.ts'
 import { pageAccess } from '../cloud/graph.ts'
 import type { SyncTicket } from './ticket'
 
-export async function relayedPageAccess(client: SupabaseClient, ticket: Omit<SyncTicket, 'exp'>, admission: boolean) {
+export type RelayAccess = 'read' | 'write' | 'limit' | null
+
+export async function relayedPageAccess(
+  client: SupabaseClient, ticket: Omit<SyncTicket, 'exp'>, admission: boolean,
+): Promise<RelayAccess> {
   const page = await pageAccess(client, ticket.pageId, ticket.subject)
   if (!page?.privateAccess) return null
 
   const plan = await workspaceEntitlementOrFree(page.page.workspace_id, client)
+  let role = page.role
 
-  if (admission && page.role !== 'owner') {
-    const cap = getPlanLimits(plan?.tier, plan?.seats).maxDistinctCollaborators
-    const { data, error } = await client.rpc('record_collaborator_if_capacity', {
-      p_document_id: ticket.pageId, p_user_id: ticket.subject, p_max_collaborators: cap,
+  if (admission && role !== 'owner') {
+    const { data, error } = await client.rpc('rebuild_record_page_collaborator', {
+      target_page: ticket.pageId, actor: ticket.subject, ...collaboratorCapacity(plan),
     })
-    if (error || !data || typeof data.allowed !== 'boolean') {
+    if (error || !['owner', 'editor', 'viewer', 'denied', 'limit'].includes(data)) {
       throw new Error('Could not verify collaborator capacity.', { cause: error })
     }
-    if (!data.allowed) return null
+    if (data === 'limit') return 'limit'
+    if (data === 'denied') return null
+    role = data
   }
-  return page.role === 'viewer' || ticket.role === 'viewer' || plan?.relayReadOnly ? 'read' : 'write'
+  return role === 'viewer' || ticket.role === 'viewer' || plan?.relayReadOnly ? 'read' : 'write'
 }

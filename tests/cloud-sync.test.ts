@@ -1,6 +1,7 @@
 import { mkdtemp, rm, readFile, appendFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { get } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as Y from 'yjs'
@@ -184,6 +185,30 @@ async function listen(hub: ReturnType<typeof createSyncHub>) {
 }
 
 describe('collaboration relay', () => {
+  it('returns an upgrade reason when a verified collaborator cannot be admitted', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lekhan-sync-capacity-'))
+    cleanup.push(() => rm(dir, { force: true, recursive: true }))
+    const load = vi.fn(async () => null)
+    const hub = createSyncHub({
+      origin, secret, wal: encryptedWal(dir, snapshotCipher(secret)), load,
+      persist: async () => undefined, authorize: async () => 'limit',
+    })
+    cleanup.push(() => hub.close())
+    const url = await listen(hub)
+    const ticket = issueSyncTicket(secret, { pageId, subject: viewer, role: 'viewer' })
+    const rejection = await new Promise((resolve, reject) => {
+      get(url.replace('ws:', 'http:') + '/' + pageId, {
+        headers: { Origin: origin, Connection: 'Upgrade', Upgrade: 'websocket',
+          'Sec-WebSocket-Protocol': syncProtocol + ', ' + ticket },
+      }, response => {
+        response.resume()
+        resolve({ status: response.statusCode, reason: response.headers['x-reason'] })
+      }).on('error', reject)
+    })
+    expect(rejection).toEqual({ status: 403, reason: 'Upgrade Required' })
+    expect(load).not.toHaveBeenCalled()
+  })
+
   it('hydrates before sync, merges offline updates, and never accepts viewer writes', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'lekhan-sync-room-'))
     cleanup.push(() => rm(dir, { force: true, recursive: true }))

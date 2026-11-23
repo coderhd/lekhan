@@ -8,6 +8,7 @@ import * as encoding from 'lib0/encoding'
 import * as sync from 'y-protocols/sync'
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from 'y-protocols/awareness'
 import { syncProtocol, verifySyncTicket, type SyncTicket } from '../../lib/sync/ticket.ts'
+import type { RelayAccess } from '../../lib/sync/authority.ts'
 import type { encryptedWal } from './wal.ts'
 
 const maxPayload = 10 * 1024 * 1024
@@ -26,7 +27,7 @@ interface HubOptions {
   wal: ReturnType<typeof encryptedWal>
   load: (pageId: string) => Promise<Uint8Array | null>
   persist: (pageId: string, doc: Y.Doc) => Promise<void>
-  authorize: (ticket: SyncTicket, admission: boolean) => Promise<'read' | 'write' | null>
+  authorize: (ticket: SyncTicket, admission: boolean) => Promise<RelayAccess>
   onFault?: (operation: string) => void
 }
 
@@ -60,8 +61,11 @@ function toBytes(data: RawData) {
   return Array.isArray(data) ? Buffer.concat(data) : data instanceof ArrayBuffer ? new Uint8Array(data) : data
 }
 
-function reject(socket: Duplex, status: string) {
-  if (!socket.destroyed) socket.end('HTTP/1.1 ' + status + '\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
+function reject(socket: Duplex, status: string, reason?: string) {
+  if (!socket.destroyed) {
+    const detail = reason ? 'X-Reason: ' + reason + '\r\n' : ''
+    socket.end('HTTP/1.1 ' + status + '\r\n' + detail + 'Connection: close\r\nContent-Length: 0\r\n\r\n')
+  }
 }
 
 class Room {
@@ -318,6 +322,7 @@ export function createSyncHub(options: HubOptions) {
     const expired = setTimeout(() => reject(socket, '503 Service Unavailable'), 15_000)
     try {
       const access = await options.authorize(ticket, true)
+      if (access === 'limit') return reject(socket, '403 Forbidden', 'Upgrade Required')
       if (!access) return reject(socket, '403 Forbidden')
       const room = await openRoom(ticket.pageId)
       if (socket.destroyed || socket.writableEnded || closing) return

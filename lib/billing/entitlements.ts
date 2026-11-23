@@ -29,7 +29,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js"
-import type { PlanTier } from "../tier-limits"
+import { getPlanLimits, type PlanTier } from "../tier-limits.ts"
 
 export type BillingCycle = "monthly" | "annual" | "none"
 export type EntitlementStatus = "active" | "past_due" | "canceled" | "incomplete" | "none"
@@ -214,6 +214,14 @@ export async function workspaceEntitlementOrFree(workspaceId: string, client: Su
 		if (!(failure instanceof EntitlementResolutionError) || failure.stage !== 'plan-missing') throw failure
 		return null
 	}
+}
+
+export function collaboratorCapacity(plan: WorkspaceEntitlement | null) {
+  return {
+    collaborator_limit: getPlanLimits(plan?.tier, plan?.seats).maxDistinctCollaborators,
+    expected_tier: plan?.tier ?? 'free',
+    expected_seats: plan?.seats ?? null,
+  }
 }
 
 /**

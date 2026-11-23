@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import { createServerAdmin } from '@/lib/auth/admin'
 import { invitationPath } from '@/lib/auth/input'
 import { accountContext } from '@/lib/auth/server'
-import { collaboratorLimit, inspectInvitation, type InvitationDetails } from '@/lib/cloud/sharing'
+import { inspectInvitation, readCollaboratorCapacity, type InvitationDetails } from '@/lib/cloud/sharing'
 
 export async function respondToInvitation(token: string, form: FormData) {
   const path = invitationPath(token)
@@ -20,13 +20,18 @@ export async function respondToInvitation(token: string, form: FormData) {
     try {
       const current = await inspectInvitation(admin, token, account.subject)
       if (current && current.status === 'pending') {
-        const page = await admin.from('pages').select('workspace_id').eq('id', current.page_id).single()
-        if (page.error) throw page.error
-        const limit = operation === 'accepted' ? await collaboratorLimit(admin, page.data.workspace_id) : 0
+        let capacity
+        if (operation === 'accepted') {
+          const page = await admin.from('pages').select('workspace_id').eq('id', current.page_id).single()
+          if (page.error) throw page.error
+          capacity = await readCollaboratorCapacity(admin, page.data.workspace_id)
+        }
         const reply = await admin.rpc('rebuild_page_invitation', {
-          invitation_token: token, actor: account.subject, operation, collaborator_limit: limit,
+          invitation_token: token, actor: account.subject, operation, ...capacity,
         }).maybeSingle<InvitationDetails>()
-        if (reply.error) outcome = reply.error.message === 'collaborator_limit' ? 'limit' : 'unavailable'
+        if (reply.error) outcome = ({
+          collaborator_limit: 'limit', collaborator_plan_changed: 'plan_changed',
+        }[reply.error.message] ?? 'unavailable')
         else result = reply.data
       } else result = current
     } catch {
