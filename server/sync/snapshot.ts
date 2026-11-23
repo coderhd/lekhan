@@ -4,7 +4,7 @@ const legacy = Buffer.from('LK_ENC_1')
 const version = Buffer.from('LK_ENC_2')
 const ivSize = 12
 const tagSize = 16
-const headerSize = version.length + ivSize + tagSize
+export const snapshotEnvelopeBytes = version.length + ivSize + tagSize
 
 export function configuredSnapshotCipher() {
   const primary = process.env.LEKHAN_ENCRYPTION_KEY?.trim()
@@ -33,15 +33,15 @@ export function snapshotCipher(primary: string, previous: string[] = []) {
         if (allowLegacy && !magic.subarray(0, 7).equals(version.subarray(0, 7))) return data
         throw new Error('Unsupported snapshot format.')
       }
-      if (data.length < headerSize) throw new Error('Truncated encrypted snapshot.')
+      if (data.length < snapshotEnvelopeBytes) throw new Error('Truncated encrypted snapshot.')
       const iv = data.subarray(version.length, version.length + ivSize)
-      const tag = data.subarray(version.length + ivSize, headerSize)
+      const tag = data.subarray(version.length + ivSize, snapshotEnvelopeBytes)
       for (const key of keys) {
         try {
           const decipher = createDecipheriv('aes-256-gcm', key, iv)
           if (!isLegacy) decipher.setAAD(Buffer.from(purpose))
           decipher.setAuthTag(tag)
-          return Buffer.concat([decipher.update(data.subarray(headerSize)), decipher.final()])
+          return Buffer.concat([decipher.update(data.subarray(snapshotEnvelopeBytes)), decipher.final()])
         } catch {
           // The envelope has no key identifier. Try the next configured rotation key.
         }

@@ -1,8 +1,8 @@
 import { mkdir, open, readFile, stat, truncate } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { snapshotCipher } from './snapshot.ts'
+import { maxPageUpdateBytes } from '../../lib/sync/wire.ts'
+import { snapshotEnvelopeBytes, type snapshotCipher } from './snapshot.ts'
 
-const maxRecordBytes = 10 * 1024 * 1024
 const maxWalBytes = 96 * 1024 * 1024
 const uuid = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i
 
@@ -20,6 +20,9 @@ export function encryptedWal(directory: string, cipher: ReturnType<typeof snapsh
   }
 
   return {
+    async needsCompaction(pageId: string, updateBytes: number) {
+      return (await size(pathFor(pageId))) + updateBytes + snapshotEnvelopeBytes + 4 > maxWalBytes
+    },
     async replay(pageId: string, apply: (update: Uint8Array) => void) {
       const path = pathFor(pageId)
       const length = await size(path)
@@ -29,7 +32,7 @@ export function encryptedWal(directory: string, cipher: ReturnType<typeof snapsh
       let offset = 0
       while (offset + 4 <= file.length) {
         const chunkLength = file.readUInt32BE(offset)
-        if (!chunkLength || chunkLength > maxRecordBytes + 36) throw new Error('Invalid WAL record size.')
+        if (!chunkLength || chunkLength > maxPageUpdateBytes + snapshotEnvelopeBytes) throw new Error('Invalid WAL record size.')
         if (offset + 4 + chunkLength > file.length) break
         apply(cipher.open(file.subarray(offset + 4, offset + 4 + chunkLength), 'wal:' + pageId, false))
         offset += 4 + chunkLength
@@ -38,7 +41,7 @@ export function encryptedWal(directory: string, cipher: ReturnType<typeof snapsh
     },
     async append(pageId: string, update: Uint8Array) {
       const path = pathFor(pageId)
-      if (!update.length || update.length > maxRecordBytes) throw new Error('WAL record exceeds the write limit.')
+      if (!update.length || update.length > maxPageUpdateBytes) throw new Error('WAL record exceeds the write limit.')
       const payload = cipher.seal(update, 'wal:' + pageId)
       const existing = await size(path)
       if (existing + payload.length + 4 > maxWalBytes) throw new Error('The WAL needs compaction before accepting more updates.')

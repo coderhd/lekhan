@@ -7,7 +7,8 @@ import { Awareness, removeAwarenessStates } from 'y-protocols/awareness'
 import * as Y from 'yjs'
 import { track } from '../analytics'
 import type { CloudImagePolicy } from '../cloud/image-policy'
-import { imageLimitCloseCode, syncProtocol } from './wire'
+import { chunkedSocket } from './chunked-socket'
+import { imageLimitCloseCode, payloadLimitCloseCode, syncProtocol } from './wire'
 
 type PausedState = 'image-limit' | 'payload-limit'
 type SyncState = 'opening' | 'live' | 'offline' | 'denied' | 'limit' | PausedState
@@ -121,6 +122,7 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
         const connection = new WebsocketProvider(response.endpoint, pageId, document, {
           connect: false,
           awareness,
+          WebSocketPolyfill: chunkedSocket(WebSocket, response.writable),
           protocols: [syncProtocol, response.ticket],
           disableBc: true,
           shouldReconnect: () => false,
@@ -130,7 +132,7 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
           if (cancel.signal.aborted) return
           const remote = [...awareness.getStates().keys()].filter(id => id !== document.clientID)
           removeAwarenessStates(awareness, remote, connection)
-          if (event?.code === imageLimitCloseCode || event?.code === 1009) {
+          if (event?.code === imageLimitCloseCode || event?.code === payloadLimitCloseCode || event?.code === 1009) {
             paused = event.code === imageLimitCloseCode ? 'image-limit' : 'payload-limit'
             if (event.reason === 'free' || event.reason === 'paid') imagePolicy = event.reason
             cachedPermission = allowed

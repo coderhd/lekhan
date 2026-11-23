@@ -9,13 +9,17 @@ import * as sync from 'y-protocols/sync'
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from 'y-protocols/awareness'
 import { syncProtocol, verifySyncTicket, type SyncTicket } from '../../lib/sync/ticket.ts'
 import type { RelayAccess } from '../../lib/sync/authority.ts'
-import { imageLimitCloseCode } from '../../lib/sync/wire.ts'
+import {
+  imageLimitCloseCode, maxPageUpdateBytes, maxSyncFrameBytes, maxSyncMessageBytes, payloadLimitCloseCode,
+  syncChunkBytes, syncChunkHeaderBytes, syncChunkMessage,
+} from '../../lib/sync/wire.ts'
 import { cloudImageAllowed, type CloudImagePolicy } from '../../lib/cloud/image-policy.ts'
 import { addedDocumentImages, documentImages, imageRoots } from './document-images.ts'
 import type { encryptedWal } from './wal.ts'
 
-const maxPayload = 10 * 1024 * 1024
 const maxBuffered = 65 * 1024 * 1024
+const maxQueuedBytes = 128 * 1024 * 1024
+const chunkTimeout = 15_000
 const maxSockets = 400
 const syncMessage = 0
 const awarenessMessage = 1
@@ -41,6 +45,8 @@ interface Peer {
   access: 'read' | 'write'
   cursorId?: number
   pending: number
+  pendingBytes: number
+  transfer?: { bytes: Uint8Array; offset: number; timer: ReturnType<typeof setTimeout> }
   alive: boolean
   checking: boolean
 }
@@ -151,12 +157,14 @@ class Room {
   }
 
   flush() {
-    return this.sequence(async () => {
-      if (!this.dirtySince || this.retired) return
-      await this.options.persist(this.pageId, this.doc)
-      await this.options.wal.clear(this.pageId)
-      this.dirtySince = 0
-    })
+    return this.sequence(() => this.persist())
+  }
+
+  private async persist() {
+    if (!this.dirtySince || this.retired) return
+    await this.options.persist(this.pageId, this.doc)
+    await this.options.wal.clear(this.pageId)
+    this.dirtySince = 0
   }
 
   get canEvict() {
@@ -245,6 +253,10 @@ class Room {
       }
       if (step !== sync.messageYjsSyncStep2 && step !== sync.messageYjsUpdate) throw new Error('Unknown sync step.')
       if (peer.access !== 'write') return
+      if (update.byteLength > maxPageUpdateBytes) return peer.socket.close(payloadLimitCloseCode, 'Sync update is too large')
+      if (this.dirtySince && update.byteLength > maxSyncFrameBytes && await this.options.wal.needsCompaction(this.pageId, update.byteLength)) {
+        await this.persist()
+      }
 
       const decoded = Y.decodeUpdate(update)
       if (!decoded.structs.length && !decoded.ds.clients.size) return
@@ -271,8 +283,8 @@ class Room {
         if (!accepted) return
 
         const nextImages = documentImages(this.roots, this.images, changed)
+        const additions = [...addedDocumentImages(this.images, nextImages)]
         if (this.options.imagePolicy) {
-          const additions = [...addedDocumentImages(this.images, nextImages)]
           if (additions.length) {
             const policy = await this.options.imagePolicy(peer.ticket).catch(() => undefined)
             if (!policy || additions.some(source => !cloudImageAllowed(source, policy))) {
@@ -285,6 +297,12 @@ class Room {
               return
             }
           }
+        }
+        if (accepted.byteLength > maxPageUpdateBytes ||
+          ((additions.length || accepted.byteLength > maxSyncFrameBytes) && Y.encodeStateAsUpdate(this.doc).byteLength > maxPageUpdateBytes)) {
+          await this.recoverDocument()
+          peer.socket.close(payloadLimitCloseCode, 'Page is too large to sync')
+          return
         }
         await this.options.wal.append(this.pageId, accepted)
         this.images = nextImages
@@ -328,14 +346,83 @@ function identify(request: IncomingMessage) {
 export function createSyncHub(options: HubOptions) {
   const rooms = new Map<string, Promise<Room>>()
   let pending = 0
+  let queuedBytes = 0
   let closing = false
   const connections = new Set<Peer>()
   const socketServer = new WebSocketServer({
     noServer: true,
-    maxPayload,
+    maxPayload: maxSyncFrameBytes,
     perMessageDeflate: false,
     handleProtocols: protocols => protocols.has(syncProtocol) ? syncProtocol : false,
   })
+
+  function reserve(peer: Peer, size: number) {
+    if (peer.pendingBytes + size > maxSyncMessageBytes || queuedBytes + size > maxQueuedBytes) {
+      peer.socket.close(1013, 'Sync relay is busy')
+      return false
+    }
+    peer.pendingBytes += size
+    queuedBytes += size
+    return true
+  }
+
+  function release(peer: Peer, size: number) {
+    peer.pendingBytes -= size
+    queuedBytes -= size
+  }
+
+  function clearTransfer(peer: Peer) {
+    if (!peer.transfer) return
+    clearTimeout(peer.transfer.timer)
+    release(peer, peer.transfer.bytes.byteLength)
+    peer.transfer = undefined
+  }
+
+  function queue(peer: Peer, room: Room, message: Uint8Array) {
+    peer.pending++
+    void room.receive(peer, message).catch(() => {
+      options.onFault?.('receive')
+      peer.socket.close(1011, 'Could not accept update')
+    }).finally(() => {
+      peer.pending--
+      release(peer, message.byteLength)
+    })
+  }
+
+  function receiveFrame(peer: Peer, room: Room, data: Uint8Array) {
+    if (data[0] !== syncChunkMessage) {
+      if (peer.transfer) return peer.socket.close(1008, 'Interrupted sync transfer')
+      if (reserve(peer, data.byteLength)) queue(peer, room, data)
+      return
+    }
+    if (peer.access !== 'write' || data.byteLength <= syncChunkHeaderBytes) {
+      return peer.socket.close(1008, 'Invalid sync chunk')
+    }
+    const total = new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(1)
+    if (total > maxSyncMessageBytes) return peer.socket.close(payloadLimitCloseCode, 'Sync update is too large')
+    const chunk = data.subarray(syncChunkHeaderBytes)
+    let transfer = peer.transfer
+    const offset = transfer?.offset ?? 0
+    if (total <= maxSyncFrameBytes || (transfer ? total !== transfer.bytes.byteLength : chunk[0] !== syncMessage) ||
+      chunk.byteLength !== Math.min(syncChunkBytes, total - offset)) {
+      return peer.socket.close(1008, 'Invalid sync chunk')
+    }
+    if (!transfer) {
+      if (!reserve(peer, total)) return
+      const timer = setTimeout(() => {
+        clearTransfer(peer)
+        peer.socket.close(1013, 'Sync transfer timed out')
+      }, chunkTimeout)
+      transfer = peer.transfer = { bytes: new Uint8Array(total), offset: 0, timer }
+    }
+    transfer.bytes.set(chunk, offset)
+    transfer.offset += chunk.byteLength
+    if (transfer.offset === total) {
+      clearTimeout(transfer.timer)
+      peer.transfer = undefined
+      queue(peer, room, transfer.bytes)
+    } else transfer.timer.refresh()
+  }
 
   function overloaded() {
     const memory = process.memoryUsage()
@@ -382,21 +469,19 @@ export function createSyncHub(options: HubOptions) {
       if (socket.destroyed || socket.writableEnded || closing) return
       if (ticket.exp * 1000 <= Date.now()) return reject(socket, '401 Unauthorized')
       socketServer.handleUpgrade(request, socket, head, ws => {
-        const peer: Peer = { socket: ws, ticket, access, pending: 0, alive: true, checking: false }
+        const peer: Peer = { socket: ws, ticket, access, pending: 0, pendingBytes: 0, alive: true, checking: false }
         connections.add(peer)
         ws.on('close', () => {
           connections.delete(peer)
+          clearTransfer(peer)
           room.remove(peer)
         })
         ws.on('error', () => ws.close())
         ws.on('pong', () => { peer.alive = true })
         ws.on('message', (message, binary) => {
+          if (ws.readyState !== WebSocket.OPEN) return
           if (!binary || peer.pending >= 20) return ws.close(1008, 'Invalid or excessive messages')
-          peer.pending++
-          void room.receive(peer, toBytes(message)).catch(() => {
-            options.onFault?.('receive')
-            ws.close(1011, 'Could not accept update')
-          }).finally(() => { peer.pending-- })
+          receiveFrame(peer, room, toBytes(message))
         })
         room.show(peer)
       })

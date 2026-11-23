@@ -2,6 +2,7 @@ import { mkdtemp, rm, readFile, appendFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { get } from 'node:http'
+import { createHash } from 'node:crypto'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as Y from 'yjs'
@@ -9,7 +10,9 @@ import { WebSocket } from 'ws'
 import { WebsocketProvider } from 'y-websocket'
 import { createClient } from '@supabase/supabase-js'
 import { issueSyncTicket, verifySyncTicket } from '../lib/sync/ticket'
-import { imageLimitCloseCode, syncProtocol } from '../lib/sync/wire'
+import { chunkedSocket } from '../lib/sync/chunked-socket'
+import { PAID_IMAGE_BYTES } from '../lib/cloud/image-policy'
+import { imageLimitCloseCode, maxSyncFrameBytes, syncChunkBytes, syncChunkHeaderBytes, syncChunkMessage, syncProtocol } from '../lib/sync/wire'
 import { createSyncHub } from '../server/sync/hub'
 import { snapshotCipher } from '../server/sync/snapshot'
 import { encryptedWal } from '../server/sync/wal'
@@ -161,10 +164,10 @@ class BrowserSocket extends WebSocket {
   }
 }
 
-async function peer(url: string, subject: string, role: 'editor' | 'viewer', doc = new Y.Doc()) {
+async function peer(url: string, subject: string, role: 'editor' | 'viewer', doc = new Y.Doc(), Socket = BrowserSocket as unknown as typeof globalThis.WebSocket) {
   const provider = new WebsocketProvider(url, pageId, doc, {
     protocols: [syncProtocol, issueSyncTicket(secret, { pageId, subject, role })],
-    WebSocketPolyfill: BrowserSocket as unknown as typeof WebSocket & typeof globalThis.WebSocket,
+    WebSocketPolyfill: Socket,
     disableBc: true,
   })
   cleanup.push(() => { provider.destroy(); doc.destroy() })
@@ -185,6 +188,86 @@ async function listen(hub: ReturnType<typeof createSyncHub>) {
 }
 
 describe('collaboration relay', () => {
+  it('discards an interrupted chunk transfer while other editors continue writing', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lekhan-sync-interrupted-'))
+    cleanup.push(() => rm(dir, { force: true, recursive: true }))
+    const wal = encryptedWal(dir, snapshotCipher(secret))
+    const append = vi.spyOn(wal, 'append')
+    const hub = createSyncHub({
+      origin, secret, wal, load: async () => null, persist: async () => undefined,
+      authorize: async ticket => ticket.subject === owner ? 'write' : 'read',
+    })
+    cleanup.push(() => hub.close())
+    const url = await listen(hub)
+    const reader = await peer(url, viewer, 'viewer')
+    const writer = await peer(url, owner, 'editor')
+    const socket = new BrowserSocket(url + '/' + pageId, [syncProtocol, issueSyncTicket(secret, { pageId, subject: owner, role: 'editor' })])
+    cleanup.push(() => socket.terminate())
+    await new Promise<void>((resolve, reject) => socket.once('open', resolve).once('error', reject))
+    const closed = new Promise<number>(resolve => socket.once('close', resolve))
+    const firstChunk = Buffer.alloc(syncChunkHeaderBytes + syncChunkBytes)
+    firstChunk[0] = syncChunkMessage
+    firstChunk.writeUInt32BE(maxSyncFrameBytes + syncChunkBytes, 1)
+    socket.send(firstChunk)
+    socket.send(Buffer.of(3))
+    expect(await closed).toBe(1008)
+    expect(append).not.toHaveBeenCalled()
+
+    writer.doc.getText('source').insert(0, 'The interrupted transfer never entered this page.')
+    await vi.waitFor(() => expect(reader.doc.getText('source').toString()).toBe(writer.doc.getText('source').toString()))
+    expect(append).toHaveBeenCalledOnce()
+  })
+
+  it('writes full-size paid images from offline sync to the encrypted WAL and replays them', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lekhan-sync-large-image-'))
+    cleanup.push(() => rm(dir, { force: true, recursive: true }))
+    const wal = encryptedWal(dir, snapshotCipher(secret))
+    const append = vi.spyOn(wal, 'append')
+    const hubOptions = {
+      origin, secret, wal, load: async () => null,
+      persist: async () => { throw new Error('Storage temporarily unavailable') },
+      authorize: async (ticket: { subject: string }) => ticket.subject === owner ? 'write' as const : 'read' as const,
+      imagePolicy: async () => 'paid' as const,
+    }
+    const hub = createSyncHub(hubOptions)
+    let stopped = false
+    cleanup.push(async () => { if (!stopped) await hub.close() })
+    const url = await listen(hub)
+    const reader = await peer(url, viewer, 'viewer')
+    const doc = new Y.Doc()
+    const text = doc.getText('source')
+    const raster = 'data:image/png;base64,' + Buffer.alloc(PAID_IMAGE_BYTES, 126).toString('base64')
+    const draft = '![Scan](' + raster + ')'
+    doc.getMap('lekhan').set('mode', 'source')
+    text.insert(0, draft)
+    const Socket = chunkedSocket(BrowserSocket as unknown as typeof globalThis.WebSocket, true)
+    const writer = await peer(url, owner, 'editor', doc, Socket)
+    const digest = (value: string) => createHash('sha256').update(value).digest('hex')
+    const expected = digest(draft)
+    await vi.waitFor(() => expect(reader.doc.getText('source').length).toBe(draft.length), { timeout: 4000 })
+    expect(digest(reader.doc.getText('source').toString())).toBe(expected)
+    expect(append).toHaveBeenCalledOnce()
+    expect(append.mock.calls[0][1].byteLength).toBeGreaterThan(maxSyncFrameBytes)
+    const file = await readFile(join(dir, pageId + '.wal'))
+    expect(file.includes('data:image/png')).toBe(false)
+
+    const invalid = new Promise<number | undefined>(resolve => writer.once('connection-close', event => resolve(event?.code)))
+    const oversized = 'data:image/png;base64,' + Buffer.alloc(PAID_IMAGE_BYTES + 1, 127).toString('base64')
+    text.insert(text.length, '\n\n![Over limit](' + oversized + ')')
+    expect(await invalid).toBe(imageLimitCloseCode)
+    expect(append).toHaveBeenCalledOnce()
+    expect(reader.wsconnected).toBe(true)
+
+    writer.disconnect()
+    reader.disconnect()
+    stopped = true
+    expect(await hub.close()).toBe(false)
+    const restarted = createSyncHub({ ...hubOptions, persist: async () => undefined })
+    cleanup.push(() => restarted.close())
+    const fresh = await peer(await listen(restarted), viewer, 'viewer')
+    expect(digest(fresh.doc.getText('source').toString())).toBe(expected)
+  }, 20_000)
+
   it('rejects new over-limit images before publication and keeps the room available', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'lekhan-sync-images-'))
     cleanup.push(() => rm(dir, { force: true, recursive: true }))

@@ -136,10 +136,10 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
       {linkMissing && <p className="account-error" role="status">There is no matching page in this link picker. Find the page in your cloud workspace.</p>}
       {replica.status === 'limit' && <p>Ask the page owner to review sharing or change the workspace plan.</p>}
       {syncPaused && <div className="billing-notice" role="status">
-        <p>{replica.status === 'payload-limit' ? 'This edit is too large to send in one sync update.'
+        <p>{replica.status === 'payload-limit' ? 'This draft exceeds the page sync size limit.'
           : replica.imagePolicy === 'paid' ? 'A new image exceeds the 20 MB cloud limit.'
             : 'New images on Free must be WebP, up to 500 KB and 1,600 pixels per side.'} Your edits are in this browser.
-          Remove or replace the image to resume sharing.</p>
+          {replica.status === 'payload-limit' ? ' Reduce the draft size and try again.' : ' Remove or replace the image to resume sharing.'}</p>
         <button type="button" className="secondary-button" onClick={replica.retrySync}>Retry sync</button>
       </div>}
       {schemaError && <p className="account-error" role="alert">This page contains blocks the editor cannot open safely. Editing and export are paused for this page.</p>}

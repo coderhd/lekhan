@@ -4,9 +4,9 @@ import { yDocToProsemirrorJSON } from '@tiptap/y-tiptap'
 import * as Y from 'yjs'
 import { wikiLinks } from '../../lib/markdown-references.ts'
 import { scanTags, toTitleKey, withoutEmbeddedImages } from '../../lib/cloud/graph-index.ts'
-import type { snapshotCipher } from './snapshot.ts'
+import { maxPageUpdateBytes } from '../../lib/sync/wire.ts'
+import { snapshotEnvelopeBytes, type snapshotCipher } from './snapshot.ts'
 
-const maxStoredBytes = 64 * 1024 * 1024
 const maxIndexSize = 2_000_000
 
 export function indexedDocument(doc: Y.Doc) {
@@ -87,12 +87,14 @@ export function cloudSnapshots(client: SupabaseClient, cipher: ReturnType<typeof
         if ('statusCode' in error && String(error.statusCode) === '404') return null
         throw error
       }
-      if (data.size > maxStoredBytes) throw new Error('Stored page exceeds the sync size limit.')
-      return cipher.open(new Uint8Array(await data.arrayBuffer()), 'snapshot:' + pageId)
+      if (data.size > maxPageUpdateBytes + snapshotEnvelopeBytes) throw new Error('Stored page exceeds the sync size limit.')
+      const bytes = cipher.open(new Uint8Array(await data.arrayBuffer()), 'snapshot:' + pageId)
+      if (bytes.length > maxPageUpdateBytes) throw new Error('Stored page exceeds the sync size limit.')
+      return bytes
     },
     async persist(pageId: string, doc: Y.Doc) {
       const bytes = Y.encodeStateAsUpdate(doc)
-      if (bytes.length > maxStoredBytes) throw new Error('Page exceeds the sync size limit.')
+      if (bytes.length > maxPageUpdateBytes) throw new Error('Page exceeds the sync size limit.')
       const encrypted = cipher.seal(bytes, 'snapshot:' + pageId, true)
       const { error } = await bucket.upload(pageId + '/main_state.bin', encrypted, {
         contentType: 'application/octet-stream', upsert: true,
