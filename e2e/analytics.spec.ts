@@ -68,6 +68,15 @@ test('only shares coarse product events after opt-in and stops after revocation'
   }
 
   // Open the same workspace under a second tab before changing consent.
+  const billingConsent = 'lekhan:usage-analytics:billing-consent'
+  const billingRevocation = 'lekhan:usage-analytics:billing-revocation'
+  const token = '19a47a11-0a56-4d36-8597-fdc1e7ef755e'
+  const revocations: unknown[] = []
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, value), { key: billingConsent, value: token })
+  await page.context().route('**/api/analytics/revoke', async route => {
+    revocations.push(route.request().postDataJSON())
+    await route.fulfill({ status: 204 })
+  })
   const second = await page.context().newPage()
   await second.route('https://www.googletagmanager.com/**', route => route.fulfill({ body: '' }))
   await second.goto('/workspace')
@@ -75,6 +84,9 @@ test('only shares coarse product events after opt-in and stops after revocation'
   await expect(secondConsent).toBeChecked()
   await consent.uncheck()
   await expect(secondConsent).not.toBeChecked()
+  await expect.poll(() => revocations).toContainEqual({ token })
+  await expect.poll(() => page.evaluate(keys => keys.map(key => localStorage.getItem(key)), [billingConsent, billingRevocation]))
+    .toEqual([null, null])
   await expect.poll(() => page.evaluate(key => Reflect.get(window, key), 'ga-disable-' + id)).toBe(true)
   await newPage.click()
   await expect(page.getByText('Saved locally', { exact: true })).toBeVisible()

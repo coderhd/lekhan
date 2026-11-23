@@ -29,6 +29,11 @@ export function UsageAnalyticsObserver() {
     consumeAnalyticsReceipts()
     trackMarketingPage(path)
   }, [consent, path])
+  useEffect(() => {
+    const sync = () => syncAnalyticsConsent(analyticsAllowed())
+    window.addEventListener('online', sync)
+    return () => window.removeEventListener('online', sync)
+  }, [])
   return null
 }
 

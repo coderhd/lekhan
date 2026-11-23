@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowUpRight, Check } from 'lucide-react'
 import { useLocale } from '@/lib/i18n/client'
-import { track } from '@/lib/analytics'
+import { billingMeasurement, track } from '@/lib/analytics'
 import { priceLabel, readOffer, unitAmount, type Currency, type Cycle, type PaidTier } from '@/lib/billing/catalog'
 import type { readBillingSummary } from '@/lib/billing/workspace'
 import RazorpayPlanChanges from './razorpay-plan-changes'
@@ -76,15 +76,16 @@ export default function BillingSettings({ summary, defaultCurrency, available, r
     setNotice('')
     if (offer && !usePending) track('upgrade_clicked', offer.tier, offer.cycle, offer.currency)
     try {
+      const measurement = offer && !usePending ? await billingMeasurement() : undefined
       const response = await fetch('/api/billing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, ...offer }),
+        body: JSON.stringify({ action, ...offer, measurement }),
       })
       const result = await response.json()
       if (!response.ok) throw new Error(errors[result.error] ?? 'Billing is temporarily unavailable. Try again in a moment.')
       if (result.url) {
-        if (offer && !usePending) track('billing_checkout_started', offer.tier, offer.cycle, offer.currency)
+        if (offer && !usePending) track('checkout_started', offer.tier, offer.cycle, offer.currency)
         window.location.assign(result.url)
         return
       }

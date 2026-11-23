@@ -7,6 +7,7 @@ import { accountContext } from '@/lib/auth/server'
 import { ensureCloudWorkspace } from '@/lib/cloud/graph'
 import type { Currency, Cycle, Offer, PaidTier } from './catalog'
 import { entitlementFromRow, type WorkspacePlanRowLike } from './entitlements'
+import { bindCheckoutMeasurement } from './measurement'
 import {
   cancelProviderSubscription, checkoutAvailable, configuredPrice, providerManagementLink, providerRenewalStopped,
   railForCurrency, razorpaySchedule, resumeProviderCheckout, startProviderCheckout, verifyCheckoutPrice, type Rail,
@@ -124,7 +125,7 @@ async function saveCheckout(admin: SupabaseClient, checkout: PendingCheckout, re
   if (error) throw new Error('Could not record the hosted checkout')
 }
 
-export async function beginCheckout(context: Awaited<ReturnType<typeof billingAccount>>, offer: Offer) {
+export async function beginCheckout(context: Awaited<ReturnType<typeof billingAccount>>, offer: Offer, measurement?: unknown) {
   const { admin, account, origin } = context
   const { id: workspaceId } = await ensureCloudWorkspace(account.client, account.subject)
   const plan = await readBillingPlan(admin, workspaceId)
@@ -174,6 +175,9 @@ export async function beginCheckout(context: Awaited<ReturnType<typeof billingAc
       throw new Error('Could not reserve a checkout')
     }
     if (typeof reservation.data !== 'string') throw new Error('Missing checkout reservation')
+    await bindCheckoutMeasurement(admin, reservation.data, measurement).catch(() => {
+      console.error('Checkout measurement binding failed')
+    })
     pending = {
       id: reservation.data, workspace_id: workspaceId, created_at: new Date().toISOString(),
       rail, tier: offer.tier, cycle: offer.cycle, seats: offer.seats, price_id: priceId,

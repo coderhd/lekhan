@@ -44,9 +44,14 @@ export function captureProductEvent(name: string, properties: Record<string, unk
     initialized = true
   }
   if (!posthog.has_opted_in_capturing()) posthog.opt_in_capturing({ captureEventName: false })
-  posthog.capture(name, properties)
+  const leavingForCheckout = name === 'upgrade_clicked' || name === 'checkout_started'
+  posthog.capture(name, properties, leavingForCheckout ? { send_instantly: true, transport: 'sendBeacon' } : undefined)
 }
 
 export function revokeProductAnalytics() {
   if (initialized && !posthog.has_opted_out_capturing()) posthog.opt_out_capturing()
+}
+
+export function billingAnalyticsId() {
+  return initialized && posthog.has_opted_in_capturing() ? posthog.get_distinct_id() : undefined
 }

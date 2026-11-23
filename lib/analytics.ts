@@ -4,7 +4,7 @@ import { wikiLinks } from './markdown-references'
 import type { Currency, Cycle, PaidTier } from './billing/catalog'
 import {
   analyticsConfigured, analyticsConsentCookie, analyticsId as id, analyticsPreference, analyticsReceipts,
-  ga4Configured, posthogConfigured,
+  billingMeasurementToken, ga4Configured, googleClientId, posthogClientId, posthogConfigured,
 } from './analytics-settings'
 
 type ImportSource = 'obsidian' | 'markdown'
@@ -13,6 +13,9 @@ type GoogleTag = (...args: unknown[]) => void
 const disableKey = 'ga-disable-' + id
 let productAnalytics: ReturnType<typeof loadProductAnalytics> | undefined
 let lastMarketingPath: string | null = null
+const measurementKey = analyticsPreference + ':billing-consent'
+const revokeKey = analyticsPreference + ':billing-revocation'
+let revoking: Promise<void> | undefined
 
 function loadProductAnalytics() {
   return import('./posthog-analytics')
@@ -28,7 +31,7 @@ type Event =
   | ['ai_provider_connected', ProviderKind]
   | ['ai_message_sent' | 'daily_active_edit']
   | ['paywall_hit', 'history' | 'collaborators' | 'sync']
-  | ['upgrade_clicked' | 'billing_checkout_started', PaidTier, Cycle, Currency]
+  | ['upgrade_clicked' | 'checkout_started', PaidTier, Cycle, Currency]
 
 function browser() {
   return window as Window & { dataLayer?: unknown[]; gtag?: GoogleTag }
@@ -40,11 +43,60 @@ export function analyticsAllowed() {
 
 export function syncAnalyticsConsent(allowed: boolean) {
   if (!analyticsConfigured) return
+  if (!allowed) revokeBillingMeasurement()
   const cookie = analyticsConsentCookie + '=granted'
   const stored = document.cookie.split('; ').includes(cookie)
   if (stored === allowed) return
   const secure = location.protocol === 'https:' ? '; Secure' : ''
   document.cookie = cookie + '; Path=/; SameSite=Lax; Max-Age=' + (allowed ? 365 * 86400 : 0) + secure
+}
+
+function revokeBillingMeasurement() {
+  try {
+    const token = localStorage.getItem(measurementKey)
+    if (token) {
+      localStorage.setItem(revokeKey, token)
+      localStorage.removeItem(measurementKey)
+    }
+    const pending = localStorage.getItem(revokeKey)
+    if (!pending || revoking) return
+    revoking = fetch('/api/analytics/revoke', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: pending }), keepalive: true,
+    }).then(response => {
+      if (response.ok && localStorage.getItem(revokeKey) === pending) localStorage.removeItem(revokeKey)
+    }).catch(() => undefined).finally(() => { revoking = undefined })
+  } catch { /* Browser storage may be unavailable. */ }
+}
+
+export async function billingMeasurement() {
+  if (!analyticsAllowed()) return undefined
+  try {
+    if (localStorage.getItem(revokeKey)) {
+      revokeBillingMeasurement()
+      return undefined
+    }
+    const ga = ga4Configured ? new Promise<string | undefined>(resolve => {
+      const timeout = window.setTimeout(resolve, 250)
+      enableUsageAnalytics()('get', id, 'client_id', (value: unknown) => {
+        window.clearTimeout(timeout)
+        resolve(typeof value === 'string' && googleClientId.test(value) ? value : undefined)
+      })
+    }) : undefined
+    const posthog = productAnalytics && Promise.race([
+      productAnalytics.then(sdk => sdk.billingAnalyticsId()).catch(() => undefined),
+      new Promise<undefined>(resolve => window.setTimeout(resolve, 250)),
+    ])
+    const [gaClient, posthogClient] = await Promise.all([ga, posthog])
+    if (!analyticsAllowed() || localStorage.getItem(revokeKey)) return undefined
+    if (!gaClient && !(posthogClient && posthogClientId.test(posthogClient))) return undefined
+    const stored = localStorage.getItem(measurementKey)
+    const token = stored && billingMeasurementToken.test(stored) ? stored : crypto.randomUUID()
+    localStorage.setItem(measurementKey, token)
+    return { token, gaClient, posthogClient }
+  } catch {
+    return undefined
+  }
 }
 
 export function consumeAnalyticsReceipts() {
@@ -148,7 +200,7 @@ export function track(...event: Event) {
       properties = { gate: detail }
       break
     case 'upgrade_clicked':
-    case 'billing_checkout_started':
+    case 'checkout_started':
       path = '/billing'
       properties = { tier: detail, cycle: count, currency }
       break

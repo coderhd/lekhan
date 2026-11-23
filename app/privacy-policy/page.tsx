@@ -108,7 +108,7 @@ export default function PrivacyPolicyPage () {
 								Cookies
 							</h2>
 							<p>
-								Lekhan uses essential cookies for functions such as signing in and remembering your preferences. If you select Share usage analytics, Google Analytics may set analytics cookies, and PostHog may store a random browser identifier in local storage. You can turn off future analytics collection using the same checkbox in the workspace sidebar or the website footer.
+								Lekhan uses essential cookies for functions such as signing in and remembering your preferences. If you select Share usage analytics, Google Analytics may set analytics cookies, and PostHog may store a random browser identifier in local storage. Opted-in billing analytics includes plan and subscription status. You can turn off future analytics collection using the same checkbox in the workspace sidebar, on the billing page, or in the website footer.
 							</p>
 						</section>
 

@@ -1,7 +1,9 @@
+import { after } from 'next/server'
 import { readBoundedBody } from '@/lib/server/read-body'
 import { readOffer } from '@/lib/billing/catalog'
 import { refreshWorkspaceCheckout } from '@/lib/billing/reconciliation'
 import { BillingError, beginCheckout, billingAccount, manageBilling, ownerWorkspace, readBillingSummary } from '@/lib/billing/workspace'
+import { billingMeasurementEnabled, deliverBillingMeasurement } from '@/lib/billing/measurement'
 
 const headers = { 'Cache-Control': 'private, no-store' }
 
@@ -38,12 +40,20 @@ export async function POST(request: Request) {
       return respond({ error: 'invalid_request' }, 400)
     }
 
-    if (input.action === 'portal' || input.action === 'cancel') return respond({ url: await manageBilling(context, input.action) })
-    if (input.action === 'check') return respond({ result: await refreshWorkspaceCheckout(context) })
+    if (input.action === 'portal' || input.action === 'cancel') {
+      const url = await manageBilling(context, input.action)
+      if (input.action === 'cancel' && billingMeasurementEnabled) after(() => deliverBillingMeasurement(context.admin))
+      return respond({ url })
+    }
+    if (input.action === 'check') {
+      const result = await refreshWorkspaceCheckout(context)
+      if (result === 'applied' && billingMeasurementEnabled) after(() => deliverBillingMeasurement(context.admin))
+      return respond({ result })
+    }
     if (input.action !== 'checkout') return respond({ error: 'invalid_request' }, 400)
     const offer = readOffer(input)
     if (!offer) return respond({ error: 'invalid_offer' }, 400)
-    return respond({ url: await beginCheckout(context, offer) })
+    return respond({ url: await beginCheckout(context, offer, input.measurement) })
   } catch (error) {
     return failure(error)
   }

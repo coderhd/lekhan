@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto'
+import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type Stripe from 'stripe'
 import { createServerAdmin } from '@/lib/auth/admin'
@@ -10,6 +11,7 @@ import { readOffer, type Offer } from './catalog'
 import { findConfiguredOffer, providerRenewalStopped, readSubscription, stripeClient, type Rail } from './gateways'
 import { readBillingPlan } from './workspace'
 import { redeemStripeInvoice } from './stripe-referrals'
+import { billingMeasurementEnabled, deliverBillingMeasurement } from './measurement'
 
 interface Event {
   key: string
@@ -262,7 +264,8 @@ export async function receiveBillingWebhook(request: Request, rail: Rail) {
 
   try {
     await recordEvent(admin, rail, event)
-    await handleRecordedEvent(admin, rail, event)
+    const result = await handleRecordedEvent(admin, rail, event)
+    if (result === 'applied' && billingMeasurementEnabled) after(() => deliverBillingMeasurement(admin))
     return Response.json({ received: true }, { headers })
   } catch {
     return Response.json({ error: 'billing_event_pending' }, { status: 503, headers })

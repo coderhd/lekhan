@@ -10,6 +10,7 @@ import { checkoutAvailable } from '@/lib/billing/gateways'
 import { ownerWorkspace, readBillingSummary } from '@/lib/billing/workspace'
 import BillingSettings from '@/components/billing-settings'
 import InviteLink from '@/components/invite-link'
+import { UsageAnalyticsControl } from '@/components/usage-analytics'
 import { WorkspaceTransferInvite } from '@/components/workspace-transfer'
 
 export const metadata = { title: 'Workspace billing · Lekhan' }
@@ -56,6 +57,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         <InviteLink path={'/signup?' + new URLSearchParams({ ref: account.subject })} origin={siteOrigin()} label="Referral link" />
       </section>}
       {billing?.workspace && <WorkspaceTransferInvite />}
+      <UsageAnalyticsControl />
     </section>
   </main>
 }
