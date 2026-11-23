@@ -1,5 +1,6 @@
 {
   "desktop": {
+    "recoveredDrafts": "अधूरे ड्राफ़्ट .lekhan/recovery में सुरक्षित हैं। डिस्क पर बदली गई फ़ाइलें वॉल्ट में बनी हुई हैं।",
     "chooseVault": "फ़ोल्डर खोलें",
     "swapVault": "वॉल्ट बदलें",
     "vaultTitle": "Markdown वॉल्ट खोलें",

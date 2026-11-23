@@ -25,10 +25,11 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
   const [restoring, setRestoring] = useState(true)
   const [choosing, setChoosing] = useState(false)
   const [vaultFailed, setVaultFailed] = useState(false)
+  const [recoveredVault, setRecoveredVault] = useState<string | null>(null)
   const [launchFailed, setLaunchFailed] = useState(false)
   const [opening, setOpening] = useState(false)
   const [preview, setPreview] = useState<Page[]>([])
-  const storage = useMemo(() => handle && vaultStorage(handle), [handle])
+  const storage = useMemo(() => handle && vaultStorage(handle, () => setRecoveredVault(handle.token)), [handle])
 
   useEffect(() => {
     let live = true
@@ -82,6 +83,7 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
           <FolderOpen size={15} /> {t('swapVault')}
         </button>
         {failure}
+        {recoveredVault === handle.token && <p className="desktop-recovery-notice" role="status">{t('recoveredDrafts')}</p>}
         {commonControls}
       </>} />
   </div>

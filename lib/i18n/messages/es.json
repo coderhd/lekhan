@@ -1,5 +1,6 @@
 {
   "desktop": {
+    "recoveredDrafts": "Lekhan guardó los borradores interrumpidos en .lekhan/recovery. Los archivos modificados en el disco siguen en la bóveda.",
     "chooseVault": "Abrir carpeta",
     "swapVault": "Cambiar de bóveda",
     "vaultTitle": "Abre una bóveda de Markdown",

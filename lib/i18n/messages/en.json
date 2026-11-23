@@ -1,5 +1,6 @@
 {
   "desktop": {
+    "recoveredDrafts": "Lekhan kept interrupted drafts in .lekhan/recovery. The files changed on disk remain in the vault.",
     "chooseVault": "Open folder",
     "swapVault": "Change vault",
     "vaultTitle": "Open a Markdown vault",

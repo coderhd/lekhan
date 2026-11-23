@@ -3,10 +3,11 @@ import { hasYamlFrontmatter } from '../lib/markdown'
 import { WorkspaceConflictError, type WorkspaceStorage } from '../lib/storage'
 import type { Page, Workspace } from '../lib/types'
 import { markdownNote } from '../lib/vault-import'
+import { advanceNoteSidecar, openNoteSidecar, type NoteSidecar, type SidecarWrite } from './vault-yjs'
 
 export type VaultHandle = { token: string; label: string }
 export type VaultFile = { path: string; text: string; modifiedMs: number }
-type IndexPage = { id: string; path: string; folder?: boolean; favorite: boolean; createdAt: string; title?: string }
+type IndexPage = { id: string; path: string; folder?: boolean; favorite: boolean; createdAt: string; title?: string; sidecar?: string }
 type VaultIndex = {
   version: 1
   revision: number
@@ -14,7 +15,7 @@ type VaultIndex = {
   pages: IndexPage[]
   vaultImports?: Workspace['vaultImports']
 }
-export type VaultSnapshot = { sequence: number; index: VaultIndex | null; files: VaultFile[] }
+export type VaultSnapshot = { sequence: number; index: VaultIndex | null; files: VaultFile[]; sidecars?: NoteSidecar[]; recoveredDrafts?: boolean }
 type NoteChange = { path: string; before: string | null; after: string | null }
 type VaultRead = {
   sequence: number
@@ -22,6 +23,8 @@ type VaultRead = {
   workspace: Workspace
   entries: Map<string, IndexPage>
   files: Map<string, VaultFile>
+  sidecars: Map<string, NoteSidecar>
+  changedOnDisk: Set<string>
 }
 
 const extension = /\.(?:md|markdown|mdown)$/i
@@ -41,6 +44,8 @@ export function readMarkdownVault(snapshot: VaultSnapshot): VaultRead {
   const { files, index } = snapshot
   if (index && (index.version !== 1 || !Array.isArray(index.pages))) throw new Error('Unsupported vault index.')
   const fileMap = new Map(files.map(file => [file.path, file]))
+  const sidecars = new Map(snapshot.sidecars?.map(sidecar => [sidecar.key, sidecar]))
+  const changedOnDisk = new Set<string>()
   const saved = new Map<string, IndexPage>()
   const ids = new Set<string>()
   for (const entry of index?.pages ?? []) {
@@ -48,6 +53,7 @@ export function readMarkdownVault(snapshot: VaultSnapshot): VaultRead {
       typeof entry.favorite !== 'boolean' || typeof entry.createdAt !== 'string' ||
       !Number.isFinite(Date.parse(entry.createdAt)) ||
       (entry.title !== undefined && typeof entry.title !== 'string') ||
+      (entry.sidecar !== undefined && typeof entry.sidecar !== 'string') ||
       ids.has(entry.id) || saved.has(entry.path)) throw new Error('Invalid vault index.')
     saved.set(entry.path, entry)
     ids.add(entry.id)
@@ -93,13 +99,23 @@ export function readMarkdownVault(snapshot: VaultSnapshot): VaultRead {
     const createdAt = previous?.createdAt ?? updatedAt
     const title = previous?.title ?? filename(stem)
     const favorite = previous?.favorite ?? false
-    entries.set(id, { path: file.path, id, favorite, createdAt, title })
+    const sidecar = previous?.sidecar
+    entries.set(id, { path: file.path, id, favorite, createdAt, title, sidecar })
+    const state = sidecar ? sidecars.get(sidecar) : undefined
+    if (state) {
+      const document = openNoteSidecar(state)
+      try {
+        if (document.getText('source').toString() !== file.text) changedOnDisk.add(id)
+      } finally {
+        document.destroy()
+      }
+    }
     pages.push({ id, title, parentId: parent ? folderId(parent) : null, markdown: note.markdown,
       ...(note.properties ? { properties: note.properties } : {}), ...(note.frontmatter ? { frontmatter: note.frontmatter } : {}),
       favorite, createdAt, updatedAt })
   }
   return {
-    sequence: snapshot.sequence, bytes, entries, files: fileMap,
+    sequence: snapshot.sequence, bytes, entries, files: fileMap, sidecars, changedOnDisk,
     workspace: {
       pages, revision: index?.revision ?? 0,
       activePageId: index?.activePageId && entries.has(index.activePageId) ? index.activePageId
@@ -159,7 +175,7 @@ export function prepareVaultSave(workspace: Workspace, baseline: VaultRead, expe
     owners.set(folded(path), page.id)
     if (folder || parents.has(page.id)) directoryOwners.set(folded(stem), page.id)
     const entry = { id: page.id, path, ...(folder ? { folder } : {}), title: page.title,
-      favorite: page.favorite, createdAt: page.createdAt }
+      favorite: page.favorite, createdAt: page.createdAt, sidecar: oldEntry?.sidecar }
     placed.set(page.id, entry)
     inProgress.delete(page.id)
     if (!folder) desired.set(path, noteText(page, oldPage, oldEntry && baseline.files.get(oldEntry.path)?.text))
@@ -180,12 +196,36 @@ export function prepareVaultSave(workspace: Workspace, baseline: VaultRead, expe
   return { changes, index, desired }
 }
 
-export function vaultStorage(handle: VaultHandle): WorkspaceStorage {
+export function prepareVaultJournal(index: VaultIndex, desired: Map<string, string>, baseline: VaultRead) {
+  const sidecars = new Map<string, NoteSidecar>()
+  const updates: SidecarWrite[] = []
+  for (const entry of index.pages) {
+    const next = desired.get(entry.path)
+    if (next === undefined) continue
+    const previous = baseline.entries.get(entry.id)
+    const onDisk = previous ? baseline.files.get(previous.path)?.text : undefined
+    const key = entry.sidecar
+    const record = key ? baseline.sidecars.get(key) : undefined
+    if (record) sidecars.set(record.key, record)
+    if (onDisk === next && !baseline.changedOnDisk.has(entry.id)) continue
+    const advanced = advanceNoteSidecar(key ?? crypto.randomUUID(), record, onDisk ?? '', next)
+    if (advanced) {
+      entry.sidecar = advanced.sidecar.key
+      sidecars.set(advanced.sidecar.key, advanced.sidecar)
+      updates.push(advanced.write)
+    }
+  }
+  return { sidecars, updates }
+}
+
+export function vaultStorage(handle: VaultHandle, onRecovered?: () => void): WorkspaceStorage {
   const token = handle.token
   const cache = new WeakMap<Workspace, VaultRead>()
   return {
     async load() {
-      const read = readMarkdownVault(await invoke<VaultSnapshot>('read_vault', { token }))
+      const snapshot = await invoke<VaultSnapshot>('read_vault', { token })
+      const read = readMarkdownVault(snapshot)
+      if (snapshot.recoveredDrafts) onRecovered?.()
       cache.set(read.workspace, read)
       return read.workspace
     },
@@ -204,13 +244,15 @@ export function vaultStorage(handle: VaultHandle): WorkspaceStorage {
           - (change.before === null ? 0 : encoder.encode(change.before).byteLength)
       }
       if (bytes > 128 * 1024 * 1024) throw new Error('The Markdown vault exceeds the local editor limit.')
+      const journal = prepareVaultJournal(index, desired, cached)
       try {
-        await invoke('write_vault', { token, changes, expectedRevision, index })
+        await invoke('write_vault', { token, changes, expectedRevision, index, sidecars: journal.updates })
         const result = { ...workspace, revision: index.revision }
         const files = new Map([...desired].map(([path, text]) => [path, {
           path, text, modifiedMs: cached.files.get(path)?.modifiedMs ?? Date.now(),
         }]))
-        cache.set(workspace, { sequence: cached.sequence, bytes, entries: new Map(index.pages.map(entry => [entry.id, entry])), workspace: result, files })
+        cache.set(workspace, { sequence: cached.sequence, bytes, entries: new Map(index.pages.map(entry => [entry.id, entry])),
+          workspace: result, files, sidecars: journal.sidecars, changedOnDisk: new Set() })
         return result
       } catch (error) {
         if (error === 'vault_conflict') throw new WorkspaceConflictError()

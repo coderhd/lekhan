@@ -1,5 +1,6 @@
 {
   "desktop": {
+    "recoveredDrafts": "Lekhan hat unterbrochene Entwürfe in .lekhan/recovery gesichert. Die auf dem Datenträger geänderten Dateien bleiben im Vault.",
     "chooseVault": "Ordner öffnen",
     "swapVault": "Vault wechseln",
     "vaultTitle": "Markdown-Vault öffnen",

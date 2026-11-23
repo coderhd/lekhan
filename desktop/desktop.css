@@ -2,6 +2,15 @@
   margin: 0;
 }
 
+.desktop-recovery-notice {
+  margin: 0;
+  padding-inline-start: 8px;
+  border-inline-start: 2px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .desktop-vault {
   display: grid;
   align-items: center;

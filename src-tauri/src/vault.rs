@@ -1,3 +1,6 @@
+mod journal;
+
+use journal::{NoteSidecar, PendingSave, SidecarWrite, read_sidecars};
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -8,7 +11,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::UNIX_EPOCH,
 };
@@ -27,6 +30,7 @@ struct Vault {
     root: PathBuf,
     token: String,
     sequence: Arc<AtomicU64>,
+    recovered_drafts: AtomicBool,
     _watcher: RecommendedWatcher,
 }
 
@@ -51,9 +55,11 @@ pub struct VaultSnapshot {
     sequence: u64,
     index: Value,
     files: Vec<Note>,
+    sidecars: Vec<NoteSidecar>,
+    recovered_drafts: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct NoteChange {
     path: String,
     before: Option<String>,
@@ -136,7 +142,21 @@ fn ensure_directory(path: &Path) -> io::Result<()> {
             Err(invalid())
         };
     }
-    fs::create_dir(path)
+    fs::create_dir(path)?;
+    #[cfg(unix)]
+    File::open(path.parent().ok_or_else(invalid)?)?.sync_all()?;
+    Ok(())
+}
+
+fn ensure_note_parent(root: &Path, path: &Path) -> io::Result<()> {
+    let parent = path.parent().ok_or_else(invalid)?;
+    let relative = parent.strip_prefix(root).map_err(|_| invalid())?;
+    let mut directory = root.to_owned();
+    for part in relative.components() {
+        directory.push(part);
+        ensure_directory(&directory)?;
+    }
+    Ok(())
 }
 
 fn atomic_write(path: &Path, bytes: &[u8], create: bool) -> io::Result<()> {
@@ -207,6 +227,7 @@ impl Vault {
             root,
             token,
             sequence,
+            recovered_drafts: AtomicBool::new(false),
             _watcher: watcher,
         })
     }
@@ -285,38 +306,42 @@ impl Vault {
     }
 
     fn read(&self) -> io::Result<VaultSnapshot> {
+        let _lock = self.journal_lock(false)?;
+        self.recover().map_err(io::Error::other)?;
         let sequence = self.sequence.load(Ordering::Relaxed);
         let mut files = Vec::new();
         let mut remaining = MAX_VAULT;
         self.walk(&self.root, &mut files, &mut remaining)?;
         files.sort_unstable_by(|first, second| first.path.cmp(&second.path));
+        let index = self.index()?;
         Ok(VaultSnapshot {
             sequence,
-            index: self.index()?,
+            sidecars: read_sidecars(&self.root, &index)?,
+            index,
             files,
+            recovered_drafts: self.recovered_drafts.load(Ordering::Relaxed),
         })
     }
 
-    fn apply(
+    fn mark_recovery(&self) {
+        self.recovered_drafts.store(true, Ordering::Relaxed);
+    }
+
+    fn preflight<'a>(
         &self,
-        changes: Vec<NoteChange>,
-        expected_revision: u64,
-        index: Value,
-    ) -> Result<(), String> {
+        save: &'a PendingSave,
+    ) -> Result<Vec<(PathBuf, &'a NoteChange)>, String> {
         let current_revision = self.index().map_err(|error| error.to_string())?["revision"]
             .as_u64()
             .unwrap_or(0);
-        if current_revision != expected_revision {
+        if current_revision != save.expected_revision {
             return Err("vault_conflict".into());
-        }
-        if index["revision"].as_u64() != expected_revision.checked_add(1) {
-            return Err("Invalid vault revision".into());
         }
         let mut paths = HashSet::new();
         let mut edits = Vec::new();
-        for change in changes {
+        for change in &save.changes {
             let path = note_path(&self.root, &change.path).map_err(|error| error.to_string())?;
-            if !paths.insert(change.path.clone())
+            if !paths.insert(&change.path)
                 || change
                     .after
                     .as_ref()
@@ -333,17 +358,17 @@ impl Vault {
             }
             edits.push((path, change));
         }
+        Ok(edits)
+    }
 
-        let index_bytes = serde_json::to_vec(&index).map_err(|error| error.to_string())?;
-        if index_bytes.len() as u64 > MAX_NOTE {
-            return Err("The vault index exceeds the local editor limit".into());
-        }
+    fn commit(&self, save: &PendingSave) -> Result<(), String> {
+        let edits = self.preflight(save)?;
         let run = || -> io::Result<()> {
             let directory = self.root.join(INTERNAL);
             ensure_directory(&directory)?;
             for (path, change) in &edits {
                 if let Some(text) = &change.after {
-                    fs::create_dir_all(path.parent().ok_or_else(invalid)?)?;
+                    ensure_note_parent(&self.root, path)?;
                     if read_note(path)? != change.before {
                         return Err(io::Error::other("vault_conflict"));
                     }
@@ -369,7 +394,12 @@ impl Vault {
                     }
                 }
             }
-            atomic_write(&directory.join("index.json"), &index_bytes, false)?;
+            save.persist_sidecars(&self.root)?;
+            atomic_write(
+                &directory.join("index.json"),
+                &serde_json::to_vec(&save.index)?,
+                false,
+            )?;
             Ok(())
         };
         run().map_err(|error| {
@@ -469,9 +499,15 @@ pub async fn write_vault(
     changes: Vec<NoteChange>,
     expected_revision: u64,
     index: Value,
+    sidecars: Option<Vec<SidecarWrite>>,
 ) -> Result<(), String> {
     locked_vault(&state, token, |vault| {
-        vault.apply(changes, expected_revision, index)
+        vault.save(PendingSave {
+            changes,
+            expected_revision,
+            index,
+            sidecars: sidecars.unwrap_or_default(),
+        })
     })
 }
 
@@ -491,6 +527,22 @@ mod tests {
 
     fn index(revision: u64) -> Value {
         json!({ "version": 1, "revision": revision, "pages": [] })
+    }
+
+    impl Vault {
+        fn apply(
+            &self,
+            changes: Vec<NoteChange>,
+            expected_revision: u64,
+            index: Value,
+        ) -> Result<(), String> {
+            self.save(PendingSave {
+                changes,
+                expected_revision,
+                index,
+                sidecars: Vec::new(),
+            })
+        }
     }
 
     #[test]

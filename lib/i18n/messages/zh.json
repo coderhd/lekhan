@@ -1,5 +1,6 @@
 {
   "desktop": {
+    "recoveredDrafts": "Lekhan 已将中断保存的草稿保存在 .lekhan/recovery 中。磁盘上修改的文件仍保留在笔记库中。",
     "chooseVault": "打开文件夹",
     "swapVault": "切换笔记库",
     "vaultTitle": "打开 Markdown 笔记库",
