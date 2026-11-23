@@ -8,7 +8,7 @@ import { ensureCloudWorkspace } from '@/lib/cloud/graph'
 import type { Currency, Cycle, Offer, PaidTier } from './catalog'
 import { entitlementFromRow, type WorkspacePlanRowLike } from './entitlements'
 import {
-  cancelProviderSubscription, checkoutAvailable, configuredPrice, providerManagementLink,
+  cancelProviderSubscription, checkoutAvailable, configuredPrice, providerManagementLink, providerRenewalStopped,
   railForCurrency, razorpaySchedule, resumeProviderCheckout, startProviderCheckout, verifyCheckoutPrice, type Rail,
 } from './gateways'
 
@@ -20,6 +20,7 @@ interface PlanRow extends WorkspacePlanRowLike {
   gateway_subscription_id: string | null
   rebuild_billing_revision: number
   rebuild_billing_price_id: string | null
+  rebuild_successor_founding: boolean | null
   credited_months: number
 }
 
@@ -39,7 +40,7 @@ export interface PendingCheckout {
 }
 
 export const checkoutFields = 'id,workspace_id,created_at,rail,tier,cycle,seats,price_id,founding,provider_ref,status,expires_at'
-const planFields = 'workspace_id,tier,billing_cycle,status,gateway,currency,gateway_customer_id,gateway_subscription_id,current_period_end,cancel_at_period_end,past_due_since,is_founding,seats,credited_months,rebuild_billing_revision,rebuild_billing_price_id'
+const planFields = 'workspace_id,tier,billing_cycle,status,gateway,currency,gateway_customer_id,gateway_subscription_id,current_period_end,cancel_at_period_end,past_due_since,is_founding,seats,credited_months,rebuild_billing_revision,rebuild_billing_price_id,rebuild_successor_founding'
 
 export class BillingError extends Error {
   constructor(readonly code: string, readonly status: number) {
@@ -69,7 +70,7 @@ export async function readBillingPlan(admin: SupabaseClient, workspaceId: string
   return data
 }
 
-export async function withBillingMutation<T>(admin: SupabaseClient, plan: PlanRow, run: () => Promise<T>) {
+export async function withBillingMutation<T>(admin: SupabaseClient, plan: PlanRow, run: (lease: string) => Promise<T>) {
   const now = new Date()
   const lease = new Date(now.getTime() + 75_000).toISOString()
   const { data, error } = await admin.from('workspace_plans').update({ rebuild_billing_write_until: lease })
@@ -78,14 +79,14 @@ export async function withBillingMutation<T>(admin: SupabaseClient, plan: PlanRo
   if (error) throw new Error('Could not reserve the billing change')
   if (!data) throw new BillingError('billing_busy', 409)
   try {
-    return await run()
+    return await run(lease)
   } finally {
     await admin.from('workspace_plans').update({ rebuild_billing_write_until: new Date().toISOString() })
       .eq('workspace_id', plan.workspace_id).eq('rebuild_billing_write_until', lease)
   }
 }
 
-async function pendingCheckout(admin: SupabaseClient, workspaceId: string) {
+export async function pendingCheckout(admin: SupabaseClient, workspaceId: string) {
   const { data, error } = await admin.from('rebuild_billing_checkouts')
     .select(checkoutFields)
     .eq('workspace_id', workspaceId).in('status', ['creating', 'open']).maybeSingle<PendingCheckout>()
@@ -106,7 +107,9 @@ export async function readBillingSummary(admin: SupabaseClient, workspaceId: str
       tier: pending.tier, cycle: pending.cycle, seats: pending.seats,
       currency: pending.rail === 'stripe' ? 'USD' as const : 'INR' as const,
     } : null,
-    canManage: !!plan?.gateway_subscription_id && plan.status !== 'canceled',
+    canManage: !!plan?.gateway_subscription_id && plan.status !== 'canceled' && plan.rebuild_successor_founding == null,
+    canReattach: plan?.rebuild_successor_founding != null,
+    checkoutFounding: (plan?.rebuild_successor_founding ?? plan?.is_founding) === true,
   }
 }
 
@@ -125,6 +128,11 @@ export async function beginCheckout(context: Awaited<ReturnType<typeof billingAc
   const { admin, account, origin } = context
   const { id: workspaceId } = await ensureCloudWorkspace(account.client, account.subject)
   const plan = await readBillingPlan(admin, workspaceId)
+  if (plan?.gateway_subscription_id && plan.status !== 'canceled') {
+    const verified = plan.rebuild_successor_founding != null && plan.cancel_at_period_end && plan.gateway !== 'none' &&
+      await providerRenewalStopped(plan.gateway, plan.gateway_subscription_id, plan.cancel_at_period_end === true)
+    if (!verified) throw new BillingError('subscription_exists', 409)
+  }
   let pending = await pendingCheckout(admin, workspaceId)
   if (pending?.provider_ref) {
     const state = await resumeProviderCheckout(pending.rail, pending.provider_ref)
@@ -138,9 +146,8 @@ export async function beginCheckout(context: Awaited<ReturnType<typeof billingAc
     pending = null
   }
 
-  if (plan?.gateway_subscription_id && plan.status !== 'canceled') throw new BillingError('subscription_exists', 409)
   const rail = railForCurrency(offer.currency)
-  const founding = plan?.is_founding === true
+  const founding = (plan?.rebuild_successor_founding ?? plan?.is_founding) === true
   const priceId = configuredPrice(offer, founding)
   if (!priceId || !checkoutAvailable(offer, founding)) throw new BillingError('price_unavailable', 503)
 
@@ -162,6 +169,8 @@ export async function beginCheckout(context: Awaited<ReturnType<typeof billingAc
       if (reservation.error.message === 'billing_checkout_in_progress') throw new BillingError('checkout_in_progress', 409)
       if (reservation.error.message === 'billing_subscription_exists') throw new BillingError('subscription_exists', 409)
       if (reservation.error.message === 'billing_offer_changed') throw new BillingError('offer_changed', 409)
+      if (reservation.error.message === 'billing_write_in_progress') throw new BillingError('billing_busy', 409)
+      if (reservation.error.message === 'billing_workspace_not_owned') throw new BillingError('workspace_changed', 409)
       throw new Error('Could not reserve a checkout')
     }
     if (typeof reservation.data !== 'string') throw new Error('Missing checkout reservation')
@@ -184,14 +193,15 @@ export async function manageBilling(context: Awaited<ReturnType<typeof billingAc
   const { account, admin, origin } = context
   const workspace = await ownerWorkspace(account.client, account.subject)
   const plan = workspace && await readBillingPlan(admin, workspace)
-  if (!plan || plan.gateway === 'none' || !plan.gateway_subscription_id || plan.status === 'canceled') {
+  if (!plan || plan.gateway === 'none' || !plan.gateway_subscription_id || plan.status === 'canceled' ||
+    plan.rebuild_successor_founding != null) {
     throw new BillingError('no_subscription', 404)
   }
-  if (action === 'portal') return providerManagementLink(
-    plan.gateway, plan.gateway_subscription_id, plan.gateway_customer_id, origin, plan.is_founding === true,
-  )
-
   const { gateway, gateway_subscription_id: ref } = plan
+  if (action === 'portal') return withBillingMutation(admin, plan, () => providerManagementLink(
+    gateway, ref, plan.gateway_customer_id, origin, plan.is_founding === true,
+  ))
+
   if (!plan.cancel_at_period_end) await withBillingMutation(admin, plan, async () => {
     if (gateway === 'razorpay' && (await razorpaySchedule(ref)).paymentChange) {
       throw new BillingError('remove_scheduled_change', 409)

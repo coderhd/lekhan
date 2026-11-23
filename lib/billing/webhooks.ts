@@ -7,7 +7,7 @@ import { createServerAdmin } from '@/lib/auth/admin'
 import { uuidPattern } from '@/lib/cloud/graph'
 import { readBoundedBody } from '@/lib/server/read-body'
 import { readOffer, type Offer } from './catalog'
-import { findConfiguredOffer, readSubscription, stripeClient, type Rail } from './gateways'
+import { findConfiguredOffer, providerRenewalStopped, readSubscription, stripeClient, type Rail } from './gateways'
 import { readBillingPlan } from './workspace'
 import { redeemStripeInvoice } from './stripe-referrals'
 
@@ -156,15 +156,23 @@ async function applyProviderState(
 
   if (!linked && (!attempt?.data || attempt.data.rail !== rail)) return ignore()
 
+  const successor = !linked && plan.rebuild_successor_founding != null
+  if (successor && provider.status === 'active' && plan.status !== 'canceled' &&
+    plan.gateway_subscription_id && plan.gateway !== 'none' &&
+    !await providerRenewalStopped(plan.gateway, plan.gateway_subscription_id, plan.cancel_at_period_end === true)) {
+    throw new Error('Predecessor renewal is still enabled')
+  }
+
   const currency = rail === 'stripe' ? 'USD' : 'INR'
-  const offerFromAttempt = !linked && attempt?.data && attempt.data.price_id === provider.priceId && attempt.data.founding === plan.is_founding
+  const founding = successor ? plan.rebuild_successor_founding : plan.is_founding
+  const offerFromAttempt = !linked && attempt?.data && attempt.data.price_id === provider.priceId && attempt.data.founding === founding
     ? readOffer({ ...attempt.data, currency, seats: provider.seats })
     : null
   const existingOffer = linked && plan.rebuild_billing_price_id === provider.priceId
     ? readOffer({ ...plan, cycle: plan.billing_cycle, currency, seats: provider.seats })
     : null
   const offer: Offer | null = offerFromAttempt ?? existingOffer ??
-    findConfiguredOffer(rail, provider.priceId, provider.seats, plan.is_founding === true) ??
+    findConfiguredOffer(rail, provider.priceId, provider.seats, founding === true) ??
     (linked && provider.status === 'canceled' ? { tier: 'plus', cycle: 'monthly', currency, seats: 1 } : null)
   if (!offer) throw new Error('Provider subscription price is unrecognized')
   if (provider.status !== 'canceled' && provider.seats !== offer.seats) throw new Error('Provider quantity is inconsistent')
@@ -176,7 +184,7 @@ async function applyProviderState(
     plan.billing_cycle === (retainsPaidTier ? offer.cycle : 'none') &&
     plan.seats === (retainsPaidTier && offer.tier === 'team' ? offer.seats : null) &&
     plan.rebuild_billing_price_id === provider.priceId &&
-    (!provider.customerId || plan.gateway_customer_id === provider.customerId) &&
+    (plan.rebuild_successor_founding != null || !provider.customerId || plan.gateway_customer_id === provider.customerId) &&
     (plan.current_period_end ? Date.parse(String(plan.current_period_end)) : null) ===
       (provider.currentPeriodEnd ? Date.parse(provider.currentPeriodEnd) : null) &&
     plan.cancel_at_period_end === (retainsPaidTier && (provider.cancelAtPeriodEnd ||

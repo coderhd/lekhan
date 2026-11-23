@@ -4,7 +4,7 @@ Billing is available in the cloud workspace for signed-in owners. The same works
 
 ## Staging setup
 
-1. Verify that the workspace plan, gateway event, referral ledger, and founding roster migrations are applied first. Apply the rebuild checkout, reconciliation, plan-change, referral grants, and Stripe referral redemption migrations in order, alongside the rebuilt billing routes. The referral grants also require the rebuild waitlist schema.
+1. Verify that the workspace plan, gateway event, referral ledger, and founding roster migrations are applied first. Apply the rebuild checkout, reconciliation, plan-change, referral grants, Stripe referral redemption, and workspace ownership transfer migrations in order, alongside the rebuilt billing routes. The referral grants also require the rebuild waitlist schema.
 2. Configure the application origin with `LEKHAN_PUBLIC_URL`. Use test payment credentials on staging. The `.env.example` entries bind each tier, cycle, currency, and founding eligibility to a provider price. A checkout checks the live price object against the catalog before creating a session.
 3. Stripe uses USD subscription prices. Configure Team as a volume price with 2–10, 11–25, and 26 or more seats. Each band applies to all seats. Set separate portal configuration IDs for founding and standard workspaces. Each configuration can expose only its cohort’s prices and can adjust seat counts only for Team. Set cancellation at period end. [Stripe tiered pricing](https://docs.stripe.com/subscriptions/pricing-models/tiered-pricing) · [Stripe portal configurations](https://docs.stripe.com/api/customer_portal/configurations/object)
 4. Razorpay uses INR subscription plans for Plus and Pro. Configure monthly and annual plans and test hosted subscription links with the supported payment methods. [Razorpay subscription API](https://razorpay.com/docs/api/payments/subscriptions/create-subscription)
@@ -41,4 +41,12 @@ On a verified paid Stripe renewal, the eligible banked months become a customer 
 
 If a worker loses the response, recovery looks for the original provider transaction and uses the same reservation and idempotency key inside its retry window. After that window, an unverified posting requires review. An unstarted reservation releases its banked months when the subscription ends. Any claims left by the legacy billing worker need review before switching redemption to the rebuild. [Stripe idempotency retention](https://docs.stripe.com/api/idempotent_requests)
 
-Workspace ownership transfer and purchase analytics still need rebuild integration.
+## Workspace ownership transfer
+
+The owner creates a seven-day transfer link for an existing verified account from Workspace billing. Starting a new transfer replaces the previous link. The named account accepts while signed in. Acceptance changes billing ownership. Individual page permissions stay in place, including any page shares already granted to the recipient.
+
+On acceptance, Stripe schedules cancellation at the current period end and returns both the schedule and the effective date for verification. The schedule prevents an existing portal session from changing the subscription during handover. For Razorpay, the app records the provider’s accepted cycle-end cancellation and fetches the subscription to verify its state. A scheduled plan change or an unresolved payment can delay transfer. [Stripe subscription schedules](https://docs.stripe.com/billing/subscriptions/subscription-schedules) · [Stripe portal limitations](https://docs.stripe.com/customer-management#limitations) · [Razorpay subscription cancellation](https://razorpay.com/docs/api/payments/subscriptions/cancel-subscription)
+
+The owner swap and removal of the old payment identity share one transaction. The paid period remains on the workspace. Checkout under the new owner uses their own founding eligibility and payment details. Unused referral grants stay with the account that earned them.
+
+Run a staging transfer on each provider with two verified accounts and an active paid period. Confirm that the previous owner cannot restart renewals through an already opened payment-management session. Confirm the paid period survives the swap, the predecessor cannot bill again, and a new checkout activates under the successor’s own payment identity. Deliver a late event from the predecessor and compare the plan and customer against the new subscription.

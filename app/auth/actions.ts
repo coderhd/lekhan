@@ -3,10 +3,10 @@
 import { redirect } from 'next/navigation'
 import { confirmationTarget } from '@/lib/auth/config'
 import { createAuthClient } from '@/lib/auth/server'
-import { invitationPath, readCredentials, referralCode, type AuthMode, type AuthResult } from '@/lib/auth/input'
+import { invitationPath, readCredentials, referralCode, workspaceTransferPath, type AuthMode, type AuthResult } from '@/lib/auth/input'
 import { recordAnalyticsReceipt } from '@/lib/server/analytics'
 
-export async function submitAuth(mode: AuthMode, invite: string | undefined, referral: string | undefined,
+export async function submitAuth(mode: AuthMode, invite: string | undefined, referral: string | undefined, transfer: string | undefined,
   _previous: AuthResult, form: FormData): Promise<AuthResult> {
   if (!['login', 'signup', 'forgot', 'reset'].includes(mode)) return { issue: 'invalid' }
   const credentials = readCredentials(form, mode)
@@ -19,7 +19,7 @@ export async function submitAuth(mode: AuthMode, invite: string | undefined, ref
   if (mode === 'login') {
     const { error } = await client.auth.signInWithPassword({ email, password })
     if (error) return { issue: 'loginError' }
-    redirect(next ?? '/workspace')
+    redirect(workspaceTransferPath(transfer) ?? next ?? '/workspace')
   }
 
   if (mode === 'reset') {

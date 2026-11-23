@@ -20,7 +20,8 @@ const errors: Record<string, string> = {
   price_unavailable: 'Checkout is unavailable for this price. Try another currency or billing period.',
   offer_changed: 'Your workspace pricing changed. Refresh this page for the current price.',
   checkout_in_progress: 'There’s already a checkout for this workspace. Resume it or check the payment status here.',
-  subscription_exists: 'This workspace already has a subscription. Open Manage payment to make changes.',
+  subscription_exists: 'This workspace still has a renewing subscription. Refresh billing before trying again.',
+  workspace_changed: 'Workspace ownership changed. Refresh this page before continuing.',
   invalid_offer: 'Choose a valid plan and number of seats.',
   billing_busy: 'Billing is being updated. Try again in a moment.',
   remove_scheduled_change: 'Cancel the scheduled plan change before canceling the subscription.',
@@ -52,7 +53,7 @@ export default function BillingSettings({ summary, defaultCurrency, available, r
   const [showPlanChanges, setShowPlanChanges] = useState(false)
   const [failure, setFailure] = useState('')
   const [notice, setNotice] = useState('')
-  const founding = entitlement?.isFounding === true
+  const founding = summary.checkoutFounding
   const waiting = !!pending || (returned && entitlement?.status !== 'active')
 
   useEffect(() => {
@@ -114,13 +115,16 @@ export default function BillingSettings({ summary, defaultCurrency, available, r
         {entitlement?.cancelAtPeriodEnd ? <p>{periodEnd ? `Ends ${periodEnd}` : 'Ends at the close of this billing period'}</p>
           : periodEnd && entitlement?.status === 'active' ? <p>Renews {periodEnd}</p>
           : <p>{canManage ? 'Workspace subscription' : 'Unlimited pages in your local workspace'}</p>}
-        {founding && <p>Founding pricing</p>}
+        {entitlement?.isFounding && <p>Founding pricing</p>}
       </div>
     </section>
     {entitlement?.status === 'past_due' && <p role="status" className="billing-notice">
       {entitlement.relayReadOnly ? 'Cloud editing is read-only until payment is resolved.' : 'A payment needs attention. Update your payment method to keep cloud editing active.'}
     </p>}
     {returned && <p role="status" className="billing-notice">{canManage && !pending ? 'Your subscription is ready.' : 'Waiting for payment confirmation. Your plan will update here.'}</p>}
+    {summary.canReattach && <p className="billing-notice">
+      Choose a plan and add your payment details to keep the workspace subscribed.
+    </p>}
     {paused && !canManage && <p className="billing-notice">Checkout was paused. You can pick up where you left off.</p>}
     {failure && <p className="account-error" role="alert">{failure}</p>}
     {notice && <p className="billing-notice" role="status">{notice}</p>}

@@ -1,15 +1,16 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { authConfig, siteOrigin } from '@/lib/auth/config'
-import { invitationPath, referralCode, type AuthMode } from '@/lib/auth/input'
+import { invitationPath, referralCode, workspaceTransferPath, type AuthMode } from '@/lib/auth/input'
 import { AccountForm } from './account-form'
 import LocaleSwitcher from './locale-switcher'
 
-export default async function AccountScreen({ mode, notice, invite, referral }: {
+export default async function AccountScreen({ mode, notice, invite, referral, transfer }: {
   mode: AuthMode
   notice?: string
   invite?: string
   referral?: string
+  transfer?: string
 }) {
   const t = await getTranslations('auth')
   const titles = { login: 'login', signup: 'signup', forgot: 'forgot', reset: 'reset' } as const
@@ -31,7 +32,8 @@ export default async function AccountScreen({ mode, notice, invite, referral }: 
         {mode === 'forgot' && <p>{t('forgotIntro')}</p>}
         {notice === 'confirm' && <p className="account-error" role="alert">{t('confirmError')}</p>}
         {notice === 'signout' && <p className="account-error" role="alert">{t('signoutError')}</p>}
-        {ready ? <AccountForm mode={mode} invite={token} referral={ref} /> : <p role="status">{t('unavailable')}</p>}
+        {ready ? <AccountForm mode={mode} invite={token} referral={ref}
+          transfer={workspaceTransferPath(transfer) ? transfer : undefined} /> : <p role="status">{t('unavailable')}</p>}
         <div className="account-links">
           {mode === 'login' && <Link href="/forgot-password">{t('forgot')}</Link>}
           {mode === 'login' && <Link href={'/signup' + next}>{t('signup')}</Link>}

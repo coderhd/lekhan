@@ -14,7 +14,8 @@ type ScheduledInfo = Awaited<ReturnType<typeof razorpaySchedule>>
 async function razorpayPlan({ account, admin }: Owner) {
   const workspace = await ownerWorkspace(account.client, account.subject)
   const plan = workspace && await readBillingPlan(admin, workspace)
-  if (!plan || plan.gateway !== 'razorpay' || !plan.gateway_subscription_id || plan.status === 'canceled') {
+  if (!plan || plan.gateway !== 'razorpay' || !plan.gateway_subscription_id || plan.status === 'canceled' ||
+    plan.rebuild_successor_founding != null) {
     throw new BillingError('no_subscription', 404)
   }
   return { plan, ref: plan.gateway_subscription_id, founding: plan.is_founding === true }

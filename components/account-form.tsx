@@ -6,9 +6,11 @@ import type { AuthMode } from '@/lib/auth/input'
 import { submitAuth } from '@/app/auth/actions'
 import { track } from '@/lib/analytics'
 
-export function AccountForm({ mode, invite, referral }: { mode: AuthMode; invite?: string; referral?: string }) {
+export function AccountForm({ mode, invite, referral, transfer }: {
+  mode: AuthMode; invite?: string; referral?: string; transfer?: string
+}) {
   const t = useTranslations('auth')
-  const [state, action, pending] = useActionState(submitAuth.bind(null, mode, invite, referral), null)
+  const [state, action, pending] = useActionState(submitAuth.bind(null, mode, invite, referral, transfer), null)
   if (state && 'outcome' in state) return <p className="account-feedback" role="status">{t(state.outcome)}</p>
 
   const password = mode !== 'forgot'

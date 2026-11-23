@@ -314,7 +314,8 @@ export async function readSubscription(rail: Rail, ref: string): Promise<Subscri
       seats: item.quantity ?? 1,
       status,
       currentPeriodEnd: iso(item.current_period_end),
-      cancelAtPeriodEnd: source.cancel_at_period_end,
+      cancelAtPeriodEnd: source.cancel_at_period_end ||
+        (!!source.schedule && source.cancel_at === item.current_period_end),
     }
   }
   const source = await razorpaySubscription(ref)
@@ -373,5 +374,69 @@ export async function cancelProviderSubscription(rail: Rail, subscriptionId: str
     await stripeClient().subscriptions.update(subscriptionId, { cancel_at_period_end: true })
     return
   }
-  await razorpay('subscriptions/' + subscriptionId + '/cancel', 'POST', { cancel_at_cycle_end: true })
+  const response = await razorpay<RazorpaySubscription>(
+    'subscriptions/' + subscriptionId + '/cancel', 'POST', { cancel_at_cycle_end: true },
+  )
+  if (response.id !== subscriptionId) {
+    throw new Error('Razorpay cancellation was not acknowledged')
+  }
+}
+
+export async function providerRenewalStopped(rail: Rail, ref: string, razorpayAcknowledged: boolean) {
+  if (rail === 'stripe') {
+    const source = await stripeClient().subscriptions.retrieve(ref, { expand: ['schedule'] })
+    if (source.id !== ref) throw new Error('Unexpected billing subscription')
+    if (source.status === 'canceled' || source.status === 'incomplete_expired') return true
+    const schedule = source.schedule
+    const end = source.items.data[0]?.current_period_end
+    return source.status === 'active' && typeof end === 'number' &&
+      typeof schedule === 'object' && schedule?.status === 'active' &&
+      schedule.end_behavior === 'cancel' && schedule.current_phase?.end_date === end &&
+      schedule.phases.at(-1)?.end_date === end && source.cancel_at === end
+  }
+  const state = await readSubscription(rail, ref)
+  if (state.id !== ref) throw new Error('Unexpected billing subscription')
+  if (state.status === 'canceled') return true
+  // Razorpay leaves status active through the current cycle and omits the
+  // cancellation flag. Only an acknowledged cancel request supplies that flag.
+  return state.status === 'active' && razorpayAcknowledged
+}
+
+export async function scheduleStripeTransferCancellation(ref: string) {
+  const stripe = stripeClient()
+  const source = await stripe.subscriptions.retrieve(ref)
+  const [item] = source.items.data
+  if (source.id !== ref || source.status !== 'active' || !item || source.items.data.length !== 1 ||
+    item.current_period_end <= Math.ceil(Date.now() / 1000) || source.pending_update) {
+    throw new Error('Stripe subscription is not ready to detach')
+  }
+  const scheduleId = typeof source.schedule === 'string' ? source.schedule : source.schedule?.id
+  const schedule = scheduleId
+    ? await stripe.subscriptionSchedules.retrieve(scheduleId)
+    : await stripe.subscriptionSchedules.create({ from_subscription: ref }, { idempotencyKey: 'lekhan-transfer-schedule-' + ref })
+  const current = schedule.phases.find(phase => phase.start_date === schedule.current_phase?.start_date)
+  const [scheduledItem] = current?.items ?? []
+  const price = typeof scheduledItem?.price === 'string' ? scheduledItem.price : scheduledItem?.price.id
+  if (schedule.status !== 'active' || !current || current !== schedule.phases.at(-1) ||
+    current.items.length !== 1 || price !== item.price.id || scheduledItem.quantity !== item.quantity ||
+    current.add_invoice_items?.length || current.discounts?.length || scheduledItem.discounts?.length ||
+    current.trial_end || current.billing_thresholds || scheduledItem.billing_thresholds) {
+    throw new Error('Resolve the current Stripe schedule before transferring')
+  }
+  await stripe.subscriptionSchedules.update(schedule.id, {
+    end_behavior: 'cancel',
+    proration_behavior: 'none',
+    phases: [{
+      start_date: current.start_date,
+      end_date: item.current_period_end,
+      proration_behavior: 'none',
+      collection_method: current.collection_method ?? undefined,
+      automatic_tax: current.automatic_tax ? { enabled: current.automatic_tax.enabled } : undefined,
+      default_tax_rates: current.default_tax_rates?.map(rate => typeof rate === 'string' ? rate : rate.id),
+      items: [{
+        price, quantity: scheduledItem.quantity ?? 1,
+        tax_rates: scheduledItem.tax_rates?.map(rate => typeof rate === 'string' ? rate : rate.id),
+      }],
+    }],
+  })
 }

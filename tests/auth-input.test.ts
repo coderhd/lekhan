@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { authConfig, confirmationTarget } from '../lib/auth/config'
-import { readConfirmation, readCredentials } from '../lib/auth/input'
+import { readConfirmation, readCredentials, workspaceTransferPath } from '../lib/auth/input'
 
 afterEach(() => vi.unstubAllEnvs())
 
@@ -33,5 +33,12 @@ describe('authentication input', () => {
     expect(readCredentials(data, 'reset')).toBeNull()
     data.set('confirmPassword', 'exact password ')
     expect(readCredentials(data, 'reset')).not.toBeNull()
+  })
+
+  it('only returns a local ownership transfer path for a valid token', () => {
+    const token = 'a_'.repeat(21) + '-'
+    expect(workspaceTransferPath(token)).toBe('/billing/transfer/' + token)
+    expect(workspaceTransferPath(token + '/')).toBeNull()
+    expect(workspaceTransferPath('//elsewhere.example')).toBeNull()
   })
 })
