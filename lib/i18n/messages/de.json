@@ -1,5 +1,10 @@
 {
   "desktop": {
+    "attachments": "Anhänge",
+    "attachFile": "Datei anhängen",
+    "attachmentLimit": "Hier lassen sich Dateien bis 50 MiB öffnen.",
+    "attachmentReadFailed": "Die Datei konnte nicht gelesen werden.",
+    "attachmentAddFailed": "Die Datei konnte nicht angehängt werden. Wähle eine Datei bis 50 MiB ohne Markdown.",
     "recoveredDrafts": "Lekhan hat unterbrochene Entwürfe in .lekhan/recovery gesichert. Die auf dem Datenträger geänderten Dateien bleiben im Vault.",
     "chooseVault": "Ordner öffnen",
     "swapVault": "Vault wechseln",

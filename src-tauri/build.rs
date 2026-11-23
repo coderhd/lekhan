@@ -7,6 +7,8 @@ fn main() {
             "read_vault",
             "vault_sequence",
             "write_vault",
+            "read_vault_attachment",
+            "attach_vault_file",
         ]),
     ))
     .expect("could not build Lekhan's desktop manifest");

@@ -138,6 +138,8 @@ fn main() {
             vault::read_vault,
             vault::vault_sequence,
             vault::write_vault,
+            vault::attachments::read_vault_attachment,
+            vault::attachments::attach_vault_file,
         ])
         .setup(|app| {
             let opener = app.handle().clone();

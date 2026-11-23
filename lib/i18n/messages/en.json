@@ -1,5 +1,10 @@
 {
   "desktop": {
+    "attachments": "Attachments",
+    "attachFile": "Attach file",
+    "attachmentLimit": "Files up to 50 MiB can be opened here.",
+    "attachmentReadFailed": "Could not read this file.",
+    "attachmentAddFailed": "Could not attach the file. Choose a non-Markdown file up to 50 MiB.",
     "recoveredDrafts": "Lekhan kept interrupted drafts in .lekhan/recovery. The files changed on disk remain in the vault.",
     "chooseVault": "Open folder",
     "swapVault": "Change vault",

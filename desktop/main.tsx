@@ -14,7 +14,8 @@ import { getCatalog } from '@/lib/i18n/catalog'
 import { localeDirection, resolveLocale, type Locale } from '@/lib/i18n/locales'
 import { loadWorkspace } from '@/lib/storage'
 import type { Page } from '@/lib/types'
-import { vaultStorage, type VaultHandle } from './vault-storage'
+import { vaultStorage, type VaultAsset, type VaultHandle } from './vault-storage'
+import AttachmentPanel from './attachment-panel'
 
 type DesktopLocale = { locale: Locale; messages: Awaited<ReturnType<typeof getCatalog>> }
 const languageKey = 'lekhan:desktop:language'
@@ -29,7 +30,13 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
   const [launchFailed, setLaunchFailed] = useState(false)
   const [opening, setOpening] = useState(false)
   const [preview, setPreview] = useState<Page[]>([])
-  const storage = useMemo(() => handle && vaultStorage(handle, () => setRecoveredVault(handle.token)), [handle])
+  const [catalog, setCatalog] = useState<{ token: string; paths: Map<string, string>; assets: VaultAsset[] }>()
+  const storage = useMemo(() => handle && vaultStorage(handle, {
+    recovered: () => setRecoveredVault(handle.token),
+    files: (paths, assets) => setCatalog(previous => ({
+      token: handle.token, paths, assets: assets ?? (previous?.token === handle.token ? previous.assets : []),
+    })),
+  }), [handle])
 
   useEffect(() => {
     let live = true
@@ -78,6 +85,9 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
 
   if (handle && storage) return <div className="desktop-writer" inert={choosing}>
     <WorkspaceApp key={handle.token} storageScope="desktop" storage={storage} workspaceName={handle.label}
+      pageAttachments={(page, insert) => <AttachmentPanel key={page.id} token={handle.token} page={page}
+        path={catalog?.token === handle.token ? catalog.paths.get(page.id) ?? '' : ''}
+        assets={catalog?.token === handle.token ? catalog.assets : []} onInsert={insert} />}
       sidebarControls={canSwitch => <>
         <button type="button" className="nav-action" disabled={!canSwitch || choosing} onClick={() => void selectVault()}>
           <FolderOpen size={15} /> {t('swapVault')}

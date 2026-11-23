@@ -1,5 +1,10 @@
 {
   "desktop": {
+    "attachments": "附件",
+    "attachFile": "添加文件",
+    "attachmentLimit": "此处可打开最大 50 MiB 的文件。",
+    "attachmentReadFailed": "无法读取该文件。",
+    "attachmentAddFailed": "无法添加文件。请选择不超过 50 MiB 的非 Markdown 文件。",
     "recoveredDrafts": "Lekhan 已将中断保存的草稿保存在 .lekhan/recovery 中。磁盘上修改的文件仍保留在笔记库中。",
     "chooseVault": "打开文件夹",
     "swapVault": "切换笔记库",

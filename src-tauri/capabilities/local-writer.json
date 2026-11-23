@@ -4,6 +4,6 @@
   "windows": ["writer"],
   "permissions": [
     "allow-open-cloud-workspace", "allow-restore-vault", "allow-choose-vault",
-    "allow-read-vault", "allow-vault-sequence", "allow-write-vault"
+    "allow-read-vault", "allow-vault-sequence", "allow-write-vault", "allow-read-vault-attachment", "allow-attach-vault-file"
   ]
 }

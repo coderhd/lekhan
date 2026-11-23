@@ -15,7 +15,8 @@ type VaultIndex = {
   pages: IndexPage[]
   vaultImports?: Workspace['vaultImports']
 }
-export type VaultSnapshot = { sequence: number; index: VaultIndex | null; files: VaultFile[]; sidecars?: NoteSidecar[]; recoveredDrafts?: boolean }
+export type VaultAsset = { path: string; bytes: number; modifiedMs: number }
+export type VaultSnapshot = { sequence: number; index: VaultIndex | null; files: VaultFile[]; sidecars?: NoteSidecar[]; recoveredDrafts?: boolean; assets?: VaultAsset[] }
 type NoteChange = { path: string; before: string | null; after: string | null }
 type VaultRead = {
   sequence: number
@@ -218,14 +219,20 @@ export function prepareVaultJournal(index: VaultIndex, desired: Map<string, stri
   return { sidecars, updates }
 }
 
-export function vaultStorage(handle: VaultHandle, onRecovered?: () => void): WorkspaceStorage {
+type VaultEvents = {
+  recovered: () => void
+  files: (paths: Map<string, string>, assets?: VaultAsset[]) => void
+}
+
+export function vaultStorage(handle: VaultHandle, events: VaultEvents): WorkspaceStorage {
   const token = handle.token
   const cache = new WeakMap<Workspace, VaultRead>()
   return {
     async load() {
       const snapshot = await invoke<VaultSnapshot>('read_vault', { token })
       const read = readMarkdownVault(snapshot)
-      if (snapshot.recoveredDrafts) onRecovered?.()
+      if (snapshot.recoveredDrafts) events.recovered()
+      events.files(new Map([...read.entries].map(([id, entry]) => [id, entry.path])), snapshot.assets ?? [])
       cache.set(read.workspace, read)
       return read.workspace
     },
@@ -253,6 +260,7 @@ export function vaultStorage(handle: VaultHandle, onRecovered?: () => void): Wor
         }]))
         cache.set(workspace, { sequence: cached.sequence, bytes, entries: new Map(index.pages.map(entry => [entry.id, entry])),
           workspace: result, files, sidecars: journal.sidecars, changedOnDisk: new Set() })
+        events.files(new Map(index.pages.map(entry => [entry.id, entry.path])))
         return result
       } catch (error) {
         if (error === 'vault_conflict') throw new WorkspaceConflictError()

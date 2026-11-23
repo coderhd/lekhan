@@ -1,3 +1,4 @@
+pub mod attachments;
 mod journal;
 
 use journal::{NoteSidecar, PendingSave, SidecarWrite, read_sidecars};
@@ -55,6 +56,7 @@ pub struct VaultSnapshot {
     sequence: u64,
     index: Value,
     files: Vec<Note>,
+    assets: Vec<attachments::VaultAsset>,
     sidecars: Vec<NoteSidecar>,
     recovered_drafts: bool,
 }
@@ -93,7 +95,7 @@ fn metadata(path: &Path) -> io::Result<Option<fs::Metadata>> {
     }
 }
 
-fn note_path(root: &Path, relative: &str) -> io::Result<PathBuf> {
+fn vault_path(root: &Path, relative: &str) -> io::Result<PathBuf> {
     let mut path = root.to_owned();
     let mut parts = relative.split('/').peekable();
     while let Some(part) = parts.next() {
@@ -108,7 +110,15 @@ fn note_path(root: &Path, relative: &str) -> io::Result<PathBuf> {
             }
         }
     }
-    if path == root || !is_note(&path) {
+    if path == root {
+        return Err(invalid());
+    }
+    Ok(path)
+}
+
+fn note_path(root: &Path, relative: &str) -> io::Result<PathBuf> {
+    let path = vault_path(root, relative)?;
+    if !is_note(&path) {
         return Err(invalid());
     }
     Ok(path)
@@ -263,7 +273,13 @@ impl Vault {
         serde_json::from_slice(&bytes).map_err(io::Error::other)
     }
 
-    fn walk(&self, directory: &Path, files: &mut Vec<Note>, remaining: &mut u64) -> io::Result<()> {
+    fn walk(
+        &self,
+        directory: &Path,
+        files: &mut Vec<Note>,
+        assets: &mut Vec<attachments::VaultAsset>,
+        remaining: &mut u64,
+    ) -> io::Result<()> {
         for entry in fs::read_dir(directory)? {
             let entry = entry?;
             let name = entry.file_name();
@@ -274,12 +290,9 @@ impl Vault {
             let path = entry.path();
             let kind = entry.file_type()?;
             if kind.is_dir() {
-                self.walk(&path, files, remaining)?;
-            } else if kind.is_file() && is_note(&path) {
+                self.walk(&path, files, assets, remaining)?;
+            } else if kind.is_file() {
                 let info = entry.metadata()?;
-                *remaining = remaining.checked_sub(info.len()).ok_or_else(|| {
-                    io::Error::other("The Markdown vault exceeds the local editor limit")
-                })?;
                 let path_name = path
                     .strip_prefix(&self.root)
                     .map_err(|_| invalid())?
@@ -287,14 +300,25 @@ impl Vault {
                     .map(|component| component.as_os_str().to_string_lossy())
                     .collect::<Vec<_>>()
                     .join("/");
-                let Some(text) = read_note(&path)? else {
-                    continue;
-                };
                 let modified_ms = info
                     .modified()
                     .ok()
                     .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
                     .map_or(0, |duration| duration.as_millis() as u64);
+                if !is_note(&path) {
+                    assets.push(attachments::VaultAsset {
+                        path: path_name,
+                        modified_ms,
+                        bytes: info.len(),
+                    });
+                    continue;
+                }
+                *remaining = remaining.checked_sub(info.len()).ok_or_else(|| {
+                    io::Error::other("The Markdown vault exceeds the local editor limit")
+                })?;
+                let Some(text) = read_note(&path)? else {
+                    continue;
+                };
                 files.push(Note {
                     path: path_name,
                     text,
@@ -310,8 +334,9 @@ impl Vault {
         self.recover().map_err(io::Error::other)?;
         let sequence = self.sequence.load(Ordering::Relaxed);
         let mut files = Vec::new();
+        let mut assets = Vec::new();
         let mut remaining = MAX_VAULT;
-        self.walk(&self.root, &mut files, &mut remaining)?;
+        self.walk(&self.root, &mut files, &mut assets, &mut remaining)?;
         files.sort_unstable_by(|first, second| first.path.cmp(&second.path));
         let index = self.index()?;
         Ok(VaultSnapshot {
@@ -319,6 +344,7 @@ impl Vault {
             sidecars: read_sidecars(&self.root, &index)?,
             index,
             files,
+            assets,
             recovered_drafts: self.recovered_drafts.load(Ordering::Relaxed),
         })
     }

@@ -1,5 +1,10 @@
 {
   "desktop": {
+    "attachments": "संलग्न फ़ाइलें",
+    "attachFile": "फ़ाइल संलग्न करें",
+    "attachmentLimit": "यहाँ 50 MiB तक की फ़ाइलें खोली जा सकती हैं।",
+    "attachmentReadFailed": "यह फ़ाइल नहीं पढ़ी जा सकी।",
+    "attachmentAddFailed": "फ़ाइल संलग्न नहीं हो सकी। 50 MiB तक की गैर-Markdown फ़ाइल चुनें।",
     "recoveredDrafts": "अधूरे ड्राफ़्ट .lekhan/recovery में सुरक्षित हैं। डिस्क पर बदली गई फ़ाइलें वॉल्ट में बनी हुई हैं।",
     "chooseVault": "फ़ोल्डर खोलें",
     "swapVault": "वॉल्ट बदलें",

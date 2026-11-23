@@ -1,5 +1,10 @@
 {
   "desktop": {
+    "attachments": "Archivos adjuntos",
+    "attachFile": "Adjuntar archivo",
+    "attachmentLimit": "Aquí se pueden abrir archivos de hasta 50 MiB.",
+    "attachmentReadFailed": "No se pudo leer el archivo.",
+    "attachmentAddFailed": "No se pudo adjuntar el archivo. Elige un archivo de hasta 50 MiB que no sea Markdown.",
     "recoveredDrafts": "Lekhan guardó los borradores interrumpidos en .lekhan/recovery. Los archivos modificados en el disco siguen en la bóveda.",
     "chooseVault": "Abrir carpeta",
     "swapVault": "Cambiar de bóveda",

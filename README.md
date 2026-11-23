@@ -33,6 +33,8 @@ The desktop shell bundles the shared writer. **Cloud workspace** opens the Next.
 
 Choose **Open folder** to write directly into an existing or empty vault. The writer opens Markdown files in nested folders and picks up edits made in another app. On a conflict, export the draft before opening the newer disk copy. Lekhan keeps deleted Markdown in the vault’s `.lekhan/trash` directory. The app remembers the last opened vault. Notes from the earlier desktop preview can be exported from the desktop sidebar.
 
+In **Page context → Attachments**, preview linked images or download a linked file. **Attach file** copies a file up to 50 MiB into the vault’s `Attachments` folder and inserts a relative Markdown link. Existing attachments stay in their original locations.
+
 The vault keeps Yjs updates and compacted snapshots under `.lekhan/yjs`. Lekhan replays an interrupted save on open. If a file changed outside Lekhan during the interruption, it keeps the external version and saves the interrupted draft as Markdown under `.lekhan/recovery`. Keep the hidden `.lekhan` folder with the vault when you back it up.
 
 The current desktop vault reads up to 128 MiB of Markdown with a 16 MiB limit per file. [The Markdown vault and Yjs storage decision](docs/adr/0003-desktop-markdown-plus-yjs-sidecar.md) and [desktop release scope](https://github.com/coderhd/lekhan/issues/88) describe the storage format and remaining release work.

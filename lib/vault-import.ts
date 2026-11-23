@@ -34,7 +34,7 @@ export interface ImportReport {
 const decoder = new TextDecoder()
 const encoder = new TextEncoder()
 
-function rasterMime(data: Uint8Array) {
+export function rasterMime(data: Uint8Array) {
   const view = strFromU8(data.subarray(0, 12), true)
   if (view.startsWith('\x89PNG\r\n\x1a\n')) return 'png'
   if (view.startsWith('\xff\xd8\xff')) return 'jpeg'

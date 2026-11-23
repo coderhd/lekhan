@@ -43,10 +43,11 @@ function scrollToHeading(target: HTMLElement) {
 }
 
 export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled = false, automaticMirror = false,
-  sidebarControls, openCloudPage, storage, workspaceName }: {
+  sidebarControls, openCloudPage, storage, workspaceName, pageAttachments }: {
   storageScope?: string; mirrorEnabled?: boolean; automaticMirror?: boolean
   sidebarControls?: ReactNode | ((canSwitch: boolean) => ReactNode); openCloudPage?: (id: string) => void
   storage?: WorkspaceStorage; workspaceName?: string
+  pageAttachments?: (page: Page, insert: ((markdown: string) => void) | undefined) => ReactNode
 }) {
   const t = useTranslations('app-shell')
   const desktopText = useTranslations('desktop')
@@ -620,6 +621,12 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
         </div>
         {page && (
           <div className="context-body">
+            {pageAttachments?.(page, localReadOnly || status !== 'saved' ? undefined : markdown => {
+              change(state => {
+                const current = state.pages.find(note => note.id === page.id)
+                return current ? updatePage(state, current.id, { markdown: [current.markdown, markdown].filter(Boolean).join('\n\n') }) : state
+              })
+            })}
             {page.properties && Object.keys(page.properties).length > 0 && (
               <section className="context-section">
                 <h3><FileText size={16} /> Properties</h3>
