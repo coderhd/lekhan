@@ -10,6 +10,7 @@ import { pruneExpiredCheckpoints } from './prune-checkpoints.ts'
 import { checkpointHttp } from './checkpoint-http.ts'
 import { attachmentHttp } from './attachments-http.ts'
 import { pruneAttachments } from './prune-attachments.ts'
+import { recordPageImages, reservePageImages } from './media-usage.ts'
 import { drainWaitlist } from '../../lib/waitlist/brevo.ts'
 
 const client = createServerAdmin()
@@ -31,6 +32,8 @@ const hub = createSyncHub({
   checkpointTransfer: checkpointHttp(client, cipher, origin),
   attachmentTransfer: attachmentHttp(client, cipher, origin, secret),
   ...cloudSnapshots(client, cipher),
+  reserveImages: (page, bytes) => reservePageImages(client, [{ page, bytes }]),
+  recordImages: (page, bytes) => recordPageImages(client, page, bytes),
   authorize: (ticket, admission) => relayedPageAccess(client, ticket, admission),
   imagePolicy: async ticket => {
     const { access, imagePolicy } = await relayedPageAuthority(client, ticket, false)

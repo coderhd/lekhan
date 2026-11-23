@@ -12,6 +12,7 @@ import BillingSettings from '@/components/billing-settings'
 import InviteLink from '@/components/invite-link'
 import { UsageAnalyticsControl } from '@/components/usage-analytics'
 import { WorkspaceTransferInvite } from '@/components/workspace-transfer'
+import WorkspaceStorage from '@/components/workspace-storage'
 
 export const metadata = { title: 'Workspace billing · Lekhan' }
 
@@ -23,7 +24,14 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
     Promise.all([headers(), searchParams]),
     admin && siteOrigin()
       ? ownerWorkspace(account.client, account.subject)
-        .then(async workspace => ({ workspace, summary: await readBillingSummary(admin, workspace) })).catch(() => null)
+        .then(async workspace => {
+          const [summary, usage] = await Promise.all([
+            readBillingSummary(admin, workspace),
+            workspace ? admin.rpc('rebuild_workspace_media_summary', { target_workspace: workspace, actor: account.subject }) : null,
+          ])
+          const storage = usage?.data
+          return { workspace, summary, storage: typeof storage?.image_bytes === 'number' && typeof storage?.file_bytes === 'number' ? storage : null }
+        }).catch(() => null)
       : null,
   ])
   const summary = billing?.summary
@@ -49,6 +57,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       {summary ? <BillingSettings summary={summary} defaultCurrency={currency} available={available}
         returned={query.checkout === 'returned'} paused={query.checkout === 'paused'} />
         : <p role="status">Billing is temporarily unavailable. You can still open your workspace and keep writing.</p>}
+      {summary && billing?.storage && <WorkspaceStorage images={billing.storage.image_bytes} files={billing.storage.file_bytes} free={(summary.entitlement?.tier ?? 'free') === 'free'} />}
       {summary && <section className="billing-referrals" aria-labelledby="billing-referrals">
         <h2 id="billing-referrals">Referrals</h2>
         <p><strong>{summary.referralMonths}</strong> {summary.referralMonths === 1 ? 'month' : 'months'} banked</p>

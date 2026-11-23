@@ -1,6 +1,7 @@
 export const syncProtocol = 'lekhan-sync-v1'
 export const imageLimitCloseCode = 4008
 export const payloadLimitCloseCode = 4009
+export const workspaceMediaLimitCloseCode = 4010
 export const maxPageUpdateBytes = 64 * 1024 * 1024
 export const maxSyncMessageBytes = maxPageUpdateBytes + 16
 export const maxSyncFrameBytes = 10 * 1024 * 1024

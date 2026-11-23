@@ -55,6 +55,27 @@ describe('cloud vault import', () => {
     expect(validateCloudImport({ ...first.batches[1], pages: [first.batches[1].pages[0], first.batches[1].pages[2]] })).toBeNull()
   })
 
+  it('checks decoded imported images against workspace usage before writing snapshots', async () => {
+    const requests: string[] = []
+    const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(typeof input === 'string' || input instanceof URL ? input : input.url).pathname
+      requests.push(path.split('/').at(-1)!)
+      if (path.endsWith('/rebuild_import_batch')) return Response.json(null)
+      expect(path).toContain('/rebuild_reserve_page_images')
+      expect(JSON.parse(String(init?.body))).toEqual({ target_workspace: workspace, importing: true,
+        requested: [{ page: importPageId(workspace, attempt, 0), bytes: 6 }] })
+      return Response.json(false)
+    }
+    const client = createClient('https://fixture.example', 'sb_secret_fixture', {
+      global: { fetch: fetcher as typeof fetch }, auth: { persistSession: false, autoRefreshToken: false },
+    })
+    const image = '![Scan](data:image/png;base64,AAAABBBB)'
+    const cipher = snapshotCipher('a local fixture encryption key at least 32 characters long')
+    const batch = { importId: attempt, index: 0, pages: [{ ordinal: 0, parent: null, title: 'Note', path: 'Note', markdown: image }] }
+    await expect(writeCloudBatch(client, cipher, workspace, owner, batch)).rejects.toThrow('import_workspace_media_limit')
+    expect(requests).toEqual(['rebuild_import_batch', 'rebuild_reserve_page_images'])
+  })
+
   it('resumes after a storage interruption, preserves an existing snapshot and skips completed batches', async () => {
     const cipher = snapshotCipher('a local fixture encryption key at least 32 characters long')
     const assets = new Map<string, Uint8Array>()

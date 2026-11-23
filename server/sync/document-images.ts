@@ -1,5 +1,5 @@
 import * as Y from 'yjs'
-import { inlineCloudImages } from '../../lib/cloud/image-policy.ts'
+import { inlineCloudImages, rasterByteLength } from '../../lib/cloud/image-policy.ts'
 import { isEmbeddedRaster } from '../../lib/markdown.ts'
 
 type ImageCounts = Map<string, number>
@@ -52,4 +52,12 @@ export function* addedDocumentImages(previous: DocumentImages, next: DocumentIma
       if (after > before) yield source
     }
   }
+}
+
+export function documentImageBytes(images: DocumentImages) {
+  let bytes = 0
+  for (const counts of [images.source, images.rich]) {
+    for (const [source, occurrences] of counts) bytes += rasterByteLength(source) * occurrences
+  }
+  return bytes
 }

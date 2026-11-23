@@ -61,6 +61,7 @@ export async function POST(request: Request) {
       return NextResponse.json(receipt, { headers })
     } catch (error) {
       const message = (error as { message?: unknown }).message
+      if (message === 'import_workspace_media_limit') return failure(message, 413)
       if (message === 'import_workspace_not_found') return failure('workspace_not_found', 404)
       if (message === 'import_payload_changed' || message === 'import_parent_missing' ||
         message === 'import_batch_out_of_order' || message === 'import_image_policy_changed') return failure(message, 409)

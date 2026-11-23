@@ -49,7 +49,7 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
   const [preview, setPreview] = useState(false)
   const sourceInput = useRef<HTMLTextAreaElement>(null)
   const editable = replica.writable && !schemaError
-  const syncPaused = replica.status === 'image-limit' || replica.status === 'payload-limit'
+  const syncPaused = replica.status === 'image-limit' || replica.status === 'payload-limit' || replica.status === 'workspace-media-limit'
   const networkLabel = !enabled ? 'Cloud sync unavailable' : replica.status === 'live' ? 'Live'
     : replica.status === 'offline' ? replica.session ? 'Offline copy' : 'Waiting for sync'
     : replica.status === 'denied' ? 'Access expired'
@@ -132,9 +132,12 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
       {replica.status === 'limit' && <p>Ask the page owner to review sharing or change the workspace plan.</p>}
       {syncPaused && <div className="billing-notice" role="status">
         <p>{replica.status === 'payload-limit' ? 'This draft exceeds the page sync size limit.'
+          : replica.status === 'workspace-media-limit' ? 'This workspace has reached its cloud storage limit.'
           : replica.imagePolicy === 'paid' ? 'A new image exceeds the 20 MB cloud limit.'
             : 'New images on Free must be WebP, up to 500 KB and 1,600 pixels per side.'} Your edits are in this browser.
-          {replica.status === 'payload-limit' ? ' Reduce the draft size and try again.' : ' Remove or replace the image to resume sharing.'}</p>
+          {replica.status === 'payload-limit' ? ' Reduce the draft size and try again.'
+            : replica.status === 'workspace-media-limit' ? ' Free up workspace storage or remove the new image and retry.'
+              : ' Remove or replace the image to resume sharing.'}</p>
         <button type="button" className="secondary-button" onClick={replica.retrySync}>Retry sync</button>
       </div>}
       {schemaError && <p className="account-error" role="alert">This page contains blocks the editor cannot open safely. Editing and export are paused for this page.</p>}

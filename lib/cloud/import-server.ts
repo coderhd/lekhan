@@ -3,11 +3,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import * as Y from 'yjs'
 import { snapshotCipher } from '@/server/sync/snapshot'
 import { uploadDocumentObject } from '../../server/sync/storage-capacity'
+import { reservePageImages } from '../../server/sync/media-usage'
 import { workspaceEntitlementOrFree } from '../billing/entitlements'
 import { wikiLinks } from '../markdown-references'
 import { pageTitle, uuidPattern } from './graph'
 import { importPathKey, scanTags, withoutEmbeddedImages } from './graph-index'
-import { cloudImageAllowed, inlineCloudImages, type CloudImagePolicy } from './image-policy'
+import { cloudImageAllowed, inlineCloudImages, rasterByteLength, type CloudImagePolicy } from './image-policy'
 import type { CloudImportImageContext } from './prepare-images'
 import { MAX_IMPORT_BATCH_PAGES, MAX_IMPORT_PAGES, type CloudImportBatch, type CloudImportPage, type CloudImportReceipt } from './import-plan'
 
@@ -98,6 +99,13 @@ export async function writeCloudBatch(admin: SupabaseClient, cipher: ReturnType<
   const claim = await admin.rpc('rebuild_import_batch', args)
   if (claim.error) throw claim.error
   if (claim.data) return claim.data as CloudImportReceipt
+
+  const images = batch.pages.flatMap(page => {
+    let bytes = 0
+    for (const image of inlineCloudImages(page.markdown)) bytes += rasterByteLength(image.source)
+    return bytes ? [{ page: importPageId(workspaceId, batch.importId, page.ordinal), bytes }] : []
+  })
+  if (images.length && !await reservePageImages(admin, images, workspaceId)) throw new Error('import_workspace_media_limit')
 
   const bucket = admin.storage.from('documents')
   const rows = []

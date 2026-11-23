@@ -807,9 +807,17 @@ kbd {
 .billing-notice, .billing-confirm { background: var(--overlay); border: 1px solid var(--line); border-radius: 7px; padding: 12px 15px; }
 .billing-confirm { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 10px; }
 .billing-confirm p { flex-basis: 100%; margin: 0; }
-:is(.billing-referrals, .billing-transfer) { border-block-start: 1px solid var(--line); padding-block-start: 20px; margin-block-start: 32px; }
-:is(.billing-referrals, .billing-transfer) h2 { margin: 0; font: 650 25px/1.15 var(--serif); }
-:is(.billing-referrals, .billing-transfer) p { margin: 8px 0; color: var(--muted); }
+:is(.billing-storage, .billing-referrals, .billing-transfer) { border-block-start: 1px solid var(--line); padding-block-start: 20px; margin-block-start: 32px; }
+:is(.billing-storage, .billing-referrals, .billing-transfer) h2 { margin: 0; font: 650 25px/1.15 var(--serif); }
+:is(.billing-storage, .billing-referrals, .billing-transfer) p { margin: 8px 0; color: var(--muted); }
+.billing-storage-line { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-block: 12px 8px; }
+.billing-storage-line span { color: var(--muted); }
+.billing-storage-meter { height: 7px; border-radius: 9px; background: var(--line); overflow: hidden; }
+.billing-storage-meter span { display: block; height: 100%; background: var(--pine); }
+.billing-storage-breakdown { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-block: 12px 8px; }
+.billing-storage-breakdown div { display: flex; gap: 7px; }
+.billing-storage-breakdown dt { color: var(--muted); }
+.billing-storage-breakdown dd { margin: 0; font-weight: 650; }
 :is(.billing-referrals, .billing-transfer) .invite-link { margin-block-start: 12px; }
 .billing-transfer-form { max-width: 365px; margin-block-start: 14px; }
 .billing-transfer-form button { justify-self: start; }

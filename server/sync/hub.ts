@@ -12,9 +12,10 @@ import type { RelayAccess } from '../../lib/sync/authority.ts'
 import {
   imageLimitCloseCode, maxPageUpdateBytes, maxSyncFrameBytes, maxSyncMessageBytes, payloadLimitCloseCode,
   syncChunkBytes, syncChunkHeaderBytes, syncChunkMessage,
+  workspaceMediaLimitCloseCode,
 } from '../../lib/sync/wire.ts'
 import { cloudImageAllowed, type CloudImagePolicy } from '../../lib/cloud/image-policy.ts'
-import { addedDocumentImages, documentImages, imageRoots } from './document-images.ts'
+import { addedDocumentImages, documentImageBytes, documentImages, imageRoots } from './document-images.ts'
 import type { encryptedWal } from './wal.ts'
 
 const maxBuffered = 65 * 1024 * 1024
@@ -36,6 +37,8 @@ interface HubOptions {
   persist: (pageId: string, doc: Y.Doc) => Promise<void>
   authorize: (ticket: SyncTicket, admission: boolean) => Promise<RelayAccess>
   imagePolicy?: (ticket: SyncTicket) => Promise<CloudImagePolicy | null>
+  reserveImages?: (pageId: string, bytes: number) => Promise<boolean>
+  recordImages?: (pageId: string, bytes: number) => Promise<void>
   checkpointTransfer?: (request: IncomingMessage, response: ServerResponse) => Promise<void>
   attachmentTransfer?: (request: IncomingMessage, response: ServerResponse) => Promise<void>
   onFault?: (operation: string) => void
@@ -84,6 +87,8 @@ class Room {
   private doc = new Y.Doc()
   private roots = imageRoots(this.doc)
   private images = documentImages(this.roots)
+  private imageBytes = 0
+  private dirtyImages = false
   private readonly cursorDoc = new Y.Doc()
   private readonly cursor = new Awareness(this.cursorDoc)
   readonly peers = new Set<Peer>()
@@ -111,6 +116,7 @@ class Room {
 
   async hydrate() {
     await this.recoverDocument()
+    await this.options.recordImages?.(this.pageId, this.imageBytes)
     if (this.dirtySince) this.scheduleFlush()
   }
 
@@ -129,6 +135,7 @@ class Room {
       this.doc = recovered
       this.roots = roots
       this.images = images
+      this.imageBytes = documentImageBytes(images)
     } catch (error) {
       recovered.destroy()
       throw error
@@ -165,6 +172,10 @@ class Room {
   private async persist() {
     if (!this.dirtySince || this.retired) return
     await this.options.persist(this.pageId, this.doc)
+    if (this.dirtyImages) {
+      await this.options.recordImages?.(this.pageId, this.imageBytes)
+      this.dirtyImages = false
+    }
     await this.options.wal.clear(this.pageId)
     this.dirtySince = 0
   }
@@ -306,8 +317,21 @@ class Room {
           peer.socket.close(payloadLimitCloseCode, 'Page is too large to sync')
           return
         }
+        const imageBytes = nextImages.rich === this.images.rich && nextImages.source === this.images.source
+          ? this.imageBytes : documentImageBytes(nextImages)
+        if (this.options.reserveImages && imageBytes > this.imageBytes) {
+          const reserved = await this.options.reserveImages(this.pageId, imageBytes).catch(() => undefined)
+          if (!reserved) {
+            await this.recoverDocument()
+            if (reserved === false) peer.socket.close(workspaceMediaLimitCloseCode, 'Workspace storage limit')
+            else peer.socket.close(1013, 'Could not check workspace storage')
+            return
+          }
+        }
         await this.options.wal.append(this.pageId, accepted)
         this.images = nextImages
+        this.dirtyImages ||= this.imageBytes !== imageBytes
+        this.imageBytes = imageBytes
       } catch (failure) {
         // A failed integration or append may have changed the in-memory document.
         // Recover from the durable state before the room serves any further reads.

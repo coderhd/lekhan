@@ -51,6 +51,7 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
           const detail = await result.json().catch(() => null)
           if (detail?.error === 'import_free_image_limit') throw new Error('Free cloud imports use WebP images up to 500 KB and 1,600 pixels per side.')
           if (detail?.error === 'import_paid_image_limit') throw new Error('A cloud image exceeds the 20 MB limit.')
+          if (detail?.error === 'import_workspace_media_limit') throw new Error('These images would exceed the workspace’s storage limit. Free up space and resume the import.')
           if (detail?.error === 'import_image_policy_changed') {
             setDraft(null)
             throw new Error('The workspace image limits changed. Choose the original files again to resume.')

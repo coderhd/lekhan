@@ -316,6 +316,35 @@ async function listen(hub: ReturnType<typeof createSyncHub>) {
 }
 
 describe('collaboration relay', () => {
+  it('releases the image reservation when an image is removed before the next snapshot', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lekhan-sync-media-'))
+    cleanup.push(() => rm(dir, { force: true, recursive: true }))
+    const reserveImages = vi.fn(async () => true)
+    const recordImages = vi.fn(async () => undefined)
+    const persist = vi.fn(async () => undefined)
+    const hub = createSyncHub({ origin, secret, wal: encryptedWal(dir, snapshotCipher(secret)), load: async () => null,
+      persist, authorize: async ticket => ticket.subject === owner ? 'write' : 'read', reserveImages, recordImages,
+    })
+    let closed = false
+    cleanup.push(async () => { if (!closed) await hub.close() })
+    const url = await listen(hub)
+    const writer = await peer(url, owner, 'editor')
+    const reader = await peer(url, viewer, 'viewer')
+    const image = '![Scan](data:image/png;base64,AAAA)'
+    const source = writer.doc.getText('source')
+    source.insert(0, image)
+    await vi.waitFor(() => expect(reader.doc.getText('source').toString()).toBe(image))
+    expect(reserveImages).toHaveBeenCalledExactlyOnceWith(pageId, 3)
+    source.delete(0, source.length)
+    await vi.waitFor(() => expect(reader.doc.getText('source').toString()).toBe(''))
+    writer.disconnect()
+    reader.disconnect()
+    closed = true
+    expect(await hub.close()).toBe(true)
+    expect(persist).toHaveBeenCalledOnce()
+    expect(recordImages.mock.calls).toEqual([[pageId, 0], [pageId, 0]])
+  })
+
   it('discards an interrupted chunk transfer while other editors continue writing', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'lekhan-sync-interrupted-'))
     cleanup.push(() => rm(dir, { force: true, recursive: true }))

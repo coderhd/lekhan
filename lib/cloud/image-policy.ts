@@ -30,9 +30,9 @@ export function* inlineCloudImages(markdown: string) {
 }
 
 export function rasterByteLength(source: string) {
-  const base64 = source.slice(source.indexOf(',') + 1)
-  if (base64.length % 4 !== 0) return 0
-  return Math.floor(base64.length * 3 / 4) - (base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0)
+  const length = source.length - source.indexOf(',') - 1
+  if (!length || length % 4 !== 0) return 0
+  return Math.floor(length * 3 / 4) - (source.endsWith('==') ? 2 : source.endsWith('=') ? 1 : 0)
 }
 
 // Read the canvas from the RIFF header, or from a simple VP8/VP8L bitstream header.

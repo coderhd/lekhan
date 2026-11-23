@@ -8,9 +8,9 @@ import * as Y from 'yjs'
 import { track } from '../analytics'
 import type { CloudImagePolicy } from '../cloud/image-policy'
 import { chunkedSocket } from './chunked-socket'
-import { imageLimitCloseCode, payloadLimitCloseCode, syncProtocol } from './wire'
+import { imageLimitCloseCode, payloadLimitCloseCode, syncProtocol, workspaceMediaLimitCloseCode } from './wire'
 
-type PausedState = 'image-limit' | 'payload-limit'
+type PausedState = 'image-limit' | 'payload-limit' | 'workspace-media-limit'
 type SyncState = 'opening' | 'live' | 'offline' | 'denied' | 'limit' | PausedState
 export interface CloudCollaboration {
   document: Y.Doc
@@ -132,8 +132,9 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
           if (cancel.signal.aborted) return
           const remote = [...awareness.getStates().keys()].filter(id => id !== document.clientID)
           removeAwarenessStates(awareness, remote, connection)
-          if (event?.code === imageLimitCloseCode || event?.code === payloadLimitCloseCode || event?.code === 1009) {
-            paused = event.code === imageLimitCloseCode ? 'image-limit' : 'payload-limit'
+          if (event?.code === imageLimitCloseCode || event?.code === payloadLimitCloseCode || event?.code === workspaceMediaLimitCloseCode || event?.code === 1009) {
+            paused = event.code === imageLimitCloseCode ? 'image-limit'
+              : event.code === workspaceMediaLimitCloseCode ? 'workspace-media-limit' : 'payload-limit'
             if (event.reason === 'free' || event.reason === 'paid') imagePolicy = event.reason
             cachedPermission = allowed
             void cache.set(pauseKey, paused).catch(() => undefined)
@@ -183,7 +184,7 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
       const [saved, policy, savedPause] = await Promise.all([cache.get(cachedKey), cache.get(policyKey), cache.get(pauseKey)])
       if (saved === 'read' || saved === 'write') cachedPermission = saved
       if (policy === 'free' || policy === 'paid') imagePolicy = policy
-      if (savedPause === 'image-limit' || savedPause === 'payload-limit') paused = savedPause
+      if (savedPause === 'image-limit' || savedPause === 'payload-limit' || savedPause === 'workspace-media-limit') paused = savedPause
       ready = true
       if (!navigator.onLine) offline()
       else void connect()
