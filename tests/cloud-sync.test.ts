@@ -17,6 +17,7 @@ import { createSyncHub } from '../server/sync/hub'
 import { snapshotCipher } from '../server/sync/snapshot'
 import { encryptedWal } from '../server/sync/wal'
 import { replaceCheckpointContent } from '../lib/cloud/checkpoints'
+import { openCheckpointTransfer, sealCheckpointTransfer } from '../server/sync/checkpoint-ticket'
 import { getExpirationCutoffDate } from '../lib/tier-limits'
 import { pruneExpiredCheckpoints } from '../server/sync/prune-checkpoints'
 
@@ -72,6 +73,25 @@ describe('sync capabilities and storage', () => {
 })
 
 describe('cloud checkpoints', () => {
+  it('keeps checkpoint transfer credentials opaque and valid only until expiry', () => {
+    const cipher = snapshotCipher(secret)
+    const operation = {
+      method: 'POST' as const, page: pageId, version: viewer, subject: owner,
+      name: 'Working draft', accessToken: 'a user access token used for row level security',
+    }
+    const now = 1000
+    const token = sealCheckpointTransfer(cipher, operation, now)
+    expect(Buffer.from(token, 'base64url').includes(operation.accessToken)).toBe(false)
+    const transfer = openCheckpointTransfer(cipher, token, now)
+    expect(transfer).toMatchObject(operation)
+    expect(openCheckpointTransfer(cipher, token, transfer!.until)).toBeNull()
+    const altered = Buffer.from(token, 'base64url')
+    altered[altered.length - 1] ^= 1
+    expect(openCheckpointTransfer(cipher, altered.toString('base64url'), now)).toBeNull()
+    expect(openCheckpointTransfer(cipher, issueSyncTicket(secret, { pageId, subject: owner, role: 'editor' }), now)).toBeNull()
+    expect(openCheckpointTransfer(snapshotCipher(previousKey), token, now)).toBeNull()
+  })
+
   it('restores formatted blocks as a replica update and supports source-only snapshots', () => {
     const checkpoint = new Y.Doc()
     const active = new Y.Doc()
@@ -104,6 +124,25 @@ describe('cloud checkpoints', () => {
     expect(peer.getText('source').toString()).toBe('Working draft')
     expect(peer.getMap('lekhan').get('frontmatter')).toBe('---\ntags: [lab]\n---\n')
     expect(peer.getXmlFragment('default').length).toBe(0)
+  })
+
+  it('restores a source checkpoint without resending the image next to an edit', () => {
+    const saved = new Y.Doc()
+    const active = new Y.Doc()
+    const replica = new Y.Doc()
+    for (const doc of [saved, active, replica]) cleanup.push(() => doc.destroy())
+    const source = '![Attachment](data:image/png;base64,' + 'AAAA'.repeat(100_000) + ')'
+    const savedText = saved.getText('source')
+    savedText.insert(0, source + '\nOriginal 🪶')
+    const activeText = active.getText('source')
+    activeText.insert(0, source + '\nEdited 💡')
+    Y.applyUpdate(replica, Y.encodeStateAsUpdate(active))
+
+    replaceCheckpointContent(active, saved, 'test restore')
+    const delta = Y.encodeStateAsUpdate(active, Y.encodeStateVector(replica))
+    expect(delta.byteLength).toBeLessThan(500)
+    Y.applyUpdate(replica, delta)
+    expect(replica.getText('source').toString() === savedText.toString()).toBe(true)
   })
 
   it('uses elapsed retention days for every tier', () => {
@@ -171,7 +210,7 @@ async function peer(url: string, subject: string, role: 'editor' | 'viewer', doc
     disableBc: true,
   })
   cleanup.push(() => { provider.destroy(); doc.destroy() })
-  await vi.waitFor(() => expect(provider.synced).toBe(true))
+  await vi.waitFor(() => expect(provider.synced).toBe(true), { timeout: 5000 })
   return provider
 }
 

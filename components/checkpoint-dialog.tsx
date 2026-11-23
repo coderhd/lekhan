@@ -6,12 +6,13 @@ import Link from 'next/link'
 import { X } from 'lucide-react'
 import * as Y from 'yjs'
 import { Awareness } from 'y-protocols/awareness'
-import { checkpointMaxBytes, replaceCheckpointContent, type Checkpoint } from '@/lib/cloud/checkpoints'
+import { checkpointInlineBytes, checkpointTransferBytes, replaceCheckpointContent, type Checkpoint } from '@/lib/cloud/checkpoints'
 import { track } from '@/lib/analytics'
 import { useLocale } from '@/lib/i18n/client'
 import type { CloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
 import { Dialog } from './workspace-dialogs'
 import PageEditor from './page-editor'
+import PublicPageBody from './public-page-body'
 
 interface History {
   checkpoints: Checkpoint[]
@@ -28,18 +29,35 @@ interface Preview {
 }
 
 async function createCheckpoint(pageId: string, name: string, snapshot: Uint8Array, signal: AbortSignal) {
-  if (snapshot.byteLength > checkpointMaxBytes) throw new Error('This page exceeds the checkpoint size limit.')
+  if (snapshot.byteLength > checkpointTransferBytes) throw new Error('This page exceeds the checkpoint size limit.')
   const endpoint = '/api/checkpoints?' + new URLSearchParams({ pageId, name })
-  const reply = await fetch(endpoint, {
-    method: 'POST', headers: { 'Content-Type': 'application/octet-stream' },
-    body: new Uint8Array(snapshot), signal,
-  })
-  if (reply.status === 413 && (await reply.json().catch(() => null))?.error === 'checkpoint_image_limit') {
+  const body = new Uint8Array(snapshot)
+  const headers = { 'Content-Type': 'application/octet-stream' }
+  const reply = snapshot.byteLength <= checkpointInlineBytes
+    ? await fetch(endpoint, { method: 'POST', headers, body, signal })
+    : await viaRelay(endpoint, { method: 'POST', headers, body, signal })
+  const failure = reply && !reply.ok && (await reply.json().catch(() => null))?.error
+  if (failure === 'checkpoint_image_limit') {
     throw new Error('A new image exceeds the workspace’s cloud limits. Replace it before saving a checkpoint.')
   }
-  if (!reply.ok) throw new Error('Could not save the checkpoint.')
+  if (failure === 'checkpoint_plan_changed') throw new Error('The workspace plan changed. Try saving the checkpoint again.')
+  if (!reply?.ok) throw new Error('Could not save the checkpoint.')
   const { checkpoint }: { checkpoint: Checkpoint } = await reply.json()
   return checkpoint
+}
+
+async function viaRelay(endpoint: string, options: RequestInit) {
+  const { method, signal } = options
+  const ticket = await fetch(endpoint + '&transport=relay', { method, signal, cache: 'no-store' })
+  if (!ticket.ok) {
+    if (ticket.status === 503 && (await ticket.clone().json().catch(() => null))?.error === 'checkpoint_transport_unavailable') return null
+    return ticket
+  }
+  const transfer = await ticket.json()
+  return fetch(transfer.endpoint, {
+    ...options, headers: { ...options.headers, Authorization: 'Bearer ' + transfer.token },
+    cache: 'no-store', credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer',
+  })
 }
 
 export default function CheckpointDialog({ pageId, session, live, writable, onClose }: {
@@ -120,7 +138,12 @@ export default function CheckpointDialog({ pageId, session, live, writable, onCl
 
   function open(record: Checkpoint) {
     void run(async signal => {
-      const reply = await fetch('/api/checkpoints?' + new URLSearchParams({ pageId, version: record.id }), { signal, cache: 'no-store' })
+      const endpoint = '/api/checkpoints?' + new URLSearchParams({ pageId, version: record.id })
+      const relay = await viaRelay(endpoint, { method: 'GET', signal }).catch(problem => {
+        if (signal.aborted || !(problem instanceof TypeError)) throw problem
+        return null
+      })
+      const reply = relay ?? await fetch(endpoint, { signal, cache: 'no-store' })
       if (!reply.ok) throw new Error('Could not open this checkpoint.')
       const data = await reply.arrayBuffer()
       if (signal.aborted) return
@@ -190,9 +213,9 @@ export default function CheckpointDialog({ pageId, session, live, writable, onCl
     {preview && <section aria-label="Checkpoint preview" className="checkpoint-preview">
       <h3>{preview.record.version_name}</h3>
       {previewFault === preview.record.id && <p role="alert">This checkpoint contains unsupported blocks. Restore is unavailable.</p>}
-      {preview.source !== null ? <pre>{preview.source}</pre> : <PageEditor
+      {preview.source !== null ? <PublicPageBody source={preview.source} targets={new Map()} /> : <PageEditor
         key={preview.record.id} pageId={preview.record.id} collaboration={preview.replica}
-        editable={false} choices={[]} markdown="" onChange={() => {}} onOpenLink={() => {}}
+        editable={false} showModePicker={false} choices={[]} markdown="" onChange={() => {}} onOpenLink={() => {}}
         onSchemaError={() => setPreviewFault(preview.record.id)}
       />}
       <div className="dialog-actions">

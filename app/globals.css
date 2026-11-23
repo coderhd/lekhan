@@ -582,7 +582,7 @@ kbd {
 .checkpoint-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .checkpoint-list { list-style: none; padding: 0; margin: 8px 0; max-height: min(48dvh, 430px); overflow: auto; }
 .checkpoint-preview h3 { overflow-wrap: anywhere; }
-.checkpoint-preview :is(pre, .writer-content) { overflow: auto; max-height: 42dvh; padding: 12px; background: var(--paper); border: 1px solid var(--line); border-radius: 7px; }
+.checkpoint-preview :is(.public-prose, .writer-content) { overflow: auto; max-height: 42dvh; padding: 12px; background: var(--paper); border: 1px solid var(--line); border-radius: 7px; }
 .checkpoint-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .cloud-page-actions { margin-top: 30px; padding-block: 12px; border-top: 1px solid var(--line); }
 .cloud-page-actions summary { color: var(--pine); font-weight: 760; }

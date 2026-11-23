@@ -3,8 +3,26 @@ import { Marked, type Token, type Tokens } from 'marked'
 import { splitYamlFrontmatter, isEmbeddedRaster } from '../lib/markdown'
 import { wikiLinks } from '../lib/markdown-references'
 import { toTitleKey } from '../lib/cloud/graph-index'
+import { inlineCloudImages } from '../lib/cloud/image-policy'
 
 const readerMarkdown = new Marked()
+
+function tokenizeSource(markdown: string) {
+  const images = new Map<string, string>()
+  let text = ''
+  let cursor = 0
+  let prefix: string | undefined
+  for (const image of inlineCloudImages(markdown)) {
+    if (image.source.length <= 64 * 1024) continue
+    // The Markdown lexer uses recursive link patterns. Keep raster bytes out of those patterns.
+    prefix ??= 'lekhan-embedded-image:' + crypto.randomUUID() + '/'
+    const reference = prefix + images.size
+    images.set(reference, image.source)
+    text += markdown.slice(cursor, image.start) + reference
+    cursor = image.end
+  }
+  return { source: cursor ? text + markdown.slice(cursor) : markdown, images }
+}
 
 function headingId(value: string) {
   return value.toLowerCase().normalize('NFC').trim().replace(/[^\p{L}\p{N}_ -]/gu, '').replace(/\s+/g, '-')
@@ -22,6 +40,12 @@ function safeHref(value: string) {
 
 export default function PublicPageBody({ source, targets }: { source: string; targets: Map<string, string> }) {
   const headings = new Set<string>()
+  const markdown = tokenizeSource(splitYamlFrontmatter(source)?.body ?? source)
+
+  function literal(text: string) {
+    return markdown.images.size ? text.replace(/lekhan-embedded-image:[\da-f-]{36}\/\d+/g, ref => markdown.images.get(ref) ?? ref) : text
+  }
+
   function textWithLinks(value: string) {
     const pieces: ReactNode[] = []
     let end = 0
@@ -30,11 +54,11 @@ export default function PublicPageBody({ source, targets }: { source: string; ta
       const id = target && targets.get(toTitleKey(target))
       const label = link.alias ?? link.target
       const heading = anchor ? '#' + encodeURIComponent(headingId(anchor)) : ''
-      pieces.push(value.slice(end, link.start))
+      pieces.push(literal(value.slice(end, link.start)))
       pieces.push(id || (!target && heading) ? <a key={link.start} href={(id ? '/page/' + id : '') + heading}>{label}</a> : label)
       end = link.end
     }
-    pieces.push(value.slice(end))
+    pieces.push(literal(value.slice(end)))
     return pieces
   }
 
@@ -58,7 +82,7 @@ export default function PublicPageBody({ source, targets }: { source: string; ta
       }
       case 'text': {
         const item = token as Tokens.Text
-        return item.tokens ? render(item.tokens, insideLink) : insideLink ? item.text : textWithLinks(item.text)
+        return item.tokens ? render(item.tokens, insideLink) : insideLink ? literal(item.text) : textWithLinks(item.text)
       }
       case 'escape': return (token as Tokens.Escape).text
       case 'strong': return <strong>{render((token as Tokens.Strong).tokens, insideLink)}</strong>
@@ -68,7 +92,7 @@ export default function PublicPageBody({ source, targets }: { source: string; ta
       case 'code': return <pre><code>{(token as Tokens.Code).text}</code></pre>
       case 'br': return <br />
       case 'hr': return <hr />
-      case 'html': return <span>{(token as Tokens.HTML).text}</span>
+      case 'html': return <span>{literal((token as Tokens.HTML).text)}</span>
       case 'blockquote': {
         const item = token as Tokens.Blockquote
         const callout = /^\[!([a-z0-9_-]{1,24})\][+-]?(?:[ \t]+([^\r\n]*))?(?:\r?\n|$)/i.exec(item.text)
@@ -85,10 +109,11 @@ export default function PublicPageBody({ source, targets }: { source: string; ta
       }
       case 'image': {
         const item = token as Tokens.Image
-        if (!isEmbeddedRaster(item.href)) return item.text
+        const src = markdown.images.get(item.href) ?? item.href
+        if (!isEmbeddedRaster(src)) return item.text
         const size = /^lekhan-size:(\d{1,4})(?:x(\d{1,4}))?$/.exec(item.title ?? '')
         // eslint-disable-next-line @next/next/no-img-element -- raster data is already embedded in the page snapshot
-        return <img src={item.href} alt={item.text} width={size?.[1]} height={size?.[2]} loading="lazy" />
+        return <img src={src} alt={item.text} width={size?.[1]} height={size?.[2]} loading="lazy" />
       }
       case 'list': {
         const list = token as Tokens.List
@@ -110,5 +135,5 @@ export default function PublicPageBody({ source, targets }: { source: string; ta
     }
   }
 
-  return <div className="public-prose">{render(readerMarkdown.lexer(splitYamlFrontmatter(source)?.body ?? source))}</div>
+  return <div className="public-prose">{render(readerMarkdown.lexer(markdown.source))}</div>
 }

@@ -7,6 +7,7 @@ import { snapshotCipher } from './snapshot.ts'
 import { cloudSnapshots } from './supabase.ts'
 import { encryptedWal } from './wal.ts'
 import { pruneExpiredCheckpoints } from './prune-checkpoints.ts'
+import { checkpointHttp } from './checkpoint-http.ts'
 import { drainWaitlist } from '../../lib/waitlist/brevo.ts'
 
 const client = createServerAdmin()
@@ -25,6 +26,7 @@ const hub = createSyncHub({
   secret,
   origin,
   wal: encryptedWal(walDirectory, cipher),
+  checkpointTransfer: checkpointHttp(client, cipher, origin),
   ...cloudSnapshots(client, cipher),
   authorize: (ticket, admission) => relayedPageAccess(client, ticket, admission),
   imagePolicy: async ticket => {

@@ -211,6 +211,13 @@
   overflow-wrap: anywhere;
 }
 
+.writer-source-bounded {
+  field-sizing: fixed;
+  height: min(56dvh, 640px);
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
 @media (max-width: 440px) {
   .writer-icon-button.writer-add-block {
     padding-inline: 0;

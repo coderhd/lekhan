@@ -29,4 +29,12 @@ describe('public page body', () => {
     expect(html).not.toContain('src="https://')
     expect(html).toContain('src="data:image/png;base64,iVBORw0KGgo="')
   })
+
+  it('renders a paid-size embedded raster without parsing its bytes as Markdown', () => {
+    const raster = 'data:image/png;base64,' + 'AAAA'.repeat(6_500_000)
+    const html = render('Before the image.\n\n![Field scan](' + raster + ')\n\nAfter the image.')
+    expect(html.includes('src="' + raster + '"')).toBe(true)
+    expect(html.includes('alt="Field scan"')).toBe(true)
+    expect(html.endsWith('<p>After the image.</p></div>')).toBe(true)
+  })
 })

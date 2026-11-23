@@ -1,6 +1,10 @@
 import * as Y from 'yjs'
+import { maxPageUpdateBytes } from '../sync/wire.ts'
+import { replaceSourceText } from '../sync/replace-source.ts'
 
 export const checkpointMaxBytes = 20 * 1024 * 1024
+export const checkpointTransferBytes = maxPageUpdateBytes
+export const checkpointInlineBytes = 4 * 1024 * 1024
 
 export interface Checkpoint {
   id: string
@@ -34,7 +38,6 @@ export function replaceCheckpointContent(target: Y.Doc, snapshot: Y.Doc, origin:
     if (rich.length) fragment.insert(0, rich)
 
     const markdown = target.getText('source')
-    if (markdown.length) markdown.delete(0, markdown.length)
-    if (text) markdown.insert(0, text)
+    replaceSourceText(markdown, markdown.toString(), text)
   }, origin)
 }

@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage } from 'node:http'
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { getHeapStatistics } from 'node:v8'
 import type { Duplex } from 'node:stream'
 import { WebSocket, WebSocketServer, type RawData } from 'ws'
@@ -36,6 +36,7 @@ interface HubOptions {
   persist: (pageId: string, doc: Y.Doc) => Promise<void>
   authorize: (ticket: SyncTicket, admission: boolean) => Promise<RelayAccess>
   imagePolicy?: (ticket: SyncTicket) => Promise<CloudImagePolicy | null>
+  checkpointTransfer?: (request: IncomingMessage, response: ServerResponse) => Promise<void>
   onFault?: (operation: string) => void
 }
 
@@ -433,6 +434,15 @@ export function createSyncHub(options: HubOptions) {
 
   const server = createServer((req, response) => {
     const healthy = !closing && connections.size + pending < maxSockets && !overloaded()
+    if (req.url === '/checkpoint-transfer' && options.checkpointTransfer) {
+      if (!healthy) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return }
+      void options.checkpointTransfer(req, response).catch(() => {
+        options.onFault?.('checkpoint transfer')
+        if (!response.headersSent) response.writeHead(503).end()
+        else response.destroy()
+      })
+      return
+    }
     const found = req.url === '/health' && req.method === 'GET'
     response.writeHead(found ? healthy ? 200 : 503 : 404, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
     response.end(JSON.stringify(found ? { ok: healthy } : { error: 'not_found' }))

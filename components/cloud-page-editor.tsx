@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import type { PageChoice } from '@/lib/types'
 import type { CloudPage } from '@/lib/cloud/graph'
 import { useCloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
+import { replaceSourceText } from '@/lib/sync/replace-source'
 import { downloadPage } from '@/lib/downloads'
 import { wikiLinks } from '@/lib/markdown-references'
 import { trackWritingEdit } from '@/lib/analytics'
@@ -34,6 +35,7 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
 }) {
   const replica = useCloudCollaboration(page.id, subject, enabled)
   const source = useReplicaSource(replica.session)
+  const largeSource = source !== null && source.length >= 1024 * 1024
   const references = useMemo(() => source === null ? [] : [...new Map(
     wikiLinks(source).map(link => [link.target, link]),
   ).values()], [source])
@@ -84,19 +86,7 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
     const text = document.getText('source')
     const current = text.toString()
     if (current === next) return
-    let start = 0
-    let suffix = 0
-    while (start < current.length && start < next.length && current[start] === next[start]) start++
-    while (suffix < current.length - start && suffix < next.length - start &&
-      current[current.length - suffix - 1] === next[next.length - suffix - 1]) suffix++
-    if (start > 0 && /[\uD800-\uDBFF]/.test(current[start - 1] ?? '')) start--
-    if (suffix > 0 && /[\uDC00-\uDFFF]/.test(current[current.length - suffix] ?? '')) suffix--
-    document.transact(() => {
-      const removed = current.length - start - suffix
-      if (removed > 0) text.delete(start, removed)
-      const inserted = next.slice(start, next.length - suffix)
-      if (inserted) text.insert(start, inserted)
-    })
+    document.transact(() => replaceSourceText(text, current, next))
     trackWritingEdit(current, next)
   }
 
@@ -155,7 +145,8 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
         editable={editable}
       /> : preview ? <PageEditor
         pageId={page.id} markdown={source} choices={choices} onChange={() => {}} showModePicker={false} editable={false} onOpenLink={openLink}
-      /> : <textarea ref={sourceInput} className="writer-source" aria-label="Markdown source" value={source} readOnly={!editable}
+      /> : <textarea ref={sourceInput} className={largeSource ? 'writer-source writer-source-bounded' : 'writer-source'}
+        wrap={largeSource ? 'off' : 'soft'} aria-label="Markdown source" value={source} readOnly={!editable}
         onChange={event => writeSource(event.target.value)} />)}
       {references.length > 0 && <details className="cloud-page-actions cloud-references">
         <summary>Page links ({references.length})</summary>
