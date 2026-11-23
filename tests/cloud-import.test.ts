@@ -1,16 +1,44 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createClient } from '@supabase/supabase-js'
 import * as Y from 'yjs'
 import { cloudImportPlan } from '../lib/cloud/import-plan'
 import { allowCloudImportImages, importPageId, validateCloudImport, writeCloudBatch } from '../lib/cloud/import-server'
 import { cloudImageAllowed, FREE_IMAGE_BYTES, inlineCloudImages, PAID_IMAGE_BYTES } from '../lib/cloud/image-policy'
 import { snapshotCipher } from '../server/sync/snapshot'
+import { prepareLocalMirror, uploadLocalMirror } from '../lib/cloud/local-mirror'
 
 const attempt = '40000000-0000-4000-8000-000000000001'
 const workspace = '40000000-0000-4000-8000-000000000002'
 const owner = '40000000-0000-4000-8000-000000000003'
 
 describe('cloud vault import', () => {
+  it('keeps the selected note and uses the same batch on retry after a lost response', async () => {
+    const recorded: string[] = []
+    let lost = true
+    const pageId = '40000000-0000-4000-8000-000000000004'
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      if (url.startsWith('/api/import?')) return Response.json({ current: 'free', batches: [] })
+      recorded.push(String(init?.body))
+      if (lost) throw new TypeError('network interruption')
+      return Response.json({ pages: [{ id: pageId, title: 'A selected page' }], importedCount: 1, replayed: true })
+    })
+    try {
+      const signal = new AbortController().signal
+      const note = { id: 'starter-page', parentId: null, title: 'A selected page', markdown: 'Private [[local link]]',
+        frontmatter: '---\ntags: [draft]\n---\n', properties: { tags: ['draft'] }, favorite: false, createdAt: '', updatedAt: '' }
+      const batch = await prepareLocalMirror(note, signal)
+      expect(batch.pages).toEqual([{ ordinal: 0, parent: null, title: note.title, path: note.title,
+        markdown: note.markdown, frontmatter: note.frontmatter, properties: note.properties }])
+      await expect(uploadLocalMirror(batch, signal)).rejects.toThrow('Retry sync')
+      // Simulate IndexedDB returning the previously selected payload.
+      lost = false
+      await expect(uploadLocalMirror(JSON.parse(JSON.stringify(batch)), signal)).resolves.toBe(pageId)
+      expect(recorded).toEqual([JSON.stringify(batch), JSON.stringify(batch)])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('verifies WebP dimensions and charges decoded image bytes against the selected cloud cap', () => {
     const tiny = Buffer.from('UklGRjQAAABXRUJQVlA4ICgAAACQAQCdASoBAAEAAUAmJZACdLoAA5gA/vQYt8VvqBnIP+Aunui8QAAA', 'base64')
     const source = 'data:image/webp;base64,' + tiny.toString('base64')

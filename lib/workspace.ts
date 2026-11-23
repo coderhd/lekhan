@@ -117,7 +117,7 @@ function keepResolvedLinks(previous: Page[], next: Page[], now: string) {
   const oldIds = new Set(previous.map((page) => page.id))
   const newPagesById = new Map(next.map((page) => [page.id, page]))
   return next.map((page) => {
-    if (!oldIds.has(page.id)) return page
+    if (!oldIds.has(page.id) || page.cloudMirror) return page
     const replacements = wikiLinks(page.markdown).flatMap((link) => {
       const target = before.resolveTarget(link.target, page.id)
       if (!target || after.resolveTarget(link.target, page.id)?.id === target.id) return []

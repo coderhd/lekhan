@@ -1,4 +1,5 @@
 import type { ImportReport } from './vault-import'
+import type { CloudImportBatch } from './cloud/import-plan'
 
 export interface Page {
   id: string
@@ -10,6 +11,7 @@ export interface Page {
   favorite: boolean
   createdAt: string
   updatedAt: string
+  cloudMirror?: { state: 'pending'; batch: CloudImportBatch } | { state: 'linked'; pageId: string }
 }
 
 export interface Workspace {
