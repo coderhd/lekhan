@@ -25,6 +25,7 @@ export async function getCatalog(locale: Locale): Promise<Catalog> {
   return {
     desktop: withEnglishFallback(en.desktop, translated.desktop),
     'app-shell': withEnglishFallback(en['app-shell'], translated['app-shell']),
+    'editor-ai': withEnglishFallback(en['editor-ai'], translated['editor-ai']),
     'editor-chrome': withEnglishFallback(en['editor-chrome'], translated['editor-chrome']),
     settings: withEnglishFallback(en.settings, translated.settings),
     metadata: withEnglishFallback(en.metadata, translated.metadata),

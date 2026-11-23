@@ -14,6 +14,7 @@ import PageEditor from './page-editor'
 import CheckpointDialog from './checkpoint-dialog'
 import CloudImageControl from './editor/cloud-image-control'
 import CloudAttachments from './cloud-attachments'
+import { AssistedMarkdownSource } from './editor/selection-ai'
 
 function useReplicaSource(document: ReturnType<typeof useCloudCollaboration>['session']) {
   const subscribe = useCallback((changed: () => void) => {
@@ -86,14 +87,16 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
     else setLinkMissing(true)
   }
 
-  function writeSource(next: string) {
+  function writeSource(next: string, expected?: string) {
     const document = replica.session?.document
-    if (!document || !editable) return
+    if (!document || !editable) return false
     const text = document.getText('source')
     const current = text.toString()
-    if (current === next) return
+    if (expected !== undefined && current !== expected) return false
+    if (current === next) return true
     document.transact(() => replaceSourceText(text, current, next))
     trackWritingEdit(current, next)
+    return true
   }
 
   async function toggleCloudSync() {
@@ -171,11 +174,12 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
         collaboration={replica.session}
         imagePolicy={replica.imagePolicy}
         editable={editable}
+        assistant={{ storageScope: 'account:' + subject }}
       /> : preview ? <PageEditor
         pageId={page.id} markdown={source} choices={choices} onChange={() => {}} showModePicker={false} editable={false} onOpenLink={openLink}
-      /> : <textarea ref={sourceInput} className={largeSource ? 'writer-source writer-source-bounded' : 'writer-source'}
-        wrap={largeSource ? 'off' : 'soft'} aria-label="Markdown source" value={source} readOnly={!editable}
-        onChange={event => writeSource(event.target.value)} />)}
+      /> : <AssistedMarkdownSource key={page.id} ref={sourceInput} className={largeSource ? 'writer-source writer-source-bounded' : 'writer-source'}
+        wrap={largeSource ? 'off' : 'soft'} aria-label="Markdown source" markdown={source} readOnly={!editable}
+        assistant={{ storageScope: 'account:' + subject }} onChange={writeSource} onApply={writeSource} />)}
       {references.length > 0 && <details className="cloud-page-actions cloud-references">
         <summary>Page links ({references.length})</summary>
         <ul>{references.map(link => <li key={link.target}>

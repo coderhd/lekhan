@@ -54,8 +54,10 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
       return undefined
     }
   }, [])
-  const model = library?.runtimeAvailable ? library.models.find(item => item.id === selectedModel) : undefined
-  const localModel = useMemo(() => model && { label: model.label, send: (options: Parameters<typeof sendToLocalModel>[1]) => sendToLocalModel(model.id, options) }, [model])
+  const localModels = useMemo(() => library?.runtimeAvailable ? library.models.map(model => ({
+    id: model.id, label: model.label, send: (options: Parameters<typeof sendToLocalModel>[1]) => sendToLocalModel(model.id, options),
+  })) : [], [library])
+  const localModel = localModels.find(item => item.id === selectedModel)
 
   useEffect(() => {
     let live = true
@@ -124,7 +126,7 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
   const failure = vaultFailed && <p className="locale-error desktop-cloud-error" role="alert">{t('openFailed')}</p>
 
   if (handle && storage) return <div className="desktop-writer" inert={choosing}>
-    <WorkspaceApp key={handle.token} storageScope="desktop" storage={storage} workspaceName={handle.label} localModel={localModel}
+    <WorkspaceApp key={handle.token} storageScope="desktop" storage={storage} workspaceName={handle.label} localModel={localModel} localModels={localModels}
       pageAttachments={(page, insert) => <AttachmentPanel key={page.id} token={handle.token} page={page}
         path={catalog?.token === handle.token ? catalog.paths.get(page.id) ?? '' : ''}
         assets={catalog?.token === handle.token ? catalog.assets : []} onAttach={storage.rememberAttachment} onInsert={insert} />}

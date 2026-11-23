@@ -15,6 +15,7 @@ import { type CommandMatch, findCommand, validWikiLink } from './editor/editor-c
 import { FormatToolbar } from './editor/format-toolbar'
 import CloudImageControl from './editor/cloud-image-control'
 import { requiresMarkdownSource } from './editor/source-mode'
+import { AssistedMarkdownSource, RichSelectionAI, type EditorAssistant } from './editor/selection-ai'
 import { collaborativeWritingExtensions, writingExtensions } from './editor/writing-extensions'
 import './editor/editor.css'
 
@@ -30,6 +31,7 @@ interface PageEditorProps {
   imagePolicy?: CloudImagePolicy
   onSchemaError?: () => void
   showModePicker?: boolean
+  assistant?: EditorAssistant
 }
 
 interface MenuState {
@@ -152,20 +154,20 @@ function PageEditorView(props: PageEditorProps) {
           {editorText('sourceHint')}
         </p>
       )}
-      <textarea
+      <AssistedMarkdownSource
+        assistant={props.assistant}
         className="writer-source"
         aria-label={editorText('markdownSource')}
         aria-describedby={sourceOnly ? hintId : undefined}
         autoFocus={focusBody}
-        value={markdown}
+        markdown={markdown}
         readOnly={!editable}
         spellCheck={false}
         placeholder={editorText('markdownPlaceholder')}
-        onChange={(event) => {
+        onChange={(value) => {
           setPreferSource(true)
-          const value = event.target.value
           const windowsLineEndings = markdown.includes('\r\n') && !/(?<!\r)\n/.test(markdown)
-          const next = windowsLineEndings ? value.replaceAll('\n', '\r\n') : value
+          const next = windowsLineEndings ? value.replace(/\r?\n/g, '\r\n') : value
           onChange(next)
           if (editable) trackWritingEdit(markdown, next)
         }}
@@ -186,6 +188,7 @@ function PageEditorSession({
   collaboration,
   imagePolicy,
   onSchemaError,
+  assistant,
 }: PageEditorProps & { modePicker: ReactNode }) {
   const editorText = useTranslations('editor-chrome')
   const menuId = useId()
@@ -444,6 +447,7 @@ function PageEditorSession({
       )}
       {(!editor || !editable) && <div className="writer-toolbar">{modePicker}</div>}
       <EditorContent editor={editor} />
+      {editor && editable && assistant && <RichSelectionAI editor={editor} assistant={assistant} formattingMenuOpen={menuOpen} />}
       {editor && menu && (
         <CommandMenu
           id={menuId}
