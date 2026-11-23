@@ -9,7 +9,7 @@ import type { Currency, Cycle, Offer, PaidTier } from './catalog'
 import { entitlementFromRow, type WorkspacePlanRowLike } from './entitlements'
 import {
   cancelProviderSubscription, checkoutAvailable, configuredPrice, providerManagementLink,
-  railForCurrency, resumeProviderCheckout, startProviderCheckout, verifyCheckoutPrice, type Rail,
+  railForCurrency, razorpaySchedule, resumeProviderCheckout, startProviderCheckout, verifyCheckoutPrice, type Rail,
 } from './gateways'
 
 interface PlanRow extends WorkspacePlanRowLike {
@@ -68,6 +68,22 @@ export async function readBillingPlan(admin: SupabaseClient, workspaceId: string
   return data
 }
 
+export async function withBillingMutation<T>(admin: SupabaseClient, plan: PlanRow, run: () => Promise<T>) {
+  const now = new Date()
+  const lease = new Date(now.getTime() + 75_000).toISOString()
+  const { data, error } = await admin.from('workspace_plans').update({ rebuild_billing_write_until: lease })
+    .eq('workspace_id', plan.workspace_id).eq('rebuild_billing_revision', plan.rebuild_billing_revision)
+    .lte('rebuild_billing_write_until', now.toISOString()).select('workspace_id').maybeSingle()
+  if (error) throw new Error('Could not reserve the billing change')
+  if (!data) throw new BillingError('billing_busy', 409)
+  try {
+    return await run()
+  } finally {
+    await admin.from('workspace_plans').update({ rebuild_billing_write_until: new Date().toISOString() })
+      .eq('workspace_id', plan.workspace_id).eq('rebuild_billing_write_until', lease)
+  }
+}
+
 async function pendingCheckout(admin: SupabaseClient, workspaceId: string) {
   const { data, error } = await admin.from('rebuild_billing_checkouts')
     .select(checkoutFields)
@@ -82,6 +98,7 @@ export async function readBillingSummary(admin: SupabaseClient, workspaceId: str
     : [null, null] as const
   return {
     entitlement: plan ? entitlementFromRow(plan) : null,
+    gateway: plan?.gateway ?? 'none',
     currency: plan?.currency ?? null,
     pending: pending ? {
       tier: pending.tier, cycle: pending.cycle, seats: pending.seats,
@@ -172,11 +189,15 @@ export async function manageBilling(context: Awaited<ReturnType<typeof billingAc
     plan.gateway, plan.gateway_subscription_id, plan.gateway_customer_id, origin, plan.is_founding === true,
   )
 
-  if (!plan.cancel_at_period_end) {
-    await cancelProviderSubscription(plan.gateway, plan.gateway_subscription_id)
+  const { gateway, gateway_subscription_id: ref } = plan
+  if (!plan.cancel_at_period_end) await withBillingMutation(admin, plan, async () => {
+    if (gateway === 'razorpay' && (await razorpaySchedule(ref)).paymentChange) {
+      throw new BillingError('remove_scheduled_change', 409)
+    }
+    await cancelProviderSubscription(gateway, ref)
     const { error } = await admin.from('workspace_plans').update({ cancel_at_period_end: true })
       .eq('workspace_id', plan.workspace_id).eq('gateway_subscription_id', plan.gateway_subscription_id).neq('status', 'canceled')
     if (error) throw new Error('Could not record the cancellation request')
-  }
+  })
   return null
 }

@@ -4,7 +4,7 @@ Billing is available in the cloud workspace for signed-in owners. The same works
 
 ## Staging setup
 
-1. Verify that the workspace plan, gateway event, and founding roster migrations are applied first. Apply the rebuild checkout and reconciliation migrations in order, alongside the rebuilt billing routes.
+1. Verify that the workspace plan, gateway event, and founding roster migrations are applied first. Apply the rebuild checkout, reconciliation, and plan-change migrations in order, alongside the rebuilt billing routes.
 2. Configure the application origin with `LEKHAN_PUBLIC_URL`. Use test payment credentials on staging. The `.env.example` entries bind each tier, cycle, currency, and founding eligibility to a provider price. A checkout checks the live price object against the catalog before creating a session.
 3. Stripe uses USD subscription prices. Configure Team as a volume price with 2–10, 11–25, and 26 or more seats. Each band applies to all seats. Set separate portal configuration IDs for founding and standard workspaces. Each configuration can expose only its cohort’s prices and can adjust seat counts only for Team. Set cancellation at period end. [Stripe tiered pricing](https://docs.stripe.com/subscriptions/pricing-models/tiered-pricing) · [Stripe portal configurations](https://docs.stripe.com/api/customer_portal/configurations/object)
 4. Razorpay uses INR subscription plans for Plus and Pro. Configure monthly and annual plans and test hosted subscription links with the supported payment methods. [Razorpay subscription API](https://razorpay.com/docs/api/payments/subscriptions/create-subscription)
@@ -25,4 +25,10 @@ Each run claims up to 10 webhooks, 12 pending checkouts, and 40 linked subscript
 
 To rehearse a missed webhook, finish a test checkout with webhook delivery disabled, then run the reconciliation endpoint. Check that the workspace moves to the paid plan and that another run leaves the paid period unchanged. Repeat with a provider-confirmed failed payment and a renewal. For a lost checkout response, remove the reference only from a disposable checkout fixture and verify that reconciliation matches its provider metadata to the reserved workspace.
 
-An unlocated checkout stays reserved until the provider can confirm what happened. An expired or terminated provider checkout can be replaced. Referral credits, ownership transfer, Razorpay scheduled plan changes, and purchase analytics still need rebuild integration.
+An unlocated checkout stays reserved until the provider can confirm what happened. An expired or terminated provider checkout can be replaced.
+
+## INR plan changes
+
+Owners can schedule or withdraw a plan change in workspace billing. The page uses Razorpay’s live schedule and keeps the current entitlement through the billing cycle. A verified event or reconciliation updates the entitlement after Razorpay switches the plan. Razorpay restricts in-place changes for subscriptions authorized by UPI or e-mandate. For those payment methods, owners can end the existing subscription at renewal and begin a new checkout after it ends. Verify the card and UPI paths in the provider test environment. [Razorpay subscription changes](https://razorpay.com/docs/api/payments/subscriptions/update-subscription) · [Razorpay scheduled update details](https://razorpay.com/docs/api/payments/subscriptions/fetch-pending-update-details)
+
+Referral credits, ownership transfer, and purchase analytics still need rebuild integration.

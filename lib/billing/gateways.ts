@@ -36,6 +36,7 @@ interface RazorpaySubscription {
   quantity: number
   status: string
   current_end?: number
+  change_scheduled_at?: number
   short_url?: string
   has_scheduled_changes?: boolean
   notes?: Record<string, string>
@@ -88,7 +89,7 @@ export function stripeClient() {
 }
 
 class RazorpayError extends Error {
-  constructor(readonly status: number) {
+  constructor(readonly status: number, readonly updateUnsupported: boolean) {
     super('Razorpay request failed')
   }
 }
@@ -107,7 +108,12 @@ async function razorpay<T>(path: string, method = 'GET', data?: object): Promise
     cache: 'no-store',
     signal: AbortSignal.timeout(12_000),
   })
-  if (!response.ok) throw new RazorpayError(response.status)
+  if (!response.ok) {
+    const error = response.status === 400 && method === 'PATCH'
+      ? await response.json().catch(() => null) as { error?: { description?: unknown } } | null : null
+    const description = error?.error?.description
+    throw new RazorpayError(response.status, typeof description === 'string' && /payment mode is UPI|e-?mandate/i.test(description))
+  }
   return await response.json() as T
 }
 
@@ -249,6 +255,38 @@ export async function resumeProviderCheckout(rail: Rail, ref: string, binding?: 
 function razorpaySubscription(ref: string) {
   if (!/^sub_[a-z\d]+$/i.test(ref)) throw new Error('Invalid subscription reference')
   return razorpay<RazorpaySubscription>('subscriptions/' + ref)
+}
+
+export async function razorpaySchedule(ref: string) {
+  const current = await razorpaySubscription(ref)
+  if (current.id !== ref) throw new Error('Unexpected Razorpay subscription')
+  const pending = current.has_scheduled_changes
+    ? await razorpay<RazorpaySubscription>('subscriptions/' + ref + '/retrieve_scheduled_changes') : null
+  if (pending && (pending.id !== ref || !pending.plan_id)) throw new Error('Unexpected Razorpay scheduled change')
+  return {
+    currentPrice: current.plan_id,
+    active: current.status === 'active',
+    paymentChange: pending && {
+      priceId: pending.plan_id,
+      effectiveAt: iso(current.change_scheduled_at) ?? iso(pending.change_scheduled_at) ?? iso(current.current_end),
+    },
+  }
+}
+
+export async function scheduleRazorpayPlan(ref: string, priceId: string) {
+  try {
+    await razorpay('subscriptions/' + ref, 'PATCH', {
+      plan_id: priceId, schedule_change_at: 'cycle_end', customer_notify: true,
+    })
+  } catch (error) {
+    if (error instanceof RazorpayError && error.updateUnsupported) return false
+    throw error
+  }
+  return true
+}
+
+export async function cancelRazorpayPlanChange(ref: string) {
+  await razorpay('subscriptions/' + ref + '/cancel_scheduled_changes', 'POST')
 }
 
 function iso(timestamp?: number) {

@@ -7,6 +7,7 @@ import { useLocale } from '@/lib/i18n/client'
 import { track } from '@/lib/analytics'
 import { priceLabel, readOffer, unitAmount, type Currency, type Cycle, type PaidTier } from '@/lib/billing/catalog'
 import type { readBillingSummary } from '@/lib/billing/workspace'
+import RazorpayPlanChanges from './razorpay-plan-changes'
 
 const tierNames = { free: 'Free', plus: 'Plus', pro: 'Pro', team: 'Team' }
 const plans = [
@@ -21,6 +22,8 @@ const errors: Record<string, string> = {
   checkout_in_progress: 'There’s already a checkout for this workspace. Resume it or check the payment status here.',
   subscription_exists: 'This workspace already has a subscription. Open Manage payment to make changes.',
   invalid_offer: 'Choose a valid plan and number of seats.',
+  billing_busy: 'Billing is being updated. Try again in a moment.',
+  remove_scheduled_change: 'Cancel the scheduled plan change before canceling the subscription.',
 }
 
 const paymentMessages: Record<string, string> = {
@@ -46,6 +49,7 @@ export default function BillingSettings({ summary, defaultCurrency, available, r
   const [seats, setSeats] = useState(String(pending?.tier === 'team' ? pending.seats : 2))
   const [busy, setBusy] = useState<string | null>(null)
   const [confirmCancel, setConfirmCancel] = useState(false)
+  const [showPlanChanges, setShowPlanChanges] = useState(false)
   const [failure, setFailure] = useState('')
   const [notice, setNotice] = useState('')
   const founding = entitlement?.isFounding === true
@@ -123,7 +127,12 @@ export default function BillingSettings({ summary, defaultCurrency, available, r
 
     {canManage ? <div className="billing-actions">
       <button className="primary-button" disabled={!!busy} onClick={() => void act('portal')}>Manage payment <ArrowUpRight size={16} /></button>
+      {summary.gateway === 'razorpay' && <button
+        type="button" className="secondary-button" aria-expanded={showPlanChanges} disabled={!!busy}
+        onClick={() => { setConfirmCancel(false); setShowPlanChanges(value => !value) }}
+      >Change plan</button>}
       {!entitlement?.cancelAtPeriodEnd && <button className="secondary-button" disabled={!!busy} onClick={() => setConfirmCancel(value => !value)}>Cancel subscription</button>}
+      {showPlanChanges && summary.gateway === 'razorpay' && <RazorpayPlanChanges />}
       {confirmCancel && <div className="billing-confirm">
         <p>{periodEnd ? `Your workspace keeps its plan through ${periodEnd}.` : 'Your workspace keeps its plan through the current billing period.'}</p>
         <button className="secondary-button" disabled={!!busy} onClick={() => void act('cancel')}>Confirm cancellation</button>
