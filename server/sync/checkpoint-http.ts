@@ -4,6 +4,7 @@ import { authConfig } from '../../lib/auth/config.ts'
 import { workspaceEntitlementOrFree } from '../../lib/billing/entitlements.ts'
 import { checkpointTransferBytes } from '../../lib/cloud/checkpoints.ts'
 import { pageAccess } from '../../lib/cloud/graph.ts'
+import { readPageSyncPreference } from '../../lib/sync/preferences.ts'
 import { getExpirationCutoffDate } from '../../lib/tier-limits.ts'
 import { CheckpointFailure, readCheckpoint, storeCheckpoint } from './checkpoint-store.ts'
 import { openCheckpointTransfer } from './checkpoint-ticket.ts'
@@ -56,7 +57,8 @@ export function checkpointHttp(admin: SupabaseClient, cipher: ReturnType<typeof 
       const access = await pageAccess(actor, transfer.page, transfer.subject)
       if (!access?.privateAccess) throw new CheckpointFailure(404, 'page_not_found')
       const plan = await workspaceEntitlementOrFree(access.page.workspace_id, admin)
-      if (transfer.method === 'POST' && (access.role === 'viewer' || plan?.relayReadOnly)) {
+      if (transfer.method === 'POST' && (access.role === 'viewer' || plan?.relayReadOnly ||
+        (access.role === 'owner' && (!plan || plan.tier === 'free') && await readPageSyncPreference(admin, transfer.page) === 'paused'))) {
         throw new CheckpointFailure(403, 'read_only')
       }
       return plan

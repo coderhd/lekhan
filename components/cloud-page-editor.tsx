@@ -46,14 +46,18 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
   const [linkMissing, setLinkMissing] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [attachmentsOpen, setAttachmentsOpen] = useState(false)
+  const [changingSync, setChangingSync] = useState(false)
+  const [preferenceError, setPreferenceError] = useState('')
   const [preview, setPreview] = useState(false)
   const sourceInput = useRef<HTMLTextAreaElement>(null)
   const editable = replica.writable && !schemaError
   const syncPaused = replica.status === 'image-limit' || replica.status === 'payload-limit' || replica.status === 'workspace-media-limit'
+  const localOnly = replica.status === 'local-only'
   const networkLabel = !enabled ? 'Cloud sync unavailable' : replica.status === 'live' ? 'Live'
     : replica.status === 'offline' ? replica.session ? 'Offline copy' : 'Waiting for sync'
     : replica.status === 'denied' ? 'Access expired'
     : replica.status === 'limit' ? 'Collaborator limit reached'
+    : localOnly ? 'Cloud sync paused'
     : syncPaused ? 'Sync paused' : 'Opening cloud page'
   const exportable = !!replica.session && !schemaError && (source !== null || markdown !== null)
 
@@ -92,6 +96,14 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
     trackWritingEdit(current, next)
   }
 
+  async function toggleCloudSync() {
+    setChangingSync(true)
+    setPreferenceError('')
+    try { await replica.changeSyncPreference(replica.preference === 'paused') }
+    catch (error) { setPreferenceError(error instanceof Error ? error.message : 'Could not change cloud sync.') }
+    finally { setChangingSync(false) }
+  }
+
   return (
     <div className="cloud-editor">
       <div className="cloud-editor-status">
@@ -116,7 +128,7 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
         {replica.session && <button type="button" className="secondary-button" onClick={() => setHistoryOpen(true)}>
           <History size={15} /> Version history
         </button>}
-        {replica.session && <button type="button" className="secondary-button" onClick={() => setAttachmentsOpen(true)}>
+        {replica.session && !localOnly && <button type="button" className="secondary-button" onClick={() => setAttachmentsOpen(true)}>
           <Paperclip size={15} /> Attachments
         </button>}
         {exportable && <button type="button" className="secondary-button" onClick={() => {
@@ -127,7 +139,15 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
             favorite: false, createdAt: page.updated_at, updatedAt: page.updated_at,
           })
         }}><Download size={15} /> Export page</button>}
+        {(replica.preference === 'personal' || replica.preference === 'paused') && <button type="button" className="secondary-button"
+          disabled={changingSync || (!localOnly && replica.status !== 'live')} onClick={() => void toggleCloudSync()}>
+          {replica.preference === 'paused' ? 'Resume cloud sync' : 'Pause cloud sync'}
+        </button>}
       </div>
+      {preferenceError && <p className="account-error" role="alert">{preferenceError}</p>}
+      {localOnly && <p className="billing-notice">{replica.session
+        ? 'Your writing stays in this browser until cloud sync resumes.'
+        : 'This device has no local copy. Resume cloud sync to open the last saved cloud version.'}</p>}
       {linkMissing && <p className="account-error" role="status">There is no matching page in this link picker. Find the page in your cloud workspace.</p>}
       {replica.status === 'limit' && <p>Ask the page owner to review sharing or change the workspace plan.</p>}
       {syncPaused && <div className="billing-notice" role="status">

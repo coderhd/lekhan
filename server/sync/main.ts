@@ -11,6 +11,7 @@ import { checkpointHttp } from './checkpoint-http.ts'
 import { attachmentHttp } from './attachments-http.ts'
 import { pruneAttachments } from './prune-attachments.ts'
 import { recordPageImages, reservePageImages } from './media-usage.ts'
+import { setPageSyncPreference } from '../../lib/sync/preferences.ts'
 import { drainWaitlist } from '../../lib/waitlist/brevo.ts'
 
 const client = createServerAdmin()
@@ -34,10 +35,11 @@ const hub = createSyncHub({
   ...cloudSnapshots(client, cipher),
   reserveImages: (page, bytes) => reservePageImages(client, [{ page, bytes }]),
   recordImages: (page, bytes) => recordPageImages(client, page, bytes),
+  setPageSync: (page, subject, enabled) => setPageSyncPreference(client, page, subject, enabled),
   authorize: (ticket, admission) => relayedPageAccess(client, ticket, admission),
   imagePolicy: async ticket => {
-    const { access, imagePolicy } = await relayedPageAuthority(client, ticket, false)
-    return access === 'write' ? imagePolicy : null
+    const { access, imagePolicy, preference } = await relayedPageAuthority(client, ticket, false)
+    return access === 'write' && preference !== 'paused' ? imagePolicy : null
   },
   onFault: operation => console.error('[sync] ' + operation + ' failed'),
 })

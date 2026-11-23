@@ -3,12 +3,13 @@ import { collaboratorCapacity, workspaceEntitlementOrFree } from '../billing/ent
 import { pageAccess } from '../cloud/graph.ts'
 import type { CloudImagePolicy } from '../cloud/image-policy.ts'
 import type { SyncTicket } from './ticket'
+import { readPageSyncPreference, type PageSyncPreference } from './preferences.ts'
 
-export type RelayAccess = 'read' | 'write' | 'limit' | null
+export type RelayAccess = 'read' | 'write' | 'limit' | 'paused' | null
 
 export async function relayedPageAuthority(
   client: SupabaseClient, ticket: Omit<SyncTicket, 'exp'>, admission: boolean,
-): Promise<{ access: RelayAccess; imagePolicy: CloudImagePolicy }> {
+): Promise<{ access: RelayAccess; imagePolicy: CloudImagePolicy; preference?: PageSyncPreference }> {
   const page = await pageAccess(client, ticket.pageId, ticket.subject)
   if (!page?.privateAccess) return { access: null, imagePolicy: 'free' }
 
@@ -28,9 +29,11 @@ export async function relayedPageAuthority(
     role = data
   }
   const access = role === 'viewer' || ticket.role === 'viewer' || plan?.relayReadOnly ? 'read' : 'write'
-  return { access, imagePolicy }
+  const preference = imagePolicy === 'paid' ? 'paid' : role !== 'owner' ? 'shared' : await readPageSyncPreference(client, ticket.pageId)
+  return { access, imagePolicy, preference }
 }
 
 export async function relayedPageAccess(client: SupabaseClient, ticket: Omit<SyncTicket, 'exp'>, admission: boolean) {
-  return (await relayedPageAuthority(client, ticket, admission)).access
+  const result = await relayedPageAuthority(client, ticket, admission)
+  return result.preference === 'paused' ? 'paused' : result.access
 }

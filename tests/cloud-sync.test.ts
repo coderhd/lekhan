@@ -12,7 +12,7 @@ import { createClient } from '@supabase/supabase-js'
 import { issueSyncTicket, verifySyncTicket } from '../lib/sync/ticket'
 import { chunkedSocket } from '../lib/sync/chunked-socket'
 import { PAID_IMAGE_BYTES } from '../lib/cloud/image-policy'
-import { imageLimitCloseCode, maxSyncFrameBytes, syncChunkBytes, syncChunkHeaderBytes, syncChunkMessage, syncProtocol } from '../lib/sync/wire'
+import { imageLimitCloseCode, maxSyncFrameBytes, pageSyncPausedCloseCode, syncChunkBytes, syncChunkHeaderBytes, syncChunkMessage, syncProtocol } from '../lib/sync/wire'
 import { createSyncHub } from '../server/sync/hub'
 import { snapshotCipher } from '../server/sync/snapshot'
 import { encryptedWal } from '../server/sync/wal'
@@ -316,6 +316,48 @@ async function listen(hub: ReturnType<typeof createSyncHub>) {
 }
 
 describe('collaboration relay', () => {
+  it('flushes accepted writes before acknowledging an owner pause and rejects stale sync tickets', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lekhan-sync-preference-'))
+    cleanup.push(() => rm(dir, { force: true, recursive: true }))
+    let paused = false
+    let durable = ''
+    const hub = createSyncHub({ origin, secret, wal: encryptedWal(dir, snapshotCipher(secret)), load: async () => null,
+      persist: async (_id, doc) => { durable = doc.getText('source').toString() },
+      authorize: async ticket => paused ? 'paused' : ticket.subject === owner ? 'write' : 'read',
+      setPageSync: async (_id, actor, enabled) => {
+        if (actor !== owner) return 'denied'
+        if (!enabled) expect(durable).toBe('Accepted before pause')
+        paused = !enabled
+        return enabled ? 'personal' : 'paused'
+      },
+    })
+    cleanup.push(() => hub.close())
+    const url = await listen(hub)
+    const writer = await peer(url, owner, 'editor')
+    const observer = await peer(url, owner, 'editor')
+    const ownerTicket = issueSyncTicket(secret, { pageId, subject: owner, role: 'owner' })
+    const update = (mode: 'pause' | 'resume', ticket: string) => fetch(url.replace('ws:', 'http:') + '/page-sync/' + pageId + '/' + mode, {
+      method: 'POST', headers: { Authorization: 'Bearer ' + ticket },
+    })
+    writer.doc.getText('source').insert(0, 'Accepted before pause')
+    await vi.waitFor(() => expect(observer.doc.getText('source').toString()).toBe('Accepted before pause'))
+    const closed = new Promise<number | undefined>(resolve => observer.once('connection-close', event => resolve(event?.code)))
+    expect((await update('pause', issueSyncTicket(secret, { pageId, subject: viewer, role: 'viewer' }))).status).toBe(403)
+    expect(await (await update('pause', ownerTicket)).json()).toEqual({ preference: 'paused' })
+    expect(await closed).toBe(pageSyncPausedCloseCode)
+
+    const stale = new BrowserSocket(url + '/' + pageId, [syncProtocol, ownerTicket])
+    cleanup.push(() => stale.terminate())
+    const status = await new Promise<number | undefined>((resolve, reject) => {
+      stale.once('unexpected-response', (request, response) => { resolve(response.statusCode); request.destroy(); response.resume() })
+      stale.once('error', reject)
+    })
+    expect(status).toBe(403)
+    expect(await (await update('resume', ownerTicket)).json()).toEqual({ preference: 'personal' })
+    const resumed = await peer(url, owner, 'editor')
+    expect(resumed.doc.getText('source').toString()).toBe(durable)
+  })
+
   it('releases the image reservation when an image is removed before the next snapshot', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'lekhan-sync-media-'))
     cleanup.push(() => rm(dir, { force: true, recursive: true }))

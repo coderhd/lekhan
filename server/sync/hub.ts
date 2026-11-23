@@ -12,11 +12,12 @@ import type { RelayAccess } from '../../lib/sync/authority.ts'
 import {
   imageLimitCloseCode, maxPageUpdateBytes, maxSyncFrameBytes, maxSyncMessageBytes, payloadLimitCloseCode,
   syncChunkBytes, syncChunkHeaderBytes, syncChunkMessage,
-  workspaceMediaLimitCloseCode,
+  workspaceMediaLimitCloseCode, pageSyncPausedCloseCode,
 } from '../../lib/sync/wire.ts'
 import { cloudImageAllowed, type CloudImagePolicy } from '../../lib/cloud/image-policy.ts'
 import { addedDocumentImages, documentImageBytes, documentImages, imageRoots } from './document-images.ts'
 import type { encryptedWal } from './wal.ts'
+import type { PageSyncPreference } from '../../lib/sync/preferences.ts'
 
 const maxBuffered = 65 * 1024 * 1024
 const maxQueuedBytes = 128 * 1024 * 1024
@@ -39,6 +40,7 @@ interface HubOptions {
   imagePolicy?: (ticket: SyncTicket) => Promise<CloudImagePolicy | null>
   reserveImages?: (pageId: string, bytes: number) => Promise<boolean>
   recordImages?: (pageId: string, bytes: number) => Promise<void>
+  setPageSync?: (pageId: string, subject: string, enabled: boolean) => Promise<PageSyncPreference | 'denied'>
   checkpointTransfer?: (request: IncomingMessage, response: ServerResponse) => Promise<void>
   attachmentTransfer?: (request: IncomingMessage, response: ServerResponse) => Promise<void>
   onFault?: (operation: string) => void
@@ -89,6 +91,7 @@ class Room {
   private images = documentImages(this.roots)
   private imageBytes = 0
   private dirtyImages = false
+  private mirrorPaused = false
   private readonly cursorDoc = new Y.Doc()
   private readonly cursor = new Awareness(this.cursorDoc)
   readonly peers = new Set<Peer>()
@@ -169,6 +172,18 @@ class Room {
     return this.sequence(() => this.persist())
   }
 
+  applySyncPreference(enabled: boolean, save: () => Promise<PageSyncPreference | 'denied'>) {
+    return this.sequence(async () => {
+      if (this.retired) throw new Error('Page is reloading.')
+      if (!enabled) await this.persist()
+      const mode = await save()
+      if (mode === 'denied') return mode
+      this.mirrorPaused = mode === 'paused'
+      if (this.mirrorPaused) for (const peer of this.peers) peer.socket.close(pageSyncPausedCloseCode, 'Cloud sync paused')
+      return mode
+    })
+  }
+
   private async persist() {
     if (!this.dirtySince || this.retired) return
     await this.options.persist(this.pageId, this.doc)
@@ -188,6 +203,12 @@ class Room {
     void this.sequence(async () => {
       if (peer.socket.readyState !== WebSocket.OPEN) return
       if (this.retired) return peer.socket.close(1013, 'Reloading page')
+      if (this.mirrorPaused) {
+        const access = await this.options.authorize(peer.ticket, false).catch(() => null)
+        if (peer.socket.readyState !== WebSocket.OPEN) return
+        if (access !== peer.access) return peer.socket.close(pageSyncPausedCloseCode, 'Cloud sync paused')
+        this.mirrorPaused = false
+      }
       this.peers.add(peer)
       this.lastUse = Date.now()
       const encoder = encoding.createEncoder()
@@ -240,7 +261,7 @@ class Room {
 
   receive(peer: Peer, data: Uint8Array) {
     return this.sequence(async () => {
-      if (this.retired || peer.socket.readyState !== WebSocket.OPEN || peer.ticket.exp * 1000 <= Date.now()) return
+      if (this.retired || this.mirrorPaused || peer.socket.readyState !== WebSocket.OPEN || peer.ticket.exp * 1000 <= Date.now()) return
       this.lastUse = Date.now()
       const decoder = decoding.createDecoder(data)
       const type = decoding.readVarUint(decoder)
@@ -304,7 +325,11 @@ class Room {
               // The speculative document has never been persisted or exposed
               // to another peer. Recover it without disconnecting the room.
               await this.recoverDocument()
-              if (policy === null) peer.socket.close(4003, 'Page access changed')
+              if (policy === null) {
+                const access = await this.options.authorize(peer.ticket, false).catch(() => null)
+                if (access === 'paused') peer.socket.close(pageSyncPausedCloseCode, 'Cloud sync paused')
+                else peer.socket.close(4003, 'Page access changed')
+              }
               else if (policy === undefined) peer.socket.close(1013, 'Could not check cloud image limits')
               else peer.socket.close(imageLimitCloseCode, policy)
               return
@@ -459,6 +484,27 @@ export function createSyncHub(options: HubOptions) {
 
   const server = createServer((req, response) => {
     const healthy = !closing && connections.size + pending < maxSockets && !overloaded()
+    const syncControl = req.method === 'POST' && /^\/page-sync\/([\da-f-]{36})\/(pause|resume)$/i.exec(req.url ?? '')
+    const savePreference = options.setPageSync
+    if (syncControl && savePreference) {
+      const [, page, action] = syncControl
+      const bearer = /^Bearer ([\w.-]+)$/.exec(req.headers.authorization ?? '')?.[1]
+      const ticket = bearer && verifySyncTicket(options.secret, bearer, page)
+      const json = (status: number, body: object) => response.writeHead(status, {
+        'Cache-Control': 'private, no-store', 'Content-Type': 'application/json',
+      }).end(JSON.stringify(body))
+      if (!ticket || ticket.role !== 'owner') { json(403, { error: 'sync_denied' }); return }
+      if (!healthy) { json(503, { error: 'sync_unavailable' }); return }
+      pending++
+      const enabled = action === 'resume'
+      void openRoom(page).then(room => room.applySyncPreference(enabled, () => savePreference(page, ticket.subject, enabled)))
+        .then(preference => {
+          if (preference === 'denied') json(403, { error: 'sync_denied' })
+          else if (preference === 'shared' || preference === 'paid') json(409, { error: 'sync_required', preference })
+          else json(200, { preference })
+        }).catch(() => json(503, { error: 'sync_unavailable' })).finally(() => { pending-- })
+      return
+    }
     const transfer = req.url === '/checkpoint-transfer' ? options.checkpointTransfer
       : req.url?.startsWith('/attachments/') ? options.attachmentTransfer : undefined
     if (transfer) {
@@ -501,6 +547,7 @@ export function createSyncHub(options: HubOptions) {
     try {
       const access = await options.authorize(ticket, true)
       if (access === 'limit') return reject(socket, '403 Forbidden', 'Upgrade Required')
+      if (access === 'paused') return reject(socket, '403 Forbidden', 'Cloud Sync Paused')
       if (!access) return reject(socket, '403 Forbidden')
       const room = await openRoom(ticket.pageId)
       if (socket.destroyed || socket.writableEnded || closing) return
@@ -548,7 +595,8 @@ export function createSyncHub(options: HubOptions) {
       if (peer.checking) continue
       peer.checking = true
       void options.authorize(peer.ticket, false).then(access => {
-        if (access !== peer.access) peer.socket.close(4003, 'Page access changed')
+        if (access === 'paused') peer.socket.close(pageSyncPausedCloseCode, 'Cloud sync paused')
+        else if (access !== peer.access) peer.socket.close(4003, 'Page access changed')
       }).catch(() => peer.socket.close(1013, 'Could not verify page access')).finally(() => { peer.checking = false })
     }
     for (const [pageId, pendingRoom] of rooms) void pendingRoom.then(room => {

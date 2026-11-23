@@ -9,6 +9,7 @@ import { getExpirationCutoffDate, getPlanLimits } from '@/lib/tier-limits'
 import { readBoundedBody } from '@/lib/server/read-body'
 import { configuredSnapshotCipher } from '@/server/sync/snapshot'
 import { syncUrl } from '@/lib/sync/config'
+import { readPageSyncPreference } from '@/lib/sync/preferences'
 import { CheckpointFailure, checkpointFields, readCheckpoint, storeCheckpoint } from '@/server/sync/checkpoint-store'
 import { sealCheckpointTransfer, type CheckpointOperation } from '@/server/sync/checkpoint-ticket'
 
@@ -31,7 +32,8 @@ async function checkpointAccess(request: NextRequest) {
   const cutoff = getExpirationCutoffDate(plan?.tier).toISOString()
   const retentionDays = getPlanLimits(plan?.tier, plan?.seats).historyRetentionDays
   const imagePolicy = plan && plan.tier !== 'free' ? 'paid' as const : 'free' as const
-  return { account, admin, access, cutoff, pageId, imagePolicy, retentionDays, writable: access.role !== 'viewer' && !plan?.relayReadOnly }
+  const paused = imagePolicy === 'free' && access.role === 'owner' && await readPageSyncPreference(admin, access.page.id) === 'paused'
+  return { account, admin, access, cutoff, pageId, imagePolicy, retentionDays, writable: access.role !== 'viewer' && !plan?.relayReadOnly && !paused }
 }
 
 function cipher() {

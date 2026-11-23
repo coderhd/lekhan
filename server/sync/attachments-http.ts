@@ -79,7 +79,7 @@ export function attachmentHttp(admin: SupabaseClient, cipher: ReturnType<typeof 
         await new Promise<void>(resolve => { response.once('close', resolve); response.end(bytes, resolve) })
         return
       }
-      if (authority.access !== 'write') return fail(403, 'read_only')
+      if (authority.access !== 'write' || authority.preference === 'paused') return fail(403, 'read_only')
       const declared = request.headers['x-lekhan-bytes'] ?? request.headers['content-length']
       const length = typeof declared === 'string' && /^\d+$/.test(declared) ? Number(declared) : 0
       const filename = requestedName(request.headers['x-lekhan-filename'])
@@ -91,6 +91,8 @@ export function attachmentHttp(admin: SupabaseClient, cipher: ReturnType<typeof 
       const bytes = await uploadBody(request, length)
       if (!bytes) return fail(400, 'invalid_file')
       if (!verifySyncTicket(secret, bearer, page)) return fail(401, 'invalid_transfer')
+      const uploadAccess = await currentAccess()
+      if (uploadAccess.access !== 'write' || uploadAccess.preference === 'paused') return fail(403, 'read_only')
       const reservation = await admin.rpc('rebuild_reserve_attachment', {
         target_page: page, actor: ticket.subject, attachment: id, name: filename, file_bytes: length,
       })
