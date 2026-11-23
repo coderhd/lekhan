@@ -48,6 +48,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
         <h2 id="billing-referrals">Referrals</h2>
         <p><strong>{summary.referralMonths}</strong> {summary.referralMonths === 1 ? 'month' : 'months'} banked</p>
         <p>Earn a month when a friend starts a cloud workspace and another when they first subscribe.</p>
+        {summary.gateway === 'stripe' && <p>At renewal, banked months become Stripe credit toward a future invoice.</p>}
         <InviteLink path={'/signup?' + new URLSearchParams({ ref: account.subject })} origin={siteOrigin()} label="Referral link" />
       </section>}
     </section>

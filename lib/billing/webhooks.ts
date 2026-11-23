@@ -9,12 +9,14 @@ import { readBoundedBody } from '@/lib/server/read-body'
 import { readOffer, type Offer } from './catalog'
 import { findConfiguredOffer, readSubscription, stripeClient, type Rail } from './gateways'
 import { readBillingPlan } from './workspace'
+import { redeemStripeInvoice } from './stripe-referrals'
 
 interface Event {
   key: string
   type: string
   body: unknown
   subscription: string | null
+  invoice?: string
 }
 
 const stripeCheckoutEvents = new Set([
@@ -41,6 +43,7 @@ function stripeEvent(payload: Buffer, signature: string, secret: string): Event 
 
 function stripePointer(body: Stripe.Event): Event {
   let subscription = null
+  let renewalInvoice: string | undefined
   if (stripeCheckoutEvents.has(body.type)) {
     subscription = reference((body.data.object as Stripe.Checkout.Session).subscription)
   } else if (stripeSubscriptionEvents.has(body.type)) {
@@ -48,8 +51,9 @@ function stripePointer(body: Stripe.Event): Event {
   } else if (stripeInvoiceEvents.has(body.type)) {
     const invoice = body.data.object as Stripe.Invoice
     subscription = reference(invoice.parent?.subscription_details?.subscription)
+    if (body.type === 'invoice.paid') renewalInvoice = invoice.id
   }
-  return { key: 'stripe:' + body.id, type: body.type, body, subscription }
+  return { key: 'stripe:' + body.id, type: body.type, body, subscription, invoice: renewalInvoice }
 }
 
 function razorpayEvent(payload: Buffer, signature: string, secret: string): Event {
@@ -114,6 +118,15 @@ async function applyRecordedEvent(admin: SupabaseClient, rail: Rail, event: Even
     return 'ignored'
   }
   return applyWithFreshReadback(admin, rail, event.subscription, event.key)
+}
+
+async function handleRecordedEvent(admin: SupabaseClient, rail: Rail, event: Event) {
+  const result = await applyRecordedEvent(admin, rail, event)
+  if (rail === 'stripe' && event.invoice && event.subscription) {
+    const redemption = await redeemStripeInvoice(admin, event.invoice, event.subscription)
+    if (redemption === 'applied') return redemption
+  }
+  return result
 }
 
 async function applyProviderState(
@@ -213,7 +226,7 @@ export async function retryBillingWebhook(admin: SupabaseClient, id: string) {
   if (data.gateway === 'stripe' && data.event_id.startsWith('stripe:')) {
     const event = stripePointer(data.payload as Stripe.Event)
     if (event.key !== data.event_id) throw new Error('Stored Stripe webhook ID mismatch')
-    return applyRecordedEvent(admin, 'stripe', event)
+    return handleRecordedEvent(admin, 'stripe', event)
   }
   if (data.gateway === 'razorpay' && data.event_id.startsWith('razorpay:')) {
     return applyRecordedEvent(admin, 'razorpay', razorpayPointer(data.payload, data.event_id))
@@ -241,7 +254,7 @@ export async function receiveBillingWebhook(request: Request, rail: Rail) {
 
   try {
     await recordEvent(admin, rail, event)
-    await applyRecordedEvent(admin, rail, event)
+    await handleRecordedEvent(admin, rail, event)
     return Response.json({ received: true }, { headers })
   } catch {
     return Response.json({ error: 'billing_event_pending' }, { status: 503, headers })

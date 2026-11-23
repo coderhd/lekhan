@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { findProviderCheckout, resumeProviderCheckout } from './gateways'
 import { reconcileProviderSubscription, retryBillingWebhook } from './webhooks'
 import { checkoutFields, ownerWorkspace, readBillingPlan, type billingAccount, type PendingCheckout } from './workspace'
+import { reconcileStripeRenewal, recoverStripeReferral } from './stripe-referrals'
 
 async function reconcileCheckout(admin: SupabaseClient, checkout: PendingCheckout) {
   const ref = checkout.provider_ref ?? await findProviderCheckout(checkout.rail, checkout)
@@ -38,10 +39,11 @@ export async function refreshWorkspaceCheckout(context: Awaited<ReturnType<typeo
 }
 
 const batchSizes = { webhook: 10, checkout: 12, subscription: 40 } as const
-type WorkKind = keyof typeof batchSizes
+type WorkKind = keyof typeof batchSizes | 'referral'
 
 async function processWork(admin: SupabaseClient, kind: WorkKind, id: string) {
   if (kind === 'webhook') return retryBillingWebhook(admin, id)
+  if (kind === 'referral') return recoverStripeReferral(admin, id)
   const nextCheck = new Date(Date.now() + 18 * 3600_000).toISOString()
   if (kind === 'checkout') {
     const { data: checkout, error } = await admin.from('rebuild_billing_checkouts').select(checkoutFields)
@@ -59,17 +61,22 @@ async function processWork(admin: SupabaseClient, kind: WorkKind, id: string) {
   if (!plan?.gateway_subscription_id || plan.gateway === 'none' || plan.status === 'canceled') return 'unchanged'
   const result = await reconcileProviderSubscription(admin, plan.gateway, plan.gateway_subscription_id)
   if (result === 'ignored') throw new Error('Provider could not confirm the linked subscription')
+  const credit = plan.gateway === 'stripe' && plan.credited_months > 0
+    ? await reconcileStripeRenewal(admin, id, plan.gateway_subscription_id) : null
   const { error } = await admin.from('workspace_plans').update({
     rebuild_poll_after: nextCheck, last_checked_at: new Date().toISOString(),
   }).eq('workspace_id', id).eq('gateway_subscription_id', plan.gateway_subscription_id)
   if (error) throw new Error('Could not schedule the next subscription check')
-  return result
+  return credit === 'applied' ? credit : result
 }
 
 export async function reconcileBilling(admin: SupabaseClient) {
   const work: { kind: WorkKind; id: string }[] = []
   const summary = { checked: 0, updated: 0, pending: 0, unlocated: 0, failures: 0, deferred: 0 }
   const deadline = Date.now() + 200_000
+  const recovery = await admin.rpc('rebuild_claim_referral_recovery', { batch_size: 10 })
+  if (recovery.error || !Array.isArray(recovery.data)) summary.failures++
+  else work.push(...recovery.data.map((id: string) => ({ kind: 'referral' as const, id })))
 
   for (const kind of ['webhook', 'checkout', 'subscription'] as const) {
     const { data, error } = await admin.rpc('rebuild_claim_billing_work', { kind, batch_size: batchSizes[kind] })

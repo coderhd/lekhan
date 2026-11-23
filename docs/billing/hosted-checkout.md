@@ -4,7 +4,7 @@ Billing is available in the cloud workspace for signed-in owners. The same works
 
 ## Staging setup
 
-1. Verify that the workspace plan, gateway event, referral ledger, and founding roster migrations are applied first. Apply the rebuild checkout, reconciliation, plan-change, and referral grants migrations in order, alongside the rebuilt billing routes. The referral grants also require the rebuild waitlist schema.
+1. Verify that the workspace plan, gateway event, referral ledger, and founding roster migrations are applied first. Apply the rebuild checkout, reconciliation, plan-change, referral grants, and Stripe referral redemption migrations in order, alongside the rebuilt billing routes. The referral grants also require the rebuild waitlist schema.
 2. Configure the application origin with `LEKHAN_PUBLIC_URL`. Use test payment credentials on staging. The `.env.example` entries bind each tier, cycle, currency, and founding eligibility to a provider price. A checkout checks the live price object against the catalog before creating a session.
 3. Stripe uses USD subscription prices. Configure Team as a volume price with 2–10, 11–25, and 26 or more seats. Each band applies to all seats. Set separate portal configuration IDs for founding and standard workspaces. Each configuration can expose only its cohort’s prices and can adjust seat counts only for Team. Set cancellation at period end. [Stripe tiered pricing](https://docs.stripe.com/subscriptions/pricing-models/tiered-pricing) · [Stripe portal configurations](https://docs.stripe.com/api/customer_portal/configurations/object)
 4. Razorpay uses INR subscription plans for Plus and Pro. Configure monthly and annual plans and test hosted subscription links with the supported payment methods. [Razorpay subscription API](https://razorpay.com/docs/api/payments/subscriptions/create-subscription)
@@ -21,7 +21,7 @@ Billing is available in the cloud workspace for signed-in owners. The same works
 
 Vercel schedules `/api/cron/billing-reconcile` daily at 04:30 UTC. Set `CRON_SECRET` in the same app environment and send it as a Bearer token for a manual staging run. The job retries authenticated webhooks saved before a failure, checks linked subscriptions, and looks for provider checkouts that lost their response. Owners can also select **Check payment status** while a checkout is pending. [Vercel cron scheduling](https://vercel.com/docs/cron-jobs/manage-cron-jobs)
 
-Each run claims up to 10 webhooks, 12 pending checkouts, and 40 linked subscriptions. A short lease releases unfinished work after 15 minutes. Inspect the job counts and run another staging sweep when testing a backlog. A response with failures, unresolved reservations, or deferred work returns HTTP 503.
+Each run claims up to 10 unfinished Stripe redemptions, 10 webhooks, 12 pending checkouts, and 40 linked subscriptions. A short lease releases unfinished work after 15 minutes. Inspect the job counts and run another staging sweep when testing a backlog. A response with failures, unresolved reservations, or deferred work returns HTTP 503.
 
 To rehearse a missed webhook, finish a test checkout with webhook delivery disabled, then run the reconciliation endpoint. Check that the workspace moves to the paid plan and that another run leaves the paid period unchanged. Repeat with a provider-confirmed failed payment and a renewal. For a lost checkout response, remove the reference only from a disposable checkout fixture and verify that reconciliation matches its provider metadata to the reserved workspace.
 
@@ -37,4 +37,8 @@ The referral link in workspace billing carries the referrer’s account code thr
 
 Founding eligibility comes from existing grants and the first 500 waitlist places with verified attribution. Review unmatched roster rows before closing the founding cohort. For each approved row, an operator calls `rebuild_record_reviewed_founder` with the verified account ID and roster row ID. The function checks a unique verified email match and an unlocked workspace. Review evidence belongs in the cohort QA record. [Accepted founding roster decision](https://github.com/coderhd/lekhan/blob/main/docs/adr/0005-founding-roster-predicate-boundaries.md)
 
-Stripe balance redemption, ownership transfer, and purchase analytics still need rebuild integration.
+On a verified paid Stripe renewal, the eligible banked months become a customer invoice balance adjustment. An annual subscription credits at the monthly value of its cohort and current tier. Stripe applies the balance to later invoices. The rebuild settles the banked months when it verifies the posting, and the billing period still comes from Stripe. Razorpay months stay banked under the H0 pricing decision. [Stripe customer invoice balance](https://docs.stripe.com/billing/customer/balance)
+
+If a worker loses the response, recovery looks for the original provider transaction and uses the same reservation and idempotency key inside its retry window. After that window, an unverified posting requires review. An unstarted reservation releases its banked months when the subscription ends. Any claims left by the legacy billing worker need review before switching redemption to the rebuild. [Stripe idempotency retention](https://docs.stripe.com/api/idempotent_requests)
+
+Workspace ownership transfer and purchase analytics still need rebuild integration.
