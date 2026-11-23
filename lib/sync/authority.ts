@@ -1,17 +1,19 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { collaboratorCapacity, workspaceEntitlementOrFree } from '../billing/entitlements.ts'
 import { pageAccess } from '../cloud/graph.ts'
+import type { CloudImagePolicy } from '../cloud/image-policy.ts'
 import type { SyncTicket } from './ticket'
 
 export type RelayAccess = 'read' | 'write' | 'limit' | null
 
-export async function relayedPageAccess(
+export async function relayedPageAuthority(
   client: SupabaseClient, ticket: Omit<SyncTicket, 'exp'>, admission: boolean,
-): Promise<RelayAccess> {
+): Promise<{ access: RelayAccess; imagePolicy: CloudImagePolicy }> {
   const page = await pageAccess(client, ticket.pageId, ticket.subject)
-  if (!page?.privateAccess) return null
+  if (!page?.privateAccess) return { access: null, imagePolicy: 'free' }
 
   const plan = await workspaceEntitlementOrFree(page.page.workspace_id, client)
+  const imagePolicy = plan && plan.tier !== 'free' ? 'paid' : 'free'
   let role = page.role
 
   if (admission && role !== 'owner') {
@@ -21,9 +23,14 @@ export async function relayedPageAccess(
     if (error || !['owner', 'editor', 'viewer', 'denied', 'limit'].includes(data)) {
       throw new Error('Could not verify collaborator capacity.', { cause: error })
     }
-    if (data === 'limit') return 'limit'
-    if (data === 'denied') return null
+    if (data === 'limit') return { access: 'limit', imagePolicy }
+    if (data === 'denied') return { access: null, imagePolicy }
     role = data
   }
-  return role === 'viewer' || ticket.role === 'viewer' || plan?.relayReadOnly ? 'read' : 'write'
+  const access = role === 'viewer' || ticket.role === 'viewer' || plan?.relayReadOnly ? 'read' : 'write'
+  return { access, imagePolicy }
+}
+
+export async function relayedPageAccess(client: SupabaseClient, ticket: Omit<SyncTicket, 'exp'>, admission: boolean) {
+  return (await relayedPageAuthority(client, ticket, admission)).access
 }

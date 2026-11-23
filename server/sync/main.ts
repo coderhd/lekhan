@@ -1,6 +1,6 @@
 import { siteOrigin } from '../../lib/auth/config.ts'
 import { createServerAdmin } from '../../lib/auth/admin.ts'
-import { relayedPageAccess } from '../../lib/sync/authority.ts'
+import { relayedPageAccess, relayedPageAuthority } from '../../lib/sync/authority.ts'
 import { getTicketSecret } from '../../lib/sync/ticket.ts'
 import { createSyncHub } from './hub.ts'
 import { snapshotCipher } from './snapshot.ts'
@@ -27,6 +27,10 @@ const hub = createSyncHub({
   wal: encryptedWal(walDirectory, cipher),
   ...cloudSnapshots(client, cipher),
   authorize: (ticket, admission) => relayedPageAccess(client, ticket, admission),
+  imagePolicy: async ticket => {
+    const { access, imagePolicy } = await relayedPageAuthority(client, ticket, false)
+    return access === 'write' ? imagePolicy : null
+  },
   onFault: operation => console.error('[sync] ' + operation + ' failed'),
 })
 

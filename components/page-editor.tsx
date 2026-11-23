@@ -7,11 +7,13 @@ import { FileText, Link2 } from 'lucide-react'
 import { useTranslations } from '@/lib/i18n/client'
 import { trackWritingEdit } from '@/lib/analytics'
 import type { CloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
+import type { CloudImagePolicy } from '@/lib/cloud/image-policy'
 import type { PageChoice } from '@/lib/types'
 import { blockCommands } from './editor/block-commands'
 import { CommandMenu, type CommandItem } from './editor/command-menu'
 import { type CommandMatch, findCommand, validWikiLink } from './editor/editor-commands'
 import { FormatToolbar } from './editor/format-toolbar'
+import CloudImageControl from './editor/cloud-image-control'
 import { requiresMarkdownSource } from './editor/source-mode'
 import { collaborativeWritingExtensions, writingExtensions } from './editor/writing-extensions'
 import './editor/editor.css'
@@ -25,6 +27,7 @@ interface PageEditorProps {
   editable?: boolean
   focusOnMount?: boolean
   collaboration?: CloudCollaboration
+  imagePolicy?: CloudImagePolicy
   onSchemaError?: () => void
   showModePicker?: boolean
 }
@@ -181,6 +184,7 @@ function PageEditorSession({
   focusOnMount = false,
   modePicker,
   collaboration,
+  imagePolicy,
   onSchemaError,
 }: PageEditorProps & { modePicker: ReactNode }) {
   const editorText = useTranslations('editor-chrome')
@@ -432,6 +436,10 @@ function PageEditorSession({
           menuId={menuId}
         >
           {modePicker}
+          {imagePolicy && <CloudImageControl policy={imagePolicy} compact onInsert={(src, alt) => {
+            if (editor.isEditable && !editor.isDestroyed) editor.chain().focus()
+              .insertContent({ type: 'image', attrs: { src, alt } }).run()
+          }} />}
         </FormatToolbar>
       )}
       {(!editor || !editable) && <div className="writer-toolbar">{modePicker}</div>}

@@ -9,7 +9,7 @@ import { WebSocket } from 'ws'
 import { WebsocketProvider } from 'y-websocket'
 import { createClient } from '@supabase/supabase-js'
 import { issueSyncTicket, verifySyncTicket } from '../lib/sync/ticket'
-import { syncProtocol } from '../lib/sync/wire'
+import { imageLimitCloseCode, syncProtocol } from '../lib/sync/wire'
 import { createSyncHub } from '../server/sync/hub'
 import { snapshotCipher } from '../server/sync/snapshot'
 import { encryptedWal } from '../server/sync/wal'
@@ -185,6 +185,77 @@ async function listen(hub: ReturnType<typeof createSyncHub>) {
 }
 
 describe('collaboration relay', () => {
+  it('rejects new over-limit images before publication and keeps the room available', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'lekhan-sync-images-'))
+    cleanup.push(() => rm(dir, { force: true, recursive: true }))
+    const legacy = 'data:image/png;base64,AAAA'
+    const webp = 'data:image/webp;base64,UklGRjQAAABXRUJQVlA4ICgAAACQAQCdASoBAAEAAUAmJZACdLoAA5gA/vQYt8VvqBnIP+Aunui8QAAA'
+    function image(source: string) {
+      const node = new Y.XmlElement('image')
+      node.setAttribute('src', source)
+      return node
+    }
+    const seed = new Y.Doc()
+    const paragraph = new Y.XmlElement('paragraph')
+    paragraph.push([image(legacy)])
+    seed.getXmlFragment('default').push([paragraph])
+    let durable = Y.encodeStateAsUpdate(seed)
+    seed.destroy()
+    const wal = encryptedWal(dir, snapshotCipher(secret))
+    const append = vi.spyOn(wal, 'append')
+    const policy = vi.fn(async () => 'free' as const)
+    const hub = createSyncHub({
+      origin, secret, wal, load: async () => durable,
+      persist: async (_id, doc) => { durable = Y.encodeStateAsUpdate(doc) },
+      authorize: async ticket => ticket.subject === owner ? 'write' : 'read',
+      imagePolicy: policy,
+    })
+    cleanup.push(() => hub.close())
+    const url = await listen(hub)
+    const reader = await peer(url, viewer, 'viewer')
+    const doc = new Y.Doc()
+    const writer = new WebsocketProvider(url, pageId, doc, {
+      protocols: [syncProtocol, issueSyncTicket(secret, { pageId, subject: owner, role: 'editor' })],
+      WebSocketPolyfill: BrowserSocket as unknown as typeof WebSocket & typeof globalThis.WebSocket,
+      disableBc: true,
+      shouldReconnect: () => false,
+    })
+    cleanup.push(() => { writer.destroy(); doc.destroy() })
+    await vi.waitFor(() => expect(writer.synced).toBe(true))
+    const ownParagraph = () => doc.getXmlFragment('default').get(0) as Y.XmlElement
+    const sharedParagraph = () => reader.doc.getXmlFragment('default').get(0) as Y.XmlElement
+    ;(ownParagraph().get(0) as Y.XmlElement).setAttribute('alt', 'Existing image caption')
+    await vi.waitFor(() => expect(sharedParagraph().get(0).toString()).toContain('Existing image caption'))
+    expect(policy).not.toHaveBeenCalled()
+
+    ownParagraph().push([image(webp)])
+    await vi.waitFor(() => expect(sharedParagraph().length).toBe(2))
+    expect(policy).toHaveBeenCalledOnce()
+    const count = append.mock.calls.length
+    const rejection = new Promise<number | undefined>(resolve => writer.once('connection-close', event => resolve(event?.code)))
+    ownParagraph().push([image(legacy)])
+    expect(await rejection).toBe(imageLimitCloseCode)
+    expect(append).toHaveBeenCalledTimes(count)
+    expect(reader.wsconnected).toBe(true)
+    expect(sharedParagraph().length).toBe(2)
+
+    ownParagraph().delete(2, 1)
+    doc.getText('source').insert(0, 'Writing after recovery')
+    writer.connect()
+    await vi.waitFor(() => expect(reader.doc.getText('source').toString()).toBe('Writing after recovery'))
+    expect(sharedParagraph().length).toBe(2)
+
+    const source = doc.getText('source')
+    const partial = '\n\n![Split image](data:ima'
+    source.insert(source.length, partial)
+    await vi.waitFor(() => expect(reader.doc.getText('source').toString()).toContain('data:ima'))
+    const splitRejection = new Promise<number | undefined>(resolve => writer.once('connection-close', event => resolve(event?.code)))
+    source.insert(source.length, 'ge/png;base64,AAAA)')
+    expect(await splitRejection).toBe(imageLimitCloseCode)
+    expect(reader.doc.getText('source').toString()).toBe('Writing after recovery' + partial)
+    expect(reader.wsconnected).toBe(true)
+  })
+
   it('returns an upgrade reason when a verified collaborator cannot be admitted', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'lekhan-sync-capacity-'))
     cleanup.push(() => rm(dir, { force: true, recursive: true }))

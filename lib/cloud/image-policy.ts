@@ -1,4 +1,4 @@
-import { escaped, proseRanges } from '../markdown-references'
+import { escaped, proseRanges } from '../markdown-references.ts'
 
 export type CloudImagePolicy = 'free' | 'paid'
 export const FREE_IMAGE_BYTES = 500_000

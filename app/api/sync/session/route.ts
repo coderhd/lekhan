@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server'
 import { accountContext } from '@/lib/auth/server'
 import { createServerAdmin } from '@/lib/auth/admin'
 import { pageAccess, uuidPattern } from '@/lib/cloud/graph'
-import { relayedPageAccess } from '@/lib/sync/authority'
+import { relayedPageAuthority } from '@/lib/sync/authority'
 import { syncUrl } from '@/lib/sync/config'
 import { getTicketSecret, issueSyncTicket } from '@/lib/sync/ticket'
 
@@ -21,12 +21,12 @@ export async function GET(request: NextRequest) {
   try {
     const access = await pageAccess(account.client, pageId, account.subject)
     if (!access?.privateAccess) return NextResponse.json({ error: 'page_not_found' }, { status: 404, headers })
-    const relay = await relayedPageAccess(admin, { pageId, subject: account.subject, role: access.role }, true)
+    const { access: relay, imagePolicy } = await relayedPageAuthority(admin, { pageId, subject: account.subject, role: access.role }, true)
     if (relay === 'limit') return NextResponse.json({ error: 'collaborator_limit' }, { status: 403, headers })
     if (!relay) return NextResponse.json({ error: 'sync_access_denied' }, { status: 403, headers })
     const role = relay === 'read' ? 'viewer' : access.role
     const ticket = issueSyncTicket(secret, { pageId, subject: account.subject, role })
-    return NextResponse.json({ ticket, endpoint, role, writable: relay === 'write',
+    return NextResponse.json({ ticket, endpoint, role, imagePolicy, writable: relay === 'write',
       planRestricted: relay === 'read' && access.role !== 'viewer' }, { headers })
   } catch {
     return NextResponse.json({ error: 'sync_unavailable' }, { status: 503, headers })

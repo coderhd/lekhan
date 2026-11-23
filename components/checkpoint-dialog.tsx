@@ -34,6 +34,9 @@ async function createCheckpoint(pageId: string, name: string, snapshot: Uint8Arr
     method: 'POST', headers: { 'Content-Type': 'application/octet-stream' },
     body: new Uint8Array(snapshot), signal,
   })
+  if (reply.status === 413 && (await reply.json().catch(() => null))?.error === 'checkpoint_image_limit') {
+    throw new Error('A new image exceeds the workspace’s cloud limits. Replace it before saving a checkpoint.')
+  }
   if (!reply.ok) throw new Error('Could not save the checkpoint.')
   const { checkpoint }: { checkpoint: Checkpoint } = await reply.json()
   return checkpoint

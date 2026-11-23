@@ -5,10 +5,13 @@ import { createServerAdmin } from '@/lib/auth/admin'
 import { accountContext } from '@/lib/auth/server'
 import { workspaceEntitlementOrFree } from '@/lib/billing/entitlements'
 import { checkpointMaxBytes, checkpointName, type Checkpoint } from '@/lib/cloud/checkpoints'
+import { cloudImageAllowed } from '@/lib/cloud/image-policy'
 import { pageAccess, uuidPattern } from '@/lib/cloud/graph'
 import { getExpirationCutoffDate, getPlanLimits } from '@/lib/tier-limits'
 import { readBoundedBody } from '@/lib/server/read-body'
 import { configuredSnapshotCipher } from '@/server/sync/snapshot'
+import { addedDocumentImages, documentImages, imageRoots } from '@/server/sync/document-images'
+import { cloudSnapshots } from '@/server/sync/supabase'
 
 const headers = { 'Cache-Control': 'private, no-store' }
 const fields = 'id,version_name,created_at'
@@ -29,7 +32,8 @@ async function checkpointAccess(request: NextRequest) {
   const plan = await workspaceEntitlementOrFree(access.page.workspace_id, admin)
   const cutoff = getExpirationCutoffDate(plan?.tier).toISOString()
   const retentionDays = getPlanLimits(plan?.tier, plan?.seats).historyRetentionDays
-  return { account, admin, access, cutoff, pageId, retentionDays, writable: access.role !== 'viewer' && !plan?.relayReadOnly }
+  const imagePolicy = plan && plan.tier !== 'free' ? 'paid' as const : 'free' as const
+  return { account, admin, access, cutoff, pageId, imagePolicy, retentionDays, writable: access.role !== 'viewer' && !plan?.relayReadOnly }
 }
 
 function cipher() {
@@ -79,23 +83,42 @@ export async function POST(request: NextRequest) {
     const context = await checkpointAccess(request)
     if (context instanceof Response) return context
     if (!context.writable) return failure(403, 'read_only')
-    const { account, admin, pageId } = context
+    const { account, admin, pageId, imagePolicy } = context
     const name = checkpointName(request.nextUrl.searchParams.get('name'))
     if (!name || request.headers.get('content-type') !== 'application/octet-stream') return failure(400, 'invalid_checkpoint')
     const snapshot = await readBoundedBody(request, checkpointMaxBytes)
     if (!snapshot) return failure(413, 'checkpoint_too_large')
+    const encryption = cipher()
     const doc = new Y.Doc()
     try {
-      Y.applyUpdate(doc, snapshot)
-    } catch {
-      return failure(400, 'invalid_checkpoint')
+      try {
+        Y.applyUpdate(doc, snapshot)
+        if (doc.store.pendingStructs || doc.store.pendingDs) return failure(400, 'invalid_checkpoint')
+      } catch {
+        return failure(400, 'invalid_checkpoint')
+      }
+      const submitted = documentImages(imageRoots(doc))
+      const empty = { source: new Map<string, number>(), rich: new Map<string, number>() }
+      const disallowed = (source: string) => !cloudImageAllowed(source, imagePolicy)
+      if ([...addedDocumentImages(empty, submitted)].some(disallowed)) {
+        const current = new Y.Doc()
+        try {
+          const saved = await cloudSnapshots(admin, encryption).load(pageId)
+          if (saved) Y.applyUpdate(current, saved)
+          if ([...addedDocumentImages(documentImages(imageRoots(current)), submitted)].some(disallowed)) {
+            return failure(413, 'checkpoint_image_limit')
+          }
+        } finally {
+          current.destroy()
+        }
+      }
     } finally {
       doc.destroy()
     }
 
     const id = randomUUID()
     const path = objectPath(pageId, id)
-    const encrypted = cipher().seal(snapshot, 'checkpoint:' + pageId + ':' + id)
+    const encrypted = encryption.seal(snapshot, 'checkpoint:' + pageId + ':' + id)
     const bucket = admin.storage.from('documents')
     const { error: uploadError } = await bucket.upload(path, encrypted, { contentType: 'application/octet-stream', upsert: false })
     if (uploadError) throw uploadError

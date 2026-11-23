@@ -1,4 +1,5 @@
-import { cloudImageAllowed, FREE_IMAGE_BYTES, FREE_IMAGE_EDGE, inlineCloudImages, type CloudImagePolicy } from './image-policy'
+import { cloudImageAllowed, FREE_IMAGE_BYTES, FREE_IMAGE_EDGE, inlineCloudImages, PAID_IMAGE_BYTES, type CloudImagePolicy } from './image-policy'
+import { isEmbeddedRaster } from '../markdown'
 import type { CloudImportBatch } from './import-plan'
 
 export interface CloudImportImageContext {
@@ -45,6 +46,15 @@ async function resizeForCloud(source: string) {
     canvas.height = 0
     image.removeAttribute('src')
   }
+}
+
+export async function prepareCloudImageFile(file: File, policy: CloudImagePolicy) {
+  if (policy === 'paid' && file.size > PAID_IMAGE_BYTES) throw new Error('Cloud images can be up to 20 MB.')
+  const source = await dataUrl(file)
+  if (!isEmbeddedRaster(source)) throw new Error('Choose a supported raster image.')
+  if (cloudImageAllowed(source, policy)) return source
+  if (policy === 'paid') throw new Error('This image could not be read.')
+  return resizeForCloud(source)
 }
 
 export async function prepareCloudImportImages(batches: CloudImportBatch[], settings: CloudImportImageContext) {

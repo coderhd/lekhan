@@ -9,6 +9,9 @@ import * as sync from 'y-protocols/sync'
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from 'y-protocols/awareness'
 import { syncProtocol, verifySyncTicket, type SyncTicket } from '../../lib/sync/ticket.ts'
 import type { RelayAccess } from '../../lib/sync/authority.ts'
+import { imageLimitCloseCode } from '../../lib/sync/wire.ts'
+import { cloudImageAllowed, type CloudImagePolicy } from '../../lib/cloud/image-policy.ts'
+import { addedDocumentImages, documentImages, imageRoots } from './document-images.ts'
 import type { encryptedWal } from './wal.ts'
 
 const maxPayload = 10 * 1024 * 1024
@@ -28,6 +31,7 @@ interface HubOptions {
   load: (pageId: string) => Promise<Uint8Array | null>
   persist: (pageId: string, doc: Y.Doc) => Promise<void>
   authorize: (ticket: SyncTicket, admission: boolean) => Promise<RelayAccess>
+  imagePolicy?: (ticket: SyncTicket) => Promise<CloudImagePolicy | null>
   onFault?: (operation: string) => void
 }
 
@@ -69,8 +73,11 @@ function reject(socket: Duplex, status: string, reason?: string) {
 }
 
 class Room {
-  readonly doc = new Y.Doc()
-  readonly cursor = new Awareness(this.doc)
+  private doc = new Y.Doc()
+  private roots = imageRoots(this.doc)
+  private images = documentImages(this.roots)
+  private readonly cursorDoc = new Y.Doc()
+  private readonly cursor = new Awareness(this.cursorDoc)
   readonly peers = new Set<Peer>()
   readonly cursorOwners = new Map<number, Peer>()
   lastUse = Date.now()
@@ -95,13 +102,29 @@ class Room {
   }
 
   async hydrate() {
-    const snapshot = await this.options.load(this.pageId)
-    if (snapshot) Y.applyUpdate(this.doc, snapshot)
-    await this.options.wal.replay(this.pageId, update => {
-      Y.applyUpdate(this.doc, update)
-      this.dirtySince ||= Date.now()
-    })
+    await this.recoverDocument()
     if (this.dirtySince) this.scheduleFlush()
+  }
+
+  private async recoverDocument() {
+    const recovered = new Y.Doc()
+    try {
+      const roots = imageRoots(recovered)
+      const snapshot = await this.options.load(this.pageId)
+      if (snapshot) Y.applyUpdate(recovered, snapshot)
+      await this.options.wal.replay(this.pageId, update => {
+        Y.applyUpdate(recovered, update)
+        this.dirtySince ||= Date.now()
+      })
+      const images = documentImages(roots)
+      this.doc.destroy()
+      this.doc = recovered
+      this.roots = roots
+      this.images = images
+    } catch (error) {
+      recovered.destroy()
+      throw error
+    }
   }
 
   private sequence<T>(task: () => Promise<T>): Promise<T> {
@@ -226,7 +249,11 @@ class Room {
       const decoded = Y.decodeUpdate(update)
       if (!decoded.structs.length && !decoded.ds.clients.size) return
       let accepted: Uint8Array | undefined
-      const capture = (result: Uint8Array) => { accepted = result }
+      let changed: ReadonlySet<unknown> | undefined
+      const capture = (result: Uint8Array, _origin: unknown, _doc: Y.Doc, transaction: Y.Transaction) => {
+        accepted = result
+        changed = new Set(transaction.changedParentTypes.keys())
+      }
       try {
         this.doc.on('update', capture)
         try {
@@ -234,7 +261,33 @@ class Room {
         } finally {
           this.doc.off('update', capture)
         }
-        await this.options.wal.append(this.pageId, update)
+        // Keep incomplete deltas out of both snapshots and the WAL. A fresh
+        // state-vector exchange lets the client send the missing dependencies.
+        if (this.doc.store.pendingStructs || this.doc.store.pendingDs) {
+          await this.recoverDocument()
+          peer.socket.close(4001, 'Resync required')
+          return
+        }
+        if (!accepted) return
+
+        const nextImages = documentImages(this.roots, this.images, changed)
+        if (this.options.imagePolicy) {
+          const additions = [...addedDocumentImages(this.images, nextImages)]
+          if (additions.length) {
+            const policy = await this.options.imagePolicy(peer.ticket).catch(() => undefined)
+            if (!policy || additions.some(source => !cloudImageAllowed(source, policy))) {
+              // The speculative document has never been persisted or exposed
+              // to another peer. Recover it without disconnecting the room.
+              await this.recoverDocument()
+              if (policy === null) peer.socket.close(4003, 'Page access changed')
+              else if (policy === undefined) peer.socket.close(1013, 'Could not check cloud image limits')
+              else peer.socket.close(imageLimitCloseCode, policy)
+              return
+            }
+          }
+        }
+        await this.options.wal.append(this.pageId, accepted)
+        this.images = nextImages
       } catch (failure) {
         // A failed integration or append may have changed the in-memory document.
         // Recover from the durable state before the room serves any further reads.
@@ -259,6 +312,7 @@ class Room {
   destroy() {
     if (this.timer) clearTimeout(this.timer)
     this.cursor.destroy()
+    this.cursorDoc.destroy()
     this.doc.destroy()
   }
 }
