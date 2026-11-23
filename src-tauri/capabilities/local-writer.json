@@ -1,0 +1,6 @@
+{
+  "identifier": "local-writer",
+  "description": "Bundled local writer controls",
+  "windows": ["writer"],
+  "permissions": ["allow-open-cloud-workspace"]
+}

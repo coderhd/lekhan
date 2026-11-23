@@ -1,4 +1,4 @@
-import WorkspaceApp from '@/components/workspace-app'
+import WebWorkspace from '@/components/web-workspace'
 import { authConfig } from '@/lib/auth/config'
 import { accountContext } from '@/lib/auth/server'
 import { resolveOwnerWorkspaceEntitlement } from '@/lib/billing/entitlements'
@@ -13,6 +13,6 @@ export default async function WorkspacePage() {
   const plan = account && mirrorEnabled
     ? await resolveOwnerWorkspaceEntitlement(account.subject, account.client).catch(() => null)
     : null
-  return <WorkspaceApp key={scope} storageScope={scope} cloudEnabled={enabled} signedIn={!!account}
+  return <WebWorkspace key={scope} storageScope={scope} cloudEnabled={enabled} signedIn={!!account}
     mirrorEnabled={mirrorEnabled} automaticMirror={!!plan && plan.tier !== 'free' && !plan.relayReadOnly} />
 }

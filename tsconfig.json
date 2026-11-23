@@ -38,6 +38,8 @@
   ],
   "exclude": [
     "node_modules",
-    "docs-site"
+    "docs-site",
+    "desktop/dist",
+    "src-tauri"
   ]
 }

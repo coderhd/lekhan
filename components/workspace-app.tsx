@@ -3,13 +3,10 @@
 import {
   ArrowDownToLine, ArrowUpFromLine, BookOpen, CalendarDays, Check, ChevronDown,
   ChevronRight, CircleAlert, FileText, FolderClosed, List, LoaderCircle, Menu, MoreHorizontal,
-  Cloud, LogIn, LogOut, PanelRight, Plus, Search, Star, X, Link2, MoveRight, Trash2, Pencil, CornerDownRight, NotebookPen, Sparkles,
+  Cloud, PanelRight, Plus, Search, Star, X, Link2, MoveRight, Trash2, Pencil, CornerDownRight, NotebookPen, Sparkles,
 } from 'lucide-react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { signOut } from '@/app/auth/actions'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChangeEvent, FormEvent } from 'react'
+import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import type { Page } from '@/lib/types'
 import {
   applyVaultImport, createPage, deletePage, getBacklinks, pageChoices, pageHeadings,
@@ -22,12 +19,10 @@ import type { SaveStatus } from '@/lib/use-workspace'
 import { Dialog, SearchDialog } from './workspace-dialogs'
 import { useLocale, useTranslations } from '@/lib/i18n/client'
 import AssistantDialog from './assistant-dialog'
-import LocaleSwitcher from './locale-switcher'
 import PageEditor from './page-editor'
 import { VaultImportDialog } from './vault-import-dialog'
 import type { ImportReport, VaultImportPlan } from '@/lib/vault-import'
 import { track, trackMilestone } from '@/lib/analytics'
-import { UsageAnalyticsControl } from './usage-analytics'
 import { AutomaticMirrorUnavailable, localMirrorPlacement, MirrorRejected, nextAutomaticMirror, prepareLocalMirror, uploadLocalMirror } from '@/lib/cloud/local-mirror'
 
 const statusMessage: Record<SaveStatus, string> = {
@@ -46,12 +41,12 @@ function scrollToHeading(target: HTMLElement) {
   target.scrollIntoView({ block: 'start' })
 }
 
-export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled = false, signedIn = false, mirrorEnabled = false, automaticMirror = false }: {
-  storageScope?: string; cloudEnabled?: boolean; signedIn?: boolean; mirrorEnabled?: boolean; automaticMirror?: boolean
+export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled = false, automaticMirror = false,
+  sidebarControls, openCloudPage }: {
+  storageScope?: string; mirrorEnabled?: boolean; automaticMirror?: boolean
+  sidebarControls?: ReactNode; openCloudPage?: (id: string) => void
 }) {
   const t = useTranslations('app-shell')
-  const router = useRouter()
-  const accountText = useTranslations('auth')
   const editorText = useTranslations('editor-chrome')
   const locale = useLocale()
   const dateLabel = useMemo(() => new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', year: 'numeric' }), [locale])
@@ -465,12 +460,7 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
             setNavigationOpen(false)
             setVaultOpen(true)
           }}><FolderClosed size={15} /> Import vault</button>
-          <LocaleSwitcher />
-          <UsageAnalyticsControl />
-          {cloudEnabled && signedIn && <Link className="nav-action account-link" href="/cloud"><Cloud size={15} /> Cloud workspace</Link>}
-          {cloudEnabled && (signedIn
-            ? <form action={signOut}><button className="nav-action" type="submit"><LogOut size={15} /> {accountText('signout')}</button></form>
-            : <Link className="nav-action account-link" href="/login"><LogIn size={15}/> {accountText('login')}</Link>) }
+          {sidebarControls}
         </div>
       </aside>
 
@@ -582,7 +572,11 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
               </div>}
               {mirror?.state === 'linked' ? <div className="local-mirror-callout">
                 <p>This page now opens in your cloud workspace. You can export the local snapshot from Page actions.</p>
-                <Link className="primary-button" href={'/page/' + mirror.pageId}><Cloud size={16} /> Open synced page</Link>
+                <a className="primary-button" href={'/page/' + mirror.pageId} onClick={event => {
+                  if (!openCloudPage || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+                  event.preventDefault()
+                  openCloudPage(mirror.pageId)
+                }}><Cloud size={16} /> Open synced page</a>
               </div> : <PageEditor
                 markdown={page.markdown}
                 pageId={page.id}
@@ -677,10 +671,10 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
       }} />}
       {vaultOpen && <VaultImportDialog onClose={() => setVaultOpen(false)} onImport={importVault} saveStatus={status} />}
       {searchOpen && <SearchDialog pages={pages} initialQuery={searchQuery} onOpen={open}
-        onOpenCloud={signedIn ? id => {
+        onOpenCloud={openCloudPage ? id => {
           setSearchOpen(false)
           setSearchQuery('')
-          router.push('/page/' + id)
+          openCloudPage(id)
         } : undefined}
         onClose={() => { setSearchOpen(false); setSearchQuery('') }} />}
       {action?.kind === 'move' && actionPage && (
