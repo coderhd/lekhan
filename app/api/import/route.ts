@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createServerAdmin } from '@/lib/auth/admin'
 import { accountContext } from '@/lib/auth/server'
-import { ensureCloudWorkspace } from '@/lib/cloud/graph'
+import { ensureCloudWorkspace, uuidPattern } from '@/lib/cloud/graph'
 import { MAX_IMPORT_BATCH_BYTES } from '@/lib/cloud/import-plan'
-import { validateCloudImport, writeCloudBatch } from '@/lib/cloud/import-server'
+import { allowCloudImportImages, cloudImportImageContext, validateCloudImport, writeCloudBatch } from '@/lib/cloud/import-server'
 import { readBoundedBody } from '@/lib/server/read-body'
 import { recordAnalyticsReceipt } from '@/lib/server/analytics'
 import { configuredSnapshotCipher } from '@/server/sync/snapshot'
@@ -12,6 +12,25 @@ const headers = { 'Cache-Control': 'private, no-store' }
 
 function failure(error: string, status: number) {
   return NextResponse.json({ error }, { status, headers })
+}
+
+export async function GET(request: Request) {
+  const account = await accountContext()
+  if (!account) return failure('sign_in_required', 401)
+  const attempt = new URL(request.url).searchParams.get('attempt')
+  if (!attempt || !uuidPattern.test(attempt)) return failure('invalid_import', 400)
+  const admin = createServerAdmin()
+  if (!admin) return failure('import_unavailable', 503)
+  try {
+    const workspace = await account.client.from('workspaces').select('id')
+      .eq('owner_id', account.subject).maybeSingle<{ id: string }>()
+    if (workspace.error) throw workspace.error
+    return NextResponse.json(
+      await cloudImportImageContext(admin, workspace.data?.id ?? null, account.subject, attempt), { headers },
+    )
+  } catch {
+    return failure('import_unavailable', 503)
+  }
 }
 
 export async function POST(request: Request) {
@@ -30,13 +49,21 @@ export async function POST(request: Request) {
     if (!batch) return failure('invalid_import', 400)
     const { id: workspaceId, created } = await ensureCloudWorkspace(account.client, account.subject)
     if (created) await recordAnalyticsReceipt('workspace')
+    const context = await cloudImportImageContext(admin, workspaceId, account.subject, batch.importId, batch.index)
+    const reserved = context.batches[0]
+    const policy = reserved ? reserved.policy : context.current
+    if (batch.imagePolicy !== undefined && batch.imagePolicy !== policy) return failure('import_image_policy_changed', 409)
+    if (policy && !allowCloudImportImages(batch, policy)) return failure(
+      policy === 'free' ? 'import_free_image_limit' : 'import_paid_image_limit', 413,
+    )
     try {
-      const receipt = await writeCloudBatch(admin, cipher, workspaceId, account.subject, batch)
+      const receipt = await writeCloudBatch(admin, cipher, workspaceId, account.subject, { ...batch, imagePolicy: policy })
       return NextResponse.json(receipt, { headers })
     } catch (error) {
       const message = (error as { message?: unknown }).message
       if (message === 'import_workspace_not_found') return failure('workspace_not_found', 404)
-      if (message === 'import_payload_changed' || message === 'import_parent_missing' || message === 'import_batch_out_of_order') return failure(message, 409)
+      if (message === 'import_payload_changed' || message === 'import_parent_missing' ||
+        message === 'import_batch_out_of_order' || message === 'import_image_policy_changed') return failure(message, 409)
       if (message === 'invalid_import') return failure(message, 400)
       throw error
     }

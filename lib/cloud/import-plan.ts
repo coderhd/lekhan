@@ -1,4 +1,5 @@
 import type { VaultImportPlan } from '../vault-import'
+import type { CloudImagePolicy } from './image-policy'
 import { applyVaultImport, pageChoices } from '../workspace'
 
 export const MAX_IMPORT_BATCH_BYTES = 48 * 1024 * 1024
@@ -19,6 +20,7 @@ export interface CloudImportPage {
 export interface CloudImportBatch {
   importId: string
   index: number
+  imagePolicy?: CloudImagePolicy | null
   pages: CloudImportPage[]
 }
 

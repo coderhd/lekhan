@@ -2,9 +2,12 @@ import { createHash } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import * as Y from 'yjs'
 import { snapshotCipher } from '@/server/sync/snapshot'
+import { workspaceEntitlementOrFree } from '../billing/entitlements'
 import { wikiLinks } from '../markdown-references'
 import { pageTitle, uuidPattern } from './graph'
 import { importPathKey, scanTags, withoutEmbeddedImages } from './graph-index'
+import { cloudImageAllowed, inlineCloudImages, type CloudImagePolicy } from './image-policy'
+import type { CloudImportImageContext } from './prepare-images'
 import { MAX_IMPORT_BATCH_PAGES, MAX_IMPORT_PAGES, type CloudImportBatch, type CloudImportPage, type CloudImportReceipt } from './import-plan'
 
 function record(input: unknown): input is Record<string, unknown> {
@@ -17,6 +20,7 @@ function position(value: unknown): value is number {
 
 export function validateCloudImport(input: unknown): CloudImportBatch | null {
   if (!record(input) || typeof input.importId !== 'string' || !uuidPattern.test(input.importId) || !position(input.index)
+    || !(input.imagePolicy == null || input.imagePolicy === 'free' || input.imagePolicy === 'paid')
     || !Array.isArray(input.pages) || !input.pages.length || input.pages.length > MAX_IMPORT_BATCH_PAGES) return null
   const pages: CloudImportPage[] = []
   for (const item of input.pages) {
@@ -28,7 +32,40 @@ export function validateCloudImport(input: unknown): CloudImportBatch | null {
       || (item.frontmatter !== undefined && (typeof item.frontmatter !== 'string' || item.frontmatter.length > 256_000))) return null
     pages.push(item as unknown as CloudImportPage)
   }
-  return { importId: input.importId.toLowerCase(), index: input.index, pages }
+  return {
+    importId: input.importId.toLowerCase(), index: input.index, pages,
+    ...(input.imagePolicy !== undefined ? { imagePolicy: input.imagePolicy } : {}),
+  }
+}
+
+export async function cloudImportImageContext(
+  admin: SupabaseClient, workspaceId: string | null, actor: string, attempt: string, batchIndex?: number,
+): Promise<CloudImportImageContext> {
+  if (!workspaceId) return { current: 'free', batches: [] }
+  let query = admin.from('import_batches').select('batch_index,image_policy').eq('workspace_id', workspaceId)
+    .eq('owner_id', actor).eq('client_import_id', attempt)
+  if (batchIndex !== undefined) query = query.eq('batch_index', batchIndex)
+  const [plan, receipts] = await Promise.all([
+    workspaceEntitlementOrFree(workspaceId, admin),
+    query.limit(MAX_IMPORT_PAGES).returns<{ batch_index: number; image_policy: CloudImagePolicy | null }[]>(),
+  ])
+  if (receipts.error) throw receipts.error
+  return {
+    current: plan && plan.tier !== 'free' ? 'paid' : 'free',
+    batches: receipts.data.map(row => ({ index: row.batch_index, policy: row.image_policy })),
+  }
+}
+
+export function allowCloudImportImages(batch: CloudImportBatch, policy: CloudImagePolicy) {
+  const verified = new Set<string>()
+  for (const page of batch.pages) {
+    for (const image of inlineCloudImages(page.markdown)) {
+      if (verified.has(image.source)) continue
+      if (!cloudImageAllowed(image.source, policy)) return false
+      verified.add(image.source)
+    }
+  }
+  return true
 }
 
 export function importPageId(workspaceId: string, importId: string, ordinal: number) {
@@ -55,6 +92,7 @@ export async function writeCloudBatch(admin: SupabaseClient, cipher: ReturnType<
   const args = {
     target_workspace: workspaceId, actor: ownerId, attempt: batch.importId, batch_number: batch.index,
     first_page: batch.pages[0].ordinal, digest: createHash('sha256').update(JSON.stringify(batch.pages)).digest('hex'),
+    requested_image_policy: batch.imagePolicy ?? null,
   }
   const claim = await admin.rpc('rebuild_import_batch', args)
   if (claim.error) throw claim.error

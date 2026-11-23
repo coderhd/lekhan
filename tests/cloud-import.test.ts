@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { createClient } from '@supabase/supabase-js'
 import * as Y from 'yjs'
 import { cloudImportPlan } from '../lib/cloud/import-plan'
-import { importPageId, validateCloudImport, writeCloudBatch } from '../lib/cloud/import-server'
+import { allowCloudImportImages, importPageId, validateCloudImport, writeCloudBatch } from '../lib/cloud/import-server'
+import { cloudImageAllowed, FREE_IMAGE_BYTES, inlineCloudImages, PAID_IMAGE_BYTES } from '../lib/cloud/image-policy'
 import { snapshotCipher } from '../server/sync/snapshot'
 
 const attempt = '40000000-0000-4000-8000-000000000001'
@@ -10,6 +11,32 @@ const workspace = '40000000-0000-4000-8000-000000000002'
 const owner = '40000000-0000-4000-8000-000000000003'
 
 describe('cloud vault import', () => {
+  it('verifies WebP dimensions and charges decoded image bytes against the selected cloud cap', () => {
+    const tiny = Buffer.from('UklGRjQAAABXRUJQVlA4ICgAAACQAQCdASoBAAEAAUAmJZACdLoAA5gA/vQYt8VvqBnIP+Aunui8QAAA', 'base64')
+    const source = 'data:image/webp;base64,' + tiny.toString('base64')
+    expect(cloudImageAllowed(source, 'free')).toBe(true)
+    const wider = Buffer.from(tiny)
+    wider.writeUInt16LE(1601, 26)
+    expect(cloudImageAllowed('data:image/webp;base64,' + wider.toString('base64'), 'free')).toBe(false)
+    expect(cloudImageAllowed('data:image/webp;base64,' + Buffer.alloc(FREE_IMAGE_BYTES + 1).toString('base64'), 'free')).toBe(false)
+    const paid = 'data:image/png;base64,' + Buffer.alloc(PAID_IMAGE_BYTES + 1).toString('base64')
+    expect(cloudImageAllowed(paid, 'paid')).toBe(false)
+    expect(cloudImageAllowed(source.replace('/webp', '/png'), 'paid')).toBe(true)
+  })
+
+  it('applies the policy to inline embeds and leaves code examples intact', () => {
+    const image = 'data:image/png;base64,AAAA'
+    const snippet = '![](' + image + ')'
+    const code = ['`' + snippet + '`', '', '```md', snippet, '```'].join('\n')
+    const pages = [{ ordinal: 0, parent: null, title: 'Examples', path: 'Examples', markdown: code }]
+    expect(allowCloudImportImages({ importId: attempt, index: 0, pages }, 'free')).toBe(true)
+    const markdown = code + '\n\n' + snippet
+    const batch = { importId: attempt, index: 0, pages: [{ ...pages[0], markdown }] }
+    expect([...inlineCloudImages(markdown)].map(record => record.source)).toEqual([image])
+    expect(allowCloudImportImages(batch, 'free')).toBe(false)
+    expect(allowCloudImportImages(batch, 'paid')).toBe(true)
+  })
+
   it('makes batches stable across independent reads and preserves hierarchy and frontmatter', () => {
     const plan = {
       fingerprint: 'a'.repeat(64),

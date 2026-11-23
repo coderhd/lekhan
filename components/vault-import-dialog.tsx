@@ -8,6 +8,7 @@ import type { ImportReport, VaultImportPlan } from '@/lib/vault-import'
 import type { SaveStatus } from '@/lib/use-workspace'
 import { pickVaultFolder, readVaultFiles, readVaultZip, type VaultContents } from '@/lib/vault-reader'
 import type { cloudImportPlan, CloudImportReceipt } from '@/lib/cloud/import-plan'
+import type { CloudImportImageContext } from '@/lib/cloud/prepare-images'
 import { consumeAnalyticsReceipts, track } from '@/lib/analytics'
 
 type Destination = { cloud: true; onOpenPage: (id: string) => void }
@@ -20,12 +21,13 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
   const markdown = useRef<HTMLInputElement>(null)
   const busy = useRef(false)
   const [draft, setDraft] = useState<ReturnType<typeof cloudImportPlan> | null>(null)
-  const [reading, setReading] = useState(false)
+  const [reading, setReading] = useState<'vault' | 'cloud' | null>(null)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState<{ saved: number; resumed: number; total: number } | null>(null)
   const [firstPage, setFirstPage] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [report, setReport] = useState<ImportReport | null>(null)
+  const [optimizedImages, setOptimizedImages] = useState(0)
   const source = useRef<'obsidian' | 'markdown'>('obsidian')
 
   useEffect(() => {
@@ -45,6 +47,15 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(batch),
           signal: AbortSignal.timeout(120_000),
         })
+        if (result.status === 413 || result.status === 409) {
+          const detail = await result.json().catch(() => null)
+          if (detail?.error === 'import_free_image_limit') throw new Error('Free cloud imports use WebP images up to 500 KB and 1,600 pixels per side.')
+          if (detail?.error === 'import_paid_image_limit') throw new Error('A cloud image exceeds the 20 MB limit.')
+          if (detail?.error === 'import_image_policy_changed') {
+            setDraft(null)
+            throw new Error('The workspace image limits changed. Choose the original files again to resume.')
+          }
+        }
         if (result.status === 413) throw new Error('The cloud host rejected the size of this batch. Earlier batches are still saved.')
         if (result.status === 400) throw new Error('A note has a title, path, or property that the cloud workspace could not accept.')
         if (result.status === 409) throw new Error('This batch conflicts with a saved import. Select the original files to continue.')
@@ -77,19 +88,30 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
     if (busy.current) return
     busy.current = true
     source.current = format
-    setReading(true)
+    setReading('vault')
     setError('')
     setReport(null)
+    setOptimizedImages(0)
     try {
       const contents = await read()
       if (!contents) return
       const { planVaultImport } = await import('@/lib/vault-import')
       const plan = await planVaultImport(contents)
       if (props.cloud) {
+        setReading('cloud')
         const { cloudImportPlan } = await import('@/lib/cloud/import-plan')
-        const cloudPlan = cloudImportPlan(plan)
+        const baseline = cloudImportPlan(plan)
+        const attempt = baseline.batches[0]?.importId
+        if (!attempt) throw new Error('No pages are ready to import.')
+        const response = await fetch('/api/import?' + new URLSearchParams({ attempt }), { cache: 'no-store' })
+        if (!response.ok) throw new Error('Cloud import could not check the workspace’s image limits.')
+        const settings: CloudImportImageContext = await response.json()
+        const { prepareCloudImportImages } = await import('@/lib/cloud/prepare-images')
+        const { batches, optimized } = await prepareCloudImportImages(baseline.batches, settings)
+        const cloudPlan = { ...baseline, batches }
+        setOptimizedImages(optimized)
         setDraft(cloudPlan)
-        setReading(false)
+        setReading(null)
         await upload(cloudPlan)
         return
       }
@@ -102,7 +124,7 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
       }
     } finally {
       busy.current = false
-      setReading(false)
+      setReading(null)
     }
   }
 
@@ -132,17 +154,19 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
         <input ref={directory} type="file" {...{ webkitdirectory: "" }} multiple hidden aria-label="Vault folder" onChange={selectFolder} />
         {props.cloud && <input ref={markdown} type="file" accept=".md,.markdown,text/markdown" multiple hidden aria-label="Markdown files" onChange={event => selectFolder(event, 'markdown')} />}
         {!report && !draft && <div className="vault-options">
-          <button className="secondary-button" disabled={reading} onClick={() => zip.current?.click()}><Archive size={17} /> Choose ZIP</button>
-          <button className="secondary-button" disabled={reading} onClick={() => {
+          <button className="secondary-button" disabled={!!reading} onClick={() => zip.current?.click()}><Archive size={17} /> Choose ZIP</button>
+          <button className="secondary-button" disabled={!!reading} onClick={() => {
             if (!('showDirectoryPicker' in window) || !window.isSecureContext) {
               directory.current?.click()
             } else {
               void run(pickVaultFolder)
             }
           }}><FolderOpen size={17} /> Choose folder</button>
-          {props.cloud && <button className="secondary-button" disabled={reading} onClick={() => markdown.current?.click()}><FileText size={17} /> Choose Markdown</button>}
+          {props.cloud && <button className="secondary-button" disabled={!!reading} onClick={() => markdown.current?.click()}><FileText size={17} /> Choose Markdown</button>}
         </div>}
-        {reading && <div role="status" className="vault-status"><LoaderCircle size={16} className="spin" /> Reading vault…</div>}
+        {reading && <div role="status" className="vault-status">
+          <LoaderCircle size={16} className="spin" /> {reading === 'cloud' ? 'Preparing cloud import…' : 'Reading vault…'}
+        </div>}
         {progress && <div role="status" className="vault-status">
           {uploading && <LoaderCircle size={16} className="spin" />}
           {progress.saved} of {progress.total} pages saved{progress.resumed ? ` · ${progress.resumed} already imported` : ''}
@@ -162,10 +186,11 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
             ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
           </dl>
           {report.degraded > 0 && <p>Attachments Lekhan couldn’t display were kept as links.</p>}
+          {optimizedImages > 0 && <p>{optimizedImages === 1 ? '1 image was' : `${optimizedImages} images were`} optimized for Free cloud storage.</p>}
           {report.invalidProperties > 0 && <p>Some properties could not be read. Their original YAML is still in the page source.</p>}
         </>}
         <div className="dialog-actions">
-          <button className={saved && !props.cloud ? 'primary-button' : 'secondary-button'} onClick={onClose} disabled={reading || uploading}>
+          <button className={saved && !props.cloud ? 'primary-button' : 'secondary-button'} onClick={onClose} disabled={!!reading || uploading}>
             {report ? props.cloud ? 'Done' : 'Open workspace' : 'Cancel'}
           </button>
           {props.cloud && error && draft && <button className="primary-button" disabled={uploading} onClick={resume}>Resume import</button>}
