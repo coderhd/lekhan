@@ -37,6 +37,7 @@ interface HubOptions {
   authorize: (ticket: SyncTicket, admission: boolean) => Promise<RelayAccess>
   imagePolicy?: (ticket: SyncTicket) => Promise<CloudImagePolicy | null>
   checkpointTransfer?: (request: IncomingMessage, response: ServerResponse) => Promise<void>
+  attachmentTransfer?: (request: IncomingMessage, response: ServerResponse) => Promise<void>
   onFault?: (operation: string) => void
 }
 
@@ -434,10 +435,12 @@ export function createSyncHub(options: HubOptions) {
 
   const server = createServer((req, response) => {
     const healthy = !closing && connections.size + pending < maxSockets && !overloaded()
-    if (req.url === '/checkpoint-transfer' && options.checkpointTransfer) {
+    const transfer = req.url === '/checkpoint-transfer' ? options.checkpointTransfer
+      : req.url?.startsWith('/attachments/') ? options.attachmentTransfer : undefined
+    if (transfer) {
       if (!healthy) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return }
-      void options.checkpointTransfer(req, response).catch(() => {
-        options.onFault?.('checkpoint transfer')
+      void transfer(req, response).catch(() => {
+        options.onFault?.('cloud transfer')
         if (!response.headersSent) response.writeHead(503).end()
         else response.destroy()
       })

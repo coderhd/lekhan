@@ -1,6 +1,7 @@
 import { createServerAdmin } from '@/lib/auth/admin'
 import { authorizedCron } from '@/lib/server/cron'
 import { pruneExpiredCheckpoints } from '@/server/sync/prune-checkpoints'
+import { pruneAttachments } from '@/server/sync/prune-attachments'
 
 export const maxDuration = 300
 
@@ -11,8 +12,8 @@ export async function GET(request: Request) {
   const admin = createServerAdmin()
   if (!admin) return Response.json({ error: 'retention_unavailable' }, { status: 503, headers })
   try {
-    const result = await pruneExpiredCheckpoints(admin)
-    return Response.json(result, { status: result.failures || result.deferred ? 503 : 200, headers })
+    const [result, attachments] = await Promise.all([pruneExpiredCheckpoints(admin), pruneAttachments(admin)])
+    return Response.json({ ...result, attachments }, { status: result.failures || result.deferred || attachments.failures ? 503 : 200, headers })
   } catch {
     return Response.json({ error: 'retention_unavailable' }, { status: 503, headers })
   }

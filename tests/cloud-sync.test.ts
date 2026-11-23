@@ -21,6 +21,8 @@ import { openCheckpointTransfer, sealCheckpointTransfer } from '../server/sync/c
 import { getExpirationCutoffDate } from '../lib/tier-limits'
 import { pruneExpiredCheckpoints } from '../server/sync/prune-checkpoints'
 import { uploadDocumentObject } from '../server/sync/storage-capacity'
+import { attachmentName, attachmentPartBytes, attachmentPaths, PAID_ATTACHMENT_BYTES } from '../lib/cloud/attachments'
+import { pruneAttachments } from '../server/sync/prune-attachments'
 
 const pageId = 'e6a3a67a-bf74-4f17-b013-95eb59b2e937'
 const owner = 'dc885a37-7b5a-4897-8d83-3cca664c0251'
@@ -117,6 +119,45 @@ describe('sync capabilities and storage', () => {
     storageStatus = 403
     await expect(uploadDocumentObject(client, object, payload, false)).rejects.toThrow('Storage refused')
     expect(calls.splice(0)).toEqual(['reserve', 'upload', 'release'])
+  })
+})
+
+describe('cloud attachments', () => {
+  it('uses generated part paths and retains cleanup claims if Storage fails', async () => {
+    expect(attachmentName(' résumé.zip ')).toBe('résumé.zip')
+    expect(attachmentName('../private')).toBeNull()
+    expect(attachmentName('bad\\path')).toBeNull()
+    expect(attachmentName('bad\nheader')).toBeNull()
+    expect(attachmentPaths(pageId, owner, PAID_ATTACHMENT_BYTES)).toHaveLength(12)
+    const expected = attachmentPaths(pageId, owner, attachmentPartBytes + 1)
+    let batch: string
+    let storageOffline = true
+    let completed = false
+    const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url)
+      const body = JSON.parse(String(init?.body))
+      if (url.pathname.endsWith('/rebuild_claim_attachment_cleanup')) {
+        batch = body.batch
+        return Response.json([{ id: owner, page_id: pageId, byte_count: attachmentPartBytes + 1 }])
+      }
+      if (url.pathname.endsWith('/object/documents')) {
+        expect(body.prefixes).toEqual(expected)
+        if (storageOffline) return Response.json({ message: 'Storage offline' }, { status: 503 })
+        return Response.json([])
+      }
+      expect(url.pathname).toContain('/rebuild_complete_attachment_cleanup')
+      expect(body).toEqual({ batch, removed: [owner] })
+      completed = true
+      return new Response(null, { status: 204 })
+    }
+    const client = createClient('https://fixture.example', 'sb_secret_fixture', {
+      auth: { persistSession: false }, global: { fetch: fetcher as typeof fetch },
+    })
+    await expect(pruneAttachments(client)).resolves.toEqual({ removed: 0, failures: 1 })
+    expect(completed).toBe(false)
+    storageOffline = false
+    await expect(pruneAttachments(client)).resolves.toEqual({ removed: 1, failures: 0 })
+    expect(completed).toBe(true)
   })
 })
 

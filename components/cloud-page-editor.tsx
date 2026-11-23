@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { Cloud, CloudOff, Download, History, LoaderCircle, LockKeyhole } from 'lucide-react'
+import { Cloud, CloudOff, Download, History, LoaderCircle, LockKeyhole, Paperclip } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import type { PageChoice } from '@/lib/types'
 import type { CloudPage } from '@/lib/cloud/graph'
@@ -13,6 +13,7 @@ import { trackWritingEdit } from '@/lib/analytics'
 import PageEditor from './page-editor'
 import CheckpointDialog from './checkpoint-dialog'
 import CloudImageControl from './editor/cloud-image-control'
+import CloudAttachments from './cloud-attachments'
 
 function useReplicaSource(document: ReturnType<typeof useCloudCollaboration>['session']) {
   const subscribe = useCallback((changed: () => void) => {
@@ -44,6 +45,7 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
   const [schemaError, setSchemaError] = useState(false)
   const [linkMissing, setLinkMissing] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false)
   const [preview, setPreview] = useState(false)
   const sourceInput = useRef<HTMLTextAreaElement>(null)
   const editable = replica.writable && !schemaError
@@ -114,6 +116,9 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
         {replica.session && <button type="button" className="secondary-button" onClick={() => setHistoryOpen(true)}>
           <History size={15} /> Version history
         </button>}
+        {replica.session && <button type="button" className="secondary-button" onClick={() => setAttachmentsOpen(true)}>
+          <Paperclip size={15} /> Attachments
+        </button>}
         {exportable && <button type="button" className="secondary-button" onClick={() => {
           const raw = replica.session?.document.getMap('lekhan').get('frontmatter')
           downloadPage({
@@ -156,6 +161,7 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
       </details>}
       {replica.session && historyOpen && <CheckpointDialog pageId={page.id} session={replica.session}
         live={replica.status === 'live'} writable={editable} onClose={() => setHistoryOpen(false)} />}
+      {replica.session && attachmentsOpen && <CloudAttachments pageId={page.id} onClose={() => setAttachmentsOpen(false)} />}
     </div>
   )
 }

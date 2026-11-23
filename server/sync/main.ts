@@ -8,6 +8,8 @@ import { cloudSnapshots } from './supabase.ts'
 import { encryptedWal } from './wal.ts'
 import { pruneExpiredCheckpoints } from './prune-checkpoints.ts'
 import { checkpointHttp } from './checkpoint-http.ts'
+import { attachmentHttp } from './attachments-http.ts'
+import { pruneAttachments } from './prune-attachments.ts'
 import { drainWaitlist } from '../../lib/waitlist/brevo.ts'
 
 const client = createServerAdmin()
@@ -27,6 +29,7 @@ const hub = createSyncHub({
   origin,
   wal: encryptedWal(walDirectory, cipher),
   checkpointTransfer: checkpointHttp(client, cipher, origin),
+  attachmentTransfer: attachmentHttp(client, cipher, origin, secret),
   ...cloudSnapshots(client, cipher),
   authorize: (ticket, admission) => relayedPageAccess(client, ticket, admission),
   imagePolicy: async ticket => {
@@ -50,7 +53,10 @@ const prune = () => {
     if (error) console.error('[imports] receipt retention failed')
     else if (data) console.log('[imports] removed receipts=' + data)
   }) : null
-  ongoingPrune = Promise.allSettled([checkpoints, receipts]).finally(() => { ongoingPrune = undefined })
+  const attachments = pruneCheckpoints ? pruneAttachments(client).then(({ removed, failures }) => {
+    if (removed || failures) console.log('[attachments] removed=' + removed + ' failures=' + failures)
+  }).catch(() => { console.error('[attachments] cleanup failed') }) : null
+  ongoingPrune = Promise.allSettled([checkpoints, receipts, attachments]).finally(() => { ongoingPrune = undefined })
 }
 if (pruneCheckpoints || pruneImportReceipts) {
   prune()
