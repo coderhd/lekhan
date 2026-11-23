@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
+import Link from 'next/link'
 import { X } from 'lucide-react'
 import * as Y from 'yjs'
 import { Awareness } from 'y-protocols/awareness'
@@ -16,6 +17,8 @@ interface History {
   checkpoints: Checkpoint[]
   writable: boolean
   olderHistoryLimited: boolean
+  retentionDays?: number
+  canManageHistory?: boolean
 }
 
 interface Preview {
@@ -163,7 +166,10 @@ export default function CheckpointDialog({ pageId, session, live, writable, onCl
     </div>
     {failure && <p className="account-error" role="alert">{failure}</p>}
     {message && <p role="status">{message}</p>}
-    {history?.olderHistoryLimited && !preview && <p>Some older checkpoints are outside this workspace’s history window.</p>}
+    {!!history?.retentionDays && !preview && <p>
+      Cloud checkpoints are kept for {history.retentionDays === 1 ? '1 day' : `${history.retentionDays} days`}.{history.olderHistoryLimited && history.canManageHistory &&
+        <> <Link className="account-link" href="/billing">Compare history plans</Link></>}
+    </p>}
     {mayChange && !preview && <form onSubmit={save} className="cloud-create">
       <label>Checkpoint name <input value={name} onChange={event => setName(event.target.value)} maxLength={200} required /></label>
       <button className="primary-button" disabled={busy}>Save checkpoint</button>

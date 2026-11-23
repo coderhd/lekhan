@@ -37,8 +37,8 @@ const pruneCheckpoints = process.env.LEKHAN_PRUNE_CHECKPOINTS === '1'
 const pruneImportReceipts = process.env.LEKHAN_PRUNE_IMPORT_RECEIPTS === '1'
 const prune = () => {
   if (ongoingPrune) return
-  const checkpoints = pruneCheckpoints ? pruneExpiredCheckpoints(client).then(({ pruned, failures }) => {
-    if (pruned || failures) console.log('[checkpoints] pruned=' + pruned + ' failures=' + failures)
+  const checkpoints = pruneCheckpoints ? pruneExpiredCheckpoints(client).then(({ pruned, failures, deferred }) => {
+    if (pruned || failures || deferred) console.log('[checkpoints] pruned=' + pruned + ' failures=' + failures + ' deferred=' + deferred)
   }).catch(() => { console.error('[checkpoints] retention failed') }) : null
   const receipts = pruneImportReceipts ? client.rpc('cleanup_import_batches', { retain_days: 30 }).then(({ data, error }) => {
     if (error) console.error('[imports] receipt retention failed')

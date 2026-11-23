@@ -1,72 +1,55 @@
+import { randomUUID } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { workspaceEntitlementOrFree } from '../../lib/billing/entitlements.ts'
+import { uuidPattern } from '../../lib/cloud/graph.ts'
 import { getExpirationCutoffDate } from '../../lib/tier-limits.ts'
 
-interface StoredVersion {
-  id: string
-  page_id: string | null
-  document_id: string | null
-  created_at: string
+interface Claim {
+  version_id: string
+  entity_id: string
 }
 
-async function versionWorkspace(client: SupabaseClient, version: StoredVersion) {
-  if (version.page_id) {
-    const { data, error } = await client.from('pages').select('workspace_id').eq('id', version.page_id).maybeSingle()
-    if (error) throw error
-    return data?.workspace_id as string | undefined
-  }
-  if (!version.document_id) return undefined
-  const { data: doc, error: docError } = await client.from('documents').select('owner_id').eq('id', version.document_id).maybeSingle()
-  if (docError) throw docError
-  if (!doc) return undefined
-  const { data: workspace, error } = await client.from('workspaces').select('id').eq('owner_id', doc.owner_id).maybeSingle()
-  if (error) throw error
-  return workspace?.id as string | undefined
+const batchSize = 100
+const maxBatches = 20
+const maxRunMs = 180_000
+
+function retentionClaims(value: unknown): value is Claim[] {
+  return Array.isArray(value) && value.every(row => row && typeof row.version_id === 'string' &&
+    typeof row.entity_id === 'string' && uuidPattern.test(row.version_id) && uuidPattern.test(row.entity_id))
 }
 
 export async function pruneExpiredCheckpoints(client: SupabaseClient, now = new Date()) {
-  const earliestExpiry = getExpirationCutoffDate('free', now).toISOString()
+  const cutoffs = {
+    free_before: getExpirationCutoffDate('free', now).toISOString(),
+    plus_before: getExpirationCutoffDate('plus', now).toISOString(),
+    pro_before: getExpirationCutoffDate('pro', now).toISOString(),
+    team_before: getExpirationCutoffDate('team', now).toISOString(),
+  }
   const storage = client.storage.from('documents')
-  const batchSize = 100
-  let after = ''
+  const deadline = Date.now() + maxRunMs
   let failures = 0
   let pruned = 0
 
-  while (true) {
-    let query = client.from('document_versions').select('id,page_id,document_id,created_at')
-      .lt('created_at', earliestExpiry).order('id').limit(batchSize)
-    if (after) query = query.gt('id', after)
-    const { data: versions, error } = await query.returns<StoredVersion[]>()
-    if (error) throw error
+  for (let index = 0; index < maxBatches && Date.now() < deadline; index++) {
+    const batch = randomUUID()
+    const { data: claims, error } = await client.rpc('rebuild_claim_checkpoint_retention', {
+      batch, batch_size: batchSize, ...cutoffs,
+    })
+    if (error || !retentionClaims(claims)) throw error ?? new Error('Could not claim expired checkpoints.')
+    if (!claims.length) return { pruned, failures, deferred: false }
 
-    const cutoffs = new Map<string, number>()
-    const workspaces = new Map<string, string>()
-    for (const version of versions) {
-      const entity = version.page_id || version.document_id
-      if (!entity) continue
-      try {
-        const key = (version.page_id ? 'page:' : 'document:') + entity
-        const workspace = workspaces.get(key) ?? await versionWorkspace(client, version)
-        if (!workspace) continue
-        workspaces.set(key, workspace)
-        let cutoff = cutoffs.get(workspace)
-        if (cutoff === undefined) {
-          const plan = await workspaceEntitlementOrFree(workspace, client)
-          cutoff = getExpirationCutoffDate(plan?.tier, now).getTime()
-          cutoffs.set(workspace, cutoff)
-        }
-        if (Date.parse(version.created_at) >= cutoff) continue
-
-        const removed = await storage.remove([entity + '/versions/' + version.id + '.bin'])
-        if (removed.error) throw removed.error
-        const row = await client.from('document_versions').delete().eq('id', version.id).lt('created_at', new Date(cutoff).toISOString())
-        if (row.error) throw row.error
-        pruned++
-      } catch {
-        failures++
-      }
+    try {
+      const removed = await storage.remove(claims.map(row => row.entity_id + '/versions/' + row.version_id + '.bin'))
+      if (removed.error) throw removed.error
+      const result = await client.rpc('rebuild_complete_checkpoint_retention', {
+        batch, removed_versions: claims.map(row => row.version_id),
+      })
+      if (result.error || typeof result.data !== 'number') throw new Error('Could not complete checkpoint retention.')
+      pruned += result.data
+    } catch {
+      failures += claims.length
     }
-    if (versions.length < batchSize) return { pruned, failures }
-    after = versions[versions.length - 1].id
+    if (claims.length < batchSize) return { pruned, failures, deferred: false }
   }
+
+  return { pruned, failures, deferred: true }
 }

@@ -6,7 +6,7 @@ import { accountContext } from '@/lib/auth/server'
 import { workspaceEntitlementOrFree } from '@/lib/billing/entitlements'
 import { checkpointMaxBytes, checkpointName, type Checkpoint } from '@/lib/cloud/checkpoints'
 import { pageAccess, uuidPattern } from '@/lib/cloud/graph'
-import { getExpirationCutoffDate } from '@/lib/tier-limits'
+import { getExpirationCutoffDate, getPlanLimits } from '@/lib/tier-limits'
 import { readBoundedBody } from '@/lib/server/read-body'
 import { configuredSnapshotCipher } from '@/server/sync/snapshot'
 
@@ -28,7 +28,8 @@ async function checkpointAccess(request: NextRequest) {
   if (!admin) return failure(503, 'checkpoints_unavailable')
   const plan = await workspaceEntitlementOrFree(access.page.workspace_id, admin)
   const cutoff = getExpirationCutoffDate(plan?.tier).toISOString()
-  return { account, admin, access, cutoff, pageId, writable: access.role !== 'viewer' && !plan?.relayReadOnly }
+  const retentionDays = getPlanLimits(plan?.tier, plan?.seats).historyRetentionDays
+  return { account, admin, access, cutoff, pageId, retentionDays, writable: access.role !== 'viewer' && !plan?.relayReadOnly }
 }
 
 function cipher() {
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
   try {
     const context = await checkpointAccess(request)
     if (context instanceof Response) return context
-    const { account, admin, cutoff, pageId, writable } = context
+    const { access, account, admin, cutoff, pageId, retentionDays, writable } = context
     const version = request.nextUrl.searchParams.get('version')
     const query = account.client.from('document_versions').select(fields).eq('page_id', pageId).gte('created_at', cutoff)
     if (!version) {
@@ -54,7 +55,10 @@ export async function GET(request: NextRequest) {
         account.client.from('document_versions').select('id').eq('page_id', pageId).lt('created_at', cutoff).limit(1),
       ])
       if (history.error) throw history.error
-      return NextResponse.json({ checkpoints: history.data, writable, olderHistoryLimited: !!older.data?.length }, { headers })
+      return NextResponse.json({
+        checkpoints: history.data, writable, retentionDays,
+        olderHistoryLimited: !!older.data?.length, canManageHistory: access.role === 'owner',
+      }, { headers })
     }
     if (!uuidPattern.test(version)) return failure(400, 'invalid_checkpoint')
     const { data: record, error: recordError } = await query.eq('id', version).maybeSingle<Checkpoint>()

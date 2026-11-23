@@ -107,52 +107,50 @@ describe('cloud checkpoints', () => {
     expect(getExpirationCutoffDate('free', clock).toISOString()).toBe('2026-03-08T04:30:00.000Z')
     expect(getExpirationCutoffDate('plus', clock).toISOString()).toBe('2025-12-09T04:30:00.000Z')
     expect(getExpirationCutoffDate('pro', clock).toISOString()).toBe('2025-03-09T04:30:00.000Z')
+    expect(getExpirationCutoffDate('team', clock).toISOString()).toBe('2025-03-09T04:30:00.000Z')
   })
 
   it('removes storage before expired metadata and leaves failed deletions available for retry', async () => {
     const freeId = '1c9b8375-1596-4572-aaa5-605fcfa5c015'
     const legacyId = '331cc0ec-e28f-4f78-851a-7ddb5c5ce508'
-    const plusId = '4f788c16-53d1-43af-ac24-b0eeec69cfd9'
-    const expiredAt = '2026-01-12T00:00:00.000Z'
     const calls: string[] = []
+    const cutoffChecks = {
+      batch_size: 100, free_before: '2026-01-29T04:30:00.000Z', plus_before: '2025-11-01T04:30:00.000Z',
+      pro_before: '2025-01-30T04:30:00.000Z', team_before: '2025-01-30T04:30:00.000Z',
+    }
+    let batch: string
+    let storageUnavailable = true
     const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
       const raw = typeof input === 'string' || input instanceof URL ? input : input.url
       const url = new URL(raw)
-      let data: unknown
-      if (url.pathname.endsWith('/document_versions') && init?.method === 'DELETE') {
-        calls.push('delete:' + url.searchParams.get('id')?.slice(3))
-        return new Response(null, { status: 204 })
+      const body = JSON.parse(String(init?.body))
+      if (url.pathname.endsWith('/rebuild_claim_checkpoint_retention')) {
+        expect(body).toMatchObject({ ...cutoffChecks, batch: expect.any(String) })
+        batch = body.batch
+        return Response.json([{ version_id: freeId, entity_id: pageId }, { version_id: legacyId, entity_id: viewer }])
       }
-      if (url.pathname.endsWith('/document_versions')) data = [
-        { id: freeId, page_id: pageId, created_at: expiredAt },
-        { id: legacyId, document_id: viewer, created_at: expiredAt },
-        { id: plusId, page_id: owner, created_at: expiredAt },
-      ]
-      else if (url.pathname.endsWith('/pages')) data = [{ workspace_id: url.searchParams.get('id')?.slice(3) }]
-      else if (url.pathname.endsWith('/documents') && url.pathname.startsWith('/rest/')) data = [{ owner_id: viewer }]
-      else if (url.pathname.endsWith('/workspaces')) data = [{ id: viewer }]
-      else if (url.pathname.endsWith('/workspace_plans')) {
-        const workspace = url.searchParams.get('workspace_id')?.slice(3)
-        data = [{ workspace_id: workspace, tier: workspace === owner ? 'plus' : 'free' }]
-      } else if (url.pathname.startsWith('/storage/')) {
-        const { prefixes }: { prefixes: string[] } = JSON.parse(String(init?.body))
-        const storagePath = prefixes[0]
-        calls.push('remove:' + storagePath)
-        if (storagePath.endsWith(legacyId + '.bin')) return Response.json({ message: 'Storage unavailable' }, { status: 503 })
-        data = []
-      } else throw new Error('Unexpected fixture path ' + url.pathname)
-      return Response.json(data)
+      if (url.pathname.endsWith('/rebuild_complete_checkpoint_retention')) {
+        expect(body).toEqual({ batch, removed_versions: [freeId, legacyId] })
+        calls.push('delete')
+        return Response.json(2)
+      }
+      if (url.pathname.startsWith('/storage/')) {
+        expect(body.prefixes).toEqual([pageId + '/versions/' + freeId + '.bin', viewer + '/versions/' + legacyId + '.bin'])
+        calls.push('remove')
+        if (storageUnavailable) return Response.json({ message: 'Storage unavailable' }, { status: 503 })
+        return Response.json([])
+      }
+      throw new Error('Unexpected fixture path ' + url.pathname)
     }
     const client = createClient('http://127.0.0.1:3323', 'sb_secret_fixture', {
       global: { fetch: fetcher as typeof fetch }, auth: { persistSession: false, autoRefreshToken: false },
     })
-    const result = await pruneExpiredCheckpoints(client, new Date('2026-01-30T04:30:00.000Z'))
-    expect(result).toEqual({ pruned: 1, failures: 1 })
-    expect(calls).toEqual([
-      'remove:' + pageId + '/versions/' + freeId + '.bin',
-      'delete:' + freeId,
-      'remove:' + viewer + '/versions/' + legacyId + '.bin',
-    ])
+    const prune = () => pruneExpiredCheckpoints(client, new Date('2026-01-30T04:30:00.000Z'))
+    expect(await prune()).toEqual({ pruned: 0, failures: 2, deferred: false })
+    expect(calls).toEqual(['remove'])
+    storageUnavailable = false
+    expect(await prune()).toEqual({ pruned: 2, failures: 0, deferred: false })
+    expect(calls).toEqual(['remove', 'remove', 'delete'])
   })
 })
 

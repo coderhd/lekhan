@@ -1,17 +1,13 @@
-import { createHash, timingSafeEqual } from 'node:crypto'
 import { createServerAdmin } from '@/lib/auth/admin'
 import { reconcileBilling } from '@/lib/billing/reconciliation'
 import { flushBillingMeasurement } from '@/lib/billing/measurement'
+import { authorizedCron } from '@/lib/server/cron'
 
 export const maxDuration = 300
 
 const headers = { 'Cache-Control': 'private, no-store' }
-const hash = (value: string) => createHash('sha256').update(value).digest()
-
 export async function GET(request: Request) {
-  const secret = process.env.CRON_SECRET?.trim()
-  const authorization = request.headers.get('authorization')
-  if (!secret || !authorization || !timingSafeEqual(hash(authorization), hash('Bearer ' + secret))) {
+  if (!authorizedCron(request)) {
     return Response.json({ error: 'unauthorized' }, { status: 401, headers })
   }
 
