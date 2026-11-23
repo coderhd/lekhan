@@ -2,6 +2,11 @@
   margin: 0;
 }
 
+.local-model-remove {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
 .desktop-recovery-notice {
   margin: 0;
   padding-inline-start: 8px;

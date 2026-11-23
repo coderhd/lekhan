@@ -4,15 +4,17 @@ import { ArrowUpRight, Check, LockKeyhole, Plus, Send, Square, Trash2 } from 'lu
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { Page } from '@/lib/types'
-import { detectLocalProviders, streamChat, testProviderConnection, type ChatMessage } from '@/lib/ai/client'
+import { detectLocalProviders, streamChat, testProviderConnection, type ChatMessage, type ChatOptions } from '@/lib/ai/client'
 import { endpointFor, FREE_PRESETS, PROVIDERS, providerDefinition, type ProviderConfig, type ProviderId } from '@/lib/ai/provider-registry'
 import { createProviderVault, unlockProviderVault } from '@/lib/ai/vault'
 import { track } from '@/lib/analytics'
+import { useTranslations } from '@/lib/i18n/client'
 import { Dialog } from './workspace-dialogs'
 
 const defaultVaultKey = 'lekhan:provider-vault:v1'
 const newConnection = (): ProviderConfig => ({ id: crypto.randomUUID(), provider: 'ollama', model: '' })
 type VaultSession = Awaited<ReturnType<typeof createProviderVault>>
+export type LocalAssistantModel = { label: string; send: (options: ChatOptions) => Promise<{ text: string }> }
 
 function readVault(vaultKey: string) {
   try { return localStorage.getItem(vaultKey) } catch { return null }
@@ -30,19 +32,21 @@ async function storeVault(vaultKey: string, previous: string | null, encrypted: 
   else write()
 }
 
-export default function AssistantDialog({ page, storageScope, onInsert, onClose }: {
+export default function AssistantDialog({ page, storageScope, onInsert, onClose, localModel }: {
   page: Page
   storageScope: string
   onInsert: (text: string) => void
   onClose: () => void
+  localModel?: LocalAssistantModel
 }) {
+  const desktopText = useTranslations('desktop')
   const vaultKey = storageScope === 'personal' ? defaultVaultKey : defaultVaultKey + ':' + storageScope
   const [envelope, setEnvelope] = useState(() => readVault(vaultKey))
   const [vault, setVault] = useState<VaultSession | null>(null)
   const [configs, setConfigs] = useState<ProviderConfig[]>([])
   const [active, setActive] = useState('')
   const [passphrase, setPassphrase] = useState('')
-  const [tab, setTab] = useState<'chat' | 'providers'>('providers')
+  const [tab, setTab] = useState<'chat' | 'providers' | 'local'>(localModel ? 'local' : 'providers')
   const [draft, setDraft] = useState(newConnection)
   const [models, setModels] = useState<string[]>([])
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -140,7 +144,8 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose 
 
   function send(event: FormEvent) {
     event.preventDefault()
-    if (!selected || !prompt.trim()) return
+    const sendPrompt = tab === 'local' ? localModel?.send : selected ? (options: ChatOptions) => streamChat(selected, options) : undefined
+    if (!sendPrompt || !prompt.trim()) return
     const question = prompt.trim()
     const outgoing = [...messages, { role: 'user', content: question } as const]
     const pageContext = sharePage ? [{
@@ -149,11 +154,13 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose 
     }] : []
     setReply('')
     void run(async signal => {
-      const result = await streamChat(selected, {
+      const options = {
         messages: [...pageContext, ...outgoing],
         signal,
-        onText: part => setReply(previous => previous + part),
-      })
+        onText: (part: string) => setReply(previous => previous + part),
+      }
+      const result = await sendPrompt(options)
+      signal.throwIfAborted()
       track('ai_message_sent')
       setMessages([...outgoing, { role: 'assistant', content: result.text }])
       setReply('')
@@ -161,11 +168,26 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose 
     })
   }
 
+  function openTab(next: typeof tab) {
+    if (next === tab) return
+    if (next === 'local' || tab === 'local') {
+      setMessages([])
+      setReply('')
+      setSharePage(false)
+    }
+    setTab(next)
+  }
+
   return (
     <Dialog title="Writing assistant" className="assistant-dialog" onClose={onClose}>
       <div className="form-dialog">
         <h2>Writing assistant</h2>
-        {!vault ? (
+        {(vault || localModel) && <div className="assistant-navigation" role="group" aria-label="Assistant view">
+          {localModel && <button className="secondary-button" disabled={busy} aria-pressed={tab === 'local'} onClick={() => openTab('local')}>{desktopText('onThisDevice')}</button>}
+          {vault && <button className="secondary-button" disabled={busy} aria-pressed={tab === 'chat'} onClick={() => openTab('chat')}>Ask</button>}
+          <button className="secondary-button" disabled={busy} aria-pressed={tab === 'providers'} onClick={() => openTab('providers')}>Providers</button>
+        </div>}
+        {!vault && tab !== 'local' ? (
           <form className="assistant-form" onSubmit={openVault}>
             <p>{envelope ? 'Unlock the connections saved on this device.' : 'Create a passphrase to encrypt your provider connections on this device.'}</p>
             <label>Passphrase
@@ -175,10 +197,6 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose 
           </form>
         ) : (
           <>
-            <div className="assistant-navigation" role="group" aria-label="Assistant view">
-              <button className="secondary-button" aria-pressed={tab === 'chat'} onClick={() => setTab('chat')}>Ask</button>
-              <button className="secondary-button" aria-pressed={tab === 'providers'} onClick={() => setTab('providers')}>Providers</button>
-            </div>
             {tab === 'providers' ? (
               <>
                 {configs.length > 0 && <ul className="assistant-connections">
@@ -244,7 +262,7 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose 
               </>
             ) : (
               <form className="assistant-form" onSubmit={send}>
-                <label>Active connection
+                {tab === 'local' && localModel ? <p className="assistant-hint">{desktopText('localModelActive', { model: localModel.label })}</p> : <label>Active connection
                   <select value={active} disabled={busy} onChange={event => {
                     setActive(event.target.value)
                     setMessages([])
@@ -253,23 +271,24 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose 
                     {!configs.length && <option value="">Add a provider first</option>}
                     {configs.map(config => <option key={config.id} value={config.id}>{config.label || PROVIDERS[config.provider].label} · {config.model}</option>)}
                   </select>
-                </label>
+                </label>}
                 {messages.length > 0 && <ol className="assistant-thread" aria-label="Conversation">
                   {messages.map((message, index) => <li key={index} data-role={message.role}>
                     <p>{message.content}</p>
                     {message.role === 'assistant' && <button className="secondary-button" type="button" onClick={() => { onInsert(message.content); onClose() }}>Insert in page</button>}
                   </li>)}
                 </ol>}
+                {tab === 'local' && busy && !reply && <p className="assistant-hint" role="status">{desktopText('localModelPreparing')}</p>}
                 {reply && <p className="assistant-partial" role="status">{reply}</p>}
                 <label>Prompt
                   <textarea value={prompt} maxLength={12_000} onChange={event => setPrompt(event.target.value)} rows={3} placeholder="What would you like help writing?" />
                 </label>
                 <label className="assistant-share"><input type="checkbox" checked={sharePage} onChange={event => setSharePage(event.target.checked)} /> Include this page with my request</label>
-                {selected && <p className="assistant-hint">Requests go directly to {PROVIDERS[selected.provider].label} using this connection.</p>}
+                {tab !== 'local' && selected && <p className="assistant-hint">Requests go directly to {PROVIDERS[selected.provider].label} using this connection.</p>}
                 <div className="assistant-actions">
                   {busy
                     ? <button type="button" className="secondary-button" onClick={() => { request.current?.abort(); setBusy(false) }}><Square size={14} /> Stop</button>
-                    : <button className="primary-button" disabled={!selected || !prompt.trim()}><Send size={15} /> Send</button>}
+                    : <button className="primary-button" disabled={!(tab === 'local' ? localModel : selected) || !prompt.trim()}><Send size={15} /> Send</button>}
                 </div>
               </form>
             )}

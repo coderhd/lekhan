@@ -1,0 +1,6 @@
+{
+  "bundle": {
+    "externalBin": ["binaries/lekhan-llama-server"],
+    "resources": ["binaries/llama-license.txt"]
+  }
+}

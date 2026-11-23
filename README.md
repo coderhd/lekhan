@@ -39,6 +39,18 @@ The vault keeps Yjs updates and compacted snapshots under `.lekhan/yjs`. Lekhan 
 
 The current desktop vault reads up to 128 MiB of Markdown with a 16 MiB limit per file. [The Markdown vault and Yjs storage decision](docs/adr/0003-desktop-markdown-plus-yjs-sidecar.md) and [desktop release scope](https://github.com/coderhd/lekhan/issues/88) describe the storage format and remaining release work.
 
+### Local models
+
+Build the desktop bundle with the pinned llama.cpp sidecar using CMake and Git.
+
+```sh
+npm run desktop:package
+```
+
+The package script defaults to Metal on macOS and CPU on Windows and Linux. Set `LEKHAN_LLAMA_BACKEND` to `cuda` or `vulkan` on a machine with the corresponding build SDK and driver. Build on the target platform. A debug build can also use an installed server via the absolute `LEKHAN_LLAMA_SERVER` path. [Pinned llama.cpp source](https://github.com/ggml-org/llama.cpp/tree/61881b1f7f0b13d9e46d561fc25afcd6bbaec479)
+
+Open **Model Library → Add GGUF model** to copy a model you already have. The writing assistant uses the selected model in **On this device** and keeps the provider vault available in **Providers**. Removing a model frees the space used by the library copy. The curated download catalog and Windows and Linux runtime verification remain open.
+
 ## Account access
 
 Configure the public Supabase project URL, publishable key, and canonical application origin using the variables in `.env.example`. Enable email/password authentication and allow the configured application's `/auth/confirm` redirect in Supabase. This route accepts verified token-hash confirmation and the PKCE exchange code. Configure the recovery template with `type=recovery` for token-hash links. Use the default Supabase recovery redirect flow for PKCE.

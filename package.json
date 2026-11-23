@@ -13,7 +13,8 @@
     "sync": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON server/sync/main.ts",
     "desktop": "tauri",
     "desktop:dev": "vite --config desktop/vite.config.mts",
-    "desktop:build": "vite build --config desktop/vite.config.mts"
+    "desktop:build": "vite build --config desktop/vite.config.mts",
+    "desktop:package": "node scripts/package-desktop.mjs"
   },
   "dependencies": {
     "@fontsource-variable/manrope": "5.2.8",

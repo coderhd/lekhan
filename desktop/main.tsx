@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
-import { Cloud, FolderOpen } from 'lucide-react'
+import { Cloud, Cpu, FolderOpen } from 'lucide-react'
 import { NextIntlClientProvider, useTranslations } from 'next-intl'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import '@fontsource-variable/manrope'
 import '@fontsource-variable/newsreader'
@@ -16,9 +16,12 @@ import { loadWorkspace } from '@/lib/storage'
 import type { Page } from '@/lib/types'
 import { vaultStorage, type VaultAsset, type VaultHandle } from './vault-storage'
 import AttachmentPanel from './attachment-panel'
+import ModelLibrary from './model-library'
+import { sendToLocalModel, type LocalLibrary } from './local-models'
 
 type DesktopLocale = { locale: Locale; messages: Awaited<ReturnType<typeof getCatalog>> }
 const languageKey = 'lekhan:desktop:language'
+const selectedModelKey = 'lekhan:desktop:local-model'
 
 function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) => Promise<void> }) {
   const t = useTranslations('desktop')
@@ -30,6 +33,9 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
   const [launchFailed, setLaunchFailed] = useState(false)
   const [opening, setOpening] = useState(false)
   const [preview, setPreview] = useState<Page[]>([])
+  const [library, setLibrary] = useState<LocalLibrary>()
+  const [modelLibraryOpen, setModelLibraryOpen] = useState(false)
+  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem(selectedModelKey))
   const [catalog, setCatalog] = useState<{ token: string; paths: Map<string, string>; assets: VaultAsset[] }>()
   const storage = useMemo(() => handle && vaultStorage(handle, {
     recovered: () => setRecoveredVault(handle.token),
@@ -37,6 +43,17 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
       token: handle.token, paths, assets: assets ?? (previous?.token === handle.token ? previous.assets : []),
     })),
   }), [handle])
+  const refreshLibrary = useCallback(async () => {
+    try {
+      const next = await invoke<LocalLibrary>('list_local_models')
+      setLibrary(next)
+      return next
+    } catch {
+      setLibrary(undefined)
+    }
+  }, [])
+  const model = library?.runtimeAvailable ? library.models.find(item => item.id === selectedModel) : undefined
+  const localModel = useMemo(() => model && { label: model.label, send: (options: Parameters<typeof sendToLocalModel>[1]) => sendToLocalModel(model.id, options) }, [model])
 
   useEffect(() => {
     let live = true
@@ -47,6 +64,20 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
     void loadWorkspace('desktop').then(value => { if (live && value) setPreview(value.pages) }).catch(() => undefined)
     return () => { live = false }
   }, [])
+
+  useEffect(() => {
+    let live = true
+    void invoke<LocalLibrary>('list_local_models').then(next => {
+      if (live) setLibrary(next)
+    }).catch(() => undefined)
+    return () => { live = false }
+  }, [])
+
+  function selectModel(id: string | null) {
+    if (id) localStorage.setItem(selectedModelKey, id)
+    else localStorage.removeItem(selectedModelKey)
+    setSelectedModel(id)
+  }
 
   async function selectVault() {
     setChoosing(true)
@@ -75,16 +106,22 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
 
   const commonControls = <>
     <LocaleSelect onSelect={selectLanguage} />
+    <button type="button" className="nav-action" onClick={() => {
+      setModelLibraryOpen(true)
+      void refreshLibrary()
+    }}><Cpu size={15} aria-hidden="true" /> {t('modelLibrary')}</button>
     <button type="button" className="nav-action account-link" disabled={opening} onClick={() => void openCloud()}>
       <Cloud size={15} /> {t('cloudWorkspace')}
     </button>
     {launchFailed && <p className="locale-error desktop-cloud-error" role="alert">{t('cloudFailed')}</p>}
     {preview.length > 0 && <button type="button" className="nav-action" onClick={() => downloadWorkspace(preview)}>{t('exportPreview')}</button>}
   </>
+  const libraryDialog = modelLibraryOpen && <ModelLibrary library={library} selected={selectedModel} onSelect={selectModel}
+    refresh={refreshLibrary} onClose={() => setModelLibraryOpen(false)} />
   const failure = vaultFailed && <p className="locale-error desktop-cloud-error" role="alert">{t('openFailed')}</p>
 
   if (handle && storage) return <div className="desktop-writer" inert={choosing}>
-    <WorkspaceApp key={handle.token} storageScope="desktop" storage={storage} workspaceName={handle.label}
+    <WorkspaceApp key={handle.token} storageScope="desktop" storage={storage} workspaceName={handle.label} localModel={localModel}
       pageAttachments={(page, insert) => <AttachmentPanel key={page.id} token={handle.token} page={page}
         path={catalog?.token === handle.token ? catalog.paths.get(page.id) ?? '' : ''}
         assets={catalog?.token === handle.token ? catalog.assets : []} onAttach={storage.rememberAttachment} onInsert={insert} />}
@@ -96,6 +133,7 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
         {recoveredVault === handle.token && <p className="desktop-recovery-notice" role="status">{t('recoveredDrafts')}</p>}
         {commonControls}
       </>} />
+    {libraryDialog}
   </div>
 
   return <main className="desktop-vault">
@@ -109,6 +147,7 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
       {failure}
       <div className="desktop-vault-controls">{commonControls}</div>
     </div>
+    {libraryDialog}
   </main>
 }
 

@@ -19,7 +19,7 @@ import type { SaveStatus } from '@/lib/use-workspace'
 import type { WorkspaceStorage } from '@/lib/storage'
 import { Dialog, SearchDialog } from './workspace-dialogs'
 import { useLocale, useTranslations } from '@/lib/i18n/client'
-import AssistantDialog from './assistant-dialog'
+import AssistantDialog, { type LocalAssistantModel } from './assistant-dialog'
 import PageEditor from './page-editor'
 import { VaultImportDialog } from './vault-import-dialog'
 import type { ImportReport, VaultImportPlan } from '@/lib/vault-import'
@@ -43,11 +43,12 @@ function scrollToHeading(target: HTMLElement) {
 }
 
 export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled = false, automaticMirror = false,
-  sidebarControls, openCloudPage, storage, workspaceName, pageAttachments }: {
+  sidebarControls, openCloudPage, storage, workspaceName, pageAttachments, localModel }: {
   storageScope?: string; mirrorEnabled?: boolean; automaticMirror?: boolean
   sidebarControls?: ReactNode | ((canSwitch: boolean) => ReactNode); openCloudPage?: (id: string) => void
   storage?: WorkspaceStorage; workspaceName?: string
   pageAttachments?: (page: Page, insert: ((markdown: string) => void) | undefined) => ReactNode
+  localModel?: LocalAssistantModel
 }) {
   const t = useTranslations('app-shell')
   const desktopText = useTranslations('desktop')
@@ -673,7 +674,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
       </aside>
 
       <input hidden type="file" multiple ref={importInput} accept=".md,.markdown,.txt,text/markdown,text/plain" onChange={importFiles} />
-      {assistantOpen && page && !localReadOnly && <AssistantDialog page={page} storageScope={storageScope} onClose={() => setAssistantOpen(false)} onInsert={text => {
+      {assistantOpen && page && !localReadOnly && <AssistantDialog page={page} storageScope={storageScope} localModel={localModel} onClose={() => setAssistantOpen(false)} onInsert={text => {
         change(state => {
           const current = state.pages.find(item => item.id === page.id)
           return current ? updatePage(state, current.id, { markdown: [current.markdown, text].filter(Boolean).join('\n\n') }) : state

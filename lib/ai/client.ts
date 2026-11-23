@@ -4,7 +4,7 @@ import {
 
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
 export type Usage = { inputTokens?: number; outputTokens?: number; totalTokens?: number }
-type ChatOptions = {
+export type ChatOptions = {
   messages: readonly ChatMessage[]
   signal?: AbortSignal
   onText?: (text: string) => void
@@ -162,12 +162,17 @@ export async function streamChat(config: ProviderConfig, options: ChatOptions): 
   const response = await fetchProvider(config, request.url, signal, request.body)
   if (!response.body) throw new Error('The provider returned an empty response.')
   const protocol = providerDefinition(config.provider).protocol
+  return readChatStream(response.body, protocol, signal, options.onText)
+}
+
+export async function readChatStream(body: ReadableStream<Uint8Array>, protocol: ReturnType<typeof providerDefinition>['protocol'],
+  signal: AbortSignal, onText?: ChatOptions['onText']): Promise<{ text: string; usage?: Usage }> {
   const usage: Usage = {}
   let text = ''
   let complete = false
 
   try {
-    for await (const packet of packets(response.body, protocol === 'ollama')) {
+    for await (const packet of packets(body, protocol === 'ollama')) {
       if (packet === '[DONE]') {
         complete = true
         break
@@ -204,7 +209,7 @@ export async function streamChat(config: ProviderConfig, options: ChatOptions): 
       if (segment) {
         if (text.length + segment.length > 2_000_000) throw new Error('The provider response exceeded the size limit.')
         text += segment
-        options.onText?.(segment)
+        onText?.(segment)
       }
     }
     if (!complete) throw new Error('The provider stream ended early. Try again.')

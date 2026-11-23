@@ -9,6 +9,11 @@ fn main() {
             "write_vault",
             "read_vault_attachment",
             "attach_vault_file",
+            "list_local_models",
+            "import_local_model",
+            "remove_local_model",
+            "generate_local_reply",
+            "cancel_local_reply",
         ]),
     ))
     .expect("could not build Lekhan's desktop manifest");
