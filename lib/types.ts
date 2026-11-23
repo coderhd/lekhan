@@ -18,6 +18,7 @@ export interface Workspace {
   revision: number
   pages: Page[]
   activePageId: string | null
+  mirrorNotebookId?: string
   vaultImports?: Record<string, { report: ImportReport; firstPageId: string }>
 }
 

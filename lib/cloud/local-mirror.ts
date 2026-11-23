@@ -1,13 +1,20 @@
-import type { Page } from '../types'
-import type { CloudImportBatch, CloudImportReceipt } from './import-plan'
+import type { Page, Workspace } from '../types'
+import type { CloudImportBatch, CloudImportReceipt, LocalMirrorPlacement } from './import-plan'
 import { uuidPattern } from './graph'
 
-export async function prepareLocalMirror(page: Page, signal: AbortSignal) {
+export function localMirrorPlacement(workspace: Workspace, selected: Page, notebook: string): LocalMirrorPlacement {
+  const known = workspace.pages.flatMap(page => page.cloudMirror?.state === 'linked' &&
+    (page.id === selected.parentId || page.parentId === selected.id)
+    ? [{ key: page.id, parent: page.parentId, page: page.cloudMirror.pageId }] : [])
+  return { notebook, key: selected.id, parent: selected.parentId, known }
+}
+
+export async function prepareLocalMirror(page: Page, signal: AbortSignal, localMirror: LocalMirrorPlacement) {
   const importId = crypto.randomUUID()
   const response = await fetch('/api/import?' + new URLSearchParams({ attempt: importId }), { cache: 'no-store', signal })
   if (!response.ok) throw new Error('Could not check your workspace’s sync settings.')
   const { prepareCloudImportImages } = await import('./prepare-images')
-  const input: CloudImportBatch = { importId, index: 0, pages: [{ ordinal: 0, parent: null,
+  const input: CloudImportBatch = { importId, index: 0, localMirror, pages: [{ ordinal: 0, parent: null,
     title: page.title, path: page.title, markdown: page.markdown,
     ...(page.frontmatter ? { frontmatter: page.frontmatter } : {}), ...(page.properties ? { properties: page.properties } : {}),
   }] }

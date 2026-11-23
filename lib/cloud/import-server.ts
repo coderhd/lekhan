@@ -10,7 +10,7 @@ import { pageTitle, uuidPattern } from './graph'
 import { importPathKey, scanTags, withoutEmbeddedImages } from './graph-index'
 import { cloudImageAllowed, inlineCloudImages, rasterByteLength, type CloudImagePolicy } from './image-policy'
 import type { CloudImportImageContext } from './prepare-images'
-import { MAX_IMPORT_BATCH_PAGES, MAX_IMPORT_PAGES, type CloudImportBatch, type CloudImportPage, type CloudImportReceipt } from './import-plan'
+import { MAX_IMPORT_BATCH_PAGES, MAX_IMPORT_PAGES, type CloudImportBatch, type CloudImportPage, type CloudImportReceipt, type LocalMirrorPlacement } from './import-plan'
 
 function record(input: unknown): input is Record<string, unknown> {
   return input !== null && typeof input === 'object' && !Array.isArray(input)
@@ -18,6 +18,19 @@ function record(input: unknown): input is Record<string, unknown> {
 
 function position(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < MAX_IMPORT_PAGES
+}
+
+function localKey(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,96}$/.test(value)
+}
+
+function mirrorPlacement(value: unknown): value is LocalMirrorPlacement {
+  return record(value) && typeof value.notebook === 'string' && uuidPattern.test(value.notebook) && localKey(value.key)
+    && (value.parent === null || localKey(value.parent) && value.parent !== value.key)
+    && Array.isArray(value.known) && value.known.length <= MAX_IMPORT_PAGES && value.known.every(item => record(item)
+      && typeof item.page === 'string' && uuidPattern.test(item.page) && localKey(item.key) && item.key !== value.key
+      && (item.parent === null || localKey(item.parent) && item.parent !== item.key)
+      && (item.key === value.parent || item.parent === value.key))
 }
 
 export function validateCloudImport(input: unknown): CloudImportBatch | null {
@@ -34,9 +47,13 @@ export function validateCloudImport(input: unknown): CloudImportBatch | null {
       || (item.frontmatter !== undefined && (typeof item.frontmatter !== 'string' || item.frontmatter.length > 256_000))) return null
     pages.push(item as unknown as CloudImportPage)
   }
+  const localMirror = input.localMirror
+  if (localMirror !== undefined && (!mirrorPlacement(localMirror) || input.index !== 0 || pages.length !== 1 ||
+    pages[0].ordinal !== 0 || pages[0].parent !== null)) return null
   return {
     importId: input.importId.toLowerCase(), index: input.index, pages,
     ...(input.imagePolicy !== undefined ? { imagePolicy: input.imagePolicy } : {}),
+    ...(localMirror ? { localMirror } : {}),
   }
 }
 
@@ -91,12 +108,15 @@ function sourceSnapshot(page: CloudImportPage) {
 
 export async function writeCloudBatch(admin: SupabaseClient, cipher: ReturnType<typeof snapshotCipher>,
   workspaceId: string, ownerId: string, batch: CloudImportBatch) {
+  const rpc = batch.localMirror ? 'rebuild_import_local_note' : 'rebuild_import_batch'
   const args = {
     target_workspace: workspaceId, actor: ownerId, attempt: batch.importId, batch_number: batch.index,
-    first_page: batch.pages[0].ordinal, digest: createHash('sha256').update(JSON.stringify(batch.pages)).digest('hex'),
+    first_page: batch.pages[0].ordinal, digest: createHash('sha256')
+      .update(JSON.stringify(batch.localMirror ? { pages: batch.pages, localMirror: batch.localMirror } : batch.pages)).digest('hex'),
     requested_image_policy: batch.imagePolicy ?? null,
+    ...(batch.localMirror ? { local_note: batch.localMirror } : {}),
   }
-  const claim = await admin.rpc('rebuild_import_batch', args)
+  const claim = await admin.rpc(rpc, args)
   if (claim.error) throw claim.error
   if (claim.data) return claim.data as CloudImportReceipt
 
@@ -128,7 +148,7 @@ export async function writeCloudBatch(admin: SupabaseClient, cipher: ReturnType<
       text, links, tags: scanTags(text, page.properties ?? null).map(tag => ({ tag })),
     })
   }
-  const { data, error } = await admin.rpc('rebuild_import_batch', { ...args, rows_to_import: rows })
+  const { data, error } = await admin.rpc(rpc, { ...args, rows_to_import: rows })
   if (error) throw error
   if (!data) throw new Error('Import did not return a receipt.')
   return data as CloudImportReceipt

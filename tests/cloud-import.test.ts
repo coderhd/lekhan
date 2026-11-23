@@ -5,7 +5,7 @@ import { cloudImportPlan } from '../lib/cloud/import-plan'
 import { allowCloudImportImages, importPageId, validateCloudImport, writeCloudBatch } from '../lib/cloud/import-server'
 import { cloudImageAllowed, FREE_IMAGE_BYTES, inlineCloudImages, PAID_IMAGE_BYTES } from '../lib/cloud/image-policy'
 import { snapshotCipher } from '../server/sync/snapshot'
-import { prepareLocalMirror, uploadLocalMirror } from '../lib/cloud/local-mirror'
+import { localMirrorPlacement, prepareLocalMirror, uploadLocalMirror } from '../lib/cloud/local-mirror'
 
 const attempt = '40000000-0000-4000-8000-000000000001'
 const workspace = '40000000-0000-4000-8000-000000000002'
@@ -26,9 +26,11 @@ describe('cloud vault import', () => {
       const signal = new AbortController().signal
       const note = { id: 'starter-page', parentId: null, title: 'A selected page', markdown: 'Private [[local link]]',
         frontmatter: '---\ntags: [draft]\n---\n', properties: { tags: ['draft'] }, favorite: false, createdAt: '', updatedAt: '' }
-      const batch = await prepareLocalMirror(note, signal)
+      const batch = await prepareLocalMirror(note, signal, { notebook: workspace, key: note.id, parent: null, known: [] })
       expect(batch.pages).toEqual([{ ordinal: 0, parent: null, title: note.title, path: note.title,
         markdown: note.markdown, frontmatter: note.frontmatter, properties: note.properties }])
+      expect(validateCloudImport(batch)).toEqual(batch)
+      expect(validateCloudImport({ ...batch, localMirror: { ...batch.localMirror, parent: note.id } })).toBeNull()
       await expect(uploadLocalMirror(batch, signal)).rejects.toThrow('Retry sync')
       // Simulate IndexedDB returning the previously selected payload.
       lost = false
@@ -37,6 +39,16 @@ describe('cloud vault import', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  it('sends identities of already-linked neighbors without adding their content to a local mirror', () => {
+    const base = { title: 'Page', markdown: 'Private text', favorite: false, createdAt: '', updatedAt: '' }
+    const parent = { ...base, id: 'parent', parentId: null, cloudMirror: { state: 'linked' as const, pageId: owner } }
+    const child = { ...base, id: 'child', parentId: parent.id }
+    const sibling = { ...base, id: 'sibling', parentId: parent.id, cloudMirror: { state: 'linked' as const, pageId: attempt } }
+    expect(localMirrorPlacement({ revision: 0, activePageId: child.id, pages: [parent, child, sibling] }, child, workspace)).toEqual({
+      notebook: workspace, key: 'child', parent: 'parent', known: [{ key: 'parent', parent: null, page: owner }],
+    })
   })
 
   it('verifies WebP dimensions and charges decoded image bytes against the selected cloud cap', () => {

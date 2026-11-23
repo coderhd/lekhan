@@ -28,7 +28,7 @@ import { VaultImportDialog } from './vault-import-dialog'
 import type { ImportReport, VaultImportPlan } from '@/lib/vault-import'
 import { track, trackMilestone } from '@/lib/analytics'
 import { UsageAnalyticsControl } from './usage-analytics'
-import { MirrorRejected, prepareLocalMirror, uploadLocalMirror } from '@/lib/cloud/local-mirror'
+import { localMirrorPlacement, MirrorRejected, prepareLocalMirror, uploadLocalMirror } from '@/lib/cloud/local-mirror'
 
 const statusMessage: Record<SaveStatus, string> = {
   loading: 'openingWorkspace', saving: 'saving', saved: 'savedLocally', error: 'saveUnavailable', conflict: 'unsavedChanges',
@@ -268,7 +268,7 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
   }
 
   async function syncLocalPage(note: Page) {
-    if (mirrorRequest.current || !mirrorEnabled || note.cloudMirror?.state === 'linked') return
+    if (mirrorRequest.current || !workspace || !mirrorEnabled || note.cloudMirror?.state === 'linked') return
     const controller = new AbortController()
     mirrorRequest.current = controller
     setSyncFailure(null)
@@ -277,10 +277,11 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
     let batch = note.cloudMirror?.batch
     try {
       if (!batch) {
-        batch = await prepareLocalMirror(note, controller.signal)
+        const notebook = workspace.mirrorNotebookId ?? crypto.randomUUID()
+        batch = await prepareLocalMirror(note, controller.signal, localMirrorPlacement(workspace, note, notebook))
         const pending = { state: 'pending' as const, batch }
-        await persistChange(state => state.pages.includes(note)
-          ? { ...state, pages: state.pages.map(item => item === note ? { ...item, cloudMirror: pending } : item) } : state)
+        await persistChange(state => state.pages.includes(note) && (!state.mirrorNotebookId || state.mirrorNotebookId === notebook)
+          ? { ...state, mirrorNotebookId: notebook, pages: state.pages.map(item => item === note ? { ...item, cloudMirror: pending } : item) } : state)
       }
       const attempt = batch.importId
       controller.signal.throwIfAborted()

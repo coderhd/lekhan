@@ -22,6 +22,14 @@ export interface CloudImportBatch {
   index: number
   imagePolicy?: CloudImagePolicy | null
   pages: CloudImportPage[]
+  localMirror?: LocalMirrorPlacement
+}
+
+export interface LocalMirrorPlacement {
+  notebook: string
+  key: string
+  parent: string | null
+  known: { key: string; parent: string | null; page: string }[]
 }
 
 export interface CloudImportReceipt {
