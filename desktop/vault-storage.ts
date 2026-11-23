@@ -4,6 +4,7 @@ import { WorkspaceConflictError, type WorkspaceStorage } from '../lib/storage'
 import type { Page, Workspace } from '../lib/types'
 import { markdownNote } from '../lib/vault-import'
 import { advanceNoteSidecar, openNoteSidecar, type NoteSidecar, type SidecarWrite } from './vault-yjs'
+import { rebaseAttachmentReferences } from './vault-attachments'
 
 export type VaultHandle = { token: string; label: string }
 export type VaultFile = { path: string; text: string; modifiedMs: number }
@@ -137,12 +138,11 @@ function noteText(page: Page, previous: Page | undefined, original: string | und
   return (page.frontmatter ?? '') + (hasYamlFrontmatter(page.markdown) ? '' : keptPrefix) + page.markdown
 }
 
-export function prepareVaultSave(workspace: Workspace, baseline: VaultRead, expectedRevision: number) {
+function vaultLayout(workspace: Workspace, baseline: VaultRead) {
   const previousPages = new Map(baseline.workspace.pages.map(page => [page.id, page]))
   const currentPages = new Map(workspace.pages.map(page => [page.id, page]))
   const parents = new Set(workspace.pages.flatMap(page => page.parentId ? [page.parentId] : []))
   const placed = new Map<string, IndexPage>()
-  const desired = new Map<string, string>()
   const inProgress = new Set<string>()
   // Reserve all original paths. A move or a deletion never replaces a different file.
   const owners = new Map([...baseline.entries].map(([id, entry]) => [folded(entry.path), id]))
@@ -179,11 +179,47 @@ export function prepareVaultSave(workspace: Workspace, baseline: VaultRead, expe
       favorite: page.favorite, createdAt: page.createdAt, sidecar: oldEntry?.sidecar }
     placed.set(page.id, entry)
     inProgress.delete(page.id)
-    if (!folder) desired.set(path, noteText(page, oldPage, oldEntry && baseline.files.get(oldEntry.path)?.text))
     return entry
   }
 
   for (const page of workspace.pages) place(page)
+  return placed
+}
+
+export function rebaseVaultWorkspace(previous: Workspace, next: Workspace, baseline: VaultRead, assets: Map<string, VaultAsset>) {
+  if (!assets.size || previous.pages === next.pages) return next
+  const structureChanged = next.pages.length !== previous.pages.length || next.pages.some((page, index) => {
+    const before = previous.pages[index]
+    return before.id !== page.id || before.title !== page.title || before.parentId !== page.parentId
+  })
+  if (!structureChanged) return next
+
+  const before = vaultLayout(previous, baseline)
+  const after = vaultLayout(next, baseline)
+  let changed = false
+  const pages = next.pages.map(page => {
+    const from = before.get(page.id)
+    const to = after.get(page.id)
+    if (!from || !to || from.path === to.path || !page.markdown) return page
+    const markdown = rebaseAttachmentReferences(page.markdown, from.path, to.path, assets)
+    if (markdown === page.markdown) return page
+    changed = true
+    return { ...page, markdown, updatedAt: new Date().toISOString() }
+  })
+  return changed ? { ...next, pages } : next
+}
+
+export function prepareVaultSave(workspace: Workspace, baseline: VaultRead, expectedRevision: number) {
+  const previousPages = new Map(baseline.workspace.pages.map(page => [page.id, page]))
+  const pages = new Map(workspace.pages.map(page => [page.id, page]))
+  const placed = vaultLayout(workspace, baseline)
+  const desired = new Map<string, string>()
+  for (const [id, entry] of placed) {
+    const page = pages.get(id)
+    if (!page || entry.folder) continue
+    const oldPath = baseline.entries.get(id)?.path
+    desired.set(entry.path, noteText(page, previousPages.get(id), oldPath ? baseline.files.get(oldPath)?.text : undefined))
+  }
   const changes: NoteChange[] = []
   for (const [path, text] of desired) {
     const before = baseline.files.get(path)?.text ?? null
@@ -224,13 +260,31 @@ type VaultEvents = {
   files: (paths: Map<string, string>, assets?: VaultAsset[]) => void
 }
 
-export function vaultStorage(handle: VaultHandle, events: VaultEvents): WorkspaceStorage {
+export function vaultStorage(handle: VaultHandle, events: VaultEvents): WorkspaceStorage & { rememberAttachment: (path: string) => void } {
   const token = handle.token
   const cache = new WeakMap<Workspace, VaultRead>()
+  const copied = new Map<string, VaultAsset>()
+  let assets = new Map<string, VaultAsset>()
   return {
+    rememberAttachment(path) {
+      if (assets.has(path)) return
+      const asset = { path, bytes: 0, modifiedMs: 0 }
+      copied.set(path, asset)
+      assets.set(path, asset)
+    },
+    prepareChange(previous, next, baseline) {
+      const cached = baseline && cache.get(baseline)
+      return cached ? rebaseVaultWorkspace(previous, next, cached, assets) : next
+    },
     async load() {
       const snapshot = await invoke<VaultSnapshot>('read_vault', { token })
       const read = readMarkdownVault(snapshot)
+      assets = new Map(snapshot.assets?.map(asset => [asset.path, asset]))
+      // A read started before the picker returned may still be in flight.
+      for (const [path, asset] of copied) {
+        if (assets.has(path)) copied.delete(path)
+        else assets.set(path, asset)
+      }
       if (snapshot.recoveredDrafts) events.recovered()
       events.files(new Map([...read.entries].map(([id, entry]) => [id, entry.path])), snapshot.assets ?? [])
       cache.set(read.workspace, read)

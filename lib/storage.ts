@@ -8,6 +8,7 @@ export interface WorkspaceStorage {
   load: () => Promise<Workspace | undefined>
   save: (workspace: Workspace, expectedRevision: number, baseline: Workspace | null) => Promise<Workspace>
   hasChanges?: (baseline: Workspace | null) => Promise<boolean>
+  prepareChange?: (previous: Workspace, next: Workspace, baseline: Workspace | null) => Workspace
 }
 
 export class WorkspaceConflictError extends Error {

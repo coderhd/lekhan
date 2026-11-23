@@ -87,7 +87,7 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
     <WorkspaceApp key={handle.token} storageScope="desktop" storage={storage} workspaceName={handle.label}
       pageAttachments={(page, insert) => <AttachmentPanel key={page.id} token={handle.token} page={page}
         path={catalog?.token === handle.token ? catalog.paths.get(page.id) ?? '' : ''}
-        assets={catalog?.token === handle.token ? catalog.assets : []} onInsert={insert} />}
+        assets={catalog?.token === handle.token ? catalog.assets : []} onAttach={storage.rememberAttachment} onInsert={insert} />}
       sidebarControls={canSwitch => <>
         <button type="button" className="nav-action" disabled={!canSwitch || choosing} onClick={() => void selectVault()}>
           <FolderOpen size={15} /> {t('swapVault')}

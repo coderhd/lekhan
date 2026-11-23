@@ -110,14 +110,16 @@ export function useWorkspace(scope = 'personal', storage?: WorkspaceStorage) {
   }, [status, workspace])
 
   const change = useCallback((update: (previous: Workspace) => Workspace, onSaved?: () => void) => {
-    if (!current.current) return
-    const next = update(current.current)
-    if (next === current.current) return
+    const previous = current.current
+    if (!previous) return
+    const updated = update(previous)
+    if (updated === previous) return
+    const next = storage?.prepareChange?.(previous, updated, persisted.current) ?? updated
     current.current = next
     if (onSaved && analyticsAllowed()) saveCallbacks.current.push(onSaved)
     setWorkspace(next)
     void flush()
-  }, [flush])
+  }, [flush, storage])
 
   const reload = useCallback(async () => {
     setStatus('loading')
@@ -130,13 +132,15 @@ export function useWorkspace(scope = 'personal', storage?: WorkspaceStorage) {
 
   const persistChange = useCallback((update: (previous: Workspace) => Workspace) => new Promise<void>((resolve, reject) => {
     if (!current.current || conflict.current) { reject(new Error('Save the current notebook before syncing this page.')); return }
-    const next = update(current.current)
-    if (next === current.current) { reject(new Error('The local page changed. Open it again and retry.')); return }
+    const previous = current.current
+    const updated = update(previous)
+    if (updated === previous) { reject(new Error('The local page changed. Open it again and retry.')); return }
+    const next = storage?.prepareChange?.(previous, updated, persisted.current) ?? updated
     durableChanges.current.push({ resolve, reject })
     current.current = next
     setWorkspace(next)
     void flush()
-  }), [flush])
+  }), [flush, storage])
 
   return {
     workspace,

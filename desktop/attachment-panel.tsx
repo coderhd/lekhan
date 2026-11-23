@@ -70,8 +70,9 @@ function Attachment({ token, asset }: { token: string; asset: VaultAttachment })
   </li>
 }
 
-export default function AttachmentPanel({ token, page, path, assets, onInsert }: {
-  token: string; page: Page; path: string; assets: VaultAsset[]; onInsert?: (markdown: string) => void
+export default function AttachmentPanel({ token, page, path, assets, onAttach, onInsert }: {
+  token: string; page: Page; path: string; assets: VaultAsset[]
+  onAttach: (path: string) => void; onInsert?: (markdown: string) => void
 }) {
   const t = useTranslations('desktop')
   const [adding, setAdding] = useState(false)
@@ -84,7 +85,10 @@ export default function AttachmentPanel({ token, page, path, assets, onInsert }:
     setFailed(false)
     try {
       const added = await invoke<string | null>('attach_vault_file', { token })
-      if (added) onInsert(attachmentMarkdown(added, path))
+      if (added) {
+        onAttach(added)
+        onInsert(attachmentMarkdown(added, path))
+      }
     } catch {
       setFailed(true)
     } finally {
