@@ -5,13 +5,25 @@ import { cloudImportPlan } from '../lib/cloud/import-plan'
 import { allowCloudImportImages, importPageId, validateCloudImport, writeCloudBatch } from '../lib/cloud/import-server'
 import { cloudImageAllowed, FREE_IMAGE_BYTES, inlineCloudImages, PAID_IMAGE_BYTES } from '../lib/cloud/image-policy'
 import { snapshotCipher } from '../server/sync/snapshot'
-import { localMirrorPlacement, prepareLocalMirror, uploadLocalMirror } from '../lib/cloud/local-mirror'
+import { localMirrorPlacement, nextAutomaticMirror, prepareLocalMirror, uploadLocalMirror } from '../lib/cloud/local-mirror'
+import { starterWorkspace } from '../lib/starter-workspace'
 
 const attempt = '40000000-0000-4000-8000-000000000001'
 const workspace = '40000000-0000-4000-8000-000000000002'
 const owner = '40000000-0000-4000-8000-000000000003'
 
 describe('cloud vault import', () => {
+  it('queues real notebook content with its ancestors and defers the note being edited', () => {
+    const { pages } = starterWorkspace()
+    expect(nextAutomaticMirror(pages)).toBeUndefined()
+    const edited = pages.map(page => page.id === 'reading-list' ? { ...page, markdown: 'New reading notes' } : page)
+    expect(nextAutomaticMirror(edited)?.id).toBe('projects')
+    const withSyncedParent = edited.map(page => page.id === 'projects'
+      ? { ...page, cloudMirror: { state: 'linked' as const, pageId: owner } } : page)
+    expect(nextAutomaticMirror(withSyncedParent, 'reading-list')).toBeUndefined()
+    expect(nextAutomaticMirror(withSyncedParent)?.id).toBe('reading-list')
+  })
+
   it('keeps the selected note and uses the same batch on retry after a lost response', async () => {
     const recorded: string[] = []
     let lost = true

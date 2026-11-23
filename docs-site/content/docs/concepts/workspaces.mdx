@@ -6,10 +6,12 @@ description: Understand where each copy is stored and when it is shared.
 | Where you write | Where it is saved | How you use it |
 | --- | --- | --- |
 | Guest local workspace | IndexedDB in the current browser and site origin | Open the workspace without signing in. |
-| Account local workspace | A separate IndexedDB replica for the signed-in account | Sign in, then open the workspace. |
+| Account local workspace | A separate IndexedDB replica for the signed-in account | Sign in, then open the workspace. Paid workspaces sync saved notes automatically. |
 | Cloud workspace | Cloud pages and an account-scoped browser copy after opening the page | Sign in, open **Cloud workspace**, then create or import a page. |
 
-Your guest notes stay in the guest workspace when you sign in. In your signed-in local workspace, open **Page actions → Sync this page** to copy a selected note to your cloud workspace. **Open synced page** takes you to its cloud editor. The original local snapshot remains available under **Page actions → Export local snapshot**. To bring across a whole folder or vault, use the cloud workspace’s import action.
+Your guest notes stay in the guest workspace when you sign in. On Free, open **Page actions → Sync this page** in your signed-in local workspace to copy a selected note. On a paid plan, the local workspace starts syncing your saved notes when you’re online. A note you’re actively editing waits until you leave the editor. An interrupted transfer resumes when you reopen the workspace or reconnect.
+
+**Open synced page** takes you to the cloud editor. The original local snapshot remains available under **Page actions → Export local snapshot**. You can also use the cloud workspace’s import action to bring across a folder or vault.
 
 If you sync a subpage first, it appears at the top level until you sync its parent. Once both are synced, the cloud workspace places the subpage under its parent.
 

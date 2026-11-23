@@ -107,8 +107,9 @@ function sourceSnapshot(page: CloudImportPage) {
 }
 
 export async function writeCloudBatch(admin: SupabaseClient, cipher: ReturnType<typeof snapshotCipher>,
-  workspaceId: string, ownerId: string, batch: CloudImportBatch) {
-  const rpc = batch.localMirror ? 'rebuild_import_local_note' : 'rebuild_import_batch'
+  workspaceId: string, ownerId: string, batch: CloudImportBatch, automatic = false) {
+  const rpc = automatic ? 'rebuild_import_automatic_local_note'
+    : batch.localMirror ? 'rebuild_import_local_note' : 'rebuild_import_batch'
   const args = {
     target_workspace: workspaceId, actor: ownerId, attempt: batch.importId, batch_number: batch.index,
     first_page: batch.pages[0].ordinal, digest: createHash('sha256')

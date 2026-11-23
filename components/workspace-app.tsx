@@ -28,7 +28,7 @@ import { VaultImportDialog } from './vault-import-dialog'
 import type { ImportReport, VaultImportPlan } from '@/lib/vault-import'
 import { track, trackMilestone } from '@/lib/analytics'
 import { UsageAnalyticsControl } from './usage-analytics'
-import { localMirrorPlacement, MirrorRejected, prepareLocalMirror, uploadLocalMirror } from '@/lib/cloud/local-mirror'
+import { AutomaticMirrorUnavailable, localMirrorPlacement, MirrorRejected, nextAutomaticMirror, prepareLocalMirror, uploadLocalMirror } from '@/lib/cloud/local-mirror'
 
 const statusMessage: Record<SaveStatus, string> = {
   loading: 'openingWorkspace', saving: 'saving', saved: 'savedLocally', error: 'saveUnavailable', conflict: 'unsavedChanges',
@@ -46,8 +46,8 @@ function scrollToHeading(target: HTMLElement) {
   target.scrollIntoView({ block: 'start' })
 }
 
-export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled = false, signedIn = false, mirrorEnabled = false }: {
-  storageScope?: string; cloudEnabled?: boolean; signedIn?: boolean; mirrorEnabled?: boolean
+export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled = false, signedIn = false, mirrorEnabled = false, automaticMirror = false }: {
+  storageScope?: string; cloudEnabled?: boolean; signedIn?: boolean; mirrorEnabled?: boolean; automaticMirror?: boolean
 }) {
   const t = useTranslations('app-shell')
   const router = useRouter()
@@ -71,6 +71,7 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
   const [titleDraft, setTitleDraft] = useState<{id: string; value: string} | null>(null)
   const [syncingPage, setSyncingPage] = useState<string | null>(null)
   const [syncFailure, setSyncFailure] = useState<{ id: string; message: string } | null>(null)
+  const [paidSyncEnded, setPaidSyncEnded] = useState(false)
   const mirrorRequest = useRef<AbortController | null>(null)
   const importInput = useRef<HTMLInputElement>(null)
   const titleInput = useRef<HTMLTextAreaElement>(null)
@@ -267,25 +268,25 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
     run()
   }
 
-  async function syncLocalPage(note: Page) {
+  const syncLocalPage = useCallback(async (note: Page, automatic = false) => {
     if (mirrorRequest.current || !workspace || !mirrorEnabled || note.cloudMirror?.state === 'linked') return
     const controller = new AbortController()
     mirrorRequest.current = controller
     setSyncFailure(null)
     setSyncingPage(note.id)
-    setAction(null)
+    if (!automatic) setAction(null)
     let batch = note.cloudMirror?.batch
     try {
       if (!batch) {
         const notebook = workspace.mirrorNotebookId ?? crypto.randomUUID()
-        batch = await prepareLocalMirror(note, controller.signal, localMirrorPlacement(workspace, note, notebook))
+        batch = await prepareLocalMirror(note, controller.signal, localMirrorPlacement(workspace, note, notebook), automatic)
         const pending = { state: 'pending' as const, batch }
         await persistChange(state => state.pages.includes(note) && (!state.mirrorNotebookId || state.mirrorNotebookId === notebook)
           ? { ...state, mirrorNotebookId: notebook, pages: state.pages.map(item => item === note ? { ...item, cloudMirror: pending } : item) } : state)
       }
       const attempt = batch.importId
       controller.signal.throwIfAborted()
-      const cloudId = await uploadLocalMirror(batch, controller.signal)
+      const cloudId = await uploadLocalMirror(batch, controller.signal, automatic)
       controller.signal.throwIfAborted()
       await persistChange(state => {
         const existing = state.pages.find(item => item.id === note.id)
@@ -293,9 +294,10 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
         return { ...state, pages: state.pages.map(item => item === existing
           ? { ...item, cloudMirror: { state: 'linked', pageId: cloudId } } : item) }
       })
-      setNotice('Page synced to your cloud workspace.')
+      if (!automatic) setNotice('Page synced to your cloud workspace.')
     } catch (failure) {
       if (controller.signal.aborted) return
+      if (failure instanceof AutomaticMirrorUnavailable) setPaidSyncEnded(true)
       if (failure instanceof MirrorRejected && batch) {
         const attempt = batch.importId
         await persistChange(state => {
@@ -309,7 +311,33 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
       mirrorRequest.current = null
       if (!controller.signal.aborted) setSyncingPage(null)
     }
-  }
+  }, [workspace, mirrorEnabled, persistChange])
+
+  useEffect(() => {
+    if (!automaticMirror || paidSyncEnded || status !== 'saved' || syncingPage || action || assistantOpen || vaultOpen) return
+    let timer: ReturnType<typeof setTimeout>
+    function schedule() {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        if (!navigator.onLine || syncFailure) return
+        const editing = document.activeElement?.closest('.document-title, .writer-content, .writer-source')
+        const next = nextAutomaticMirror(pages, editing ? page?.id : undefined)
+        if (next) void syncLocalPage(next, true)
+      }, 1100)
+    }
+    function reconnect() {
+      setSyncFailure(null)
+      schedule()
+    }
+    schedule()
+    window.addEventListener('online', reconnect)
+    document.addEventListener('focusout', schedule)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('online', reconnect)
+      document.removeEventListener('focusout', schedule)
+    }
+  }, [automaticMirror, paidSyncEnded, status, syncingPage, action, assistantOpen, vaultOpen, syncFailure, pages, page?.id, syncLocalPage])
 
   function toggleContext() {
     if (window.matchMedia('(max-width: 1180px)').matches) setMobileContext(previous => !previous)
@@ -499,6 +527,12 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
             {status === 'error' ? <button onClick={() => void retry()}>{t('retrySave')}</button> : <button onClick={() => setAction({ kind: 'reload' })}>{t('openSavedCopy')}</button>}
           </div>
         )}
+        {automaticMirror && !paidSyncEnded && syncFailure && syncFailure.id !== page?.id && (
+          <div className="save-warning" role="alert">
+            {syncFailure.message}
+            <button onClick={() => setSyncFailure(null)}>Retry notebook sync</button>
+          </div>
+        )}
 
         {page ? (
           <div className="document-scroll" key={page.id}>
@@ -536,7 +570,11 @@ export default function WorkspaceApp({ storageScope = 'personal', cloudEnabled =
                   document.querySelector<HTMLElement>('.writer-content')?.focus()
                 }}
               />
-              {syncFailure?.id === page.id && <p className="account-error" role="alert">{syncFailure.message}</p>}
+              {syncFailure?.id === page.id && <div className="local-mirror-callout" role="alert">
+                <p>{syncFailure.message}</p>
+                {automaticMirror && !paidSyncEnded && !mirror &&
+                  <button type="button" className="secondary-button" onClick={() => setSyncFailure(null)}>Retry notebook sync</button>}
+              </div>}
               {syncingPage === page.id && <p role="status">Syncing this page…</p>}
               {mirror?.state === 'pending' && syncingPage !== page.id && <div className="local-mirror-callout">
                 <p>The local draft is saved. Retry to confirm its cloud copy.</p>
