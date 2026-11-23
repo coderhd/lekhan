@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import * as Y from 'yjs'
 import { snapshotCipher } from '@/server/sync/snapshot'
+import { uploadDocumentObject } from '../../server/sync/storage-capacity'
 import { workspaceEntitlementOrFree } from '../billing/entitlements'
 import { wikiLinks } from '../markdown-references'
 import { pageTitle, uuidPattern } from './graph'
@@ -104,12 +105,10 @@ export async function writeCloudBatch(admin: SupabaseClient, cipher: ReturnType<
     const id = importPageId(workspaceId, batch.importId, page.ordinal)
     if (page.markdown || page.frontmatter) {
       const bytes = cipher.seal(sourceSnapshot(page), 'snapshot:' + id, true)
-      const { error } = await bucket.upload(id + '/main_state.bin', bytes, { contentType: 'application/octet-stream', upsert: false })
-      if (error) {
-        if (!/asset already exists|keyalreadyexists|resourcealreadyexists/i.test(error.message)
-          && (!('statusCode' in error) || String(error.statusCode) !== '409')) throw error
-        const existing = await bucket.exists(id + '/main_state.bin')
-        if (existing.error || !existing.data) throw error
+      const path = id + '/main_state.bin'
+      if (await uploadDocumentObject(admin, path, bytes, false) === 'exists') {
+        const existing = await bucket.exists(path)
+        if (existing.error || !existing.data) throw existing.error ?? new Error('Import snapshot could not be confirmed.')
       }
     }
     const text = withoutEmbeddedImages(page.markdown).slice(0, 2_000_000)

@@ -5,6 +5,7 @@ import { cloudImageAllowed, type CloudImagePolicy } from '../../lib/cloud/image-
 import { addedDocumentImages, documentImages, imageRoots } from './document-images.ts'
 import { snapshotEnvelopeBytes, type snapshotCipher } from './snapshot.ts'
 import { cloudSnapshots } from './supabase.ts'
+import { uploadDocumentObject } from './storage-capacity.ts'
 
 export const checkpointFields = 'id,version_name,created_at'
 
@@ -86,8 +87,11 @@ export async function storeCheckpoint({ admin, actor, subject, encryption, page,
   const path = objectPath(page, id)
   const encrypted = encryption.seal(snapshot, 'checkpoint:' + page + ':' + id)
   const bucket = admin.storage.from('documents')
-  const { error: uploadError } = await bucket.upload(path, encrypted, { contentType: 'application/octet-stream', upsert: false })
-  if (uploadError) throw uploadError
+  if (await uploadDocumentObject(admin, path, encrypted, false) === 'exists') {
+    const { data, error } = await existingRecord()
+    if (data) return data
+    throw error ?? new Error('Checkpoint storage path already exists.')
+  }
   try {
     await recheck?.()
     const { data, error } = await actor.from('document_versions').insert({

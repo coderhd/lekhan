@@ -20,6 +20,7 @@ import { replaceCheckpointContent } from '../lib/cloud/checkpoints'
 import { openCheckpointTransfer, sealCheckpointTransfer } from '../server/sync/checkpoint-ticket'
 import { getExpirationCutoffDate } from '../lib/tier-limits'
 import { pruneExpiredCheckpoints } from '../server/sync/prune-checkpoints'
+import { uploadDocumentObject } from '../server/sync/storage-capacity'
 
 const pageId = 'e6a3a67a-bf74-4f17-b013-95eb59b2e937'
 const owner = 'dc885a37-7b5a-4897-8d83-3cca664c0251'
@@ -69,6 +70,53 @@ describe('sync capabilities and storage', () => {
     await wal.append(pageId, bytes('second edit'))
     await wal.replay(pageId, update => result.push(Buffer.from(update).toString()))
     expect(result).toEqual(['first private edit', 'first private edit', 'second edit'])
+  })
+
+  it('only sends object bytes after a reservation and retains the lease on ambiguous upload failures', async () => {
+    const calls: string[] = []
+    const object = pageId + '/main_state.bin'
+    const payload = bytes('encrypted snapshot')
+    let leaseId = ''
+    let decision = 'full'
+    let storageStatus = 200
+    const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url.endsWith('/rebuild_reserve_document_upload')) {
+        calls.push('reserve')
+        const args = JSON.parse(String(init?.body))
+        expect(args).toMatchObject({ target_path: object, proposed_bytes: payload.length, replace_existing: false })
+        leaseId = args.proposed_lease
+        return Response.json(decision)
+      }
+      if (url.endsWith('/rebuild_release_document_upload')) {
+        calls.push('release')
+        expect(JSON.parse(String(init?.body))).toEqual({ completed_lease: leaseId })
+        return new Response(null, { status: 204 })
+      }
+      expect(url).toContain('/storage/v1/object/documents/' + object)
+      expect(init?.body).toEqual(payload)
+      calls.push('upload')
+      return Response.json(storageStatus === 200 ? { Key: 'documents/' + object } : {
+        message: 'Storage refused the request', statusCode: String(storageStatus),
+      }, { status: storageStatus })
+    }
+    const client = createClient('https://fixture.example', 'sb_secret_fixture', {
+      auth: { persistSession: false }, global: { fetch: fetcher as typeof fetch },
+    })
+    await expect(uploadDocumentObject(client, object, payload, false)).rejects.toMatchObject({ reason: 'full' })
+    expect(calls.splice(0)).toEqual(['reserve'])
+    decision = 'exists'
+    await expect(uploadDocumentObject(client, object, payload, false)).resolves.toBe('exists')
+    expect(calls.splice(0)).toEqual(['reserve'])
+    decision = 'reserved'
+    await expect(uploadDocumentObject(client, object, payload, false)).resolves.toBe('uploaded')
+    expect(calls.splice(0)).toEqual(['reserve', 'upload', 'release'])
+    storageStatus = 503
+    await expect(uploadDocumentObject(client, object, payload, false)).rejects.toThrow('Storage refused')
+    expect(calls.splice(0)).toEqual(['reserve', 'upload'])
+    storageStatus = 403
+    await expect(uploadDocumentObject(client, object, payload, false)).rejects.toThrow('Storage refused')
+    expect(calls.splice(0)).toEqual(['reserve', 'upload', 'release'])
   })
 })
 

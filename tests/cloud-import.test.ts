@@ -64,7 +64,9 @@ describe('cloud vault import', () => {
       { ordinal: 2, parent: 0, title: 'Plan', path: 'Lab/Plan', markdown: 'Private plan #lab' },
     ]
     let fail = true
+    let capacityFull = true
     let finalized = false
+    const leases = new Map<string, string>()
     const requests: string[] = []
     const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url)
@@ -76,11 +78,26 @@ describe('cloud vault import', () => {
           importedCount: 3, replayed: !payload.rows_to_import,
         } : null)
       }
+      if (url.pathname.endsWith('/rebuild_reserve_document_upload')) {
+        const { target_path, proposed_lease } = JSON.parse(String(init?.body))
+        const id = target_path.split('/')[0]
+        if (assets.has(id)) return Response.json('exists')
+        if (capacityFull) return Response.json('full')
+        if (leases.has(id)) return Response.json('busy')
+        leases.set(id, proposed_lease)
+        return Response.json('reserved')
+      }
+      if (url.pathname.endsWith('/rebuild_release_document_upload')) {
+        const { completed_lease } = JSON.parse(String(init?.body))
+        for (const [id, lease] of leases) if (lease === completed_lease) leases.delete(id)
+        return new Response(null, { status: 204 })
+      }
       if (url.pathname.includes('/storage/')) {
         const id = url.pathname.split('/').at(-2)!
         requests.push((init?.method ?? 'GET') + ' ' + id)
         if (url.pathname.includes('/object/info/')) return Response.json(assets.has(id) ? { id } : { message: 'Not found' }, { status: assets.has(id) ? 200 : 404 })
-        if (fail && id === importPageId(workspace, attempt, 2)) return Response.json({ message: 'Unavailable' }, { status: 503 })
+        expect(leases.has(id)).toBe(true)
+        if (fail && id === importPageId(workspace, attempt, 2)) return Response.json({ message: 'Retry later', statusCode: '429' }, { status: 429 })
         if (assets.has(id)) return Response.json({ message: 'Asset already exists' }, { status: 400 })
         assets.set(id, new Uint8Array(init?.body as Uint8Array))
         return Response.json({ Key: 'documents/' + id + '/main_state.bin' })
@@ -91,6 +108,10 @@ describe('cloud vault import', () => {
       global: { fetch: fetcher as typeof fetch }, auth: { persistSession: false, autoRefreshToken: false },
     })
     const batch = { importId: attempt, index: 0, pages }
+    await expect(writeCloudBatch(client, cipher, workspace, owner, batch)).rejects.toMatchObject({ reason: 'full' })
+    expect(requests).toHaveLength(0)
+    expect(finalized).toBe(false)
+    capacityFull = false
     await expect(writeCloudBatch(client, cipher, workspace, owner, batch)).rejects.toThrow()
     expect(finalized).toBe(false)
     const id = importPageId(workspace, attempt, 1)

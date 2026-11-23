@@ -6,6 +6,7 @@ import { wikiLinks } from '../../lib/markdown-references.ts'
 import { scanTags, toTitleKey, withoutEmbeddedImages } from '../../lib/cloud/graph-index.ts'
 import { maxPageUpdateBytes } from '../../lib/sync/wire.ts'
 import { snapshotEnvelopeBytes, type snapshotCipher } from './snapshot.ts'
+import { uploadDocumentObject } from './storage-capacity.ts'
 
 const maxIndexSize = 2_000_000
 
@@ -96,10 +97,9 @@ export function cloudSnapshots(client: SupabaseClient, cipher: ReturnType<typeof
       const bytes = Y.encodeStateAsUpdate(doc)
       if (bytes.length > maxPageUpdateBytes) throw new Error('Page exceeds the sync size limit.')
       const encrypted = cipher.seal(bytes, 'snapshot:' + pageId, true)
-      const { error } = await bucket.upload(pageId + '/main_state.bin', encrypted, {
-        contentType: 'application/octet-stream', upsert: true,
-      })
-      if (error) throw error
+      if (await uploadDocumentObject(client, pageId + '/main_state.bin', encrypted, true) !== 'uploaded') {
+        throw new Error('Could not replace the cloud snapshot.')
+      }
       await syncGraph(client, pageId, indexedDocument(doc))
     },
   }
