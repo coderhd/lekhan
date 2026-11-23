@@ -800,6 +800,10 @@ kbd {
 .billing-notice, .billing-confirm { background: var(--overlay); border: 1px solid var(--line); border-radius: 7px; padding: 12px 15px; }
 .billing-confirm { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 10px; }
 .billing-confirm p { flex-basis: 100%; margin: 0; }
+.billing-referrals { border-block-start: 1px solid var(--line); padding-block-start: 20px; margin-block-start: 32px; }
+.billing-referrals h2 { margin: 0; font: 650 25px/1.15 var(--serif); }
+.billing-referrals p { margin: 8px 0; color: var(--muted); }
+.billing-referrals .invite-link { margin-block-start: 12px; }
 .billing-change-select { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; font-weight: 700; }
 .billing-change-select select { color: var(--ink); background: var(--overlay); border: 1px solid var(--line); border-radius: 6px; padding: 7px; font: inherit; max-width: 100%; }
 @media (max-width: 740px) {

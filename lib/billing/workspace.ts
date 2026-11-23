@@ -20,6 +20,7 @@ interface PlanRow extends WorkspacePlanRowLike {
   gateway_subscription_id: string | null
   rebuild_billing_revision: number
   rebuild_billing_price_id: string | null
+  credited_months: number
 }
 
 export interface PendingCheckout {
@@ -38,7 +39,7 @@ export interface PendingCheckout {
 }
 
 export const checkoutFields = 'id,workspace_id,created_at,rail,tier,cycle,seats,price_id,founding,provider_ref,status,expires_at'
-const planFields = 'workspace_id,tier,billing_cycle,status,gateway,currency,gateway_customer_id,gateway_subscription_id,current_period_end,cancel_at_period_end,past_due_since,is_founding,seats,rebuild_billing_revision,rebuild_billing_price_id'
+const planFields = 'workspace_id,tier,billing_cycle,status,gateway,currency,gateway_customer_id,gateway_subscription_id,current_period_end,cancel_at_period_end,past_due_since,is_founding,seats,credited_months,rebuild_billing_revision,rebuild_billing_price_id'
 
 export class BillingError extends Error {
   constructor(readonly code: string, readonly status: number) {
@@ -98,6 +99,7 @@ export async function readBillingSummary(admin: SupabaseClient, workspaceId: str
     : [null, null] as const
   return {
     entitlement: plan ? entitlementFromRow(plan) : null,
+    referralMonths: plan?.credited_months ?? 0,
     gateway: plan?.gateway ?? 'none',
     currency: plan?.currency ?? null,
     pending: pending ? {

@@ -3,10 +3,11 @@
 import { redirect } from 'next/navigation'
 import { confirmationTarget } from '@/lib/auth/config'
 import { createAuthClient } from '@/lib/auth/server'
-import { invitationPath, readCredentials, type AuthMode, type AuthResult } from '@/lib/auth/input'
+import { invitationPath, readCredentials, referralCode, type AuthMode, type AuthResult } from '@/lib/auth/input'
 import { recordAnalyticsReceipt } from '@/lib/server/analytics'
 
-export async function submitAuth(mode: AuthMode, invite: string | undefined, _previous: AuthResult, form: FormData): Promise<AuthResult> {
+export async function submitAuth(mode: AuthMode, invite: string | undefined, referral: string | undefined,
+  _previous: AuthResult, form: FormData): Promise<AuthResult> {
   if (!['login', 'signup', 'forgot', 'reset'].includes(mode)) return { issue: 'invalid' }
   const credentials = readCredentials(form, mode)
   if (!credentials) return { issue: 'invalid' }
@@ -36,7 +37,10 @@ export async function submitAuth(mode: AuthMode, invite: string | undefined, _pr
     return { outcome: 'resetEmail' }
   }
 
-  const { data, error } = await client.auth.signUp({ email, password, options: { emailRedirectTo: callback } })
+  const ref = referralCode(referral)
+  const { data, error } = await client.auth.signUp({
+    email, password, options: { emailRedirectTo: callback, ...(ref ? { data: { referred_by: ref } } : {}) },
+  })
   if (error && error.status !== 422) return { issue: 'signupError' }
   if (data.session) {
     await recordAnalyticsReceipt('signup')

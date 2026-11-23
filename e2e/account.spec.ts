@@ -50,3 +50,14 @@ test('an invitation survives the sign-in and sign-up screens', async ({ page }) 
   await page.getByRole('link', { name: 'Sign in' }).click()
   await expect(page).toHaveURL('/login?invite=' + invite)
 })
+
+test('a referral and an invitation survive switching account forms together', async ({ page }) => {
+  const invite = 'e6a3a67a-bf74-4f17-b013-95eb59b2e937'
+  const ref = '24f66e78-ba69-42c3-a063-38e03bdb0891'
+  const query = new URLSearchParams({ invite, ref })
+  await page.goto('/login?' + query)
+  await page.getByRole('link', { name: 'Create an account' }).click()
+  await expect(page).toHaveURL('/signup?' + query)
+  await page.getByRole('link', { name: 'Sign in' }).click()
+  await expect(page).toHaveURL('/login?' + query)
+})

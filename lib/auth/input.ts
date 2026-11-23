@@ -8,6 +8,11 @@ export function invitationPath(token: string | undefined | null) {
   return token && /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(token) ? '/invite/' + token : null
 }
 
+export function referralCode(input: unknown) {
+  const value = typeof input === 'string' ? input.trim() : ''
+  return /^[a-zA-Z0-9_-]{1,100}$/.test(value) ? value : undefined
+}
+
 export function readCredentials(form: FormData, mode: AuthMode) {
   const email = form.get('email')
   const password = form.get('password')

@@ -4,7 +4,7 @@ Billing is available in the cloud workspace for signed-in owners. The same works
 
 ## Staging setup
 
-1. Verify that the workspace plan, gateway event, and founding roster migrations are applied first. Apply the rebuild checkout, reconciliation, and plan-change migrations in order, alongside the rebuilt billing routes.
+1. Verify that the workspace plan, gateway event, referral ledger, and founding roster migrations are applied first. Apply the rebuild checkout, reconciliation, plan-change, and referral grants migrations in order, alongside the rebuilt billing routes. The referral grants also require the rebuild waitlist schema.
 2. Configure the application origin with `LEKHAN_PUBLIC_URL`. Use test payment credentials on staging. The `.env.example` entries bind each tier, cycle, currency, and founding eligibility to a provider price. A checkout checks the live price object against the catalog before creating a session.
 3. Stripe uses USD subscription prices. Configure Team as a volume price with 2–10, 11–25, and 26 or more seats. Each band applies to all seats. Set separate portal configuration IDs for founding and standard workspaces. Each configuration can expose only its cohort’s prices and can adjust seat counts only for Team. Set cancellation at period end. [Stripe tiered pricing](https://docs.stripe.com/subscriptions/pricing-models/tiered-pricing) · [Stripe portal configurations](https://docs.stripe.com/api/customer_portal/configurations/object)
 4. Razorpay uses INR subscription plans for Plus and Pro. Configure monthly and annual plans and test hosted subscription links with the supported payment methods. [Razorpay subscription API](https://razorpay.com/docs/api/payments/subscriptions/create-subscription)
@@ -31,4 +31,10 @@ An unlocated checkout stays reserved until the provider can confirm what happene
 
 Owners can schedule or withdraw a plan change in workspace billing. The page uses Razorpay’s live schedule and keeps the current entitlement through the billing cycle. A verified event or reconciliation updates the entitlement after Razorpay switches the plan. Razorpay restricts in-place changes for subscriptions authorized by UPI or e-mandate. For those payment methods, owners can end the existing subscription at renewal and begin a new checkout after it ends. Verify the card and UPI paths in the provider test environment. [Razorpay subscription changes](https://razorpay.com/docs/api/payments/subscriptions/update-subscription) · [Razorpay scheduled update details](https://razorpay.com/docs/api/payments/subscriptions/fetch-pending-update-details)
 
-Referral credits, ownership transfer, and purchase analytics still need rebuild integration.
+## Referral credits and founding pricing
+
+The referral link in workspace billing carries the referrer’s account code through signup. A verified account can also inherit its confirmed waitlist attribution. A referral banks one month when the invitee creates a cloud workspace and one more when the first paid subscription activates. A referrer without a workspace keeps the grants in the ledger until their workspace is created. The service-managed `rebuild_referral_rules.annual_bank_cap` defaults to 12 months and applies to the UTC year and the outstanding balance.
+
+Founding eligibility comes from existing grants and the first 500 waitlist places with verified attribution. Review unmatched roster rows before closing the founding cohort. For each approved row, an operator calls `rebuild_record_reviewed_founder` with the verified account ID and roster row ID. The function checks a unique verified email match and an unlocked workspace. Review evidence belongs in the cohort QA record. [Accepted founding roster decision](https://github.com/coderhd/lekhan/blob/main/docs/adr/0005-founding-roster-predicate-boundaries.md)
+
+Stripe balance redemption, ownership transfer, and purchase analytics still need rebuild integration.

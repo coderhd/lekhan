@@ -9,6 +9,7 @@ import type { Currency, Cycle, PaidTier } from '@/lib/billing/catalog'
 import { checkoutAvailable } from '@/lib/billing/gateways'
 import { ownerWorkspace, readBillingSummary } from '@/lib/billing/workspace'
 import BillingSettings from '@/components/billing-settings'
+import InviteLink from '@/components/invite-link'
 
 export const metadata = { title: 'Workspace billing · Lekhan' }
 
@@ -43,6 +44,12 @@ export default async function BillingPage({ searchParams }: { searchParams: Prom
       {summary ? <BillingSettings summary={summary} defaultCurrency={currency} available={available}
         returned={query.checkout === 'returned'} paused={query.checkout === 'paused'} />
         : <p role="status">Billing is temporarily unavailable. You can still open your workspace and keep writing.</p>}
+      {summary && <section className="billing-referrals" aria-labelledby="billing-referrals">
+        <h2 id="billing-referrals">Referrals</h2>
+        <p><strong>{summary.referralMonths}</strong> {summary.referralMonths === 1 ? 'month' : 'months'} banked</p>
+        <p>Earn a month when a friend starts a cloud workspace and another when they first subscribe.</p>
+        <InviteLink path={'/signup?' + new URLSearchParams({ ref: account.subject })} origin={siteOrigin()} label="Referral link" />
+      </section>}
     </section>
   </main>
 }
