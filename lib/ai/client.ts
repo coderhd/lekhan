@@ -1,5 +1,5 @@
 import {
-  endpointFor, LOCAL_PROVIDERS, localConnectionHelp, providerDefinition, type ProviderConfig, type ProviderId,
+  endpointFor, LOCAL_PROVIDERS, localConnectionHelp, providerDefinition, type LocalProviderId, type ProviderConfig,
 } from './provider-registry'
 
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
@@ -16,6 +16,9 @@ export class ProviderHttpError extends Error {
     super(message)
   }
 }
+
+class ProviderNetworkError extends Error {}
+class ProviderTimeoutError extends Error {}
 
 function headersFor(config: ProviderConfig): Record<string, string> {
   const key = config.apiKey?.trim()
@@ -80,19 +83,23 @@ async function fetchProvider(config: ProviderConfig, url: string, signal: AbortS
       headers: { ...headers, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
       body: body === undefined ? undefined : JSON.stringify(body),
       credentials: 'omit',
+      mode: 'cors',
       referrerPolicy: 'no-referrer',
       cache: 'no-store',
       redirect: 'error',
       signal,
     })
   } catch {
-    if (signal.aborted) throw new Error(signal.reason?.name === 'TimeoutError' ? 'The provider did not respond in time.' : 'The request was cancelled.')
-    if (providerDefinition(config.provider).local) throw new Error(localConnectionHelp(config.provider))
-    throw new Error('The browser could not reach this provider. Check your connection and whether the endpoint allows browser requests.')
+    if (signal.aborted) {
+      if (signal.reason?.name === 'TimeoutError') throw new ProviderTimeoutError('The provider did not respond in time.')
+      throw new Error('The request was cancelled.')
+    }
+    if (providerDefinition(config.provider).local) throw new ProviderNetworkError(localConnectionHelp(config.provider))
+    throw new ProviderNetworkError('The browser could not reach this provider. Check your connection and whether the endpoint allows browser requests.')
   }
   if (response.ok) return response
   await response.body?.cancel().catch(() => undefined)
-  if (response.status === 401 || response.status === 403) throw new Error('The provider rejected the API key or model access.')
+  if (response.status === 401 || response.status === 403) throw new ProviderHttpError(response.status, 'The provider rejected the API key or model access.')
   if (response.status === 429) throw new ProviderHttpError(429, 'The provider applied a rate limit or quota. Check your provider account or try again later.')
   if (response.status === 404) throw new Error('The model or provider endpoint was not found.')
   throw new ProviderHttpError(response.status, 'The provider could not complete this request (HTTP ' + response.status + ').')
@@ -240,21 +247,83 @@ export async function testProviderConnection(config: ProviderConfig, options: { 
   }
 
   const ollama = config.provider === 'ollama'
-  const response = await fetchProvider(config, endpointFor(config) + (ollama ? '/api/tags' : '/models'), requestSignal(options.signal, 4_000))
-  const catalog = object(await response.json())
-  const models = items(ollama ? catalog.models : catalog.data).map(item => textOf(object(item)[ollama ? 'name' : 'id'])).filter(Boolean)
-  if (!Array.isArray(ollama ? catalog.models : catalog.data)) throw new Error('This local endpoint did not return a model catalog.')
+  const response = await fetchProvider(config, localCatalogUrl(config), requestSignal(options.signal, 4_000))
+  const catalog = await readLocalCatalog(response)
+  const modelRows = ollama ? catalog.models : catalog.data
+  if (!Array.isArray(modelRows)) throw new Error('This local endpoint did not return a model catalog.')
+  const models = [...new Set(modelRows.map(item => textOf(object(item)[ollama ? 'name' : 'id']))
+    .filter(model => model.trim() && model.length <= 256))].slice(0, 250)
   return { models, latencyMs: Math.round(performance.now() - started) }
 }
 
-export async function detectLocalProviders({ signal }: { signal?: AbortSignal } = {}) {
-  const candidates = await Promise.all(LOCAL_PROVIDERS.map(async (provider: ProviderId) => {
+function localCatalogUrl(config: ProviderConfig) {
+  return endpointFor(config) + (config.provider === 'ollama' ? '/api/tags' : '/models')
+}
+
+async function readLocalCatalog(response: Response) {
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error('This local endpoint did not return a model catalog.')
+  const decoder = new TextDecoder()
+  const chunks: string[] = []
+  let bytes = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      bytes += value.byteLength
+      if (bytes > 512 * 1024) throw new Error('The local model catalog exceeded the size limit.')
+      chunks.push(decoder.decode(value, { stream: true }))
+    }
+    chunks.push(decoder.decode())
+    return object(JSON.parse(chunks.join('')))
+  } finally {
+    await reader.cancel().catch(() => undefined)
+    reader.releaseLock()
+  }
+}
+
+type LocalProbeEndpoint = { provider: LocalProviderId; baseUrl: string }
+export type LocalProviderProbe = LocalProbeEndpoint & (
+  { status: 'connected'; models: string[]; latencyMs: number } |
+  { status: 'cors_blocked' | 'offline' | 'authorization_needed' | 'unexpected_response' }
+)
+
+export async function probeLocalProviders({ signal }: { signal?: AbortSignal } = {}): Promise<LocalProviderProbe[]> {
+  return Promise.all(LOCAL_PROVIDERS.map(async (provider): Promise<LocalProviderProbe> => {
+    signal?.throwIfAborted()
     const config = { id: provider, provider, model: '' }
+    const endpoint = { provider, baseUrl: endpointFor(config) }
     try {
-      return { provider, baseUrl: endpointFor(config), ...await testProviderConnection(config, { signal }) }
-    } catch {
-      return null
+      return { ...endpoint, status: 'connected', ...await testProviderConnection(config, { signal }) }
+    } catch (error) {
+      signal?.throwIfAborted()
+      if (error instanceof ProviderHttpError && (error.status === 401 || error.status === 403)) {
+        return { ...endpoint, status: 'authorization_needed' }
+      }
+      if (error instanceof ProviderNetworkError) {
+        try {
+          const response = await fetch(localCatalogUrl(config), {
+            // Browsers require the follow redirect mode for an opaque fetch. Use a bodyless HEAD.
+            method: 'HEAD', mode: 'no-cors', credentials: 'omit', redirect: 'follow', referrerPolicy: 'no-referrer',
+            cache: 'no-store', signal: requestSignal(signal, 1_500),
+          })
+          void response.body?.cancel().catch(() => undefined)
+          // An opaque response establishes reachability without exposing its status or contents.
+          if (response.type === 'opaque') {
+            signal?.throwIfAborted()
+            return { ...endpoint, status: 'cors_blocked' }
+          }
+        } catch {
+          signal?.throwIfAborted()
+        }
+        return { ...endpoint, status: 'offline' }
+      }
+      return { ...endpoint, status: error instanceof ProviderTimeoutError ? 'offline' : 'unexpected_response' }
     }
   }))
-  return candidates.filter(candidate => candidate !== null)
+}
+
+export async function detectLocalProviders(options: { signal?: AbortSignal } = {}) {
+  return (await probeLocalProviders(options)).flatMap(probe => probe.status === 'connected'
+    ? [{ provider: probe.provider, baseUrl: probe.baseUrl, models: probe.models, latencyMs: probe.latencyMs }] : [])
 }

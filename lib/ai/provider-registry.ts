@@ -18,7 +18,7 @@ export const PROVIDERS = {
   zai: { label: 'Z.AI', protocol: 'openai', requiresKey: true, baseUrl: 'https://api.z.ai/api/paas/v4', docsUrl: 'https://docs.z.ai', signupUrl: 'https://z.ai/manage-apikey/apikey-list' },
   sarvam: { label: 'Sarvam', protocol: 'openai', requiresKey: true, baseUrl: 'https://api.sarvam.ai/v2', docsUrl: 'https://docs.sarvam.ai/api-reference/chat/chat-completions-v2', signupUrl: 'https://dashboard.sarvam.ai' },
   ollama: { label: 'Ollama', protocol: 'ollama', requiresKey: false, local: true, baseUrl: 'http://localhost:11434', docsUrl: 'https://docs.ollama.com/faq' },
-  lmstudio: { label: 'LM Studio', protocol: 'openai', requiresKey: false, local: true, baseUrl: 'http://localhost:1234/v1', docsUrl: 'https://lmstudio.ai/docs/developer' },
+  lmstudio: { label: 'LM Studio', protocol: 'openai', requiresKey: false, local: true, baseUrl: 'http://localhost:1234/v1', docsUrl: 'https://lmstudio.ai/docs/developer/core/server/settings' },
   llamacpp: { label: 'llama.cpp', protocol: 'openai', requiresKey: false, local: true, baseUrl: 'http://localhost:8080/v1', docsUrl: 'https://github.com/ggml-org/llama.cpp/tree/master/tools/server' },
   custom: { label: 'OpenAI-compatible endpoint', protocol: 'openai', requiresKey: false, docsUrl: 'https://platform.openai.com/docs/api-reference/chat' },
 } satisfies Record<string, ProviderDefinition>
@@ -37,6 +37,7 @@ export interface ProviderConfig {
 export const MAX_FALLBACK_MODELS = 5
 
 export const LOCAL_PROVIDERS = ['ollama', 'lmstudio', 'llamacpp'] as const
+export type LocalProviderId = typeof LOCAL_PROVIDERS[number]
 export const FREE_PRESETS = [
   { provider: 'openrouter', model: 'openrouter/free', label: 'OpenRouter Free Models Router', sourceUrl: 'https://openrouter.ai/openrouter/free' },
   { provider: 'gemini', model: 'gemini-3.1-flash-lite', label: 'Gemini Flash-Lite', sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing' },

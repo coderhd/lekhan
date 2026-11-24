@@ -200,3 +200,39 @@ test('persists the writer’s fallback order and discloses retries before sendin
     { hostname: 'api.groq.com', authorization: 'Bearer fixture-second-key', messages: [{ role: 'user', content: 'Draft a sentence.' }] },
   ])
 })
+
+test('discovers local model tags and allows choosing the model to save', async ({ page }) => {
+  const catalogReads: string[] = []
+  await page.route(url => url.hostname === 'localhost' && ['11434', '1234', '8080'].includes(url.port), async route => {
+    const request = route.request()
+    catalogReads.push(request.url())
+    if (request.url().includes(':11434')) {
+      return route.fulfill({
+        headers: { 'access-control-allow-origin': '*' },
+        json: { models: [{ name: 'fixture:one' }, { name: 'fixture:two' }] },
+      })
+    }
+    if (request.url().includes(':1234')) {
+      return route.fulfill({ status: 401, headers: { 'access-control-allow-origin': '*' } })
+    }
+    return route.abort('connectionrefused')
+  })
+  await page.goto('/workspace')
+  await page.getByRole('button', { name: 'Writing assistant' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Writing assistant' })
+  await dialog.getByLabel('Passphrase').fill('local discovery fixture')
+  await dialog.getByRole('button', { name: 'Create provider vault' }).click()
+  await dialog.getByRole('button', { name: 'Find local models' }).click()
+  const result = dialog.getByRole('region', { name: 'Local model servers' })
+  await expect(result.getByText('Access required', { exact: true })).toBeVisible()
+  await expect(result.getByText('No response', { exact: true })).toBeVisible()
+  await result.getByRole('button', { name: 'Configure access' }).click()
+  await expect(dialog.getByLabel('API key (optional)', { exact: true })).toBeFocused()
+  await expect(dialog.getByLabel('API endpoint')).toHaveValue('http://localhost:1234/v1')
+  await result.getByRole('combobox', { name: 'Choose model for Ollama' }).selectOption('fixture:two')
+  await expect(dialog.getByLabel('Model ID')).toBeFocused()
+  await expect(dialog.getByLabel('Model ID')).toHaveValue('fixture:two')
+  await dialog.getByRole('button', { name: 'Save connection' }).click()
+  await expect(dialog.getByRole('button', { name: 'Ollama fixture:two' })).toBeVisible()
+  expect(catalogReads).toContain('http://localhost:11434/api/tags')
+})

@@ -344,3 +344,95 @@
 .fallback-row .icon-button {
   width: 29px;
 }
+
+.local-discovery {
+  min-width: 0;
+  border-block-start: 1px solid var(--line);
+  padding-block-start: 14px;
+}
+
+.local-discovery h3 {
+  margin: 0 0 10px;
+}
+
+.local-discovery ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.local-discovery li {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.local-discovery-heading,
+.local-discovery-endpoint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+}
+
+.local-discovery-heading span {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.local-discovery-heading [data-status=connected] {
+  color: var(--pine);
+}
+
+.local-discovery-endpoint,
+.form-dialog .local-discovery p,
+.local-setup-command small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.local-discovery-endpoint code {
+  overflow-wrap: anywhere;
+}
+
+.local-setup summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.local-setup[open] summary {
+  margin-block-end: 9px;
+}
+
+.local-setup > p,
+.local-setup .assistant-provider-link {
+  margin-block-start: 8px;
+}
+
+.local-setup-command {
+  margin-block-start: 8px;
+}
+
+.local-setup-command pre {
+  background: var(--context);
+  border-radius: 6px;
+  padding: 8px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font-size: 12px;
+  direction: ltr;
+}
+
+.local-setup-command small {
+  display: block;
+  margin-block-start: 6px;
+}

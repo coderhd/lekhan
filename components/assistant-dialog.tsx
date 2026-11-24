@@ -4,7 +4,7 @@ import { ArrowUpRight, Check, Copy, LockKeyhole, Plus, Send, Square, Trash2 } fr
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { Page } from '@/lib/types'
-import { detectLocalProviders, streamChat, testProviderConnection, type ChatMessage, type ChatOptions } from '@/lib/ai/client'
+import { probeLocalProviders, streamChat, testProviderConnection, type ChatMessage, type ChatOptions, type LocalProviderProbe } from '@/lib/ai/client'
 import { endpointFor, FREE_PRESETS, PROVIDERS, providerDefinition, type ProviderConfig, type ProviderId } from '@/lib/ai/provider-registry'
 import { editorActionMessages, translationLanguages, type EditorAction } from '@/lib/ai/editor-actions'
 import { runFallback } from '@/lib/ai/fallback'
@@ -14,6 +14,7 @@ import { useLocale, useTranslations } from '@/lib/i18n/client'
 import { Dialog } from './workspace-dialogs'
 import BotBarModelPicker, { type ModelTelemetry } from './editor/bot-bar-model-picker'
 import FallbackModelSettings from './editor/fallback-model-settings'
+import LocalProviderDiscovery from './editor/local-provider-discovery'
 
 const defaultVaultKey = 'lekhan:provider-vault:v1'
 const newConnection = (): ProviderConfig => ({ id: crypto.randomUUID(), provider: 'ollama', model: '' })
@@ -62,6 +63,7 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
   const [tab, setTab] = useState<'chat' | 'providers' | 'local'>(localModel ? 'local' : 'providers')
   const [draft, setDraft] = useState(newConnection)
   const [models, setModels] = useState<string[]>([])
+  const [localProbes, setLocalProbes] = useState<LocalProviderProbe[]>()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [prompt, setPrompt] = useState('')
   const [reply, setReply] = useState('')
@@ -76,6 +78,8 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
   const [fallbackModel, setFallbackModel] = useState('')
   const languageNames = useMemo(() => new Intl.DisplayNames(locale, { type: 'language', fallback: 'none' }), [locale])
   const request = useRef<AbortController | null>(null)
+  const modelInput = useRef<HTMLInputElement>(null)
+  const keyInput = useRef<HTMLInputElement>(null)
   const selected = configs.find(config => config.id === active)
   const definition = providerDefinition(draft.provider)
   const installed = localModels ?? (localModel ? [localModel] : [])
@@ -330,12 +334,12 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
                     <input type="url" value={draft.baseUrl ?? ''} placeholder={definition.baseUrl ?? 'https://'} disabled={busy} onChange={event => setDraft({ ...draft, baseUrl: event.target.value })} />
                   </label>}
                   <label>Model ID
-                    <input list="assistant-discovered-models" value={draft.model} placeholder="Enter a model ID" disabled={busy} onChange={event => setDraft({ ...draft, model: event.target.value })} />
+                    <input ref={modelInput} list="assistant-discovered-models" value={draft.model} placeholder="Enter a model ID" disabled={busy} onChange={event => setDraft({ ...draft, model: event.target.value })} />
                     <datalist id="assistant-discovered-models">{models.map(model => <option key={model} value={model} />)}</datalist>
                   </label>
-                  {!definition.local && <label>API key
-                    <input type="password" autoComplete="off" value={draft.apiKey ?? ''} disabled={busy} onChange={event => setDraft({ ...draft, apiKey: event.target.value })} />
-                  </label>}
+                  <label>{definition.local ? text('optionalLocalKey') : 'API key'}
+                    <input ref={keyInput} type="password" autoComplete="off" value={draft.apiKey ?? ''} disabled={busy} onChange={event => setDraft({ ...draft, apiKey: event.target.value })} />
+                  </label>
                   {definition.signupUrl && <a className="assistant-provider-link" href={definition.signupUrl} target="_blank" rel="noopener noreferrer">Get a {definition.label} key <ArrowUpRight size={14} /></a>}
                   <FallbackModelSettings routes={allRoutes.filter(route => route.id !== 'provider:' + draft.id)}
                     chain={draft.fallback ?? []} disabled={busy} onChange={fallback => setDraft({ ...draft, fallback })} />
@@ -348,15 +352,20 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
                       setFeedback('Connected to ' + definition.label + '.')
                     })}>Test connection</button>
                     <button type="button" className="secondary-button" disabled={busy} onClick={() => void run(async signal => {
-                      const [first] = await detectLocalProviders({ signal })
+                      const results = await probeLocalProviders({ signal })
                       if (signal.aborted) return
-                      if (!first) throw new Error('No local endpoints responded. Start your model server and check browser access.')
-                      setDraft({ id: crypto.randomUUID(), provider: first.provider, baseUrl: first.baseUrl, model: first.models[0] ?? '' })
-                      setModels(first.models)
-                      setFeedback('Found ' + PROVIDERS[first.provider].label + ' on this device.')
-                    })}>Find local models</button>
+                      setLocalProbes(results)
+                      setFeedback(text('localDiscoveryComplete'))
+                    })}>{text(localProbes ? 'rescanLocalModels' : 'findLocalModels')}</button>
                     <button className="primary-button" disabled={busy}><Plus size={15} /> Save connection</button>
                   </div>
+                  {localProbes && <LocalProviderDiscovery results={localProbes} disabled={busy} onSelect={(probe, model) => {
+                    setDraft({ id: crypto.randomUUID(), provider: probe.provider, baseUrl: probe.baseUrl, model })
+                    setModels(probe.status === 'connected' ? probe.models : [])
+                    setFeedback(text('localModelReadyToConfigure', { provider: PROVIDERS[probe.provider].label }))
+                    const field = probe.status === 'authorization_needed' ? keyInput : modelInput
+                    field.current?.focus()
+                  }} />}
                 </form>
               </>
             ) : editorRequest ? (
