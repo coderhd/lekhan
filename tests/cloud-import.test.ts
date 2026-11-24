@@ -38,16 +38,70 @@ describe('cloud vault import', () => {
       const signal = new AbortController().signal
       const note = { id: 'starter-page', parentId: null, title: 'A selected page', markdown: 'Private [[local link]]',
         frontmatter: '---\ntags: [draft]\n---\n', properties: { tags: ['draft'] }, favorite: false, createdAt: '', updatedAt: '' }
-      const batch = await prepareLocalMirror(note, signal, { notebook: workspace, key: note.id, parent: null, known: [] })
+      const pending = await prepareLocalMirror(note, signal, { notebook: workspace, key: note.id, parent: null, known: [] })
+      const { batch } = pending
       expect(batch.pages).toEqual([{ ordinal: 0, parent: null, title: note.title, path: note.title,
         markdown: note.markdown, frontmatter: note.frontmatter, properties: note.properties }])
       expect(validateCloudImport(batch)).toEqual(batch)
       expect(validateCloudImport({ ...batch, localMirror: { ...batch.localMirror, parent: note.id } })).toBeNull()
-      await expect(uploadLocalMirror(batch, signal)).rejects.toThrow('Retry sync')
+      await expect(uploadLocalMirror(pending, [], signal)).rejects.toThrow('Retry sync')
       // Simulate IndexedDB returning the previously selected payload.
       lost = false
-      await expect(uploadLocalMirror(JSON.parse(JSON.stringify(batch)), signal)).resolves.toBe(pageId)
+      await expect(uploadLocalMirror({ state: 'pending', batch: JSON.parse(JSON.stringify(batch)) }, [], signal)).resolves.toBe(pageId)
       expect(recorded).toEqual([JSON.stringify(batch), JSON.stringify(batch)])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('resumes a notebook file from its durable draft and keeps the page pending until the relay confirms', async () => {
+    const file = { id: attempt, filename: 'Report.pdf', data: Uint8Array.of(1, 2, 3) }
+    const note = { id: 'reading-list', parentId: null, title: 'My research',
+      markdown: `[Read](#lekhan-file-${file.id}-%23page%3D2)`,
+      files: [file], favorite: false, createdAt: '', updatedAt: '' }
+    const posts: string[] = []
+    const uploads: string[] = []
+    let lost = true
+    const pageId = '40000000-0000-4000-8000-000000000004'
+    vi.stubGlobal('fetch', async (url: string | URL, init?: RequestInit) => {
+      const target = String(url)
+      const headers = new Headers(init?.headers)
+      if (target.startsWith('/api/import?') && !init?.method) return Response.json({ current: 'paid', batches: [], account: owner })
+      if (target === '/api/import?sync=automatic') {
+        expect(headers.get('X-Lekhan-Account')).toBe(owner)
+        posts.push(String(init?.body))
+        return Response.json({ pages: [{ id: pageId, title: note.title }] })
+      }
+      if (target.startsWith('/api/sync/session?')) {
+        expect(target).toContain('account=' + owner)
+        return Response.json({ endpoint: 'wss://cloud.example.test', ticket: 'fixture' })
+      }
+      expect(target).toMatch(new RegExp(`/attachments/${pageId}/`))
+      const id = target.split('/').at(-1)!
+      uploads.push(id)
+      expect(headers.get('X-Lekhan-SHA256')).toMatch(/^[a-f0-9]{64}$/)
+      expect(init?.body).toEqual(file.data)
+      if (lost) return Response.json({ error: 'attachments_unavailable' }, { status: 503 })
+      return Response.json({ id, filename: file.filename, byte_count: file.data.byteLength })
+    })
+    try {
+      const signal = new AbortController().signal
+      expect(nextAutomaticMirror([note])).toBe(note)
+      expect(nextAutomaticMirror([{ ...note, files: [{ ...file, data: new Uint8Array(0) }] }])).toBeUndefined()
+      const pending = await prepareLocalMirror(note, signal, { notebook: workspace, key: note.id, parent: null, known: [] }, true)
+      const transfer = pending.files![0]
+      expect(transfer).not.toHaveProperty('data')
+      expect(transfer.sourceId).toBe(file.id)
+      expect(pending.batch.pages[0].markdown).toBe(`[Read](#lekhan-file-${transfer.id}-%23page%3D2)`)
+      await expect(uploadLocalMirror(pending, [], signal, true)).rejects.toThrow('could not be read')
+      expect(posts).toHaveLength(0)
+      await expect(uploadLocalMirror(pending, note.files, signal, true)).rejects.toThrow('The file transfer could not finish')
+      const reopened = { ...note, cloudMirror: JSON.parse(JSON.stringify(pending)) }
+      expect(nextAutomaticMirror([reopened], note.id)).toBe(reopened)
+      lost = false
+      await expect(uploadLocalMirror(reopened.cloudMirror, reopened.files, signal, true)).resolves.toBe(pageId)
+      expect(posts).toEqual([JSON.stringify(pending.batch), JSON.stringify(pending.batch)])
+      expect(uploads).toEqual([transfer.id, transfer.id])
     } finally {
       vi.unstubAllGlobals()
     }
@@ -63,7 +117,8 @@ describe('cloud vault import', () => {
     const second = await bindCloudImportFiles(cloudImportPlan(plan), owner, 'free')
     const other = await bindCloudImportFiles(cloudImportPlan(plan), workspace, 'free')
     expect(first.batches).toEqual(second.batches)
-    expect(first.files).toEqual(second.files)
+    expect(first.files[0]).toMatchObject({ id: second.files[0].id, digest: second.files[0].digest,
+      filename: second.files[0].filename, ordinal: second.files[0].ordinal, data: second.files[0].data })
     expect(first.files[0].id).not.toBe(other.files[0].id)
     expect(first.files[0].digest).toMatch(/^[a-f0-9]{64}$/)
     expect(first.batches[0].pages[0].markdown).toContain('#lekhan-file-' + first.files[0].id + '-%23page%3D2')

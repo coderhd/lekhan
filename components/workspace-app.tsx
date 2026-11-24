@@ -28,7 +28,7 @@ import PageEditor from './page-editor'
 import { VaultImportDialog } from './vault-import-dialog'
 import type { ImportReport, VaultImportPlan } from '@/lib/vault-import'
 import { track, trackMilestone } from '@/lib/analytics'
-import { AutomaticMirrorUnavailable, localMirrorPlacement, MirrorRejected, nextAutomaticMirror, prepareLocalMirror, uploadLocalMirror } from '@/lib/cloud/local-mirror'
+import { AutomaticMirrorUnavailable, hasUnsupportedMirrorFile, localMirrorPlacement, MirrorRejected, nextAutomaticMirror, prepareLocalMirror, uploadLocalMirror } from '@/lib/cloud/local-mirror'
 
 const statusMessage: Record<SaveStatus, string> = {
   loading: 'openingWorkspace', saving: 'saving', saved: 'savedLocally', error: 'saveUnavailable', conflict: 'unsavedChanges',
@@ -379,24 +379,24 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
   }
 
   const syncLocalPage = useCallback(async (note: Page, automatic = false) => {
-    if (mirrorRequest.current || !workspace || !mirrorEnabled || note.cloudMirror?.state === 'linked' || note.files?.length) return
+    if (mirrorRequest.current || !workspace || !mirrorEnabled || note.cloudMirror?.state === 'linked') return
     const controller = new AbortController()
     mirrorRequest.current = controller
     setSyncFailure(null)
     setSyncingPage(note.id)
     if (!automatic) setAction(null)
-    let batch = note.cloudMirror?.batch
+    let pending = note.cloudMirror
     try {
-      if (!batch) {
+      if (!pending) {
         const notebook = workspace.mirrorNotebookId ?? crypto.randomUUID()
-        batch = await prepareLocalMirror(note, controller.signal, localMirrorPlacement(workspace, note, notebook), automatic)
-        const pending = { state: 'pending' as const, batch }
+        const prepared = await prepareLocalMirror(note, controller.signal, localMirrorPlacement(workspace, note, notebook), automatic)
         await persistChange(state => state.pages.includes(note) && (!state.mirrorNotebookId || state.mirrorNotebookId === notebook)
-          ? { ...state, mirrorNotebookId: notebook, pages: state.pages.map(item => item === note ? { ...item, cloudMirror: pending } : item) } : state)
+          ? { ...state, mirrorNotebookId: notebook, pages: state.pages.map(item => item === note ? { ...item, cloudMirror: prepared } : item) } : state)
+        pending = prepared
       }
-      const attempt = batch.importId
+      const attempt = pending.batch.importId
       controller.signal.throwIfAborted()
-      const cloudId = await uploadLocalMirror(batch, controller.signal, automatic)
+      const cloudId = await uploadLocalMirror(pending, note.files ?? [], controller.signal, automatic)
       controller.signal.throwIfAborted()
       await persistChange(state => {
         const existing = state.pages.find(item => item.id === note.id)
@@ -408,8 +408,8 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
     } catch (failure) {
       if (controller.signal.aborted) return
       if (failure instanceof AutomaticMirrorUnavailable) setPaidSyncEnded(true)
-      if (failure instanceof MirrorRejected && batch) {
-        const attempt = batch.importId
+      if (failure instanceof MirrorRejected && pending) {
+        const attempt = pending.batch.importId
         await persistChange(state => {
           const existing = state.pages.find(item => item.id === note.id)
           if (existing?.cloudMirror?.state !== 'pending' || existing.cloudMirror.batch.importId !== attempt) return state
@@ -627,7 +627,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
                   <summary className="icon-button" aria-label={t('pageActions')} title={t('pageActions')}><MoreHorizontal size={21} /></summary>
                   <div className="page-menu-content">
                     {!localReadOnly && <button onClick={() => withMenuClosed(() => setTitleFocusRequest(value => value + 1))}><Pencil size={16} /> {t('renamePage')}</button>}
-                    {mirrorEnabled && !mirror && !page.files?.length && <button disabled={!!syncingPage || status === 'error' || status === 'conflict'}
+                    {mirrorEnabled && !mirror && <button disabled={!!syncingPage || status === 'error' || status === 'conflict'}
                       onClick={() => withMenuClosed(() => setAction({ kind: 'mirror', id: page.id }))}><Cloud size={16} /> Sync this page</button>}
                     <button onClick={() => withMenuClosed(() => add(page.id))}><CornerDownRight size={16} /> {t('newSubpage')}</button>
                     <button onClick={() => withMenuClosed(() => setAction({ kind: 'move', id: page.id }))}><MoveRight size={16} /> {t('movePage')}</button>
@@ -698,7 +698,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
                 {automaticMirror && !paidSyncEnded && !mirror &&
                   <button type="button" className="secondary-button" onClick={() => setSyncFailure(null)}>Retry notebook sync</button>}
               </div>}
-              {syncingPage === page.id && <p role="status">Syncing this page…</p>}
+              {syncingPage === page.id && <p role="status">{page.files?.length ? 'Syncing this page and its files…' : 'Syncing this page…'}</p>}
               {mirror?.state === 'pending' && syncingPage !== page.id && <div className="local-mirror-callout">
                 <p>The local draft is saved. Retry to confirm its cloud copy.</p>
                 <button type="button" className="secondary-button" disabled={!mirrorEnabled || !!syncingPage || status !== 'saved'} onClick={() => void syncLocalPage(page)}>Retry cloud sync</button>
@@ -771,7 +771,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
                   <ArrowDownToLine size={14} aria-hidden="true" /> <span>{file.filename}</span>
                 </button>
               </li>)}</ul>
-              {mirrorEnabled && <p>{t('filesStayLocal')}</p>}
+              {automaticMirror && !mirror && hasUnsupportedMirrorFile(page) && <p>{t('filesPreventSync')}</p>}
             </section>}
             {page.properties && Object.keys(page.properties).length > 0 && (
               <section className="context-section">
@@ -871,7 +871,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
       {action?.kind === 'mirror' && actionPage && <Dialog title="Sync this page" onClose={() => setAction(null)}>
         <div className="form-dialog">
           <h2>Sync {actionPage.title}</h2>
-          <p>Copy this note to your cloud workspace. Future edits open in the cloud editor.</p>
+          <p>{actionPage.files?.length ? 'Copy this note and its attached files to your cloud workspace.' : 'Copy this note to your cloud workspace.'} Future edits open in the cloud editor.</p>
           <div className="dialog-actions">
             <button type="button" className="secondary-button" onClick={() => setAction(null)}>{t('cancel')}</button>
             <button type="button" className="primary-button" onClick={() => void syncLocalPage(actionPage)}>Sync this page</button>

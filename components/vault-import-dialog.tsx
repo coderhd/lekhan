@@ -8,12 +8,13 @@ import { planVaultImport, type ImportReport, type VaultImportPlan } from '@/lib/
 import type { SaveStatus } from '@/lib/use-workspace'
 import { pickVaultFolder, readVaultFiles, readVaultZip, type VaultContents } from '@/lib/vault-reader'
 import { uploadImportedAttachment } from '@/lib/cloud/attachment-client'
-import type { cloudImportPlan, CloudImportReceipt } from '@/lib/cloud/import-plan'
+import type { BoundCloudFile, cloudImportPlan, CloudImportReceipt } from '@/lib/cloud/import-plan'
 import type { CloudImportImageContext } from '@/lib/cloud/prepare-images'
 import { consumeAnalyticsReceipts, track } from '@/lib/analytics'
 
 type Destination = { cloud: true; onOpenPage: (id: string) => void }
   | { cloud?: false; onImport: (plan: VaultImportPlan) => ImportReport | null; includeAttachments?: boolean; saveStatus: SaveStatus }
+type CloudDraft = Omit<ReturnType<typeof cloudImportPlan>, 'files'> & { files: BoundCloudFile[]; account?: string }
 
 export function VaultImportDialog(props: Destination & { onClose: () => void }) {
   const { onClose } = props
@@ -22,7 +23,7 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
   const directory = useRef<HTMLInputElement>(null)
   const markdown = useRef<HTMLInputElement>(null)
   const busy = useRef(false)
-  const [draft, setDraft] = useState<(ReturnType<typeof cloudImportPlan> & { account?: string }) | null>(null)
+  const [draft, setDraft] = useState<CloudDraft | null>(null)
   const [reading, setReading] = useState<'vault' | 'cloud' | null>(null)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState<{ saved: number; resumed: number; total: number; files: number; filesTotal: number } | null>(null)
@@ -36,7 +37,7 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
     if (report) track('import_report_viewed', source.current, report.degraded)
   }, [report])
 
-  async function upload(plan: ReturnType<typeof cloudImportPlan> & { account?: string }) {
+  async function upload(plan: CloudDraft) {
     setUploading(true)
     setError('')
     const total = plan.report.notes + plan.report.folders

@@ -69,7 +69,7 @@
     "externalReload": "打开已保存的版本会丢弃未保存的编辑。请先导出以保留副本。"
   },
   "app-shell": {
-    "filesStayLocal": "此页面及其文件保存在此笔记本中。",
+    "filesPreventSync": "此页面中的某个文件超出云端限制，或其名称或大小不受支持。此页面将保留在你的笔记本中。",
     "searchLocalCloudCopies": "云端搜索不可用，正在显示此设备上的副本。",
     "showMorePages": "显示更多页面",
     "showMoreFavorites": "显示更多收藏",

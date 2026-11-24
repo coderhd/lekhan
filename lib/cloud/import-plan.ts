@@ -42,7 +42,8 @@ export interface CloudImportReceipt {
   replayed: boolean
 }
 
-type CloudArchiveFile = LocalAttachment & { ordinal: number; digest?: string }
+type CloudArchiveFile = LocalAttachment & { ordinal: number }
+export type BoundCloudFile = CloudArchiveFile & { sourceId: string; digest: string }
 
 function importUuid(hex: string) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`
@@ -89,13 +90,15 @@ export function cloudImportPlan(vault: VaultImportPlan) {
   return { report, batches, files, firstNote: positions.get(workspace.activePageId ?? '') ?? 0 }
 }
 
-export async function bindCloudImportFiles(plan: ReturnType<typeof cloudImportPlan>, account: string | undefined, policy: CloudImagePolicy) {
-  if (!plan.files.length) return plan
+export async function bindCloudImportFiles<T extends { batches: CloudImportBatch[]; files: CloudArchiveFile[] }>(
+  plan: T, account: string | undefined, policy: CloudImagePolicy,
+): Promise<Omit<T, 'files'> & { files: BoundCloudFile[] }> {
+  if (!plan.files.length) return { ...plan, files: [] }
   if (!account) throw new Error('Could not verify the account for this file import.')
   const uploadLimit = policy === 'paid' ? PAID_ATTACHMENT_BYTES : FREE_ATTACHMENT_BYTES
   const byPage = new Map<number, Map<string, CloudArchiveFile>>()
   const digests = new Map<Uint8Array, string>()
-  const files = []
+  const files: BoundCloudFile[] = []
   for (const file of plan.files) {
     const filename = attachmentName(file.filename)
     if (!filename || !file.data.byteLength) throw new Error(`“${file.filename}” is empty or has an unsupported filename.`)
@@ -108,7 +111,7 @@ export async function bindCloudImportFiles(plan: ReturnType<typeof cloudImportPl
     const id = importUuid(await sha256(new TextEncoder().encode(key)))
     const digest = digests.get(file.data) ?? await sha256(new Uint8Array(file.data))
     digests.set(file.data, digest)
-    const bound = { ...file, filename, id, digest }
+    const bound = { ...file, filename, id, sourceId: file.id, digest }
     page.set(file.id, bound)
     files.push(bound)
   }

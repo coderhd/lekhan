@@ -1,5 +1,5 @@
 import type { ImportReport } from './vault-import'
-import type { CloudImportBatch } from './cloud/import-plan'
+import type { PendingLocalMirror } from './cloud/local-mirror'
 
 export interface LocalAttachment {
   id: string
@@ -18,7 +18,7 @@ export interface Page {
   favorite: boolean
   createdAt: string
   updatedAt: string
-  cloudMirror?: { state: 'pending'; batch: CloudImportBatch } | { state: 'linked'; pageId: string }
+  cloudMirror?: PendingLocalMirror | { state: 'linked'; pageId: string }
 }
 
 export interface Workspace {

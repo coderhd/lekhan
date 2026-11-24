@@ -69,7 +69,7 @@
     "externalReload": "Opening the saved copy discards unsaved edits. Export them first to keep a copy."
   },
   "app-shell": {
-    "filesStayLocal": "This page and its files stay in this notebook.",
+    "filesPreventSync": "A file on this page exceeds the cloud limit or has an unsupported name or size. This page stays in your notebook.",
     "searchLocalCloudCopies": "Cloud search is unavailable. Showing copies on this device.",
     "showMorePages": "Show more pages",
     "showMoreFavorites": "Show more favorites",

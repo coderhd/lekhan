@@ -44,16 +44,16 @@ export async function listCloudAttachments(pageId: string, signal: AbortSignal, 
 }
 
 export async function uploadImportedAttachment(pageId: string, file: {
-  id: string; filename: string; data: Uint8Array; digest?: string
-}, account: string | undefined) {
+  id: string; filename: string; data: Uint8Array; digest: string
+}, account: string | undefined, signal?: AbortSignal) {
   const reply = await transferCloudAttachment(pageId, file.id, {
     method: 'POST',
-    signal: AbortSignal.timeout(120_000),
+    signal: AbortSignal.any([AbortSignal.timeout(120_000), ...(signal ? [signal] : [])]),
     headers: {
       'Content-Type': 'application/octet-stream',
       'X-Lekhan-Filename': encodeURIComponent(file.filename),
       'X-Lekhan-Bytes': String(file.data.byteLength),
-      'X-Lekhan-SHA256': file.digest ?? '',
+      'X-Lekhan-SHA256': file.digest,
     },
     body: new Uint8Array(file.data),
   }, account)

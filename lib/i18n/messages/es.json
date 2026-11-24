@@ -69,7 +69,7 @@
     "externalReload": "Al abrir la copia guardada, se perderán los cambios sin guardar. Expórtalos primero para conservarlos."
   },
   "app-shell": {
-    "filesStayLocal": "Esta página y sus archivos se quedan en este cuaderno.",
+    "filesPreventSync": "Un archivo de esta página supera el límite de la nube o tiene un nombre o tamaño incompatible. La página se queda en tu cuaderno.",
     "searchLocalCloudCopies": "La búsqueda en la nube no está disponible. Se muestran las copias de este dispositivo.",
     "showMorePages": "Mostrar más páginas",
     "showMoreFavorites": "Mostrar más favoritos",
