@@ -346,6 +346,8 @@
     "browse": "Browse saved pages"
   },
   "cloud-export": {
+    "downloadingAttachment": "Downloading attachment…",
+    "attachmentUnavailable": "Could not download the attachment. Check your connection and page access.",
     "title": "Export page",
     "close": "Close export",
     "zipFile": "ZIP archive",

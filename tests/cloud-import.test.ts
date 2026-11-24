@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createClient } from '@supabase/supabase-js'
 import * as Y from 'yjs'
-import { cloudImportPlan } from '../lib/cloud/import-plan'
+import { bindCloudImportFiles, cloudImportPlan } from '../lib/cloud/import-plan'
 import { allowCloudImportImages, importPageId, validateCloudImport, writeCloudBatch } from '../lib/cloud/import-server'
 import { cloudImageAllowed, FREE_IMAGE_BYTES, inlineCloudImages, PAID_IMAGE_BYTES } from '../lib/cloud/image-policy'
 import { snapshotCipher } from '../server/sync/snapshot'
@@ -51,6 +51,27 @@ describe('cloud vault import', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  it('uses stable file IDs, changes them across accounts, and binds note links to those IDs', async () => {
+    const plan = {
+      fingerprint: 'e'.repeat(64), invalidProperties: 0, directories: [], images: new Map(),
+      notes: [{ sourcePath: 'Page.md', title: 'Page', markdown: '[Report](report.pdf#page=2)' }],
+      attachments: new Map([['report.pdf', Uint8Array.of(1, 2, 3)]]),
+    }
+    const first = await bindCloudImportFiles(cloudImportPlan(plan), owner, 'free')
+    const second = await bindCloudImportFiles(cloudImportPlan(plan), owner, 'free')
+    const other = await bindCloudImportFiles(cloudImportPlan(plan), workspace, 'free')
+    expect(first.batches).toEqual(second.batches)
+    expect(first.files).toEqual(second.files)
+    expect(first.files[0].id).not.toBe(other.files[0].id)
+    expect(first.files[0].digest).toMatch(/^[a-f0-9]{64}$/)
+    expect(first.batches[0].pages[0].markdown).toContain('#lekhan-file-' + first.files[0].id + '-%23page%3D2')
+    await expect(bindCloudImportFiles(cloudImportPlan(plan), undefined, 'free')).rejects.toThrow('verify the account')
+
+    plan.attachments.set('report.pdf', new Uint8Array(2_000_001))
+    await expect(bindCloudImportFiles(cloudImportPlan(plan), owner, 'free')).rejects.toThrow('2 MB file limit')
+    await expect(bindCloudImportFiles(cloudImportPlan(plan), owner, 'paid')).resolves.toMatchObject({ files: [{ filename: 'report.pdf' }] })
   })
 
   it('sends identities of already-linked neighbors without adding their content to a local mirror', () => {

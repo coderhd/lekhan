@@ -346,6 +346,8 @@
     "browse": "Gespeicherte Seiten durchsuchen"
   },
   "cloud-export": {
+    "downloadingAttachment": "Anhang wird heruntergeladen …",
+    "attachmentUnavailable": "Der Anhang konnte nicht heruntergeladen werden. Prüfe deine Verbindung und deinen Seitenzugriff.",
     "title": "Seite exportieren",
     "close": "Export schließen",
     "zipFile": "ZIP-Archiv",

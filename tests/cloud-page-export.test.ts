@@ -3,12 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { writeCloudPageArchive } from '../lib/cloud/page-export'
 import { readVaultZip } from '../lib/vault-reader'
 import { planVaultImport } from '../lib/vault-import'
+import { attachmentDestination } from '../lib/local-attachments'
 import { applyVaultImport } from '../lib/workspace'
 import type { Page } from '../lib/types'
 
 const page: Page = {
   id: 'page', parentId: 'previous-parent', title: 'Field note', favorite: false, createdAt: '', updatedAt: '',
-  markdown: 'Unsynced sentence.\n\n![Chart](data:image/png;base64,iVBORw0KGgoBAg==)',
+  markdown: 'Unsynced sentence.\n\n![Chart](data:image/png;base64,iVBORw0KGgoBAg==)'
+    + '\n\n[Report](' + attachmentDestination({ id: '40000000-0000-4000-8000-000000000001', filename: 'Report.txt', data: Uint8Array.of(1, 2) }, '#page=2') + ')',
 }
 
 function fixture(failure?: 'denied' | 'truncated') {
@@ -19,7 +21,7 @@ function fixture(failure?: 'denied' | 'truncated') {
     if (url.pathname === '/api/attachments') {
       return Response.json(url.searchParams.has('after')
         ? { files: [{ id: 'second', filename: 'REPORT.txt', byte_count: 3 }], after: null }
-        : { files: [{ id: 'first', filename: 'Report.txt', byte_count: 2 }], after: 'first' })
+        : { files: [{ id: '40000000-0000-4000-8000-000000000001', filename: 'Report.txt', byte_count: 2 }], after: 'first' })
     }
     if (url.pathname === '/api/sync/session') {
       expect(url.searchParams.get('transfer')).toBe('attachment')
@@ -27,7 +29,7 @@ function fixture(failure?: 'denied' | 'truncated') {
     }
     expect(options?.headers).toMatchObject({ Authorization: 'Bearer signed' })
     expect(options).toMatchObject({ credentials: 'omit', redirect: 'error' })
-    if (url.pathname.endsWith('/first')) return new Response(Uint8Array.of(1, 2))
+    if (url.pathname.endsWith('/40000000-0000-4000-8000-000000000001')) return new Response(Uint8Array.of(1, 2))
     if (failure === 'denied') return Response.json({}, { status: 404 })
     return new Response(failure === 'truncated' ? Uint8Array.of(3, 4) : Uint8Array.of(3, 4, 5))
   }))
@@ -48,11 +50,13 @@ describe('cloud page export', () => {
     const files = unzipSync(new Uint8Array(bytes))
     expect(strFromU8(files['Field note.md'])).toContain('Unsynced sentence.\n\n![Chart](Attachments/image-1.png)')
     expect(files['Attachments/image-1.png']).toEqual(Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2]))
+    expect(strFromU8(files['Field note.md'])).toContain('[Report](Files/Report.txt#page=2)')
     expect(files['Files/Report.txt']).toEqual(Uint8Array.of(1, 2))
     expect(files['Files/REPORT (2).txt']).toEqual(Uint8Array.of(3, 4, 5))
     const plan = await planVaultImport(await readVaultZip(new File([bytes], 'cloud.zip'), true), true)
     const { workspace, report } = applyVaultImport({ revision: 0, pages: [], activePageId: null }, plan)
     expect(report).toMatchObject({ notes: 1, images: 1, files: 2 })
+    expect(workspace.pages[0].markdown).toContain('#lekhan-file-' + workspace.pages[0].files?.[0].id)
     expect(workspace.pages[0].files?.map(({ filename }) => filename)).toEqual(['Report.txt', 'REPORT (2).txt'])
     expect(workspace.pages[0].files?.[1].data).toEqual(Uint8Array.of(3, 4, 5))
     expect(requests).toContain('/api/attachments?pageId=page&after=first')

@@ -9,6 +9,9 @@ import { forgetCloudSearchPage, rememberCloudSearchPage } from '@/lib/cloud/loca
 import { useTranslations } from '@/lib/i18n/client'
 import { useCloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
 import { replaceSourceText } from '@/lib/sync/replace-source'
+import { transferCloudAttachment, transferredFilename } from '@/lib/cloud/attachment-client'
+import { attachmentReference } from '@/lib/local-attachments'
+import { downloadBlob } from '@/lib/downloads'
 import { wikiLinks } from '@/lib/markdown-references'
 import { trackWritingEdit } from '@/lib/analytics'
 import PageEditor from './page-editor'
@@ -67,6 +70,9 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
   const [historyOpen, setHistoryOpen] = useState(false)
   const [attachmentsOpen, setAttachmentsOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const download = useRef<AbortController | null>(null)
+  const [attachmentDownload, setAttachmentDownload] = useState<'running' | 'failed' | null>(null)
+  useEffect(() => () => download.current?.abort(), [])
   const [changingSync, setChangingSync] = useState(false)
   const [preferenceError, setPreferenceError] = useState('')
   const [preview, setPreview] = useState(false)
@@ -145,6 +151,25 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
     return true
   }
 
+  function openAttachment(href: string) {
+    const file = attachmentReference(href)
+    if (!file) return false
+    if (download.current) return true
+    const transfer = new AbortController()
+    download.current = transfer
+    setAttachmentDownload('running')
+    const signal = AbortSignal.any([transfer.signal, AbortSignal.timeout(120_000)])
+    void transferCloudAttachment(page.id, file.id, { method: 'GET', signal }, subject).then(async reply => {
+      const blob = await reply.blob()
+      signal.throwIfAborted()
+      downloadBlob(transferredFilename(reply), blob)
+      setAttachmentDownload(null)
+    }).catch(() => {
+      if (!transfer.signal.aborted) setAttachmentDownload('failed')
+    }).finally(() => { download.current = null })
+    return true
+  }
+
   async function toggleCloudSync() {
     setChangingSync(true)
     setPreferenceError('')
@@ -189,6 +214,8 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
           {replica.preference === 'paused' ? 'Resume cloud sync' : 'Pause cloud sync'}
         </button>}
       </div>
+      {attachmentDownload === 'running' && <p role="status">{exportText('downloadingAttachment')}</p>}
+      {attachmentDownload === 'failed' && <p role="alert" className="account-error">{exportText('attachmentUnavailable')}</p>}
       {preferenceError && <p className="account-error" role="alert">{preferenceError}</p>}
       {localOnly && <p className="billing-notice">{replica.session
         ? 'Your writing stays in this browser until cloud sync resumes.'
@@ -213,13 +240,14 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
         choices={choices}
         onChange={setMarkdown}
         onOpenLink={openLink}
+        onOpenAttachment={openAttachment}
         onSchemaError={() => setSchemaError(true)}
         collaboration={replica.session}
         imagePolicy={replica.imagePolicy}
         editable={editable}
         assistant={offlineShell && replica.status !== 'live' ? undefined : { storageScope: 'account:' + subject }}
       /> : preview ? <PageEditor
-        pageId={page.id} markdown={source} choices={choices} onChange={() => {}} showModePicker={false} editable={false} onOpenLink={openLink}
+        pageId={page.id} markdown={source} choices={choices} onChange={() => {}} showModePicker={false} editable={false} onOpenLink={openLink} onOpenAttachment={openAttachment}
       /> : <AssistedMarkdownSource key={page.id} ref={sourceInput} className={largeSource ? 'writer-source writer-source-bounded' : 'writer-source'}
         wrap={largeSource ? 'off' : 'soft'} aria-label={t('markdownSource')} markdown={source} readOnly={!editable} spellCheck={spellcheck}
         assistant={offlineShell && replica.status !== 'live' ? undefined : { storageScope: 'account:' + subject }} onChange={writeSource} onApply={writeSource} />)}

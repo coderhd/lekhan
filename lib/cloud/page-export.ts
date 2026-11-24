@@ -1,7 +1,9 @@
 import type { Page } from '../types'
-import { safeFilename, workspaceArchiveEntries } from '../workspace-export'
+import { markdownArchivePath, safeFilename, workspaceArchiveEntries } from '../workspace-export'
 import { readWorkspaceArchiveMetadata, workspaceManifestPath } from '../archive-metadata'
 import { listCloudAttachments, transferCloudAttachment } from './attachment-client'
+import { attachmentReference } from '../local-attachments'
+import { mapMarkdownDestinations } from '../markdown-destinations'
 import type { CloudAttachment } from './attachments'
 
 export type CloudExportProgress = { completed: number; total: number }
@@ -62,11 +64,18 @@ export async function writeCloudPageArchive(
     const zip = new ZipWriter(new WritableStream<Uint8Array>({ write: chunk => sink.write(chunk) }), {
       level: 0, useWebWorkers: false,
     })
-    const entries = workspaceArchiveEntries([{ ...page, parentId: null }])
-    const manifest = readWorkspaceArchiveMetadata(new TextDecoder().decode(entries[workspaceManifestPath]))!
-    const note = Object.values(manifest.notes)[0]
     const used = new Set<string>()
     const namedFiles = files.map(file => ({ file, path: 'Files/' + fileName(file.filename, used) }))
+    const paths = new Map(namedFiles.map(({ file, path }) => [file.id, path]))
+    const markdown = paths.size && page.markdown.includes('#lekhan-file-') ? mapMarkdownDestinations(page.markdown, target => {
+      const attachment = attachmentReference(target)
+      const path = attachment && paths.get(attachment.id)
+      if (attachment && path) return markdownArchivePath(path)
+        + encodeURI(attachment.fragment).replace(/[()]/g, char => char === '(' ? '%28' : '%29')
+    }) : page.markdown
+    const entries = workspaceArchiveEntries([{ ...page, markdown, parentId: null }])
+    const manifest = readWorkspaceArchiveMetadata(new TextDecoder().decode(entries[workspaceManifestPath]))!
+    const note = Object.values(manifest.notes)[0]
     note.files = namedFiles.map(({ path }) => path)
     entries[workspaceManifestPath] = new TextEncoder().encode(JSON.stringify(manifest))
     for (const [path, bytes] of Object.entries(entries)) {

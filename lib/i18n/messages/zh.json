@@ -346,6 +346,8 @@
     "browse": "浏览已保存的页面"
   },
   "cloud-export": {
+    "downloadingAttachment": "正在下载附件…",
+    "attachmentUnavailable": "无法下载附件。请检查网络连接和页面访问权限。",
     "title": "导出页面",
     "close": "关闭导出",
     "zipFile": "ZIP 压缩包",

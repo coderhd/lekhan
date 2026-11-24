@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { attachmentName, attachmentPartBytes, attachmentPaths, FREE_ATTACHMENT_BYTES, PAID_ATTACHMENT_BYTES, type CloudAttachment } from '../../lib/cloud/attachments.ts'
@@ -5,7 +6,7 @@ import { uuidPattern } from '../../lib/cloud/graph.ts'
 import { relayedPageAuthority } from '../../lib/sync/authority.ts'
 import { verifySyncTicket } from '../../lib/sync/ticket.ts'
 import { snapshotEnvelopeBytes, type snapshotCipher } from './snapshot.ts'
-import { uploadDocumentObject } from './storage-capacity.ts'
+import { DocumentUploadUnavailable, uploadDocumentObject } from './storage-capacity.ts'
 
 async function uploadBody(request: IncomingMessage, length: number) {
   const bytes = Buffer.alloc(length)
@@ -33,10 +34,11 @@ export function attachmentHttp(admin: SupabaseClient, cipher: ReturnType<typeof 
     }
     if (request.headers.origin !== origin) return fail(403, 'origin_denied')
     response.setHeader('Access-Control-Allow-Origin', origin)
+    response.setHeader('Access-Control-Expose-Headers', 'Content-Disposition')
     if (request.method === 'OPTIONS') {
       response.writeHead(204, {
         'Access-Control-Allow-Methods': 'GET, POST',
-        'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Lekhan-Filename, X-Lekhan-Bytes',
+        'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Lekhan-Filename, X-Lekhan-Bytes, X-Lekhan-SHA256',
       }).end()
       return
     }
@@ -88,32 +90,53 @@ export function attachmentHttp(admin: SupabaseClient, cipher: ReturnType<typeof 
         return fail(400, 'invalid_file')
       }
       if (length > (authority.imagePolicy === 'free' ? FREE_ATTACHMENT_BYTES : PAID_ATTACHMENT_BYTES)) return fail(413, 'file_limit')
+      const digest = request.headers['x-lekhan-sha256']
+      if (digest !== undefined && (typeof digest !== 'string' || !/^[a-f0-9]{64}$/.test(digest))) return fail(400, 'invalid_file')
       const bytes = await uploadBody(request, length)
-      if (!bytes) return fail(400, 'invalid_file')
+      if (!bytes || (digest && createHash('sha256').update(bytes).digest('hex') !== digest)) return fail(400, 'invalid_file')
       if (!verifySyncTicket(secret, bearer, page)) return fail(401, 'invalid_transfer')
       const uploadAccess = await currentAccess()
       if (uploadAccess.access !== 'write' || uploadAccess.preference === 'paused') return fail(403, 'read_only')
-      const reservation = await admin.rpc('rebuild_reserve_attachment', {
+      const reserve = () => admin.rpc(digest ? 'rebuild_reserve_import_attachment' : 'rebuild_reserve_attachment', {
         target_page: page, actor: ticket.subject, attachment: id, name: filename, file_bytes: length,
+        ...(digest ? { file_digest: digest } : {}),
       })
+      const reservation = await reserve()
       if (reservation.error) throw reservation.error
       const decision = reservation.data
       if (decision === 'denied') return fail(403, 'read_only')
       if (decision === 'file_limit' || decision === 'workspace_limit') return fail(413, decision)
-      if (decision !== 'pending' && decision !== 'ready') return fail(409, 'attachments_unavailable')
-      if (decision === 'pending') {
+      if (decision !== 'pending' && decision !== 'resume' && decision !== 'ready') return fail(409, 'attachments_unavailable')
+      if (decision !== 'ready') {
         for (const [index, path] of attachmentPaths(page, id, length).entries()) {
           const start = index * attachmentPartBytes
-          const part = cipher.seal(bytes.subarray(start, start + attachmentPartBytes), `attachment:${page}:${id}:${index}`)
-          if (await uploadDocumentObject(admin, path, part, false) !== 'uploaded') throw new Error('Attachment part already exists.')
+          const clear = bytes.subarray(start, start + attachmentPartBytes)
+          const purpose = `attachment:${page}:${id}:${index}`
+          const part = cipher.seal(clear, purpose)
+          if (await uploadDocumentObject(admin, path, part, false) !== 'uploaded') {
+            if (!digest) throw new Error('Attachment part already exists.')
+            const { data, error } = await admin.storage.from('documents').download(path)
+            if (error) throw error
+            if (data.size !== part.length || !clear.equals(cipher.open(new Uint8Array(await data.arrayBuffer()), purpose, false))) {
+              throw new Error('Saved attachment part does not match the archive.')
+            }
+          }
         }
         const result = await admin.rpc('rebuild_finish_attachment', { target_page: page, actor: ticket.subject, attachment: id })
         if (result.error) throw result.error
-        if (!result.data) return fail(403, 'read_only')
+        if (!result.data) {
+          if (!digest) return fail(403, 'read_only')
+          const concurrent = await reserve()
+          if (concurrent.error) throw concurrent.error
+          if (concurrent.data !== 'ready') return fail(403, 'read_only')
+        }
       }
-      response.writeHead(201, { 'Content-Type': 'application/json' }).end(JSON.stringify({ id, filename, byte_count: length }))
-    } catch {
-      if (!response.headersSent && !response.destroyed) fail(503, 'attachments_unavailable')
+      response.writeHead(201, { 'Content-Type': 'application/json' }).end(JSON.stringify({ id, filename, byte_count: length, ...(digest ? { replayed: decision === 'ready' } : {}) }))
+    } catch (error) {
+      if (!response.headersSent && !response.destroyed) {
+        const waiting = request.headers['x-lekhan-sha256'] && error instanceof DocumentUploadUnavailable && error.reason === 'busy'
+        fail(503, waiting ? 'import_attachment_pending' : 'attachments_unavailable')
+      }
     } finally {
       transfers--
     }

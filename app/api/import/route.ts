@@ -32,7 +32,7 @@ export async function GET(request: Request) {
       if (!plan || plan.tier === 'free' || plan.relayReadOnly) return failure('import_paid_sync_ended', 409)
     }
     return NextResponse.json(
-      await cloudImportImageContext(admin, workspace.data?.id ?? null, account.subject, attempt), { headers },
+      { ...await cloudImportImageContext(admin, workspace.data?.id ?? null, account.subject, attempt), account: account.subject }, { headers },
     )
   } catch {
     return failure('import_unavailable', 503)
@@ -42,6 +42,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const account = await accountContext()
   if (!account) return failure('sign_in_required', 401)
+  const expectedAccount = request.headers.get('x-lekhan-account')
+  if (expectedAccount !== null && expectedAccount !== account.subject) return failure('account_changed', 403)
   if (request.headers.get('content-type') !== 'application/json') return failure('invalid_import', 415)
   const admin = createServerAdmin()
   const cipher = configuredSnapshotCipher()

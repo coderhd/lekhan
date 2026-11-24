@@ -209,7 +209,7 @@ function findVaultTarget<T>(index: Map<string, T>, target: string, sourcePath: s
   return usable.length === 1 ? usable[0][1] : undefined
 }
 
-export function applyVaultImport(workspace: Workspace, plan: VaultImportPlan): { workspace: Workspace; report: ImportReport } {
+export function applyVaultImport(workspace: Workspace, plan: VaultImportPlan, { relativeImages = true } = {}): { workspace: Workspace; report: ImportReport } {
   const previous = workspace.vaultImports?.[plan.fingerprint]
   if (previous) {
     const activePageId = workspace.pages.some(page => page.id === previous.firstPageId)
@@ -317,7 +317,7 @@ export function applyVaultImport(workspace: Workspace, plan: VaultImportPlan): {
           register(file)
           return attachmentDestination(file, fragment)
         }
-        const image = findImage(path, note.sourcePath, false)
+        const image = plan.workspaceArchive || relativeImages ? findImage(path, note.sourcePath, false) : undefined
         if (image) usedImages.add(image)
         return image
       })

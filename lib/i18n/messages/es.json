@@ -346,6 +346,8 @@
     "browse": "Ver páginas guardadas"
   },
   "cloud-export": {
+    "downloadingAttachment": "Descargando archivo adjunto…",
+    "attachmentUnavailable": "No se pudo descargar el archivo adjunto. Comprueba tu conexión y el acceso a la página.",
     "title": "Exportar página",
     "close": "Cerrar exportación",
     "zipFile": "Archivo ZIP",

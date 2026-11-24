@@ -7,6 +7,7 @@ import { Dialog } from './workspace-dialogs'
 import { planVaultImport, type ImportReport, type VaultImportPlan } from '@/lib/vault-import'
 import type { SaveStatus } from '@/lib/use-workspace'
 import { pickVaultFolder, readVaultFiles, readVaultZip, type VaultContents } from '@/lib/vault-reader'
+import { uploadImportedAttachment } from '@/lib/cloud/attachment-client'
 import type { cloudImportPlan, CloudImportReceipt } from '@/lib/cloud/import-plan'
 import type { CloudImportImageContext } from '@/lib/cloud/prepare-images'
 import { consumeAnalyticsReceipts, track } from '@/lib/analytics'
@@ -16,15 +17,15 @@ type Destination = { cloud: true; onOpenPage: (id: string) => void }
 
 export function VaultImportDialog(props: Destination & { onClose: () => void }) {
   const { onClose } = props
-  const includeAttachments = !props.cloud && props.includeAttachments === true
+  const includeAttachments = props.cloud || props.includeAttachments === true
   const zip = useRef<HTMLInputElement>(null)
   const directory = useRef<HTMLInputElement>(null)
   const markdown = useRef<HTMLInputElement>(null)
   const busy = useRef(false)
-  const [draft, setDraft] = useState<ReturnType<typeof cloudImportPlan> | null>(null)
+  const [draft, setDraft] = useState<(ReturnType<typeof cloudImportPlan> & { account?: string }) | null>(null)
   const [reading, setReading] = useState<'vault' | 'cloud' | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [progress, setProgress] = useState<{ saved: number; resumed: number; total: number } | null>(null)
+  const [progress, setProgress] = useState<{ saved: number; resumed: number; total: number; files: number; filesTotal: number } | null>(null)
   const [firstPage, setFirstPage] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [report, setReport] = useState<ImportReport | null>(null)
@@ -35,17 +36,21 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
     if (report) track('import_report_viewed', source.current, report.degraded)
   }, [report])
 
-  async function upload(plan: ReturnType<typeof cloudImportPlan>) {
+  async function upload(plan: ReturnType<typeof cloudImportPlan> & { account?: string }) {
     setUploading(true)
     setError('')
     const total = plan.report.notes + plan.report.folders
     let saved = 0
     let resumed = 0
-    setProgress({ saved, resumed, total })
+    let files = 0
+    let reusedFiles = 0
+    const updateProgress = () => setProgress({ saved, resumed, total, files, filesTotal: plan.files.length })
+    updateProgress()
     try {
       for (const batch of plan.batches) {
         const result = await fetch('/api/import', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(batch),
+          method: 'POST', headers: { 'Content-Type': 'application/json', ...(plan.account ? { 'X-Lekhan-Account': plan.account } : {}) },
+          body: JSON.stringify(batch),
           signal: AbortSignal.timeout(120_000),
         })
         if (result.status === 413 || result.status === 409) {
@@ -59,6 +64,7 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
           }
         }
         if (result.status === 413) throw new Error('The cloud host rejected the size of this batch. Earlier batches are still saved.')
+        if (result.status === 403) throw new Error('Sign back into the account that started this import.')
         if (result.status === 400) throw new Error('A note has a title, path, or property that the cloud workspace could not accept.')
         if (result.status === 409) throw new Error('This batch conflicts with a saved import. Select the original files to continue.')
         if (!result.ok) throw new Error('Could not finish the cloud upload. Resume to continue from the saved batches.')
@@ -68,10 +74,21 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
         if (firstIndex >= 0 && receipt.pages[firstIndex]) setFirstPage(receipt.pages[firstIndex].id)
         saved += receipt.importedCount
         if (receipt.replayed) resumed += receipt.importedCount
-        setProgress({ saved, resumed, total })
+        updateProgress()
+        const targets = new Map(batch.pages.map((page, index) => [page.ordinal, receipt.pages[index]?.id]))
+        for (const file of plan.files) {
+          if (!targets.has(file.ordinal)) continue
+          const target = targets.get(file.ordinal)
+          if (!target) throw new Error('An attachment could not be matched to its imported page.')
+          const replayed = await uploadImportedAttachment(target, file, plan.account)
+          files++
+          if (replayed) reusedFiles++
+          updateProgress()
+        }
       }
-      setReport({ ...plan.report, repeated: saved === resumed })
-      if (saved > resumed) track('import_completed', source.current, plan.report.notes)
+      if (files !== plan.files.length) throw new Error('Some files could not be matched to their imported pages.')
+      setReport({ ...plan.report, ...(files ? { files } : {}), repeated: saved === resumed && files === reusedFiles })
+      if (saved > resumed || files > reusedFiles) track('import_completed', source.current, plan.report.notes)
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : 'Could not finish the cloud upload.')
     } finally {
@@ -100,7 +117,7 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
       const plan = await planVaultImport(contents, includeAttachments)
       if (props.cloud) {
         setReading('cloud')
-        const { cloudImportPlan } = await import('@/lib/cloud/import-plan')
+        const { bindCloudImportFiles, cloudImportPlan } = await import('@/lib/cloud/import-plan')
         const baseline = cloudImportPlan(plan)
         const attempt = baseline.batches[0]?.importId
         if (!attempt) throw new Error('No pages are ready to import.')
@@ -108,8 +125,9 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
         if (!response.ok) throw new Error('Cloud import could not check the workspace’s image limits.')
         const settings: CloudImportImageContext = await response.json()
         const { prepareCloudImportImages } = await import('@/lib/cloud/prepare-images')
-        const { batches, optimized } = await prepareCloudImportImages(baseline.batches, settings)
-        const cloudPlan = { ...baseline, batches }
+        const bound = await bindCloudImportFiles(baseline, settings.account, settings.current)
+        const { batches, optimized } = await prepareCloudImportImages(bound.batches, settings)
+        const cloudPlan = { ...bound, batches, account: settings.account }
         setOptimizedImages(optimized)
         setDraft(cloudPlan)
         setReading(null)
@@ -171,6 +189,7 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
         {progress && <div role="status" className="vault-status">
           {uploading && <LoaderCircle size={16} className="spin" />}
           {progress.saved} of {progress.total} pages saved{progress.resumed ? ` · ${progress.resumed} already imported` : ''}
+          {progress.filesTotal ? ` · ${progress.files} of ${progress.filesTotal} files saved` : ''}
         </div>}
         {error && <div role="alert" className="vault-status vault-error"><AlertCircle size={16} /> {error}</div>}
         {report && <>
@@ -188,9 +207,7 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
               ['Converted embeds', report.degraded],
             ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
           </dl>
-          {!!report.omittedFiles && <p>{props.cloud
-            ? 'Use the local notebook to restore the files listed in a Lekhan ZIP.'
-            : 'Files without a page link or an archive attachment record stay in the source vault.'}</p>}
+          {!!report.omittedFiles && <p>Files without a page link or an archive attachment record stay in the source vault.</p>}
           {report.degraded > 0 && <p>Attachments Lekhan couldn’t display were kept as links.</p>}
           {optimizedImages > 0 && <p>{optimizedImages === 1 ? '1 image was' : `${optimizedImages} images were`} optimized for Free cloud storage.</p>}
           {report.invalidProperties > 0 && <p>Some properties could not be read. Their original YAML is still in the page source.</p>}

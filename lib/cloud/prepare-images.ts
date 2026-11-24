@@ -3,6 +3,7 @@ import { isEmbeddedRaster } from '../markdown'
 import type { CloudImportBatch } from './import-plan'
 
 export interface CloudImportImageContext {
+  account?: string
   current: CloudImagePolicy
   batches: { index: number; policy: CloudImagePolicy | null }[]
 }
