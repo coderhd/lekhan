@@ -1,6 +1,6 @@
 import type { Page } from '../types'
 import { safeFilename, workspaceArchiveEntries } from '../workspace-export'
-import { workspaceManifestPath } from '../archive-metadata'
+import { readWorkspaceArchiveMetadata, workspaceManifestPath } from '../archive-metadata'
 import { listCloudAttachments, transferCloudAttachment } from './attachment-client'
 import type { CloudAttachment } from './attachments'
 
@@ -63,20 +63,23 @@ export async function writeCloudPageArchive(
       level: 0, useWebWorkers: false,
     })
     const entries = workspaceArchiveEntries([{ ...page, parentId: null }])
-    // Workbook restoration metadata belongs to the workspace ZIP.
-    delete entries[workspaceManifestPath]
+    const manifest = readWorkspaceArchiveMetadata(new TextDecoder().decode(entries[workspaceManifestPath]))!
+    const note = Object.values(manifest.notes)[0]
+    const used = new Set<string>()
+    const namedFiles = files.map(file => ({ file, path: 'Files/' + fileName(file.filename, used) }))
+    note.files = namedFiles.map(({ path }) => path)
+    entries[workspaceManifestPath] = new TextEncoder().encode(JSON.stringify(manifest))
     for (const [path, bytes] of Object.entries(entries)) {
       await zip.add(path, new Uint8ArrayReader(bytes), { signal })
     }
-    const used = new Set<string>()
     let completed = 0
     progress({ completed, total: files.length })
-    for (const file of files) {
+    for (const { file, path } of namedFiles) {
       signal.throwIfAborted()
       const response = await transferCloudAttachment(page.id, file.id, { method: 'GET', signal })
       if (!response.body) throw new Error('Attachment has no file data.')
       const input = { readable: completeFile(response.body, file.byte_count), size: file.byte_count }
-      await zip.add('Files/' + fileName(file.filename, used), input, { signal })
+      await zip.add(path, input, { signal })
       progress({ completed: ++completed, total: files.length })
     }
     await zip.close()

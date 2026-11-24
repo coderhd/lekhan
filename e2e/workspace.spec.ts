@@ -306,7 +306,7 @@ test('reveals more notebook pages and backlinks without hiding the active branch
       favorite: false, createdAt: now, updatedAt: now,
     }))
     await new Promise<void>((resolve, reject) => {
-      const request = indexedDB.open('lekhan-writing-workspace', 1)
+      const request = indexedDB.open('lekhan-writing-workspace')
       request.onupgradeneeded = () => request.result.createObjectStore('workspace')
       request.onerror = () => reject(request.error)
       request.onsuccess = () => {
@@ -336,4 +336,49 @@ test('reveals more notebook pages and backlinks without hiding the active branch
   await expect(context.getByRole('button', { name: /Fixture page 25/ })).toBeFocused()
   await context.getByRole('button', { name: /Fixture page 25/ }).press('Enter')
   await expect(title).toHaveValue('Fixture page 25')
+})
+
+test('downloads a vault attachment after saving the notebook and reopening its exported ZIP', async ({ page, browser }) => {
+  const bytes = Buffer.from('%PDF-1.7\nPortable document fixture\n')
+  const original = zipSync({
+    'Work/Attachment notebook.md': strToU8('Read [[../Evidence/Report.pdf#page=3|the report]].'),
+    'Evidence/Report.pdf': bytes,
+  })
+  async function importArchive(tab: typeof page, name: string, archive: Buffer) {
+    await tab.getByRole('button', { name: 'Import vault' }).click()
+    const dialog = tab.getByRole('dialog', { name: 'Import an Obsidian vault' })
+    await dialog.getByLabel('Vault ZIP').setInputFiles({ name, mimeType: 'application/zip', buffer: archive })
+    await expect(dialog.getByRole('status')).toHaveText('Import saved locally')
+    await expect(dialog.getByText('Files saved')).toBeVisible()
+    await dialog.getByRole('button', { name: 'Open workspace' }).click()
+    await tab.getByRole('button', { name: 'Attachment notebook', exact: true }).click()
+    await expect(tab.getByRole('textbox', { name: 'Page title' })).toHaveValue('Attachment notebook')
+  }
+  async function verifyDownload(tab: typeof page, keyboard = false) {
+    const file = await Promise.all([
+      tab.waitForEvent('download', { timeout: 5000 }),
+      keyboard ? tab.getByRole('button', { name: 'Report.pdf' }).press('Enter')
+        : tab.getByRole('link', { name: 'the report' }).click(),
+    ]).then(([download]) => download)
+    expect(file.suggestedFilename()).toBe('Report.pdf')
+    expect(await readFile(await file.path())).toEqual(bytes)
+  }
+
+  await page.goto('/workspace')
+  await importArchive(page, 'original.zip', Buffer.from(original))
+  await page.reload()
+  await verifyDownload(page)
+
+  const exporting = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export', exact: true }).click()
+  const exported = await readFile(await (await exporting).path())
+  expect(Buffer.from(unzipSync(exported)['Attachments/Files/1/Report.pdf'])).toEqual(bytes)
+  const restored = await browser.newPage()
+  try {
+    await restored.goto(new URL('/workspace', page.url()).href)
+    await importArchive(restored, 'Lekhan workspace.zip', exported)
+    await verifyDownload(restored, true)
+  } finally {
+    await restored.close()
+  }
 })

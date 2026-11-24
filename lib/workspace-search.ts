@@ -1,3 +1,4 @@
+import { attachmentReference } from './local-attachments'
 import type { Page } from './types'
 import { escaped, proseRanges, wikiLinks } from './markdown-references'
 
@@ -44,7 +45,7 @@ export function pageTags(page: Page): string[] {
     hashtag.lastIndex = 0
     for (const match of prose.matchAll(hashtag)) {
       const prefix = match[0].indexOf('#')
-      if (!escaped(prose, match.index + prefix)) add(match[1])
+      if (!attachmentReference('#' + match[1]) && !escaped(prose, match.index + prefix)) add(match[1])
     }
   }
   return [...tags.values()]
@@ -60,6 +61,7 @@ function searchRecord(page: Page) {
     tags: pageTags(page).map(tag => field('#' + tag)),
     targets: wikiLinks(page.markdown).map(link => field(link.target)),
     content: field(page.markdown
+      .replace(/#lekhan-file-[a-f0-9-]{36}(?:-[^\s)>]*)?/gi, '')
       .replace(/data:image\/[a-z-]+;base64,[a-z0-9+/=]+/gi, '')
       .replace(/\[\[([^|\]]+)(?:\|([^\]]+))?\]\]/g, (_, target, label) => label ?? target)
       .replace(/\s+/g, ' ')),

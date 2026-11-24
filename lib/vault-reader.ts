@@ -4,7 +4,8 @@ import { workspaceManifestPath } from './archive-metadata'
 export type VaultEntry = { path: string; data: Uint8Array }
 export type VaultContents = { files: VaultEntry[]; directories: string[] }
 
-const MAX_FILE_BYTES = 10 * 1024 * 1024
+export const maxVaultInlineBytes = 10 * 1024 * 1024
+const MAX_ATTACHMENT_BYTES = 50_000_000
 const MAX_TOTAL_BYTES = 100 * 1024 * 1024
 const MAX_IMAGES = 1_000
 const COMPRESSION_CHUNK_BYTES = 4 * 1024
@@ -35,12 +36,13 @@ function skipDirectory(segments: string[]) {
   return segments.some(segment => DISCARDED_DIRECTORIES.has(segment.toLowerCase()))
 }
 
-function isVaultFile(segments: string[]) {
+function isVaultFile(segments: string[], includeAttachments: boolean) {
   const name = segments.at(-1) ?? ''
   if (segments.length === 1 && name === workspaceManifestPath) return true
   return !name.startsWith('.') &&
     !skipDirectory(segments.slice(0, -1)) &&
-    (MARKDOWN_EXTENSION.test(name) || IMAGE_EXTENSION.test(name))
+    (MARKDOWN_EXTENSION.test(name) || IMAGE_EXTENSION.test(name) ||
+      includeAttachments && !segments.some(part => part.startsWith('.')) && !/\.canvas$/i.test(name))
 }
 
 class VaultCollector {
@@ -48,6 +50,8 @@ class VaultCollector {
   private readonly directories = new Set<string>()
   private totalBytes = 0
   private imageCount = 0
+
+  constructor(private readonly includeAttachments: boolean) {}
 
   addDirectory(segments: string[]) {
     let path = ''
@@ -59,9 +63,10 @@ class VaultCollector {
   }
 
   checkSize(path: string, bytes: number) {
-    if (bytes > MAX_FILE_BYTES) {
-      throw new Error(`"${path}" exceeds the 10 MB per-file limit.`)
-    }
+    const attachment = this.includeAttachments && path !== workspaceManifestPath
+      && (!MARKDOWN_EXTENSION.test(path) && !IMAGE_EXTENSION.test(path) || /^(?:Files|Attachments(?: \(\d+\))?\/Files)\//.test(path))
+    const limit = attachment ? MAX_ATTACHMENT_BYTES : maxVaultInlineBytes
+    if (bytes > limit) throw new Error(`"${path}" exceeds the ${attachment ? 50 : 10} MB per-file limit.`)
     if (this.totalBytes + bytes > MAX_TOTAL_BYTES) {
       throw new Error('The vault exceeds the 100 MB total unpacked size limit.')
     }
@@ -80,7 +85,8 @@ class VaultCollector {
     this.checkSize(path, size)
     const data = await read(path)
     this.checkSize(path, data.byteLength)
-    this.addDirectory(segments.slice(0, -1))
+    if (MARKDOWN_EXTENSION.test(path) || isImage || path === workspaceManifestPath) this.addDirectory(segments.slice(0, -1))
+    if (this.files.size >= 5_000) throw new Error('The vault exceeds the limit of 5,000 files.')
     this.files.set(path, data)
     this.totalBytes += data.byteLength
     if (isImage) this.imageCount += 1
@@ -128,8 +134,8 @@ async function zipDirectory(zip: Blob) {
 
 // Use the central directory for compressed byte ranges, including entries
 // written with data descriptors. Their unpacked sizes are only a preflight check.
-export async function readVaultZip(zip: File): Promise<VaultContents> {
-  const vault = new VaultCollector()
+export async function readVaultZip(zip: File, includeAttachments = false): Promise<VaultContents> {
+  const vault = new VaultCollector(includeAttachments)
   const directory = await zipDirectory(zip)
   let offset = directory.start
 
@@ -161,7 +167,7 @@ export async function readVaultZip(zip: File): Promise<VaultContents> {
 
     if (name.endsWith('/') || name.endsWith('\\')) {
       if (!skipDirectory(segments)) vault.addDirectory(segments)
-    } else if (isVaultFile(segments)) {
+    } else if (isVaultFile(segments, includeAttachments)) {
       await vault.addFile(segments, size, async path => {
         if (flags & 1) throw new Error('The vault contains an encrypted ZIP entry.')
         if (method !== 0 && method !== 8) {
@@ -216,12 +222,12 @@ export async function readVaultZip(zip: File): Promise<VaultContents> {
   return vault.contents()
 }
 
-export async function readVaultFiles(files: File[]): Promise<VaultContents> {
-  const vault = new VaultCollector()
+export async function readVaultFiles(files: File[], includeAttachments = false): Promise<VaultContents> {
+  const vault = new VaultCollector(includeAttachments)
   for (const file of files) {
     const relativePath = file.webkitRelativePath
     const segments = canonicalSegments(relativePath || file.name).slice(relativePath ? 1 : 0)
-    if (isVaultFile(segments)) {
+    if (isVaultFile(segments, includeAttachments)) {
       await vault.addFile(segments, file.size, async () => new Uint8Array(await file.arrayBuffer()))
     }
   }
@@ -237,7 +243,7 @@ type DirectoryHandle = {
 }
 
 /** Returns null when the browser needs the webkitdirectory fallback. */
-export async function pickVaultFolder(): Promise<VaultContents | null> {
+export async function pickVaultFolder(includeAttachments = false): Promise<VaultContents | null> {
   if (typeof window === 'undefined' || !window.isSecureContext) return null
   const picker = (window as Window & {
     showDirectoryPicker?: () => Promise<DirectoryHandle>
@@ -245,7 +251,7 @@ export async function pickVaultFolder(): Promise<VaultContents | null> {
   if (!picker) return null
 
   const root = await picker.call(window)
-  const vault = new VaultCollector()
+  const vault = new VaultCollector(includeAttachments)
 
   async function visit(directory: DirectoryHandle, parent: string[]) {
     for await (const handle of directory.values()) {
@@ -254,7 +260,7 @@ export async function pickVaultFolder(): Promise<VaultContents | null> {
       if (handle.kind === 'directory' && !skipDirectory(segments)) {
         vault.addDirectory(segments)
         await visit(handle, segments)
-      } else if (handle.kind === 'file' && isVaultFile(segments)) {
+      } else if (handle.kind === 'file' && isVaultFile(segments, includeAttachments)) {
         const file = await handle.getFile()
         await vault.addFile(segments, file.size, async () => new Uint8Array(await file.arrayBuffer()))
       }

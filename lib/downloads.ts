@@ -1,6 +1,8 @@
-import type { Page } from './types'
+import { attachmentReference } from './local-attachments'
+import { mapMarkdownDestinations } from './markdown-destinations'
+import type { LocalAttachment, Page } from './types'
 import { exportPage } from './workspace'
-import { makeWorkspaceArchive, safeFilename } from './workspace-export'
+import { makeWorkspaceArchive, markdownArchivePath, safeAttachmentFilename, safeFilename } from './workspace-export'
 import { track } from './analytics'
 
 export function downloadBlob(filename: string, blob: Blob) {
@@ -12,8 +14,19 @@ export function downloadBlob(filename: string, blob: Blob) {
   setTimeout(() => URL.revokeObjectURL(url), 30_000)
 }
 
+export function downloadAttachment(file: LocalAttachment) {
+  const data = new Blob([new Uint8Array(file.data)], { type: 'application/octet-stream' })
+  downloadBlob(safeAttachmentFilename(file.filename), data)
+}
+
 export function downloadPage(page: Page) {
-  downloadBlob(`${safeFilename(page.title)}.md`, new Blob([exportPage(page)], { type: 'text/markdown' }))
+  const files = page.files
+  const markdown = files?.length ? mapMarkdownDestinations(page.markdown, target => {
+    const link = attachmentReference(target)
+    const file = link && files.find(item => item.id === link.id)
+    if (file && link) return markdownArchivePath(safeAttachmentFilename(file.filename)) + encodeURI(link.fragment).replace(/[()]/g, char => char === '(' ? '%28' : '%29')
+  }) : page.markdown
+  downloadBlob(`${safeFilename(page.title)}.md`, new Blob([exportPage({ ...page, markdown })], { type: 'text/markdown' }))
   track('export_triggered', 'markdown')
 }
 

@@ -3,6 +3,7 @@ export const workspaceManifestPath = '.lekhan-workspace.json'
 export interface ArchivedNote {
   title: string
   generatedHeading: boolean
+  files?: string[]
 }
 
 export interface WorkspaceArchiveMetadata {
@@ -21,7 +22,9 @@ export function readWorkspaceArchiveMetadata(source: string): WorkspaceArchiveMe
     for (const [path, note] of Object.entries(value.notes)) {
       if (!note || typeof note !== 'object' || !('title' in note) || typeof note.title !== 'string' || !note.title.trim()
         || !('generatedHeading' in note) || typeof note.generatedHeading !== 'boolean') return
-      notes.set(path, { title: note.title, generatedHeading: note.generatedHeading })
+      const files = 'files' in note ? note.files : undefined
+      if (files !== undefined && (!Array.isArray(files) || files.some(file => typeof file !== 'string'))) return
+      notes.set(path, { title: note.title, generatedHeading: note.generatedHeading, ...(files ? { files } : {}) })
     }
     return { version: 1, notes: Object.fromEntries(notes), attachments: value.attachments }
   } catch {

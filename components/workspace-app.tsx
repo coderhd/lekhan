@@ -3,7 +3,7 @@
 import {
   ArrowDownToLine, ArrowUpFromLine, BookOpen, CalendarDays, Check, ChevronDown,
   ChevronRight, CircleAlert, FileText, FolderClosed, Keyboard, List, LoaderCircle, Menu, MoreHorizontal,
-  Cloud, PanelRight, Plus, Search, Star, X, Link2, MoveRight, Trash2, Pencil, CornerDownRight, NotebookPen, Sparkles,
+  Cloud, PanelRight, Plus, Search, Star, X, Link2, MoveRight, Trash2, Pencil, CornerDownRight, NotebookPen, Sparkles, Paperclip,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
@@ -13,7 +13,8 @@ import {
   pagePath, resolvePage, updatePage,
 } from '@/lib/workspace'
 import { pageTags, workspaceSearch } from '@/lib/workspace-search'
-import { downloadPage, downloadWorkspace } from '@/lib/downloads'
+import { attachmentReference } from '@/lib/local-attachments'
+import { downloadAttachment, downloadPage, downloadWorkspace } from '@/lib/downloads'
 import { useWorkspace } from '@/lib/use-workspace'
 import { workspaceShortcut } from '@/lib/workspace-shortcuts'
 import type { SaveStatus } from '@/lib/use-workspace'
@@ -378,7 +379,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
   }
 
   const syncLocalPage = useCallback(async (note: Page, automatic = false) => {
-    if (mirrorRequest.current || !workspace || !mirrorEnabled || note.cloudMirror?.state === 'linked') return
+    if (mirrorRequest.current || !workspace || !mirrorEnabled || note.cloudMirror?.state === 'linked' || note.files?.length) return
     const controller = new AbortController()
     mirrorRequest.current = controller
     setSyncFailure(null)
@@ -626,7 +627,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
                   <summary className="icon-button" aria-label={t('pageActions')} title={t('pageActions')}><MoreHorizontal size={21} /></summary>
                   <div className="page-menu-content">
                     {!localReadOnly && <button onClick={() => withMenuClosed(() => setTitleFocusRequest(value => value + 1))}><Pencil size={16} /> {t('renamePage')}</button>}
-                    {mirrorEnabled && !mirror && <button disabled={!!syncingPage || status === 'error' || status === 'conflict'}
+                    {mirrorEnabled && !mirror && !page.files?.length && <button disabled={!!syncingPage || status === 'error' || status === 'conflict'}
                       onClick={() => withMenuClosed(() => setAction({ kind: 'mirror', id: page.id }))}><Cloud size={16} /> Sync this page</button>}
                     <button onClick={() => withMenuClosed(() => add(page.id))}><CornerDownRight size={16} /> {t('newSubpage')}</button>
                     <button onClick={() => withMenuClosed(() => setAction({ kind: 'move', id: page.id }))}><MoveRight size={16} /> {t('movePage')}</button>
@@ -717,6 +718,13 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
                 assistant={{ storageScope, localModel, localModels, transport: providerTransport }}
                 onChange={markdown => { if (!localReadOnly) change(state => updatePage(state, page.id, { markdown })) }}
                 onOpenLink={handleLink}
+                onOpenAttachment={href => {
+                  const link = attachmentReference(href)
+                  const file = link && page.files?.find(item => item.id === link.id)
+                  if (!file) return false
+                  downloadAttachment(file)
+                  return true
+                }}
               />}
             </article>
           </div>
@@ -756,6 +764,15 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
                 return current ? updatePage(state, current.id, { markdown: [current.markdown, markdown].filter(Boolean).join('\n\n') }) : state
               })
             })}
+            {!!page.files?.length && <section className="context-section">
+              <h3><Paperclip size={16} aria-hidden="true" /> {desktopText('attachments')}</h3>
+              <ul className="context-file-list">{page.files.map(file => <li key={file.id}>
+                <button type="button" onClick={() => downloadAttachment(file)}>
+                  <ArrowDownToLine size={14} aria-hidden="true" /> <span>{file.filename}</span>
+                </button>
+              </li>)}</ul>
+              {mirrorEnabled && <p>{t('filesStayLocal')}</p>}
+            </section>}
             {page.properties && Object.keys(page.properties).length > 0 && (
               <section className="context-section">
                 <h3><FileText size={16} /> Properties</h3>
@@ -801,7 +818,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
           return current ? updatePage(state, current.id, { markdown: [current.markdown, text].filter(Boolean).join('\n\n') }) : state
         })
       }} />}
-      {vaultOpen && <VaultImportDialog onClose={() => setVaultOpen(false)} onImport={importVault} saveStatus={status} />}
+      {vaultOpen && <VaultImportDialog onClose={() => setVaultOpen(false)} onImport={importVault} includeAttachments={!storage} saveStatus={status} />}
       {shortcutsOpen && <WorkspaceShortcutHelp onClose={() => setShortcutsOpen(false)} />}
       {switcherOpen && <SearchDialog titleOnly pages={pages} onOpen={open} onClose={() => setSwitcherOpen(false)} />}
       {searchOpen && <SearchDialog pages={pages} initialQuery={searchQuery} onOpen={open} cloudSubject={cloudSearchSubject}

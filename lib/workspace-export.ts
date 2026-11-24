@@ -3,6 +3,7 @@ import { workspaceManifestPath, type ArchivedNote, type WorkspaceArchiveMetadata
 import { hasYamlFrontmatter, isEmbeddedRaster } from './markdown'
 import { mapMarkdownDestinations } from './markdown-destinations'
 import { wikiLinks } from './markdown-references'
+import { attachmentReference } from './local-attachments'
 import type { Page } from './types'
 import { exportPage, pagePath, resolvePage } from './workspace'
 
@@ -12,6 +13,16 @@ export function safeFilename(name: string) {
   const safe = Array.from(name.replace(/[\\/:*?"<>|#[\]^%\p{Cc}]/gu, ' ').replace(/^[. ]+|[. ]+$/g, '')).slice(0, 60).join('')
     .replace(/[. ]+$/g, '') || 'Untitled'
   return /^(?:__macosx|con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(safe) ? '_' + safe : safe
+}
+
+export function safeAttachmentFilename(name: string) {
+  const dot = name.lastIndexOf('.')
+  if (dot <= 0 || !/^[a-z0-9]{1,16}$/i.test(name.slice(dot + 1))) return safeFilename(name)
+  return safeFilename(name.slice(0, dot)) + name.slice(dot)
+}
+
+export function markdownArchivePath(path: string) {
+  return path.split('/').map(segment => encodeURIComponent(segment).replace(/[()]/g, char => char === '(' ? '%28' : '%29')).join('/')
 }
 
 function reserveName(base: string, used: Set<string>, unavailable?: Set<string>) {
@@ -69,14 +80,31 @@ export function workspaceArchiveEntries(pages: Page[]) {
   const { paths, rootNames } = notePaths(pages)
   const attachments = reserveName('Attachments', rootNames)
   const assets = new Map<string, string>()
+  const retainedPaths = new Map<string, string>()
   const files: Record<string, Uint8Array> = Object.create(null)
   const notes: Record<string, ArchivedNote> = Object.create(null)
   for (const page of pages) {
     const path = paths.get(page.id)!
     const filename = path + '.md'
+    const retained = new Map<string, string>()
+    for (const file of page.files ?? []) {
+      const bytes = file.data
+      let asset = retainedPaths.get(file.id)
+      if (!asset) {
+        asset = `${attachments}/Files/${retainedPaths.size + 1}/${safeAttachmentFilename(file.filename)}`
+        retainedPaths.set(file.id, asset)
+        files[asset] = bytes
+      }
+      retained.set(file.id, asset)
+    }
+    const relative = '../'.repeat(path.split('/').length - 1)
     let markdown = linkTargets(page.markdown, pages, page, paths)
+    if (retained.size) markdown = mapMarkdownDestinations(markdown, target => {
+      const link = attachmentReference(target)
+      const asset = link && retained.get(link.id)
+      if (asset && link) return relative + markdownArchivePath(asset) + encodeURI(link.fragment).replace(/[()]/g, char => char === '(' ? '%28' : '%29')
+    })
     if (/data:image\//i.test(markdown)) {
-      const relative = '../'.repeat(path.split('/').length - 1)
       markdown = mapMarkdownDestinations(markdown, target => {
         if (!isEmbeddedRaster(target)) return
         let asset = assets.get(target)
@@ -93,11 +121,12 @@ export function workspaceArchiveEntries(pages: Page[]) {
           assets.set(target, asset)
           files[asset] = bytes
         }
-        return relative + asset.replaceAll(' ', '%20').replaceAll('(', '%28').replaceAll(')', '%29')
+        return relative + markdownArchivePath(asset)
       })
     }
     const serialized = exportPage({ ...page, markdown })
-    notes[filename] = { title: page.title, generatedHeading: !hasYamlFrontmatter(serialized) }
+    notes[filename] = { title: page.title, generatedHeading: !hasYamlFrontmatter(serialized),
+      ...(retained.size ? { files: [...retained.values()] } : {}) }
     files[filename] = strToU8(serialized)
   }
   const manifest: WorkspaceArchiveMetadata = { version: 1, notes, attachments }

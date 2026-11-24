@@ -69,6 +69,7 @@
     "externalReload": "Beim Öffnen der gespeicherten Kopie gehen ungespeicherte Änderungen verloren. Exportiere sie vorher."
   },
   "app-shell": {
+    "filesStayLocal": "Diese Seite und ihre Dateien bleiben in diesem Notizbuch.",
     "searchLocalCloudCopies": "Die Cloud-Suche ist nicht verfügbar. Kopien auf diesem Gerät werden angezeigt.",
     "showMorePages": "Weitere Seiten anzeigen",
     "showMoreFavorites": "Weitere Favoriten anzeigen",

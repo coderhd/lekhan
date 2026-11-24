@@ -1,6 +1,9 @@
 import { unzipSync, strFromU8 } from 'fflate'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { writeCloudPageArchive } from '../lib/cloud/page-export'
+import { readVaultZip } from '../lib/vault-reader'
+import { planVaultImport } from '../lib/vault-import'
+import { applyVaultImport } from '../lib/workspace'
 import type { Page } from '../lib/types'
 
 const page: Page = {
@@ -47,6 +50,11 @@ describe('cloud page export', () => {
     expect(files['Attachments/image-1.png']).toEqual(Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2]))
     expect(files['Files/Report.txt']).toEqual(Uint8Array.of(1, 2))
     expect(files['Files/REPORT (2).txt']).toEqual(Uint8Array.of(3, 4, 5))
+    const plan = await planVaultImport(await readVaultZip(new File([bytes], 'cloud.zip'), true), true)
+    const { workspace, report } = applyVaultImport({ revision: 0, pages: [], activePageId: null }, plan)
+    expect(report).toMatchObject({ notes: 1, images: 1, files: 2 })
+    expect(workspace.pages[0].files?.map(({ filename }) => filename)).toEqual(['Report.txt', 'REPORT (2).txt'])
+    expect(workspace.pages[0].files?.[1].data).toEqual(Uint8Array.of(3, 4, 5))
     expect(requests).toContain('/api/attachments?pageId=page&after=first')
     expect(progress.mock.calls).toEqual([[{ completed: 0, total: 2 }], [{ completed: 1, total: 2 }], [{ completed: 2, total: 2 }]])
   })

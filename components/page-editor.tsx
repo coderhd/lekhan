@@ -26,6 +26,7 @@ interface PageEditorProps {
   choices: PageChoice[]
   onChange: (markdown: string) => void
   onOpenLink: (target: string) => void
+  onOpenAttachment?: (href: string) => boolean
   editable?: boolean
   focusOnMount?: boolean
   collaboration?: CloudCollaboration
@@ -186,6 +187,7 @@ function PageEditorSession({
   choices,
   onChange,
   onOpenLink,
+  onOpenAttachment,
   editable = true,
   focusOnMount = false,
   modePicker,
@@ -434,8 +436,17 @@ function PageEditorSession({
     updateMenu({ match, active: 0, manual: true, ...menuPosition(editor, match.to) })
   }
 
+  function downloadAttachment(event: React.MouseEvent<HTMLDivElement>) {
+    if (!(event.target instanceof Element)) return
+    const href = event.target.closest('a')?.getAttribute('href')
+    if (!href || !onOpenAttachment?.(href)) return
+    event.preventDefault()
+    event.stopPropagation()
+  }
+
   return (
-    <div className="writer-editor" ref={wrapper}>
+    <div className="writer-editor" ref={wrapper}
+      onClickCapture={onOpenAttachment ? downloadAttachment : undefined}>
       {editor && editable && (
         <FormatToolbar
           editor={editor}

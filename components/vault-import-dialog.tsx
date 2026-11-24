@@ -4,7 +4,7 @@ import { AlertCircle, Archive, Check, FileText, FolderOpen, LoaderCircle } from 
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { Dialog } from './workspace-dialogs'
-import type { ImportReport, VaultImportPlan } from '@/lib/vault-import'
+import { planVaultImport, type ImportReport, type VaultImportPlan } from '@/lib/vault-import'
 import type { SaveStatus } from '@/lib/use-workspace'
 import { pickVaultFolder, readVaultFiles, readVaultZip, type VaultContents } from '@/lib/vault-reader'
 import type { cloudImportPlan, CloudImportReceipt } from '@/lib/cloud/import-plan'
@@ -12,10 +12,11 @@ import type { CloudImportImageContext } from '@/lib/cloud/prepare-images'
 import { consumeAnalyticsReceipts, track } from '@/lib/analytics'
 
 type Destination = { cloud: true; onOpenPage: (id: string) => void }
-  | { cloud?: false; onImport: (plan: VaultImportPlan) => ImportReport | null; saveStatus: SaveStatus }
+  | { cloud?: false; onImport: (plan: VaultImportPlan) => ImportReport | null; includeAttachments?: boolean; saveStatus: SaveStatus }
 
 export function VaultImportDialog(props: Destination & { onClose: () => void }) {
   const { onClose } = props
+  const includeAttachments = !props.cloud && props.includeAttachments === true
   const zip = useRef<HTMLInputElement>(null)
   const directory = useRef<HTMLInputElement>(null)
   const markdown = useRef<HTMLInputElement>(null)
@@ -96,8 +97,7 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
     try {
       const contents = await read()
       if (!contents) return
-      const { planVaultImport } = await import('@/lib/vault-import')
-      const plan = await planVaultImport(contents)
+      const plan = await planVaultImport(contents, includeAttachments)
       if (props.cloud) {
         setReading('cloud')
         const { cloudImportPlan } = await import('@/lib/cloud/import-plan')
@@ -132,13 +132,13 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
   function selectZip(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0]
     event.currentTarget.value = ''
-    if (file) void run(() => readVaultZip(file))
+    if (file) void run(() => readVaultZip(file, includeAttachments))
   }
 
   function selectFolder(event: ChangeEvent<HTMLInputElement>, format?: 'markdown') {
     const files = Array.from(event.currentTarget.files ?? [])
     event.currentTarget.value = ''
-    if (files.length) void run(() => readVaultFiles(files), format)
+    if (files.length) void run(() => readVaultFiles(files, includeAttachments), format)
   }
 
   const saved = report && (props.cloud || props.saveStatus === 'saved')
@@ -160,7 +160,7 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
             if (!('showDirectoryPicker' in window) || !window.isSecureContext) {
               directory.current?.click()
             } else {
-              void run(pickVaultFolder)
+              void run(() => pickVaultFolder(includeAttachments))
             }
           }}><FolderOpen size={17} /> Choose folder</button>
           {props.cloud && <button className="secondary-button" disabled={!!reading} onClick={() => markdown.current?.click()}><FileText size={17} /> Choose Markdown</button>}
@@ -182,10 +182,15 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
           <dl className="vault-report">
             {[
               ['Notes', report.notes], ['Folders', report.folders], ['Images', report.images],
+              ...(report.files === undefined ? [] : [['Files saved', report.files]]),
+              ...(report.omittedFiles ? [['Files left in the archive', report.omittedFiles]] : []),
               ['Resolved links', report.resolved], ['Unresolved links', report.unresolved],
               ['Converted embeds', report.degraded],
             ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
           </dl>
+          {!!report.omittedFiles && <p>{props.cloud
+            ? 'Use the local notebook to restore the files listed in a Lekhan ZIP.'
+            : 'Files without a page link or an archive attachment record stay in the source vault.'}</p>}
           {report.degraded > 0 && <p>Attachments Lekhan couldn’t display were kept as links.</p>}
           {optimizedImages > 0 && <p>{optimizedImages === 1 ? '1 image was' : `${optimizedImages} images were`} optimized for Free cloud storage.</p>}
           {report.invalidProperties > 0 && <p>Some properties could not be read. Their original YAML is still in the page source.</p>}

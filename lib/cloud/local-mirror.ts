@@ -21,7 +21,7 @@ export function nextAutomaticMirror(pages: Page[], editingPage?: string) {
       parent = parent.parentId ? byId.get(parent.parentId) : undefined
     }
   }
-  return pages.find(page => !page.cloudMirror && page.id !== editingPage && candidates.has(page.id))
+  return pages.find(page => !page.files?.length && !page.cloudMirror && page.id !== editingPage && candidates.has(page.id))
 }
 
 export function localMirrorPlacement(workspace: Workspace, selected: Page, notebook: string): LocalMirrorPlacement {

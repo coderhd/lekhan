@@ -1,8 +1,9 @@
 import { lexer, type Token, type Tokens } from 'marked'
 import { stringify } from 'yaml'
-import type { Page, PageChoice, Workspace } from './types'
+import type { LocalAttachment, Page, PageChoice, Workspace } from './types'
 import { wikiLinks } from './markdown-references'
 import { mapMarkdownDestinations } from './markdown-destinations'
+import { attachmentDestination, vaultFileIndex } from './local-attachments'
 export { searchPages } from './workspace-search'
 import { hasYamlFrontmatter } from './markdown'
 import type { ImportNote, ImportReport, VaultImportPlan } from './vault-import'
@@ -246,6 +247,12 @@ export function applyVaultImport(workspace: Workspace, plan: VaultImportPlan): {
   const pathWithoutExtension = (path: string) => normalize(path).replace(/\.(md|markdown)$/i, '')
   const notePaths = new Map(importedNotes.map(({ note, page }) => [pathWithoutExtension(note.sourcePath), page]))
   const images = new Map([...plan.images].map(([path, data]) => [normalize(path), data]))
+  const localFiles = new Map<string, LocalAttachment>([...(plan.attachments ?? [])].map(([path, data]) => [path, {
+    id: crypto.randomUUID(), filename: path.split('/').at(-1)!, data,
+  }]))
+  const findFile = vaultFileIndex(localFiles)
+  const findImage = vaultFileIndex(plan.images)
+  const usedFiles = new Set<string>()
   const usedImages = new Set<string>()
   const report: ImportReport = {
     notes: importedNotes.length, folders: folders.size - mergedFolders.size, images: 0,
@@ -253,18 +260,34 @@ export function applyVaultImport(workspace: Workspace, plan: VaultImportPlan): {
   }
   let outputSize = 0
   for (const { page, note } of importedNotes) {
+    const files = new Map<string, LocalAttachment>()
+    const register = (file: LocalAttachment) => {
+      files.set(file.id, file)
+      usedFiles.add(file.id)
+    }
+    for (const path of note.files ?? []) {
+      const file = localFiles.get(path)
+      if (file) register(file)
+      else report.degraded++
+    }
     let body = ''
     let cursor = 0
     for (const link of wikiLinks(note.markdown, true)) {
       const [path] = link.target.split('#', 1)
       const anchor = link.target.slice(path.length)
       const picture = link.embed ? findVaultTarget(images, path, note.sourcePath) : undefined
+      const file = findFile(path, note.sourcePath, true)
       body += note.markdown.slice(cursor, link.start)
       if (picture) {
         usedImages.add(picture)
         const label = path.split('/').at(-1)?.replace(/[\[\]\\]/g, '') || 'Imported image'
         const width = /^\d{1,4}(?:x\d{1,4})?$/.test(link.alias ?? '') ? ' "lekhan-size:' + link.alias + '"' : ''
         body += '![' + label + '](' + picture + width + ')'
+      } else if (file) {
+        if (link.embed) report.degraded++
+        register(file)
+        const label = (link.alias ?? file.filename).replace(/[\\[\]]/g, '\\$&')
+        body += '[' + label + '](' + attachmentDestination(file, anchor) + ')'
       } else {
         if (link.embed && !plan.workspaceArchive) report.degraded++
         const target = (plan.workspaceArchive ? notePaths.get(pathWithoutExtension(path)) : undefined)
@@ -281,21 +304,32 @@ export function applyVaultImport(workspace: Workspace, plan: VaultImportPlan): {
       cursor = link.end
     }
     page.markdown = body + note.markdown.slice(cursor)
-    if (plan.workspaceArchive && plan.images.size) {
+    if ((plan.workspaceArchive || plan.attachments) && (plan.images.size || localFiles.size)) {
       page.markdown = mapMarkdownDestinations(page.markdown, target => {
         if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(target)) return
+        const delimiter = target.search(/[?#]/)
+        const fragment = delimiter < 0 ? '' : target.slice(delimiter)
         let path: string
-        try { path = decodeURIComponent(target) }
+        try { path = decodeURIComponent(delimiter < 0 ? target : target.slice(0, delimiter)) }
         catch { return }
-        const image = findVaultTarget(images, path, note.sourcePath)
+        const file = findFile(path, note.sourcePath, false)
+        if (file) {
+          register(file)
+          return attachmentDestination(file, fragment)
+        }
+        const image = findImage(path, note.sourcePath, false)
         if (image) usedImages.add(image)
         return image
       })
     }
+    if (files.size) page.files = [...files.values()]
     outputSize += page.markdown.length
     if (outputSize > 140_000_000) throw new Error('Embedded images make this vault too large to import.')
   }
   report.images = usedImages.size
+  if (plan.attachments?.size) report.files = usedFiles.size
+  const omitted = (plan.omittedFiles ?? 0) + (plan.attachments?.size ?? 0) - usedFiles.size
+  if (omitted) report.omittedFiles = omitted
   return {
     workspace: {
       ...workspace,

@@ -1,6 +1,12 @@
 import type { ImportReport } from './vault-import'
 import type { CloudImportBatch } from './cloud/import-plan'
 
+export interface LocalAttachment {
+  id: string
+  filename: string
+  data: Uint8Array
+}
+
 export interface Page {
   id: string
   parentId: string | null
@@ -8,6 +14,7 @@ export interface Page {
   markdown: string
   frontmatter?: string
   properties?: Record<string, unknown>
+  files?: LocalAttachment[]
   favorite: boolean
   createdAt: string
   updatedAt: string
