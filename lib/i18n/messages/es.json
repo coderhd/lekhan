@@ -323,6 +323,20 @@
     "selectionChanged": "La página cambió. Vuelve a abrir la acción desde el texto que quieres editar.",
     "close": "Cerrar"
   },
+  "cloud-export": {
+    "title": "Exportar página",
+    "close": "Cerrar exportación",
+    "zipFile": "Archivo ZIP",
+    "markdown": "Descargar Markdown",
+    "markdownDescription": "La página como archivo Markdown.",
+    "zip": "Guardar ZIP con adjuntos",
+    "zipDescription": "La página, sus imágenes integradas y los archivos adjuntos.",
+    "progress": "Añadidos {completed} de {total} archivos adjuntos…",
+    "preparing": "Preparando el archivo…",
+    "failed": "No se pudo guardar el ZIP. Comprueba tu conexión y tu acceso e inténtalo de nuevo.",
+    "complete": "La exportación ZIP está lista.",
+    "cancel": "Cancelar exportación"
+  },
   "editor-chrome": {
     "checkingCloudCopy": "Copia local · comprobando la sincronización",
     "checkingCloudAccess": "Comprobando permisos de edición",

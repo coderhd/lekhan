@@ -873,3 +873,17 @@ kbd {
 }
 .notebook-list-more:hover { background: var(--hover); }
 .page-tree .notebook-list-more { padding-inline-start: 21px; }
+
+.cloud-export-options {
+  display: grid;
+  gap: 1.25rem;
+  margin-block: 1.25rem;
+}
+.cloud-export-options > div {
+  display: grid;
+  justify-items: start;
+  gap: .4rem;
+}
+.cloud-export-options p {
+  margin: 0;
+}

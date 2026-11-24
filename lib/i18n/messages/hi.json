@@ -323,6 +323,20 @@
     "selectionChanged": "पेज बदल गया है। जिस पाठ को संपादित करना है, उसे चुनकर कार्रवाई फिर खोलें।",
     "close": "बंद करें"
   },
+  "cloud-export": {
+    "title": "पेज निर्यात करें",
+    "close": "निर्यात बंद करें",
+    "zipFile": "ZIP संग्रह",
+    "markdown": "Markdown डाउनलोड करें",
+    "markdownDescription": "पेज की Markdown फ़ाइल।",
+    "zip": "अटैचमेंट के साथ ZIP सेव करें",
+    "zipDescription": "पेज, उसमें मौजूद इमेज और उससे जुड़ी फ़ाइलें।",
+    "progress": "{total} में से {completed} अटैचमेंट जोड़े गए…",
+    "preparing": "संग्रह तैयार हो रहा है…",
+    "failed": "ZIP सेव नहीं हो सकी। अपना कनेक्शन और पहुँच जाँचकर फिर कोशिश करें।",
+    "complete": "ZIP निर्यात तैयार है।",
+    "cancel": "निर्यात रद्द करें"
+  },
   "editor-chrome": {
     "checkingCloudCopy": "स्थानीय कॉपी · सिंक की जाँच जारी है",
     "checkingCloudAccess": "संपादन की अनुमति जाँची जा रही है",

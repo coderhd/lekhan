@@ -22,12 +22,14 @@ export async function GET(request: NextRequest) {
     const access = await pageAccess(account.client, pageId, account.subject)
     if (!access?.privateAccess) return NextResponse.json({ error: 'page_not_found' }, { status: 404, headers })
     const { access: relay, imagePolicy, preference } = await relayedPageAuthority(admin, { pageId, subject: account.subject, role: access.role }, true)
-    if (preference === 'paused') return NextResponse.json({ preference, imagePolicy }, { headers })
+    const attachment = request.nextUrl.searchParams.get('transfer') === 'attachment'
+    if (preference === 'paused' && !attachment) return NextResponse.json({ preference, imagePolicy }, { headers })
     if (relay === 'limit') return NextResponse.json({ error: 'collaborator_limit' }, { status: 403, headers })
     if (!relay) return NextResponse.json({ error: 'sync_access_denied' }, { status: 403, headers })
-    const role = relay === 'read' ? 'viewer' : access.role
+    const writable = relay === 'write' && preference !== 'paused'
+    const role = writable && !attachment ? access.role : 'viewer'
     const ticket = issueSyncTicket(secret, { pageId, subject: account.subject, role })
-    return NextResponse.json({ ticket, endpoint, role, imagePolicy, preference, writable: relay === 'write',
+    return NextResponse.json({ ticket, endpoint, role, imagePolicy, preference, writable: writable && !attachment,
       planRestricted: relay === 'read' && access.role !== 'viewer' }, { headers })
   } catch {
     return NextResponse.json({ error: 'sync_unavailable' }, { status: 503, headers })

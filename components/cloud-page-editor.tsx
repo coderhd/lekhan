@@ -9,13 +9,13 @@ import { forgetCloudSearchPage, rememberCloudSearchPage } from '@/lib/cloud/loca
 import { useTranslations } from '@/lib/i18n/client'
 import { useCloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
 import { replaceSourceText } from '@/lib/sync/replace-source'
-import { downloadPage } from '@/lib/downloads'
 import { wikiLinks } from '@/lib/markdown-references'
 import { trackWritingEdit } from '@/lib/analytics'
 import PageEditor from './page-editor'
 import CheckpointDialog from './checkpoint-dialog'
 import CloudImageControl from './editor/cloud-image-control'
 import CloudAttachments from './cloud-attachments'
+import CloudExportDialog from './cloud-export-dialog'
 import { AssistedMarkdownSource } from './editor/selection-ai'
 import { useEditorPreferences } from './settings/appearance-settings'
 
@@ -46,6 +46,7 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
   enabled: boolean
 }) {
   const t = useTranslations('editor-chrome')
+  const exportText = useTranslations('cloud-export')
   const { spellcheck } = useEditorPreferences()
   const replica = useCloudCollaboration(page.id, subject, enabled, role !== 'viewer')
   const source = useReplicaSource(replica.session)
@@ -60,6 +61,7 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
   const [linkMissing, setLinkMissing] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [attachmentsOpen, setAttachmentsOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const [changingSync, setChangingSync] = useState(false)
   const [preferenceError, setPreferenceError] = useState('')
   const [preview, setPreview] = useState(false)
@@ -76,6 +78,7 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
     : syncPaused ? 'Sync paused' : checkingSync ? t('checkingCloudCopy') : 'Opening cloud page'
   const exportable = !!replica.session && !schemaError && (source !== null || markdown !== null)
   const searchableText = source ?? markdown
+  const frontmatter = exportOpen ? replica.session?.document.getMap('lekhan').get('frontmatter') : null
 
   useEffect(() => {
     if (replica.status === 'denied' || replica.status === 'limit') {
@@ -164,15 +167,9 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
         {replica.session && !localOnly && <button type="button" className="secondary-button" onClick={() => setAttachmentsOpen(true)}>
           <Paperclip size={15} /> Attachments
         </button>}
-        {exportable && <button type="button" className="secondary-button" onClick={() => {
-          const raw = replica.session?.document.getMap('lekhan').get('frontmatter')
-          downloadPage({
-            id: page.id, parentId: page.parent_id, title: page.title, markdown: source ?? markdown ?? '',
-            ...(typeof raw === 'string' ? { frontmatter: raw } : {}),
-            ...(page.properties ? { properties: page.properties } : {}),
-            favorite: false, createdAt: page.updated_at, updatedAt: page.updated_at,
-          })
-        }}><Download size={15} /> Export page</button>}
+        {exportable && <button type="button" className="secondary-button" onClick={() => setExportOpen(true)}>
+          <Download size={15} /> {exportText('title')}
+        </button>}
         {(replica.preference === 'personal' || replica.preference === 'paused') && <button type="button" className="secondary-button"
           disabled={changingSync || (!localOnly && replica.status !== 'live')} onClick={() => void toggleCloudSync()}>
           {replica.preference === 'paused' ? 'Resume cloud sync' : 'Pause cloud sync'}
@@ -219,6 +216,12 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
       </details>}
       {replica.session && historyOpen && <CheckpointDialog pageId={page.id} session={replica.session}
         live={replica.status === 'live'} writable={editable} onClose={() => setHistoryOpen(false)} />}
+      {exportable && exportOpen && <CloudExportDialog page={{
+        id: page.id, parentId: page.parent_id, title: page.title, markdown: source ?? markdown ?? '',
+        ...(typeof frontmatter === 'string' ? { frontmatter } : {}),
+        ...(page.properties ? { properties: page.properties } : {}),
+        favorite: false, createdAt: page.updated_at, updatedAt: page.updated_at,
+      }} onClose={() => setExportOpen(false)} />}
       {replica.session && attachmentsOpen && <CloudAttachments pageId={page.id} onClose={() => setAttachmentsOpen(false)} />}
     </div>
   )

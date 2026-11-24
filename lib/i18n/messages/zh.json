@@ -323,6 +323,20 @@
     "selectionChanged": "页面已更改。请重新选中要编辑的文本，再打开此操作。",
     "close": "关闭"
   },
+  "cloud-export": {
+    "title": "导出页面",
+    "close": "关闭导出",
+    "zipFile": "ZIP 压缩包",
+    "markdown": "下载 Markdown",
+    "markdownDescription": "将页面保存为 Markdown 文件。",
+    "zip": "保存包含附件的 ZIP",
+    "zipDescription": "包含页面、嵌入图片和附加文件。",
+    "progress": "已添加 {completed} 个附件，共 {total} 个…",
+    "preparing": "正在准备压缩包…",
+    "failed": "无法保存 ZIP。请检查网络连接和访问权限后重试。",
+    "complete": "ZIP 导出已就绪。",
+    "cancel": "取消导出"
+  },
   "editor-chrome": {
     "checkingCloudCopy": "正在显示本地副本 · 检查同步",
     "checkingCloudAccess": "正在检查编辑权限",

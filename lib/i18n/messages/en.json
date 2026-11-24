@@ -323,6 +323,20 @@
     "selectionChanged": "The page changed. Reopen the action from the text you want to edit.",
     "close": "Close"
   },
+  "cloud-export": {
+    "title": "Export page",
+    "close": "Close export",
+    "zipFile": "ZIP archive",
+    "markdown": "Download Markdown",
+    "markdownDescription": "The page as a Markdown file.",
+    "zip": "Save ZIP with attachments",
+    "zipDescription": "The page, embedded images, and files attached to it.",
+    "progress": "Added {completed} of {total} attachments…",
+    "preparing": "Preparing archive…",
+    "failed": "The ZIP could not be saved. Check your connection and access, then try again.",
+    "complete": "ZIP export ready.",
+    "cancel": "Cancel export"
+  },
   "editor-chrome": {
     "checkingCloudCopy": "Showing local copy · checking sync",
     "checkingCloudAccess": "Checking editing access",

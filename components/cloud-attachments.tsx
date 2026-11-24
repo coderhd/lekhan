@@ -3,36 +3,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { Download, FileText, Paperclip, Trash2, X } from 'lucide-react'
 import { attachmentName, type CloudAttachment } from '@/lib/cloud/attachments'
+import { listCloudAttachments, transferCloudAttachment, type CloudAttachmentList } from '@/lib/cloud/attachment-client'
 import { Dialog } from './workspace-dialogs'
-
-interface FileList { files: CloudAttachment[]; after: string | null; writable: boolean; canRemove: boolean; maxBytes: number }
 
 function formatBytes(bytes: number) {
   return bytes < 1000 ? `${bytes} B` : bytes < 1_000_000 ? `${Math.round(bytes / 1000)} KB`
     : `${Number((bytes / 1_000_000).toFixed(1))} MB`
 }
 
-async function transfer(pageId: string, id: string, options: RequestInit) {
-  const session = await fetch('/api/sync/session?' + new URLSearchParams({ pageId }), { cache: 'no-store', signal: options.signal })
-  if (!session.ok) throw new Error('Could not verify access to this page.')
-  const { endpoint, ticket } = await session.json()
-  const url = new URL(endpoint)
-  url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:'
-  url.pathname = `/attachments/${pageId}/${id}`
-  const reply = await fetch(url, {
-    ...options, headers: { ...options.headers, Authorization: 'Bearer ' + ticket }, credentials: 'omit',
-    cache: 'no-store', redirect: 'error', referrerPolicy: 'no-referrer',
-  })
-  if (reply.ok) return reply
-  const body = await reply.json().catch(() => null)
-  if (body?.error === 'workspace_limit') throw new Error('This workspace has reached its file storage limit.')
-  if (body?.error === 'file_limit') throw new Error('This file exceeds the workspace’s current per-file limit.')
-  if (reply.status === 403 || reply.status === 404) throw new Error('Access to this file or page changed.')
-  throw new Error('The file transfer could not finish. Try again.')
-}
-
 export default function CloudAttachments({ pageId, onClose }: { pageId: string; onClose: () => void }) {
-  const [list, setList] = useState<FileList | null>(null)
+  const [list, setList] = useState<CloudAttachmentList | null>(null)
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -43,7 +23,7 @@ export default function CloudAttachments({ pageId, onClose }: { pageId: string; 
   useEffect(() => {
     const controller = new AbortController()
     aborter.current = controller
-    void loadFiles(pageId, controller.signal).then(data => {
+    void listCloudAttachments(pageId, controller.signal).then(data => {
       if (!controller.signal.aborted) setList(data)
     }).catch(() => { if (!controller.signal.aborted) setError('Could not load attachments.') })
     return () => controller.abort()
@@ -66,7 +46,7 @@ export default function CloudAttachments({ pageId, onClose }: { pageId: string; 
     if (!name || !file.size) { setError('Choose a non-empty file with a valid name.'); return }
     if (file.size > list.maxBytes) { setError(`Choose a file up to ${formatBytes(list.maxBytes)}.`); return }
     void act(`Uploading ${name}…`, async signal => {
-      const reply = await transfer(pageId, crypto.randomUUID(), { method: 'POST', signal, body: file,
+      const reply = await transferCloudAttachment(pageId, crypto.randomUUID(), { method: 'POST', signal, body: file,
         headers: { 'Content-Type': 'application/octet-stream', 'X-Lekhan-Filename': encodeURIComponent(name), 'X-Lekhan-Bytes': String(file.size) } })
       const item: CloudAttachment = await reply.json()
       setList(current => current && { ...current, files: [item, ...current.files] })
@@ -76,7 +56,7 @@ export default function CloudAttachments({ pageId, onClose }: { pageId: string; 
 
   function download(file: CloudAttachment) {
     void act(`Downloading ${file.filename}…`, async signal => {
-      const reply = await transfer(pageId, file.id, { method: 'GET', signal })
+      const reply = await transferCloudAttachment(pageId, file.id, { method: 'GET', signal })
       const bytes = await reply.blob()
       if (signal.aborted) return
       const url = URL.createObjectURL(bytes)
@@ -139,17 +119,9 @@ export default function CloudAttachments({ pageId, onClose }: { pageId: string; 
     {list?.after && <button type="button" className="secondary-button" disabled={!!busy} onClick={() => {
       const after = list.after
       void act('Loading more files…', async signal => {
-        const next = await loadFiles(pageId, signal, after)
+        const next = await listCloudAttachments(pageId, signal, after)
         setList(current => current && { ...next, files: Array.from(new Map([...current.files, ...next.files].map(file => [file.id, file])).values()) })
       })
     }}>Load more</button>}
   </Dialog>
-}
-
-async function loadFiles(pageId: string, signal: AbortSignal, after?: string | null): Promise<FileList> {
-  const params = new URLSearchParams({ pageId })
-  if (after) params.set('after', after)
-  const reply = await fetch('/api/attachments?' + params, { signal, cache: 'no-store' })
-  if (!reply.ok) throw new Error('Could not load attachments.')
-  return reply.json()
 }

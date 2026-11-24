@@ -3,7 +3,7 @@ import { exportPage } from './workspace'
 import { makeWorkspaceArchive, safeFilename } from './workspace-export'
 import { track } from './analytics'
 
-function download(filename: string, blob: Blob) {
+export function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
@@ -13,12 +13,12 @@ function download(filename: string, blob: Blob) {
 }
 
 export function downloadPage(page: Page) {
-  download(`${safeFilename(page.title)}.md`, new Blob([exportPage(page)], { type: 'text/markdown' }))
+  downloadBlob(`${safeFilename(page.title)}.md`, new Blob([exportPage(page)], { type: 'text/markdown' }))
   track('export_triggered', 'markdown')
 }
 
 export async function downloadWorkspace(pages: Page[]) {
   const archive = await makeWorkspaceArchive(pages)
-  download('Lekhan workspace.zip', new Blob([new Uint8Array(archive)], { type: 'application/zip' }))
+  downloadBlob('Lekhan workspace.zip', new Blob([new Uint8Array(archive)], { type: 'application/zip' }))
   track('export_triggered', 'md_zip')
 }

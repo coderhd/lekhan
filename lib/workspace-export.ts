@@ -65,7 +65,7 @@ function linkTargets(markdown: string, pages: Page[], page: Page, paths: Map<str
   return pieces.join('')
 }
 
-export function makeWorkspaceArchive(pages: Page[]): Promise<Uint8Array> {
+export function workspaceArchiveEntries(pages: Page[]) {
   const { paths, rootNames } = notePaths(pages)
   const attachments = reserveName('Attachments', rootNames)
   const assets = new Map<string, string>()
@@ -102,5 +102,10 @@ export function makeWorkspaceArchive(pages: Page[]): Promise<Uint8Array> {
   }
   const manifest: WorkspaceArchiveMetadata = { version: 1, notes, attachments }
   files[workspaceManifestPath] = strToU8(JSON.stringify(manifest))
+  return files
+}
+
+export function makeWorkspaceArchive(pages: Page[]): Promise<Uint8Array> {
+  const files = workspaceArchiveEntries(pages)
   return new Promise((resolve, reject) => zip(files, (error, archive) => error ? reject(error) : resolve(archive)))
 }
