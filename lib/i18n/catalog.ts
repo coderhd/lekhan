@@ -26,6 +26,7 @@ export async function getCatalog(locale: Locale): Promise<Catalog> {
     desktop: withEnglishFallback(en.desktop, translated.desktop),
     'app-shell': withEnglishFallback(en['app-shell'], translated['app-shell']),
     'editor-ai': withEnglishFallback(en['editor-ai'], translated['editor-ai']),
+    'cloud-offline': withEnglishFallback(en['cloud-offline'], translated['cloud-offline']),
     'cloud-export': withEnglishFallback(en['cloud-export'], translated['cloud-export']),
     'editor-chrome': withEnglishFallback(en['editor-chrome'], translated['editor-chrome']),
     settings: withEnglishFallback(en.settings, translated.settings),

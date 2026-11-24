@@ -25,6 +25,7 @@ export interface CloudStatus {
   writable: boolean
   imagePolicy?: CloudImagePolicy
   preference?: PageSyncPreference
+  verifiedAt?: number
 }
 
 const empty: CloudStatus = { session: null, status: 'opening', writable: false }
@@ -36,8 +37,8 @@ const preferenceKey = 'sync-preference'
 type Ticket = { ticket: string; endpoint: string; writable: boolean; planRestricted?: boolean; imagePolicy?: CloudImagePolicy;
   preference?: Exclude<PageSyncPreference, 'paused'> }
 
-async function requestTicket(pageId: string, signal: AbortSignal) {
-  const response = await fetch('/api/sync/session?' + new URLSearchParams({ pageId }), {
+async function requestTicket(pageId: string, subject: string, signal: AbortSignal) {
+  const response = await fetch('/api/sync/session?' + new URLSearchParams({ pageId, account: subject }), {
     cache: 'no-store', credentials: 'same-origin', signal,
   })
   if (response.status === 403 && (await response.json().catch(() => null))?.error === 'collaborator_limit') return 'limit' as const
@@ -51,7 +52,7 @@ async function requestTicket(pageId: string, signal: AbortSignal) {
   return result as Ticket
 }
 
-export function useCloudCollaboration(pageId: string, subject: string, enabled: boolean, serverCanWrite: boolean) {
+export function useCloudCollaboration(pageId: string, subject: string, enabled: boolean, serverCanWrite: boolean, offlineShell = false) {
   const [state, setState] = useState<CloudStatus>(empty)
   const resume = useRef<() => void>(() => {})
   const preferenceChange = useRef<(enabled: boolean) => Promise<void>>(async () => { throw new Error('Sync is unavailable.') })
@@ -67,6 +68,7 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
     const cancel = new AbortController()
     let provider: WebsocketProvider | null = null
     let disposeProvider: (() => void) | null = null
+    let verifiedAt: number | undefined
     let cachedPermission: 'read' | 'write' | undefined
     let imagePolicy: CloudImagePolicy | undefined
     let preference: PageSyncPreference | undefined
@@ -85,13 +87,13 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
 
     function showLocalOnly() {
       if (!cancel.signal.aborted) {
-        setState({ session: cachedPermission ? session : null, status: 'local-only', writable: cachedPermission === 'write', imagePolicy, preference: 'paused' })
+        setState({ session: cachedPermission ? session : null, status: 'local-only', writable: cachedPermission === 'write', imagePolicy, preference: 'paused', verifiedAt })
       }
     }
 
     function showPaused() {
       if (paused && !cancel.signal.aborted) {
-        setState({ session: cachedPermission ? session : null, status: paused, writable: cachedPermission === 'write', imagePolicy, preference })
+        setState({ session: cachedPermission ? session : null, status: paused, writable: cachedPermission === 'write', imagePolicy, preference, verifiedAt })
       }
     }
 
@@ -107,7 +109,7 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
       if (cancel.signal.aborted) return
       if (preference === 'paused') { showLocalOnly(); return }
       if (paused) { showPaused(); return }
-      setState({ session: cachedPermission ? session : null, status: 'offline', writable: cachedPermission === 'write', imagePolicy, preference })
+      setState({ session: cachedPermission ? session : null, status: 'offline', writable: cachedPermission === 'write', imagePolicy, preference, verifiedAt })
       retry()
     }
 
@@ -115,11 +117,12 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
       if (cancel.signal.aborted || connecting || provider?.wsconnected || provider?.wsconnecting) return
       connecting = true
       const revision = ++connectionRevision
+      const requestedAt = Date.now()
       disposeProvider?.()
       disposeProvider = null
       provider = null
       try {
-        const response = await requestTicket(pageId, AbortSignal.any([cancel.signal, AbortSignal.timeout(12_000)]))
+        const response = await requestTicket(pageId, subject, AbortSignal.any([cancel.signal, AbortSignal.timeout(12_000)]))
         if (cancel.signal.aborted || revision !== connectionRevision) return
         if (!response || response === 'limit') {
           if (response === 'limit' && !reportedLimit) reportedLimit = track('paywall_hit', 'collaborators')
@@ -129,6 +132,7 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
           await Promise.allSettled([cache.del(cachedKey), cache.del(pauseKey), cache.del(preferenceKey)])
           return
         }
+        verifiedAt = requestedAt
         if (response.imagePolicy === 'free' || response.imagePolicy === 'paid') {
           imagePolicy = response.imagePolicy
           void cache.set(policyKey, imagePolicy).catch(() => undefined)
@@ -144,7 +148,7 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
           return
         }
         if (!writable && cachedPermission === 'write') {
-          setState({ session, status: 'opening', writable: false, imagePolicy, preference })
+          setState({ session, status: 'opening', writable: false, imagePolicy, preference, verifiedAt })
           cachedPermission = 'read'
         }
         const connection = new WebsocketProvider(response.endpoint, pageId, document, {
@@ -189,7 +193,7 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
           cachedPermission = allowed
           paused = undefined
           void cache.del(pauseKey).catch(() => undefined)
-          setState({ session, status: 'live', writable, imagePolicy, preference })
+          setState({ session, status: 'live', writable, imagePolicy, preference, verifiedAt })
           void cache.set(cachedKey, allowed).catch(() => undefined)
         }
         connection.on('connection-close', onClose)
@@ -244,14 +248,20 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
         cache.get(cachedKey), cache.get(policyKey), cache.get(pauseKey), cache.get(preferenceKey),
       ])
       if (cancel.signal.aborted) return
-      if (saved === 'read' || saved === 'write') cachedPermission = saved === 'write' && serverCanWrite ? 'write' : 'read'
+      if (saved === 'read' || saved === 'write') {
+        cachedPermission = saved === 'write' && serverCanWrite ? 'write' : 'read'
+        if (saved !== cachedPermission && !offlineShell) void cache.set(cachedKey, cachedPermission).catch(() => undefined)
+      }
       if (policy === 'free' || policy === 'paid') imagePolicy = policy
       if (savedPause === 'image-limit' || savedPause === 'payload-limit' || savedPause === 'workspace-media-limit') paused = savedPause
       if (pageSyncPreference(savedPreference)) preference = savedPreference
       ready = true
-      if (!navigator.onLine) offline()
+      if (!navigator.onLine || offlineShell) {
+        offline()
+        if (offlineShell && navigator.onLine) void connect()
+      }
       else {
-        if (cachedPermission) setState({ session, status: 'opening', writable: false, imagePolicy, preference })
+        if (cachedPermission) setState({ session, status: 'opening', writable: false, imagePolicy, preference, verifiedAt })
         void connect()
       }
     }).catch(() => {
@@ -271,7 +281,7 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
       // Y.Doc destroy also releases the IndexedDB provider and its queued listeners.
       document.destroy()
     }
-  }, [enabled, pageId, serverCanWrite, subject])
+  }, [enabled, pageId, serverCanWrite, subject, offlineShell])
 
   return { ...state, retrySync, changeSyncPreference }
 }

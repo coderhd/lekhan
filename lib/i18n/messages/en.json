@@ -323,6 +323,24 @@
     "selectionChanged": "The page changed. Reopen the action from the text you want to edit.",
     "close": "Close"
   },
+  "cloud-offline": {
+    "openPage": "Open page online",
+    "offlineCopy": "Offline copy",
+    "waiting": "Waiting for sync",
+    "accessExpired": "Access expired",
+    "viewing": "Viewing access",
+    "preview": "Preview Markdown",
+    "title": "On this device",
+    "cloud": "Open cloud workspace",
+    "loading": "Opening saved pages…",
+    "signedOut": "Sign in online to open the copies saved for your account.",
+    "linkMissing": "That linked page isn’t saved on this device.",
+    "missingCopy": "This page has no saved copy on this device.",
+    "readFailure": "Could not read the saved pages on this device.",
+    "empty": "Open a cloud page online to save a copy here.",
+    "more": "Show more pages",
+    "browse": "Browse saved pages"
+  },
   "cloud-export": {
     "title": "Export page",
     "close": "Close export",

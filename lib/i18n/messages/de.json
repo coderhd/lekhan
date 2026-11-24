@@ -323,6 +323,24 @@
     "selectionChanged": "Die Seite wurde geändert. Öffne die Aktion erneut für den gewünschten Text.",
     "close": "Schließen"
   },
+  "cloud-offline": {
+    "openPage": "Seite online öffnen",
+    "offlineCopy": "Offline-Kopie",
+    "waiting": "Warte auf Synchronisierung",
+    "accessExpired": "Zugriff abgelaufen",
+    "viewing": "Lesezugriff",
+    "preview": "Markdown-Vorschau",
+    "title": "Auf diesem Gerät",
+    "cloud": "Cloud-Arbeitsbereich öffnen",
+    "loading": "Gespeicherte Seiten werden geöffnet …",
+    "signedOut": "Melde dich online an, um die für dein Konto gespeicherten Kopien zu öffnen.",
+    "linkMissing": "Die verlinkte Seite ist auf diesem Gerät nicht gespeichert.",
+    "missingCopy": "Für diese Seite gibt es auf diesem Gerät keine gespeicherte Kopie.",
+    "readFailure": "Die auf diesem Gerät gespeicherten Seiten konnten nicht gelesen werden.",
+    "empty": "Öffne eine Cloud-Seite online, um hier eine Kopie zu speichern.",
+    "more": "Weitere Seiten anzeigen",
+    "browse": "Gespeicherte Seiten durchsuchen"
+  },
   "cloud-export": {
     "title": "Seite exportieren",
     "close": "Export schließen",

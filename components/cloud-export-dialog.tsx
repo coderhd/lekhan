@@ -15,7 +15,7 @@ type SavePicker = (options: {
   types: { description: string; accept: Record<string, string[]> }[]
 }) => Promise<FileSystemFileHandle>
 
-export default function CloudExportDialog({ page, onClose }: { page: Page; onClose: () => void }) {
+export default function CloudExportDialog({ page, onClose, markdownOnly }: { page: Page; onClose: () => void; markdownOnly?: boolean }) {
   const t = useTranslations('cloud-export')
   const operation = useRef<AbortController | null>(null)
   const [working, setWorking] = useState(false)
@@ -83,12 +83,12 @@ export default function CloudExportDialog({ page, onClose }: { page: Page; onClo
         </button>
         <p>{t('markdownDescription')}</p>
       </div>
-      <div>
+      {!markdownOnly && <div>
         <button type="button" className="primary-button" onClick={() => void exportZip()} disabled={working}>
           <FileArchive size={16} aria-hidden="true" /> {t('zip')}
         </button>
         <p>{t('zipDescription')}</p>
-      </div>
+      </div>}
     </div>
     {working && <p role="status">{progress && progress.total > 0
       ? t('progress', { completed: progress.completed, total: progress.total }) : t('preparing')}</p>}

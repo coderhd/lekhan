@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 import { describe, expect, it, vi } from 'vitest'
-import { forgetCloudSearchPage, readCloudSearchPages, rememberCloudSearchPage, subscribeCloudSearchPages } from '../../lib/cloud/local-search'
+import { forgetCloudSearchPage, readCloudSearchPages, readOfflineCloudPage, rememberCloudSearchPage, subscribeCloudSearchPages } from '../../lib/cloud/local-search'
 import { workspaceSearch } from '../../lib/workspace-search'
 
 describe('search across cloud copies on the device', () => {
@@ -39,5 +39,17 @@ describe('search across cloud copies on the device', () => {
     unsubscribe()
     expect(await readCloudSearchPages('viewer')).toEqual([])
     expect(await readCloudSearchPages('writer')).toHaveLength(1)
+  })
+
+  it('keeps a revoked copy hidden when a tab writes with older access', async () => {
+    const page = { id: 'revoked', title: 'Revocable note', markdown: 'a saved draft', updatedAt: '2026-11-24T00:00:00.000Z' }
+    const beforeRevocation = Date.now() - 1
+    await rememberCloudSearchPage('offline-revocation', page, beforeRevocation)
+    await forgetCloudSearchPage('offline-revocation', page.id)
+    await rememberCloudSearchPage('offline-revocation', page, beforeRevocation)
+    expect(await readOfflineCloudPage('offline-revocation', page.id)).toBeNull()
+    expect(await readCloudSearchPages('offline-revocation')).toEqual([])
+    await rememberCloudSearchPage('offline-revocation', page, Date.now() + 1)
+    expect(await readOfflineCloudPage('offline-revocation', page.id)).toMatchObject({ id: page.id, title: page.title })
   })
 })

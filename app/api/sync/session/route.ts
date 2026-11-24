@@ -13,6 +13,10 @@ export async function GET(request: NextRequest) {
   if (!pageId || !uuidPattern.test(pageId)) return NextResponse.json({ error: 'invalid_page' }, { status: 400, headers })
   const account = await accountContext()
   if (!account) return NextResponse.json({ error: 'sign_in_required' }, { status: 401, headers })
+  const expectedAccount = request.nextUrl.searchParams.get('account')
+  if (expectedAccount !== null && expectedAccount !== account.subject) {
+    return NextResponse.json({ error: 'account_changed' }, { status: 403, headers })
+  }
   const endpoint = syncUrl()
   const secret = getTicketSecret()
   const admin = createServerAdmin()

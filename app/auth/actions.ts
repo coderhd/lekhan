@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { authConfig, confirmationTarget, siteOrigin } from '@/lib/auth/config'
 import { createAuthClient } from '@/lib/auth/server'
+import { offlineAccountCookie } from '@/lib/cloud/offline-account'
 import { invitationPath, readCredentials, referralCode, workspaceTransferPath, type AuthMode, type AuthResult } from '@/lib/auth/input'
 import { googleCallback, googleFlowCookie, googleFlowLifetime, googleOAuthEnabled } from '@/lib/auth/google-oauth'
 import { recordAnalyticsReceipt } from '@/lib/server/analytics'
@@ -83,6 +84,8 @@ export async function startGoogleSignIn(invite: string | undefined, transfer: st
 export async function signOut() {
   const client = await createAuthClient()
   const result = await client?.auth.signOut({ scope: 'local' })
+  const store = await cookies()
+  store.set(offlineAccountCookie, '', { path: '/', maxAge: 0 })
   await clearGoogleFlow()
   redirect(result?.error ? '/login?error=signout' : '/login')
 }

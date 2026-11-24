@@ -323,6 +323,24 @@
     "selectionChanged": "La página cambió. Vuelve a abrir la acción desde el texto que quieres editar.",
     "close": "Cerrar"
   },
+  "cloud-offline": {
+    "openPage": "Abrir página en línea",
+    "offlineCopy": "Copia sin conexión",
+    "waiting": "Esperando sincronización",
+    "accessExpired": "Acceso caducado",
+    "viewing": "Acceso de lectura",
+    "preview": "Vista previa de Markdown",
+    "title": "En este dispositivo",
+    "cloud": "Abrir el espacio en la nube",
+    "loading": "Abriendo páginas guardadas…",
+    "signedOut": "Inicia sesión en línea para abrir las copias guardadas en tu cuenta.",
+    "linkMissing": "La página enlazada no está guardada en este dispositivo.",
+    "missingCopy": "Esta página no tiene una copia guardada en este dispositivo.",
+    "readFailure": "No se pudieron leer las páginas guardadas en este dispositivo.",
+    "empty": "Abre una página de la nube en línea para guardar una copia aquí.",
+    "more": "Mostrar más páginas",
+    "browse": "Ver páginas guardadas"
+  },
   "cloud-export": {
     "title": "Exportar página",
     "close": "Cerrar exportación",

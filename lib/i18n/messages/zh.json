@@ -323,6 +323,24 @@
     "selectionChanged": "页面已更改。请重新选中要编辑的文本，再打开此操作。",
     "close": "关闭"
   },
+  "cloud-offline": {
+    "openPage": "在线打开页面",
+    "offlineCopy": "离线副本",
+    "waiting": "正在等待同步",
+    "accessExpired": "访问权限已过期",
+    "viewing": "只读权限",
+    "preview": "预览 Markdown",
+    "title": "此设备上的页面",
+    "cloud": "打开云工作区",
+    "loading": "正在打开已保存的页面…",
+    "signedOut": "请联网登录以打开为你的账户保存的副本。",
+    "linkMissing": "链接的页面尚未保存在此设备上。",
+    "missingCopy": "此页面在此设备上没有已保存的副本。",
+    "readFailure": "无法读取此设备上保存的页面。",
+    "empty": "在线打开云页面，即可在此处保存副本。",
+    "more": "显示更多页面",
+    "browse": "浏览已保存的页面"
+  },
   "cloud-export": {
     "title": "导出页面",
     "close": "关闭导出",

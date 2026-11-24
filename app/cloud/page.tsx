@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { Cloud, FileText, Plus } from 'lucide-react'
 import CloudSearch from '@/components/cloud-search'
+import { PrepareCloudOffline } from '@/components/prepare-cloud-offline'
 import CloudVaultImport from '@/components/cloud-vault-import'
 import { UsageAnalyticsControl } from '@/components/usage-analytics'
 import { accountContext } from '@/lib/auth/server'
@@ -17,6 +18,7 @@ export default async function CloudWorkspace({ searchParams }: {
   if (!account) redirect('/login')
   const { after, error, view, notice } = await searchParams
   const settings = await getTranslations('settings')
+  const offline = await getTranslations('cloud-offline')
   const tab = view === 'shared' || view === 'invitations' ? view : 'mine'
   const result = tab === 'invitations' ? null : await listCloudPages(account.client, account.subject, tab === 'shared', after).catch(() => null)
   const invitations = tab === 'invitations' && account.email ? await account.client.from('page_invitations')
@@ -25,12 +27,14 @@ export default async function CloudWorkspace({ searchParams }: {
 
   return (
     <main className="cloud-screen">
+      <PrepareCloudOffline />
       <header className="account-header">
         <Link className="account-brand" href="/"><span className="brand-mark" aria-hidden="true">L</span> Lekhan</Link>
         <div className="cloud-header-actions">
           <Link className="account-link" href="/settings">{settings('title')}</Link>
           <Link className="account-link" href="/workspace">Local workspace</Link>
           <CloudSearch subject={account.subject} />
+          <a className="account-link" href="/cloud-offline">{offline('title')}</a>
         </div>
       </header>
       <section className="cloud-library" aria-labelledby="cloud-heading">

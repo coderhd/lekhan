@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { type NextRequest, NextResponse } from 'next/server'
 import { authConfig } from './lib/auth/config'
+import { authSessionCookie, offlineAccountCookie } from './lib/cloud/offline-account'
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
@@ -19,7 +20,17 @@ export async function proxy(request: NextRequest) {
     },
   })
 
-  await client.auth.getClaims()
+  const { data, error } = await client.auth.getClaims()
+  const name = authSessionCookie(settings.url)
+  const existing = request.cookies.get(offlineAccountCookie)?.value
+  const options = { path: '/', sameSite: 'lax' as const, secure: request.nextUrl.protocol === 'https:' }
+  if (!error && typeof data?.claims.sub === 'string') {
+    const marker = data.claims.sub + ':' + name
+    const pathname = request.nextUrl.pathname
+    if (existing !== marker || pathname === '/cloud' || pathname.startsWith('/page/')) response.cookies.set(offlineAccountCookie, marker, { ...options, maxAge: 30 * 24 * 60 * 60 })
+  } else if (existing && (!request.cookies.has(name) && !request.cookies.has(name + '.0') || error?.status === 401 || error?.status === 403)) {
+    response.cookies.set(offlineAccountCookie, '', { ...options, maxAge: 0 })
+  }
   response.headers.set('Cache-Control', 'private, no-store')
   return response
 }
