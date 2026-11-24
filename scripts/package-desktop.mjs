@@ -6,6 +6,26 @@ import { fileURLToPath } from 'node:url'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const revision = '61881b1f7f0b13d9e46d561fc25afcd6bbaec479'
+const updatePublicKey = process.env.LEKHAN_UPDATE_PUBLIC_KEY?.trim()
+const updateManifest = process.env.LEKHAN_UPDATE_MANIFEST_URL?.trim()
+const releaseConfig = []
+if (updatePublicKey || updateManifest) {
+  if (!updatePublicKey || !updateManifest || !process.env.TAURI_SIGNING_PRIVATE_KEY?.trim()) {
+    throw new Error('Signed packages require the update manifest URL, the public key, and TAURI_SIGNING_PRIVATE_KEY.')
+  }
+  const url = new URL(updateManifest)
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || !url.hostname) {
+    throw new Error('Use an HTTPS update manifest URL without credentials, query, or fragment.')
+  }
+  if (!/^[a-z0-9+/]+={0,2}$/i.test(updatePublicKey)
+    || !Buffer.from(updatePublicKey, 'base64').toString('utf8').startsWith('untrusted comment: minisign public key')) {
+    throw new Error('Use the contents of the public key from the Tauri signer.')
+  }
+  releaseConfig.push('--config', JSON.stringify({
+    bundle: { createUpdaterArtifacts: true },
+    plugins: { updater: { pubkey: updatePublicKey, endpoints: [url.href] } },
+  }))
+}
 const host = spawnSync('rustc', ['--print', 'host-tuple'], { cwd: root, encoding: 'utf8' })
 if (host.status !== 0 || !host.stdout?.trim()) throw new Error('Install Rust before packaging Lekhan.')
 const target = host.stdout.trim()
@@ -60,4 +80,4 @@ const [driver, , ...args] = process.argv
 const npm = process.env.npm_execpath
 if (!npm) throw new Error('Build with npm run desktop:package.')
 run(driver, [npm, 'exec', '--', 'tauri', 'build', '--config',
-  join(root, 'src-tauri', 'tauri.llama.conf.json'), ...args])
+  join(root, 'src-tauri', 'tauri.llama.conf.json'), ...releaseConfig, ...args])

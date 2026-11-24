@@ -1,5 +1,15 @@
 {
   "desktop": {
+    "updateInstall": "Instalar actualización {version}",
+    "updateChecking": "Buscando actualizaciones…",
+    "updateCheck": "Buscar actualizaciones",
+    "updateCurrent": "Lekhan está al día.",
+    "updateTitle": "Instalando actualización",
+    "updateInstalling": "Lekhan se reiniciará cuando se verifique e instale la actualización.",
+    "updateError_checkFailed": "No se pudieron buscar actualizaciones.",
+    "updateError_installFailed": "No se pudo instalar la actualización. Tu bóveda está a salvo.",
+    "updateError_closeCloud": "Cierra la ventana del espacio en la nube y vuelve a intentarlo.",
+    "updateError_versionChanged": "La versión disponible ha cambiado. Busca actualizaciones de nuevo.",
     "fitsDevice": "Compatible con este dispositivo según la estimación",
     "discoverModels": "Explorar",
     "installedModels": "Instalados",

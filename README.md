@@ -55,6 +55,8 @@ Open **Installed** to select a model for the writing assistant, see storage usag
 
 In desktop **Settings → AI Providers & Models**, **Find local models** checks Ollama, LM Studio, and llama.cpp over loopback. The bundled writer connects directly to the chosen model server or HTTPS provider through its native transport. Local catalog checks work without a browser CORS setting. Provider credentials go to the chosen endpoint, and HTTP redirects end the request.
 
+The [desktop release guide](docs/operations/desktop-release.md) covers the packaging matrix, release signing, and how the updater verifies an artifact before installation.
+
 ## Account access
 
 Configure the public Supabase project URL, publishable key, and canonical application origin using the variables in `.env.example`. Enable email/password authentication and allow the configured application's `/auth/confirm` redirect in Supabase. This route accepts verified token-hash confirmation and the PKCE exchange code. Configure the recovery template with `type=recovery` for token-hash links. Use the default Supabase recovery redirect flow for PKCE.

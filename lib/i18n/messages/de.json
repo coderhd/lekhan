@@ -1,5 +1,15 @@
 {
   "desktop": {
+    "updateInstall": "Update {version} installieren",
+    "updateChecking": "Suche nach Updates…",
+    "updateCheck": "Nach Updates suchen",
+    "updateCurrent": "Lekhan ist auf dem neuesten Stand.",
+    "updateTitle": "Update wird installiert",
+    "updateInstalling": "Lekhan startet neu, sobald das Update geprüft und installiert ist.",
+    "updateError_checkFailed": "Die Suche nach Updates ist fehlgeschlagen.",
+    "updateError_installFailed": "Das Update konnte nicht installiert werden. Dein Tresor bleibt erhalten.",
+    "updateError_closeCloud": "Schließe das Cloud-Arbeitsbereichsfenster und versuche es erneut.",
+    "updateError_versionChanged": "Die verfügbare Version hat sich geändert. Suche erneut nach Updates.",
     "fitsDevice": "Passt nach aktueller Schätzung auf dieses Gerät",
     "discoverModels": "Entdecken",
     "installedModels": "Installiert",

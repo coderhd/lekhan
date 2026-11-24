@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod app_updates;
 mod local_models;
 mod provider_http;
 mod vault;
@@ -135,6 +136,7 @@ fn main() {
         .manage(vault::VaultState::default())
         .manage(local_models::LocalModels::default())
         .manage(provider_http::ProviderRequests::default())
+        .manage(app_updates::InstallLock::default())
         .invoke_handler(tauri::generate_handler![
             open_cloud_workspace,
             vault::restore_vault,
@@ -154,8 +156,14 @@ fn main() {
             local_models::cancel_local_reply,
             provider_http::stream_provider_request,
             provider_http::cancel_provider_request,
+            app_updates::check_for_app_update,
+            app_updates::install_app_update,
         ])
         .setup(|app| {
+            if app.config().plugins.0.contains_key("updater") {
+                app.handle()
+                    .plugin(tauri_plugin_updater::Builder::new().build())?;
+            }
             let opener = app.handle().clone();
             let popup_opener = app.handle().clone();
             WebviewWindowBuilder::new(app, "writer", WebviewUrl::App("index.html".into()))

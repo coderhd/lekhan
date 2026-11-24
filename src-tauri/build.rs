@@ -19,6 +19,8 @@ fn main() {
             "cancel_local_reply",
             "stream_provider_request",
             "cancel_provider_request",
+            "check_for_app_update",
+            "install_app_update",
         ]),
     ))
     .expect("could not build Lekhan's desktop manifest");

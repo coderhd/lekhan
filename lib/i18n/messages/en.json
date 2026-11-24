@@ -1,5 +1,15 @@
 {
   "desktop": {
+    "updateInstall": "Install update {version}",
+    "updateChecking": "Checking for updates…",
+    "updateCheck": "Check for updates",
+    "updateCurrent": "Lekhan is up to date.",
+    "updateTitle": "Installing update",
+    "updateInstalling": "Lekhan will restart after the update is verified and installed.",
+    "updateError_checkFailed": "Could not check for updates.",
+    "updateError_installFailed": "Could not install the update. Your vault is safe.",
+    "updateError_closeCloud": "Close the Cloud workspace window and try again.",
+    "updateError_versionChanged": "The available version changed. Check for updates again.",
     "fitsDevice": "Fits this device on current estimates",
     "discoverModels": "Discover",
     "installedModels": "Installed",

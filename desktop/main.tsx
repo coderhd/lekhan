@@ -22,6 +22,7 @@ import AttachmentPanel from './attachment-panel'
 import ModelLibrary from '@/components/settings/model-library'
 import { sendToLocalModel, type LocalLibrary } from './local-models'
 import { desktopProviderTransport } from './provider-transport'
+import { DesktopUpdateControls, DesktopUpdateProgress, useDesktopUpdates } from './update-controls'
 
 type DesktopLocale = { locale: Locale; messages: Awaited<ReturnType<typeof getCatalog>> }
 const languageKey = 'lekhan:desktop:language'
@@ -30,6 +31,7 @@ const selectedModelKey = 'lekhan:desktop:local-model'
 function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) => Promise<void> }) {
   const t = useTranslations('desktop')
   const settings = useTranslations('settings')
+  const updates = useDesktopUpdates()
   const [handle, setHandle] = useState<VaultHandle | null>(null)
   const [restoring, setRestoring] = useState(true)
   const [choosing, setChoosing] = useState(false)
@@ -115,7 +117,7 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
     }
   }
 
-  const commonControls = <>
+  const commonControls = (canInstall: boolean) => <>
     <LocaleSelect onSelect={selectLanguage} />
     <button type="button" className="nav-action" onClick={() => {
       setModelLibraryOpen(true)
@@ -129,6 +131,7 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
       <Cloud size={15} /> {t('cloudWorkspace')}
     </button>
     {launchFailed && <p className="locale-error desktop-cloud-error" role="alert">{t('cloudFailed')}</p>}
+    <DesktopUpdateControls updates={updates} canInstall={canInstall} />
     {preview.length > 0 && <button type="button" className="nav-action" onClick={() => downloadWorkspace(preview)}>{t('exportPreview')}</button>}
   </>
   const libraryDialog = modelLibraryOpen && <ModelLibrary library={library} selected={selectedModel} onSelect={selectModel}
@@ -151,10 +154,11 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
         </button>
         {failure}
         {recoveredVault === handle.token && <p className="desktop-recovery-notice" role="status">{t('recoveredDrafts')}</p>}
-        {commonControls}
+        {commonControls(canSwitch && !choosing)}
       </>} />
     {libraryDialog}
     {settingsDialog}
+    <DesktopUpdateProgress installing={updates.installing} />
   </div>
 
   return <main className="desktop-vault">
@@ -166,10 +170,11 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
         <FolderOpen size={18} /> {t('chooseVault')}
       </button>
       {failure}
-      <div className="desktop-vault-controls">{commonControls}</div>
+      <div className="desktop-vault-controls">{commonControls(!restoring && !choosing)}</div>
     </div>
     {libraryDialog}
     {settingsDialog}
+    <DesktopUpdateProgress installing={updates.installing} />
   </main>
 }
 

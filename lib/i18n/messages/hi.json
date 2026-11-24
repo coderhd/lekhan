@@ -1,5 +1,15 @@
 {
   "desktop": {
+    "updateInstall": "अपडेट {version} इंस्टॉल करें",
+    "updateChecking": "अपडेट खोज रहे हैं…",
+    "updateCheck": "अपडेट देखें",
+    "updateCurrent": "Lekhan का सबसे नया वर्शन इंस्टॉल है।",
+    "updateTitle": "अपडेट इंस्टॉल हो रहा है",
+    "updateInstalling": "अपडेट की पुष्टि और इंस्टॉलेशन के बाद Lekhan फिर से शुरू होगा।",
+    "updateError_checkFailed": "अपडेट की जाँच नहीं हो सकी।",
+    "updateError_installFailed": "अपडेट इंस्टॉल नहीं हो सका। आपका वॉल्ट सुरक्षित है।",
+    "updateError_closeCloud": "क्लाउड वर्कस्पेस की विंडो बंद करके दोबारा कोशिश करें।",
+    "updateError_versionChanged": "उपलब्ध वर्शन बदल गया है। अपडेट फिर से देखें।",
     "fitsDevice": "मौजूदा अनुमान के अनुसार इस डिवाइस पर चल सकता है",
     "discoverModels": "खोजें",
     "installedModels": "इंस्टॉल किए गए",

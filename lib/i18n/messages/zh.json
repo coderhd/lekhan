@@ -1,5 +1,15 @@
 {
   "desktop": {
+    "updateInstall": "安装更新 {version}",
+    "updateChecking": "正在检查更新…",
+    "updateCheck": "检查更新",
+    "updateCurrent": "Lekhan 已是最新版本。",
+    "updateTitle": "正在安装更新",
+    "updateInstalling": "更新验证并安装后，Lekhan 会重新启动。",
+    "updateError_checkFailed": "无法检查更新。",
+    "updateError_installFailed": "无法安装更新。你的笔记库仍然安全。",
+    "updateError_closeCloud": "关闭云端工作区窗口后重试。",
+    "updateError_versionChanged": "可用版本已变更，请重新检查更新。",
     "fitsDevice": "按当前估算适合此设备",
     "discoverModels": "发现",
     "installedModels": "已安装",
