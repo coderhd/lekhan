@@ -59,6 +59,9 @@
     "externalReload": "सहेजी गई प्रति खोलने से बिना सहेजे बदलाव हट जाएँगे। उन्हें रखने के लिए पहले निर्यात करें।"
   },
   "app-shell": {
+    "showMorePages": "और पेज दिखाएँ",
+    "showMoreFavorites": "और पसंदीदा पेज दिखाएँ",
+    "showMoreBacklinks": "और बैकलिंक दिखाएँ",
     "keyboardShortcuts": "कीबोर्ड शॉर्टकट",
     "quickSwitch": "पेज पर तुरंत जाएँ",
     "findPageTitle": "पेज का शीर्षक खोजें",

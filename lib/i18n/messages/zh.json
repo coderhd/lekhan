@@ -59,6 +59,9 @@
     "externalReload": "打开已保存的版本会丢弃未保存的编辑。请先导出以保留副本。"
   },
   "app-shell": {
+    "showMorePages": "显示更多页面",
+    "showMoreFavorites": "显示更多收藏",
+    "showMoreBacklinks": "显示更多反向链接",
     "keyboardShortcuts": "键盘快捷键",
     "quickSwitch": "快速切换",
     "findPageTitle": "搜索页面标题",

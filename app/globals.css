@@ -860,3 +860,15 @@ kbd {
   padding: 9px 0;
 }
 .shortcut-list dd { margin: 0; display: flex; align-items: center; flex: none; gap: 4px; }
+
+.notebook-list-more {
+  min-height: 34px;
+  border-radius: 6px;
+  padding: 4px 10px;
+  color: var(--pine-dark);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: start;
+}
+.notebook-list-more:hover { background: var(--hover); }
+.page-tree .notebook-list-more { padding-inline-start: 21px; }

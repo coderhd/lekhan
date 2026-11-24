@@ -40,12 +40,31 @@ function pathFromMap(pages: Map<string, Page>, id: string) {
   return path.reverse()
 }
 
-export function pagePath(pages: Page[], id: string) {
-  return pathFromMap(new Map(pages.map((page) => [page.id, page])), id)
+const pagesBySnapshot = new WeakMap<Page[], Map<string, Page>>()
+interface PageResolver {
+  canonicalPath: (page: Page, explicit?: boolean) => string
+  resolveTarget: (target: string, sourceId?: string) => Page | undefined
+}
+const resolversBySnapshot = new WeakMap<Page[], PageResolver>()
+const linksByPage = new WeakMap<Page, ReturnType<typeof wikiLinks>>()
+
+function pageIndex(pages: Page[]) {
+  let index = pagesBySnapshot.get(pages)
+  if (!index) {
+    index = new Map(pages.map(page => [page.id, page]))
+    pagesBySnapshot.set(pages, index)
+  }
+  return index
 }
 
-function buildResolver(pages: Page[]) {
-  const pagesById = new Map(pages.map((page) => [page.id, page]))
+export function pagePath(pages: Page[], id: string) {
+  return pathFromMap(pageIndex(pages), id)
+}
+
+function buildResolver(pages: Page[]): PageResolver {
+  const cached = resolversBySnapshot.get(pages)
+  if (cached) return cached
+  const pagesById = pageIndex(pages)
   const pathsById = new Map(pages.map((page) => [page.id, pathFromMap(pagesById, page.id)]))
   const byPath = new Map<string, Page>()
   const byTitle = new Map<string, Page[]>()
@@ -99,7 +118,9 @@ function buildResolver(pages: Page[]) {
     return best
   }
 
-  return { canonicalPath, resolveTarget }
+  const resolver = { canonicalPath, resolveTarget }
+  resolversBySnapshot.set(pages, resolver)
+  return resolver
 }
 
 export function resolvePage(pages: Page[], target: string, sourceId?: string) {
@@ -313,7 +334,12 @@ export function getBacklinks(pages: Page[], id: string) {
   const { resolveTarget } = buildResolver(pages)
   return pages.flatMap((page) => {
     if (page.id === id) return []
-    const link = wikiLinks(page.markdown).find(({ target }) => resolveTarget(target, page.id)?.id === id)
+    let references = linksByPage.get(page)
+    if (!references) {
+      references = wikiLinks(page.markdown)
+      linksByPage.set(page, references)
+    }
+    const link = references.find(({ target }) => resolveTarget(target, page.id)?.id === id)
     if (!link) return []
     const lineStart = page.markdown.lastIndexOf('\n', Math.max(0, link.start - 1)) + 1
     const lineBreak = page.markdown.indexOf('\n', link.end)

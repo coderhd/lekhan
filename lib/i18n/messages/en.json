@@ -59,6 +59,9 @@
     "externalReload": "Opening the saved copy discards unsaved edits. Export them first to keep a copy."
   },
   "app-shell": {
+    "showMorePages": "Show more pages",
+    "showMoreFavorites": "Show more favorites",
+    "showMoreBacklinks": "Show more backlinks",
     "keyboardShortcuts": "Keyboard shortcuts",
     "quickSwitch": "Quick switch",
     "findPageTitle": "Find a page title",

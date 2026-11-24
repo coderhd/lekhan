@@ -59,6 +59,9 @@
     "externalReload": "Beim Öffnen der gespeicherten Kopie gehen ungespeicherte Änderungen verloren. Exportiere sie vorher."
   },
   "app-shell": {
+    "showMorePages": "Weitere Seiten anzeigen",
+    "showMoreFavorites": "Weitere Favoriten anzeigen",
+    "showMoreBacklinks": "Weitere Rückverweise anzeigen",
     "keyboardShortcuts": "Tastenkürzel",
     "quickSwitch": "Schnellwechsel",
     "findPageTitle": "Seitentitel suchen",

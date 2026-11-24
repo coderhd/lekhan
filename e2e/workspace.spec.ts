@@ -257,3 +257,47 @@ test('uses the workspace shortcuts while preserving modal and editor behavior', 
   await page.keyboard.press('Escape')
   await expect(page.getByRole('button', { name: 'Open navigation' })).toBeFocused()
 })
+
+test('reveals more notebook pages and backlinks without hiding the active branch', async ({ page }) => {
+  await page.goto('/about')
+  await page.evaluate(async () => {
+    const now = new Date().toISOString()
+    const pages = Array.from({ length: 61 }, (_, index) => ({
+      id: 'fixture-' + index,
+      parentId: index === 60 ? 'fixture-59' : null,
+      title: 'Fixture page ' + index,
+      markdown: index === 0 ? 'Start here.' : 'Reference [[Fixture page 0]].',
+      favorite: false, createdAt: now, updatedAt: now,
+    }))
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open('lekhan-writing-workspace', 1)
+      request.onupgradeneeded = () => request.result.createObjectStore('workspace')
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => {
+        const database = request.result
+        const transaction = database.transaction('workspace', 'readwrite')
+        transaction.objectStore('workspace').put({ pages, revision: 1, activePageId: 'fixture-60' }, 'personal')
+        transaction.oncomplete = () => { database.close(); resolve() }
+        transaction.onabort = () => { database.close(); reject(transaction.error) }
+      }
+    })
+  })
+  await page.goto('/workspace')
+  const tree = page.getByRole('region', { name: 'All pages' })
+  const title = page.getByRole('textbox', { name: 'Page title' })
+  await expect(title).toHaveValue('Fixture page 60')
+  await expect(tree.getByRole('button', { name: 'Fixture page 59', exact: true })).toBeVisible()
+  await expect(tree.getByRole('button', { name: 'Fixture page 60', exact: true })).toHaveAttribute('aria-current', 'page')
+  await expect(tree.getByRole('button', { name: 'Fixture page 48', exact: true })).toHaveCount(0)
+  await tree.getByRole('button', { name: 'Show more pages' }).press('Enter')
+  await expect(tree.getByRole('button', { name: 'Fixture page 48', exact: true })).toBeFocused()
+
+  await tree.getByRole('button', { name: 'Fixture page 0', exact: true }).click()
+  const context = page.getByRole('complementary', { name: 'Page context' })
+  await expect(context.getByRole('heading', { name: 'Backlinks 60' })).toBeVisible()
+  await expect(context.getByRole('button', { name: /Fixture page 25/ })).toHaveCount(0)
+  await context.getByRole('button', { name: 'Show more backlinks' }).press('Enter')
+  await expect(context.getByRole('button', { name: /Fixture page 25/ })).toBeFocused()
+  await context.getByRole('button', { name: /Fixture page 25/ }).press('Enter')
+  await expect(title).toHaveValue('Fixture page 25')
+})

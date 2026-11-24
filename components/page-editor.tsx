@@ -85,16 +85,18 @@ function getItems(choices: PageChoice[], pageId: string, match: CommandMatch): C
       }))
   }
 
-  const items = choices
-    .filter((page) => page.id !== pageId && validWikiLink(page.title) && validWikiLink(page.path))
-    .filter((page) => page.title.toLowerCase().includes(query) || page.path.toLowerCase().includes(query))
-    .slice(0, 12)
-    .map((page): CommandItem => ({
+  const items: CommandItem[] = []
+  for (const page of choices) {
+    if (page.id === pageId || !validWikiLink(page.title) || !validWikiLink(page.path)) continue
+    if (!page.title.toLowerCase().includes(query) && !page.path.toLowerCase().includes(query)) continue
+    items.push({
       id: page.id,
       title: page.title,
       description: page.path !== page.title ? page.path : undefined,
       icon: FileText,
-    }))
+    })
+    if (items.length === 12) break
+  }
 
   const unresolved = match.query.trim()
   if (items.length === 0 && validWikiLink(unresolved)) {

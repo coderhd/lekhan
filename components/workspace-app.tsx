@@ -32,6 +32,8 @@ import { AutomaticMirrorUnavailable, localMirrorPlacement, MirrorRejected, nextA
 const statusMessage: Record<SaveStatus, string> = {
   loading: 'openingWorkspace', saving: 'saving', saved: 'savedLocally', error: 'saveUnavailable', conflict: 'unsavedChanges',
 }
+const navigationBatch = 48
+const backlinkBatch = 24
 
 type PageAction = { kind: 'move' | 'delete' | 'mirror'; id: string } | { kind: 'link'; target: string } | { kind: 'reload' }
 
@@ -55,6 +57,14 @@ function navigatePageRows(event: ReactKeyboardEvent<HTMLElement>) {
   if (event.key === 'Home') rows[0]?.focus()
   else if (event.key === 'End') rows.at(-1)?.focus()
   else rows[current + (event.key === 'ArrowDown' ? 1 : -1)]?.focus()
+}
+
+function restoreListFocus(button: HTMLButtonElement, list: Element | null, rows: string, firstNewRow: number) {
+  requestAnimationFrame(() => {
+    if (document.activeElement === button || !button.isConnected && document.activeElement === document.body) {
+      list?.querySelectorAll<HTMLButtonElement>(rows)[firstNewRow]?.focus()
+    }
+  })
 }
 
 export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled = false, automaticMirror = false,
@@ -84,6 +94,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
   const [contextOpen, setContextOpen] = useState(true)
   const [mobileContext, setMobileContext] = useState(false)
   const [collapsed, setCollapsed] = useState<string[]>([])
+  const [favoriteLimit, setFavoriteLimit] = useState(navigationBatch)
   const [action, setAction] = useState<PageAction | null>(null)
   const [focusTitle, setFocusTitle] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
@@ -111,9 +122,20 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
   const trail = useMemo(() => page ? pagePath(pages, page.id) : [], [pages, page])
   const links = useMemo(() => page ? getBacklinks(pages, page.id) : [], [pages, page])
   const headings = useMemo(() => page ? pageHeadings(page.markdown) : [], [page])
-  const choices = useMemo(() => pageChoices(pages).filter(item => item.id !== page?.id), [pages, page?.id])
+  const choices = useMemo(() => pageChoices(pages), [pages])
   const tags = useMemo(() => page ? pageTags(page) : [], [page])
-  const favorites = pages.filter(item => item.favorite)
+  const { childPages, favorites } = useMemo(() => {
+    const childPages = new Map<string | null, Page[]>()
+    const favorites: Page[] = []
+    for (const note of pages) {
+      const siblings = childPages.get(note.parentId) ?? []
+      siblings.push(note)
+      childPages.set(note.parentId, siblings)
+      if (note.favorite) favorites.push(note)
+    }
+    return { childPages, favorites }
+  }, [pages])
+  const activePath = useMemo(() => new Map(trail.map(note => [note.parentId, note.id])), [trail])
 
   useEffect(() => () => mirrorRequest.current?.abort(), [])
 
@@ -526,11 +548,16 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
           {favorites.length > 0 && (
             <section className="nav-section" aria-label={t('favorites')}>
               <div className="nav-heading"><span>{t('favorites')}</span></div>
-              {favorites.map(item => (
+              {favorites.slice(0, favoriteLimit).map(item => (
                 <button key={item.id} className="favorite-row" onClick={() => open(item.id)}>
                   <Star size={14} aria-hidden="true" /><span>{item.title}</span>
                 </button>
               ))}
+              {favorites.length > favoriteLimit && <button className="notebook-list-more" type="button"
+                onClick={({ currentTarget }) => {
+                  setFavoriteLimit(limit => limit + navigationBatch)
+                  restoreListFocus(currentTarget, currentTarget.parentElement, '.favorite-row', favoriteLimit)
+                }}>{t('showMoreFavorites')}</button>}
             </section>
           )}
           <section className="nav-section" aria-label={t('allPages')}>
@@ -540,7 +567,8 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
             </div>
             <PageTree
               parentId={null}
-              pages={pages}
+              childPages={childPages}
+              activePath={activePath}
               currentId={page?.id}
               collapsed={collapsed}
               onOpen={open}
@@ -758,15 +786,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
                 </ol>
               ) : <p className="context-empty">{t('headingsEmpty')}</p>}
             </section>
-            <section className="context-section">
-              <h3><Link2 size={16} /> {t('backlinks')} <span className="count">{new Intl.NumberFormat(locale).format(links.length)}</span></h3>
-              {links.length ? links.map(({ page: source, excerpt }) => (
-                <button className="backlink" key={source.id} onClick={() => open(source.id)}>
-                  <span><FileText size={15} /> {source.title} <ChevronRight size={13} /></span>
-                  {excerpt && <small>{excerpt}</small>}
-                </button>
-              )) : <p className="context-empty">{t('backlinksEmpty')}</p>}
-            </section>
+            <BacklinksSection key={page.id} links={links} onOpen={open} />
           </div>
         )}
       </aside>
@@ -874,21 +894,26 @@ const emptyPages: Page[] = []
 
 interface PageTreeProps {
   parentId: string | null
-  pages: Page[]
+  childPages: ReadonlyMap<string | null, Page[]>
+  activePath: ReadonlyMap<string | null, string>
   currentId: string | undefined
   collapsed: string[]
   onOpen: (id: string) => void
   onToggle: (id: string) => void
 }
 
-function PageTree({ parentId, pages, currentId, collapsed, onOpen, onToggle }: PageTreeProps) {
+function PageTree({ parentId, childPages, activePath, currentId, collapsed, onOpen, onToggle }: PageTreeProps) {
   const t = useTranslations('app-shell')
-  const children = pages.filter(page => page.parentId === parentId)
-  if (!children.length) return null
+  const [limit, setLimit] = useState(navigationBatch)
+  const children = childPages.get(parentId)
+  if (!children?.length) return null
+  const shown = children.slice(0, limit)
+  const active = children.find(page => page.id === activePath.get(parentId))
+  if (active && !shown.includes(active)) shown.push(active)
   return (
     <ul className={`page-tree ${parentId ? 'nested-tree' : ''}`}>
-      {children.map(page => {
-        const hasChildren = pages.some(child => child.parentId === page.id)
+      {shown.map(page => {
+        const hasChildren = childPages.has(page.id)
         const expanded = !collapsed.includes(page.id)
         return (
           <li key={page.id}>
@@ -902,10 +927,36 @@ function PageTree({ parentId, pages, currentId, collapsed, onOpen, onToggle }: P
                 {hasChildren ? <FolderClosed size={16} /> : <FileText size={16} />}<span>{page.title}</span>
               </button>
             </div>
-            {expanded && hasChildren && <PageTree parentId={page.id} pages={pages} currentId={currentId} collapsed={collapsed} onOpen={onOpen} onToggle={onToggle} />}
+            {expanded && hasChildren && <PageTree parentId={page.id} childPages={childPages} activePath={activePath}
+              currentId={currentId} collapsed={collapsed} onOpen={onOpen} onToggle={onToggle} />}
           </li>
         )
       })}
+      {children.length > shown.length && <li><button className="notebook-list-more" type="button"
+        onClick={({ currentTarget }) => {
+          setLimit(previous => previous + navigationBatch)
+          restoreListFocus(currentTarget, currentTarget.closest('ul'), ':scope > li > .page-row > .page-row-link', limit)
+        }}>{t('showMorePages')}</button></li>}
     </ul>
   )
+}
+
+function BacklinksSection({ links, onOpen }: { links: ReturnType<typeof getBacklinks>; onOpen: (id: string) => void }) {
+  const t = useTranslations('app-shell')
+  const locale = useLocale()
+  const [limit, setLimit] = useState(backlinkBatch)
+  return <section className="context-section">
+    <h3><Link2 size={16} /> {t('backlinks')} <span className="count">{new Intl.NumberFormat(locale).format(links.length)}</span></h3>
+    {links.length ? links.slice(0, limit).map(({ page, excerpt }) => (
+      <button className="backlink" key={page.id} onClick={() => onOpen(page.id)}>
+        <span><FileText size={15} /> {page.title} <ChevronRight size={13} /></span>
+        {excerpt && <small>{excerpt}</small>}
+      </button>
+    )) : <p className="context-empty">{t('backlinksEmpty')}</p>}
+    {links.length > limit && <button className="notebook-list-more" type="button"
+      onClick={({ currentTarget }) => {
+        setLimit(previous => previous + backlinkBatch)
+        restoreListFocus(currentTarget, currentTarget.parentElement, '.backlink', limit)
+      }}>{t('showMoreBacklinks')}</button>}
+  </section>
 }
