@@ -1,6 +1,7 @@
-const shellPath = '/cloud-offline'
-const cacheName = 'lekhan-cloud-shell-v1'
-const storedShell = '/cloud-offline?cached-shell'
+const cloudShell = '/cloud-offline'
+const notebookShell = '/workspace-offline'
+const cacheName = 'lekhan-offline-shell-v2'
+const cacheKey = path => path + '?cached-shell'
 let warmup = null
 let refreshed = 0
 
@@ -11,30 +12,42 @@ function assetsIn(source, base) {
     .map(url => url.href)
 }
 
-async function prepare() {
-  const cache = await caches.open(cacheName)
-  const page = await fetch(shellPath, { credentials: 'omit', cache: 'no-store', redirect: 'error' })
+async function fetchAsset(cache, href) {
+  const saved = await cache.match(href)
+  if (saved) return saved
+  const asset = await fetch(href, { credentials: 'omit', redirect: 'error' })
+  if (!asset.ok) throw new Error('Offline editor asset unavailable.')
+  await cache.put(href, asset.clone())
+  return asset
+}
+
+async function prepareShell(path, assetFor) {
+  const page = await fetch(path, { credentials: 'omit', cache: 'no-store', redirect: 'error' })
   if (!page.ok || !page.headers.get('content-type')?.includes('text/html')) throw new Error('Offline editor unavailable.')
   const assets = new Set(assetsIn(await page.clone().text(), page.url))
   if (![...assets].some(url => new URL(url).pathname.endsWith('.js'))) throw new Error('Offline editor has no runtime.')
   const styles = await Promise.all([...assets].map(async href => {
-    const existing = await cache.match(href)
-    const asset = existing ?? await fetch(href, { credentials: 'omit', redirect: 'error' })
-    if (!asset.ok) throw new Error('Offline editor asset unavailable.')
-    if (!existing) await cache.put(href, asset.clone())
-    return new URL(href).pathname.endsWith('.css') ? assetsIn(await asset.text(), href) : []
+    const asset = await assetFor(href)
+    return new URL(href).pathname.endsWith('.css') ? assetsIn(await asset.clone().text(), href) : []
   }))
-  for (const href of new Set(styles.flat())) {
-    assets.add(href)
-    if (!await cache.match(href)) {
-      const asset = await fetch(href, { credentials: 'omit', redirect: 'error' })
-      if (!asset.ok) throw new Error('Offline editor font unavailable.')
-      await cache.put(href, asset)
-    }
+  for (const href of styles.flat()) assets.add(href)
+  await Promise.all(styles.flat().map(assetFor))
+  return { page, assets }
+}
+
+async function prepare() {
+  const cache = await caches.open(cacheName)
+  const pending = new Map()
+  const assetFor = href => {
+    if (!pending.has(href)) pending.set(href, fetchAsset(cache, href))
+    return pending.get(href)
   }
-  await cache.put(storedShell, page)
+  const paths = [cloudShell, notebookShell]
+  const shells = await Promise.all(paths.map(path => prepareShell(path, assetFor)))
+  await Promise.all(shells.map(({ page }, index) => cache.put(cacheKey(paths[index]), page)))
+  const urls = new Set(shells.flatMap(({ assets }) => [...assets]))
   refreshed = Date.now()
-  const stale = (await cache.keys()).filter(request => new URL(request.url).pathname.startsWith('/_next/static/') && !assets.has(request.url))
+  const stale = (await cache.keys()).filter(request => new URL(request.url).pathname.startsWith('/_next/static/') && !urls.has(request.url))
   await Promise.all(stale.map(request => cache.delete(request)))
 }
 
@@ -49,7 +62,7 @@ self.addEventListener('install', event => {
 })
 
 self.addEventListener('activate', event => {
-  event.waitUntil(self.clients.claim())
+  event.waitUntil(caches.delete('lekhan-cloud-shell-v1').then(() => self.clients.claim()))
 })
 
 self.addEventListener('message', event => {
@@ -65,12 +78,13 @@ self.addEventListener('fetch', event => {
     return
   }
   if (request.mode !== 'navigate') return
-  if (target.pathname === shellPath) {
-    event.respondWith(caches.open(cacheName).then(cache => cache.match(storedShell)).then(saved => saved ?? fetch(request)))
+  if (target.pathname === cloudShell || target.pathname === notebookShell) {
+    event.respondWith(caches.open(cacheName).then(cache => cache.match(cacheKey(target.pathname))).then(saved => saved ?? fetch(request)))
     return
   }
   const id = /^\/page\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\/?$/i.exec(target.pathname)?.[1]
-  if (!id && target.pathname !== '/cloud') return
+  const shell = target.pathname === '/workspace' ? notebookShell : id || target.pathname === '/cloud' ? cloudShell : null
+  if (!shell) return
   event.respondWith((async () => {
     let result
     try {
@@ -79,8 +93,8 @@ self.addEventListener('fetch', event => {
     } catch {
       // Network failures fall back to the public shell. Authentication responses use the hosted route.
     }
-    if (!await (await caches.open(cacheName)).match(storedShell)) return result ?? Response.error()
-    const fallback = new URL(shellPath, target.origin)
+    if (!await (await caches.open(cacheName)).match(cacheKey(shell))) return result ?? Response.error()
+    const fallback = new URL(shell, target.origin)
     if (id) fallback.searchParams.set('page', id)
     return Response.redirect(fallback.href)
   })())

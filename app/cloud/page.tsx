@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { Cloud, FileText, Plus } from 'lucide-react'
 import CloudSearch from '@/components/cloud-search'
-import { PrepareCloudOffline } from '@/components/prepare-cloud-offline'
+import { PrepareOfflineWorkspace } from '@/components/prepare-offline-workspace'
 import CloudVaultImport from '@/components/cloud-vault-import'
 import { UsageAnalyticsControl } from '@/components/usage-analytics'
 import { accountContext } from '@/lib/auth/server'
@@ -27,7 +27,7 @@ export default async function CloudWorkspace({ searchParams }: {
 
   return (
     <main className="cloud-screen">
-      <PrepareCloudOffline />
+      <PrepareOfflineWorkspace />
       <header className="account-header">
         <Link className="account-brand" href="/"><span className="brand-mark" aria-hidden="true">L</span> Lekhan</Link>
         <div className="cloud-header-actions">

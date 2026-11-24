@@ -16,7 +16,7 @@ export function errorSampleRate(value?: string) {
 export function monitoredPath(path: string) {
   try {
     const route = decodeURIComponent(path.split(/[?#]/, 1)[0]).replace(/\/{2,}/g, '/')
-    return route.startsWith('/') && !/^\/(?:doc|page|cloud-offline)(?:\/|$)/i.test(route)
+    return route.startsWith('/') && !/^\/(?:doc|page|cloud-offline|workspace-offline)(?:\/|$)/i.test(route)
   } catch { return false }
 }
 

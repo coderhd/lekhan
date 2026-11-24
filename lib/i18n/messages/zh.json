@@ -324,6 +324,9 @@
     "close": "关闭"
   },
   "cloud-offline": {
+    "notebook": "离线笔记本",
+    "loadingNotebook": "正在打开此设备上的笔记本…",
+    "openNotebookOnline": "在线打开笔记本",
     "openPage": "在线打开页面",
     "offlineCopy": "离线副本",
     "waiting": "正在等待同步",

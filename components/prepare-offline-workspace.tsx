@@ -14,7 +14,7 @@ export function DiscardOfflineAccess({ subject }: { subject: string }) {
   return null
 }
 
-export function PrepareCloudOffline() {
+export function PrepareOfflineWorkspace() {
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production' || !('serviceWorker' in navigator)) return
     void navigator.serviceWorker.register('/cloud-offline-worker.js', { updateViaCache: 'none' })

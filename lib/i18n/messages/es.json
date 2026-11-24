@@ -324,6 +324,9 @@
     "close": "Cerrar"
   },
   "cloud-offline": {
+    "notebook": "Cuaderno sin conexión",
+    "loadingNotebook": "Abriendo el cuaderno de este dispositivo…",
+    "openNotebookOnline": "Abrir cuaderno en línea",
     "openPage": "Abrir página en línea",
     "offlineCopy": "Copia sin conexión",
     "waiting": "Esperando sincronización",

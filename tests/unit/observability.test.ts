@@ -15,6 +15,7 @@ describe('error-data handling', () => {
     for (const path of ['/doc', '/doc/a?title=secret', '/page/private/share', '//page/private', '/%64oc/a', '/%zz']) {
       expect(monitoredPath(path)).toBe(false)
     expect(monitoredPath('/cloud-offline?page=private-id')).toBe(false)
+    expect(monitoredPath('/workspace-offline')).toBe(false)
     }
     for (const path of ['/', '/workspace', '/api/cron/retention-prune']) expect(monitoredPath(path)).toBe(true)
   })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { authSessionCookie, offlineAccount } from '../lib/cloud/offline-account'
+import { authSessionCookie, offlineAccount, offlineNotebookScope } from '../lib/cloud/offline-account'
 
 const first = '4dbc5892-753d-4be6-9d78-faaeb9bbd2d7'
 const second = 'ae84d6dc-d9c6-46b1-9187-fc3634bf88f5'
@@ -20,5 +20,15 @@ describe('offline account continuity', () => {
     const session = cookieSession(first)
     expect(offlineAccount(mark + '; ' + name + '.0=' + session.slice(0, 40) + '; ' + name + '.1=' + session.slice(40))).toBe(first)
     expect(offlineAccount(mark + '; ' + name + '.0=' + session.slice(0, 40) + '; ' + name + '.2=' + session.slice(40))).toBeNull()
+  })
+
+  it('keeps guest and signed-in notebooks distinct during an outage', () => {
+    expect(offlineNotebookScope('', name)).toBe('personal')
+    expect(offlineNotebookScope(mark, name)).toBe('personal')
+    expect(offlineNotebookScope(mark + '; ' + name + '=' + cookieSession(first), name)).toBe('account:' + first)
+    expect(offlineNotebookScope(mark + '; ' + name + '=' + cookieSession(second), name)).toBeNull()
+    expect(offlineNotebookScope(name + '.0=broken', name)).toBeNull()
+    const other = authSessionCookie('https://other.supabase.co')
+    expect(offlineNotebookScope(mark + '; ' + name + '=' + cookieSession(first) + '; ' + other + '=current', other)).toBeNull()
   })
 })

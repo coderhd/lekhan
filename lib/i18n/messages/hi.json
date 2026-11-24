@@ -324,6 +324,9 @@
     "close": "बंद करें"
   },
   "cloud-offline": {
+    "notebook": "ऑफ़लाइन नोटबुक",
+    "loadingNotebook": "इस डिवाइस की नोटबुक खुल रही है…",
+    "openNotebookOnline": "नोटबुक ऑनलाइन खोलें",
     "openPage": "पेज ऑनलाइन खोलें",
     "offlineCopy": "ऑफ़लाइन कॉपी",
     "waiting": "सिंक का इंतज़ार है",

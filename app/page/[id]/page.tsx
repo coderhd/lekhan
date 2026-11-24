@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import CloudPageEditor from '@/components/cloud-page-editor'
 import CloudSearch from '@/components/cloud-search'
-import { DiscardOfflineAccess, PrepareCloudOffline } from '@/components/prepare-cloud-offline'
+import { DiscardOfflineAccess, PrepareOfflineWorkspace } from '@/components/prepare-offline-workspace'
 import { accountContext, createAuthClient } from '@/lib/auth/server'
 import { listCloudChildren, listCloudLinkChoices, pageAccess } from '@/lib/cloud/graph'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -52,7 +52,7 @@ export default async function CloudPageRoute({ params, searchParams }: {
 
   return (
     <main className="cloud-screen">
-      <PrepareCloudOffline />
+      <PrepareOfflineWorkspace />
       <header className="account-header">
         <Link className="account-brand" href="/cloud"><span className="brand-mark" aria-hidden="true">L</span> Cloud workspace</Link>
         <div className="cloud-header-actions">

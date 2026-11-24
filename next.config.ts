@@ -9,7 +9,7 @@ const config: NextConfig = {
       source: '/cloud-offline-worker.js',
       headers: [{ key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' }],
     }, {
-      source: '/cloud-offline',
+      source: '/:offline(cloud-offline|workspace-offline)',
       headers: [{ key: 'Referrer-Policy', value: 'no-referrer' }],
     }]
   },

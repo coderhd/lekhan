@@ -27,7 +27,7 @@ export async function proxy(request: NextRequest) {
   if (!error && typeof data?.claims.sub === 'string') {
     const marker = data.claims.sub + ':' + name
     const pathname = request.nextUrl.pathname
-    if (existing !== marker || pathname === '/cloud' || pathname.startsWith('/page/')) response.cookies.set(offlineAccountCookie, marker, { ...options, maxAge: 30 * 24 * 60 * 60 })
+    if (existing !== marker || pathname === '/workspace' || pathname === '/cloud' || pathname.startsWith('/page/')) response.cookies.set(offlineAccountCookie, marker, { ...options, maxAge: 30 * 24 * 60 * 60 })
   } else if (existing && (!request.cookies.has(name) && !request.cookies.has(name + '.0') || error?.status === 401 || error?.status === 403)) {
     response.cookies.set(offlineAccountCookie, '', { ...options, maxAge: 0 })
   }

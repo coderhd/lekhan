@@ -2,24 +2,12 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { CloudOff, FileText } from 'lucide-react'
-import { NextIntlClientProvider, type AbstractIntlMessages } from 'next-intl'
-import { localeCookie, localeDirection, resolveLocale, type Locale } from '@/lib/i18n/locales'
 import { offlineAccount } from '@/lib/cloud/offline-account'
 import { readOfflineCloudPage, readOfflineCloudPages } from '@/lib/cloud/local-search'
 import { uuidPattern } from '@/lib/cloud/graph'
 import { useTranslations } from '@/lib/i18n/client'
 import CloudPageEditor from './cloud-page-editor'
-
-function watchAccount(check: () => void) {
-  const timer = setInterval(check, 1000)
-  window.addEventListener('focus', check)
-  window.addEventListener('pageshow', check)
-  return () => {
-    clearInterval(timer)
-    window.removeEventListener('focus', check)
-    window.removeEventListener('pageshow', check)
-  }
-}
+import OfflineShell, { watchOfflineCookies, type OfflineCatalogs } from './offline-shell'
 
 function browserAccount() {
   return offlineAccount(document.cookie)
@@ -30,27 +18,13 @@ const loading = () => undefined
 const pageParam = () => new URLSearchParams(location.search).get('page')
 const hrefFor = (id: string) => '/cloud-offline?' + new URLSearchParams({ page: id })
 
-function browserLocale() {
-  const prefix = localeCookie + '='
-  const value = document.cookie.split(/;\s*/).find(entry => entry.startsWith(prefix))
-  return resolveLocale(value?.slice(prefix.length))
-}
-
-export default function CloudOffline({ catalogs }: { catalogs: Partial<Record<Locale, AbstractIntlMessages>> }) {
-  const locale = useSyncExternalStore(nothing, browserLocale, () => 'en' as const)
-  useEffect(() => {
-    document.documentElement.lang = locale
-    document.documentElement.dir = localeDirection(locale)
-  }, [locale])
-
-  return <NextIntlClientProvider locale={locale} messages={catalogs[locale]} timeZone="UTC">
-    <CloudOfflineScreen />
-  </NextIntlClientProvider>
+export default function CloudOffline({ catalogs }: { catalogs: OfflineCatalogs }) {
+  return <OfflineShell catalogs={catalogs}><CloudOfflineScreen /></OfflineShell>
 }
 
 function CloudOfflineScreen() {
   const t = useTranslations('cloud-offline')
-  const subject = useSyncExternalStore(watchAccount, browserAccount, loading)
+  const subject = useSyncExternalStore(watchOfflineCookies, browserAccount, loading)
   const id = useSyncExternalStore(nothing, pageParam, loading)
   return <main className="cloud-screen">
     <header className="account-header">

@@ -324,6 +324,9 @@
     "close": "Schließen"
   },
   "cloud-offline": {
+    "notebook": "Offline-Notizbuch",
+    "loadingNotebook": "Das Notizbuch auf diesem Gerät wird geöffnet …",
+    "openNotebookOnline": "Notizbuch online öffnen",
     "openPage": "Seite online öffnen",
     "offlineCopy": "Offline-Kopie",
     "waiting": "Warte auf Synchronisierung",
