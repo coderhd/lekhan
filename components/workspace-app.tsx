@@ -787,7 +787,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
                 </ol>
               ) : <p className="context-empty">{t('headingsEmpty')}</p>}
             </section>
-            <BacklinksSection key={page.id} links={links} onOpen={open} />
+            <BacklinksSection key={'backlinks:' + page.id} links={links} onOpen={open} />
           </div>
         )}
       </aside>
