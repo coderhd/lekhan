@@ -31,7 +31,10 @@ export interface ProviderConfig {
   label?: string
   baseUrl?: string
   apiKey?: string
+  fallback?: string[]
 }
+
+export const MAX_FALLBACK_MODELS = 5
 
 export const LOCAL_PROVIDERS = ['ollama', 'lmstudio', 'llamacpp'] as const
 export const FREE_PRESETS = [

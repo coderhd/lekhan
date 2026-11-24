@@ -143,6 +143,18 @@
     "close": "Close"
   },
   "editor-ai": {
+    "fallbackSettings": "Fallback models",
+    "fallbackSettingsHint": "Choose which models can receive the request if this connection is rate-limited or unavailable (HTTP 429 or 503). They are tried in order.",
+    "fallbackUnavailable": "Unavailable model",
+    "moveFallbackUp": "Move {model} up",
+    "moveFallbackDown": "Move {model} down",
+    "removeFallback": "Remove {model} from fallback",
+    "addFallback": "Add a fallback model",
+    "chooseFallback": "Choose a saved model",
+    "fallbackDisclosure": "If the chosen model is rate-limited or unavailable, this request may go to {models}.",
+    "tryingFallback": "Trying {model}…",
+    "usedFallback": "Response from {model}.",
+    "failedFallback": "Last fallback attempted: {model}.",
     "actions": "Writing actions",
     "polish": "Polish",
     "summarize": "Summarize",

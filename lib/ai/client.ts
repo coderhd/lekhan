@@ -11,6 +11,12 @@ export type ChatOptions = {
   maxTokens?: number
 }
 
+export class ProviderHttpError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message)
+  }
+}
+
 function headersFor(config: ProviderConfig): Record<string, string> {
   const key = config.apiKey?.trim()
   if (!key) {
@@ -87,9 +93,9 @@ async function fetchProvider(config: ProviderConfig, url: string, signal: AbortS
   if (response.ok) return response
   await response.body?.cancel().catch(() => undefined)
   if (response.status === 401 || response.status === 403) throw new Error('The provider rejected the API key or model access.')
-  if (response.status === 429) throw new Error('The provider applied a rate limit or quota. Check your provider account or try again later.')
+  if (response.status === 429) throw new ProviderHttpError(429, 'The provider applied a rate limit or quota. Check your provider account or try again later.')
   if (response.status === 404) throw new Error('The model or provider endpoint was not found.')
-  throw new Error('The provider could not complete this request (HTTP ' + response.status + ').')
+  throw new ProviderHttpError(response.status, 'The provider could not complete this request (HTTP ' + response.status + ').')
 }
 
 async function* linesFrom(body: ReadableStream<Uint8Array>) {

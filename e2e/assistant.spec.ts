@@ -131,3 +131,72 @@ test('generates selected-text suggestions with the chosen model and applies only
   await expect(source).toHaveValue('Private sentence. चुना हुआ वाक्य।\n\nA revised sentence.')
   expect(sends[2].messages[1]).toEqual({ role: 'user', content: 'Private' })
 })
+
+test('persists the writer’s fallback order and discloses retries before sending', async ({ page }) => {
+  const { createProviderVault } = await import('../lib/ai/vault')
+  const passphrase = 'fallback fixture passphrase'
+  const vault = await createProviderVault(passphrase, [
+    { id: 'first', provider: 'openai', model: 'fixture-primary', apiKey: 'fixture-primary-key' },
+    { id: 'second', provider: 'groq', model: 'fixture-second', apiKey: 'fixture-second-key' },
+    { id: 'third', provider: 'openrouter', model: 'fixture-third', apiKey: 'fixture-third-key' },
+  ])
+  await page.addInitScript(payload => {
+    const key = 'lekhan:provider-vault:v1'
+    if (!localStorage.getItem(key)) localStorage.setItem(key, payload)
+  }, await vault.seal())
+  const requests: { hostname: string; authorization?: string; messages: unknown }[] = []
+  const hosts = ['api.openai.com', 'api.groq.com', 'openrouter.ai']
+  await page.route(url => hosts.includes(url.hostname) && url.pathname.endsWith('/chat/completions'), async route => {
+    const headers = {
+      'access-control-allow-origin': '*',
+      'access-control-allow-headers': 'authorization,content-type',
+      'access-control-allow-methods': 'POST,OPTIONS',
+    }
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers })
+    const hostname = new URL(route.request().url()).hostname
+    const authorization = route.request().headers().authorization
+    requests.push({ hostname, authorization, messages: route.request().postDataJSON().messages })
+    if (hostname === 'api.openai.com') return route.fulfill({ status: 429, headers })
+    if (hostname === 'openrouter.ai') return route.fulfill({ status: 503, headers })
+    await route.fulfill({ headers, contentType: 'text/event-stream', body:
+      'data: {"choices":[{"delta":{"content":"Backup reply."},"finish_reason":"stop"}],"usage":{"total_tokens":19}}\n\ndata: [DONE]\n\n',
+    })
+  })
+  await page.goto('/workspace')
+  const open = page.getByRole('button', { name: 'Writing assistant' })
+  const dialog = page.getByRole('dialog', { name: 'Writing assistant' })
+  async function unlock() {
+    await open.click()
+    await dialog.getByLabel('Passphrase').fill(passphrase)
+    await dialog.getByRole('button', { name: 'Unlock', exact: true }).click()
+    await expect(dialog.getByRole('combobox', { name: 'Model', exact: true })).toBeVisible()
+  }
+  await unlock()
+  await dialog.getByRole('button', { name: 'Providers', exact: true }).click()
+  await dialog.getByRole('button', { name: 'OpenAI fixture-primary' }).click()
+  await dialog.getByText('Fallback models', { exact: true }).click()
+  const add = dialog.getByRole('combobox', { name: 'Add a fallback model' })
+  await add.selectOption('provider:second')
+  await add.selectOption('provider:third')
+  await dialog.getByRole('button', { name: 'Move OpenRouter · fixture-third up' }).click()
+  await dialog.getByRole('button', { name: 'Save connection' }).click()
+  await expect(dialog.getByText('Connection saved.')).toBeVisible()
+  const payload = await page.evaluate(() => localStorage.getItem('lekhan:provider-vault:v1'))
+  expect(payload).toMatch(/^v1\./)
+  expect(payload).not.toContain('provider:third')
+
+  await page.reload()
+  await unlock()
+  await expect(dialog.getByText(/OpenRouter · fixture-third → Groq · fixture-second/)).toBeVisible()
+  expect(requests).toHaveLength(0)
+  await dialog.getByLabel('Prompt').fill('Draft a sentence.')
+  await dialog.getByRole('button', { name: 'Send', exact: true }).click()
+  await expect(dialog.getByText('Backup reply.', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('Response from Groq · fixture-second.', { exact: true })).toBeVisible()
+  await expect(dialog.getByText(/19 tokens · .* ms/)).toBeVisible()
+  expect(requests).toEqual([
+    { hostname: 'api.openai.com', authorization: 'Bearer fixture-primary-key', messages: [{ role: 'user', content: 'Draft a sentence.' }] },
+    { hostname: 'openrouter.ai', authorization: 'Bearer fixture-third-key', messages: [{ role: 'user', content: 'Draft a sentence.' }] },
+    { hostname: 'api.groq.com', authorization: 'Bearer fixture-second-key', messages: [{ role: 'user', content: 'Draft a sentence.' }] },
+  ])
+})

@@ -143,6 +143,18 @@
     "close": "बंद करें"
   },
   "editor-ai": {
+    "fallbackSettings": "वैकल्पिक मॉडल",
+    "fallbackSettingsHint": "चुनें कि अनुरोध सीमा या सेवा अनुपलब्ध होने पर (HTTP 429 या 503) किन मॉडल को भेजा जा सकता है। मॉडल दिए गए क्रम में आज़माए जाएँगे।",
+    "fallbackUnavailable": "मॉडल उपलब्ध नहीं है",
+    "moveFallbackUp": "{model} को ऊपर ले जाएँ",
+    "moveFallbackDown": "{model} को नीचे ले जाएँ",
+    "removeFallback": "{model} को वैकल्पिक सूची से हटाएँ",
+    "addFallback": "वैकल्पिक मॉडल जोड़ें",
+    "chooseFallback": "सहेजा हुआ मॉडल चुनें",
+    "fallbackDisclosure": "चुने हुए मॉडल की सीमा पूरी होने या उसके अनुपलब्ध होने पर यह अनुरोध {models} को भेजा जा सकता है।",
+    "tryingFallback": "{model} आज़माया जा रहा है…",
+    "usedFallback": "{model} से जवाब।",
+    "failedFallback": "पिछली कोशिश में {model} का इस्तेमाल हुआ।",
     "actions": "लेखन कार्रवाइयाँ",
     "polish": "लेखन सुधारें",
     "summarize": "सारांश बनाएँ",

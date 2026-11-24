@@ -299,3 +299,48 @@
   background: var(--context);
   padding: 12px;
 }
+
+.fallback-settings {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.fallback-settings summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.form-dialog .fallback-settings p {
+  margin: 8px 0;
+  font-size: 12px;
+}
+
+.fallback-list {
+  margin: 10px 0;
+  padding-inline-start: 1.45em;
+}
+
+.fallback-list li {
+  padding: 4px 0 4px 2px;
+}
+
+.fallback-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.fallback-row > span {
+  overflow-wrap: anywhere;
+}
+
+.fallback-row > div {
+  display: flex;
+}
+
+.fallback-row .icon-button {
+  width: 29px;
+}

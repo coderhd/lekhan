@@ -143,6 +143,18 @@
     "close": "关闭"
   },
   "editor-ai": {
+    "fallbackSettings": "备用模型",
+    "fallbackSettingsHint": "选择此连接限流或不可用时（HTTP 429 或 503）可以接收请求的模型。系统会按顺序尝试。",
+    "fallbackUnavailable": "模型不可用",
+    "moveFallbackUp": "上移 {model}",
+    "moveFallbackDown": "下移 {model}",
+    "removeFallback": "从备用列表移除 {model}",
+    "addFallback": "添加备用模型",
+    "chooseFallback": "选择已保存的模型",
+    "fallbackDisclosure": "如果所选模型限流或不可用，此请求可能会发送给 {models}。",
+    "tryingFallback": "正在尝试 {model}…",
+    "usedFallback": "回复来自 {model}。",
+    "failedFallback": "最后尝试的备用模型为 {model}。",
     "actions": "写作操作",
     "polish": "润色",
     "summarize": "总结",

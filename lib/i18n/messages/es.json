@@ -143,6 +143,18 @@
     "close": "Cerrar"
   },
   "editor-ai": {
+    "fallbackSettings": "Modelos alternativos",
+    "fallbackSettingsHint": "Elige qué modelos pueden recibir la solicitud si esta conexión alcanza su límite o no está disponible (HTTP 429 o 503). Se prueban en orden.",
+    "fallbackUnavailable": "Modelo no disponible",
+    "moveFallbackUp": "Subir {model}",
+    "moveFallbackDown": "Bajar {model}",
+    "removeFallback": "Quitar {model} de las alternativas",
+    "addFallback": "Añadir un modelo alternativo",
+    "chooseFallback": "Elegir un modelo guardado",
+    "fallbackDisclosure": "Si el modelo elegido alcanza su límite o no está disponible, la solicitud puede enviarse a {models}.",
+    "tryingFallback": "Probando {model}…",
+    "usedFallback": "Respuesta de {model}.",
+    "failedFallback": "Última alternativa probada: {model}.",
     "actions": "Acciones de escritura",
     "polish": "Pulir",
     "summarize": "Resumir",

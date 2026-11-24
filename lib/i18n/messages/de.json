@@ -143,6 +143,18 @@
     "close": "Schließen"
   },
   "editor-ai": {
+    "fallbackSettings": "Ersatzmodelle",
+    "fallbackSettingsHint": "Lege fest, welche Modelle die Anfrage bei einem Ratenlimit oder Ausfall erhalten dürfen (HTTP 429 oder 503). Die Reihenfolge gilt von oben nach unten.",
+    "fallbackUnavailable": "Modell nicht verfügbar",
+    "moveFallbackUp": "{model} nach oben verschieben",
+    "moveFallbackDown": "{model} nach unten verschieben",
+    "removeFallback": "{model} aus der Ersatzliste entfernen",
+    "addFallback": "Ersatzmodell hinzufügen",
+    "chooseFallback": "Gespeichertes Modell wählen",
+    "fallbackDisclosure": "Bei einem Ratenlimit oder Ausfall kann diese Anfrage an {models} gesendet werden.",
+    "tryingFallback": "{model} wird versucht …",
+    "usedFallback": "Antwort von {model}.",
+    "failedFallback": "Zuletzt versucht: {model}.",
     "actions": "Schreibaktionen",
     "polish": "Überarbeiten",
     "summarize": "Zusammenfassen",

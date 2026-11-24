@@ -7,17 +7,27 @@ import type { Page } from '@/lib/types'
 import { detectLocalProviders, streamChat, testProviderConnection, type ChatMessage, type ChatOptions } from '@/lib/ai/client'
 import { endpointFor, FREE_PRESETS, PROVIDERS, providerDefinition, type ProviderConfig, type ProviderId } from '@/lib/ai/provider-registry'
 import { editorActionMessages, translationLanguages, type EditorAction } from '@/lib/ai/editor-actions'
+import { runFallback } from '@/lib/ai/fallback'
 import { createProviderVault, unlockProviderVault } from '@/lib/ai/vault'
 import { track } from '@/lib/analytics'
 import { useLocale, useTranslations } from '@/lib/i18n/client'
 import { Dialog } from './workspace-dialogs'
 import BotBarModelPicker, { type ModelTelemetry } from './editor/bot-bar-model-picker'
+import FallbackModelSettings from './editor/fallback-model-settings'
 
 const defaultVaultKey = 'lekhan:provider-vault:v1'
 const newConnection = (): ProviderConfig => ({ id: crypto.randomUUID(), provider: 'ollama', model: '' })
 type VaultSession = Awaited<ReturnType<typeof createProviderVault>>
 export type LocalAssistantModel = { id?: string; label: string; send: (options: ChatOptions) => ReturnType<typeof streamChat> }
 type EditorRequest = { action: EditorAction; selection: { text: string; apply: (result: string, append: boolean) => boolean } }
+
+function modelLabel(config: ProviderConfig) {
+  let destination = PROVIDERS[config.provider].label
+  if (config.provider === 'custom') {
+    try { destination = new URL(endpointFor(config)).host } catch { /* The connection will need repair. */ }
+  }
+  return [config.label !== destination ? config.label : undefined, destination, config.model].filter(Boolean).join(' · ')
+}
 
 function readVault(vaultKey: string) {
   try { return localStorage.getItem(vaultKey) } catch { return null }
@@ -63,6 +73,7 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
   const [telemetry, setTelemetry] = useState<{ key: string; result: ModelTelemetry }>()
   const [language, setLanguage] = useState<keyof typeof translationLanguages>(locale in translationLanguages ? locale as keyof typeof translationLanguages : 'en')
   const [suggestion, setSuggestion] = useState('')
+  const [fallbackModel, setFallbackModel] = useState('')
   const languageNames = useMemo(() => new Intl.DisplayNames(locale, { type: 'language', fallback: 'none' }), [locale])
   const request = useRef<AbortController | null>(null)
   const selected = configs.find(config => config.id === active)
@@ -70,10 +81,21 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
   const installed = localModels ?? (localModel ? [localModel] : [])
   const deviceModel = installed.find(model => (model.id ?? '') === localId) ?? localModel ?? installed[0]
   const modelKey = tab === 'local' ? 'device:' + (deviceModel?.id ?? '') : 'provider:' + active
-  const sendPrompt = tab === 'local' ? deviceModel?.send : selected ? (options: ChatOptions) => streamChat(selected, options) : undefined
-  const modelChoices = tab === 'local'
-    ? installed.map(model => ({ id: 'device:' + (model.id ?? ''), label: model.label }))
-    : configs.map(config => ({ id: 'provider:' + config.id, label: (config.label || PROVIDERS[config.provider].label) + ' · ' + config.model }))
+  const deviceRoutes = installed.map(model => ({ id: 'device:' + (model.id ?? ''), label: model.label, send: model.send }))
+  const providerRoutes = configs.map(config => ({
+    id: 'provider:' + config.id,
+    label: modelLabel(config),
+    send: (options: ChatOptions) => streamChat(config, options),
+  }))
+  const allRoutes = [...deviceRoutes, ...providerRoutes]
+  const modelChoices = tab === 'local' ? deviceRoutes : providerRoutes
+  const primary = modelChoices.find(model => model.id === modelKey)
+  const fallbacks = tab === 'chat' ? (selected?.fallback ?? []).flatMap(id => allRoutes.filter(route => route.id === id && route.id !== primary?.id)) : []
+  const fallbackNames = fallbacks.map(model => model.label).join(' → ')
+  const fallbackHint = fallbacks.length > 0 && <p className="assistant-hint">{text('fallbackDisclosure', { models: fallbackNames })}</p>
+  const fallbackStatus = fallbackModel && <p className="assistant-hint" role="status">
+    {text(busy ? 'tryingFallback' : error ? 'failedFallback' : 'usedFallback', { model: fallbackModel })}
+  </p>
   const dialogTitle = editorRequest ? text(editorRequest.action) : 'Writing assistant'
 
   useEffect(() => () => request.current?.abort(), [])
@@ -155,15 +177,24 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
   }
 
   function setProvider(provider: ProviderId, model = '') {
-    setDraft(previous => ({ id: previous.id, provider, model }))
+    setDraft(previous => ({ id: previous.id, provider, model, fallback: previous.fallback }))
     setModels([])
     setFeedback('')
     setError('')
   }
 
+  async function sendThroughModel(options: ChatOptions) {
+    if (!primary) throw new Error(text('needsModel'))
+    setFallbackModel('')
+    const result = await runFallback(primary, fallbacks, options, next => setFallbackModel(next.label))
+    options.signal?.throwIfAborted()
+    setTelemetry({ key: primary.id, result: { elapsedMs: result.elapsedMs, usage: result.usage } })
+    return result
+  }
+
   function send(event: FormEvent) {
     event.preventDefault()
-    if (!sendPrompt || !prompt.trim()) return
+    if (!primary || !prompt.trim()) return
     const question = prompt.trim()
     const outgoing = [...messages, { role: 'user', content: question } as const]
     const pageContext = sharePage && page ? [{
@@ -172,15 +203,13 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
     }] : []
     setReply('')
     void run(async signal => {
-      const started = performance.now()
       const options = {
         messages: [...pageContext, ...outgoing],
         signal,
         onText: (part: string) => setReply(previous => previous + part),
       }
-      const result = await sendPrompt(options)
+      const result = await sendThroughModel(options)
       signal.throwIfAborted()
-      setTelemetry({ key: modelKey, result: { elapsedMs: Math.round(performance.now() - started), usage: result.usage } })
       track('ai_message_sent')
       setMessages([...outgoing, { role: 'assistant', content: result.text }])
       setReply('')
@@ -190,12 +219,11 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
 
   function generate(event: FormEvent) {
     event.preventDefault()
-    if (!editorRequest || !sendPrompt) return
+    if (!editorRequest || !primary) return
     setReply('')
     setSuggestion('')
     void run(async signal => {
-      const started = performance.now()
-      const result = await sendPrompt({
+      const result = await sendThroughModel({
         messages: editorActionMessages(editorRequest.action, editorRequest.selection.text, translationLanguages[language]),
         signal,
         onText: part => setReply(value => value + part),
@@ -203,7 +231,6 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
       })
       signal.throwIfAborted()
       if (!result.text.trim()) throw new Error(text('emptyResult'))
-      setTelemetry({ key: modelKey, result: { elapsedMs: Math.round(performance.now() - started), usage: result.usage } })
       setReply('')
       setSuggestion(result.text.trim())
       track('ai_message_sent')
@@ -216,12 +243,14 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
     setMessages([])
     setReply('')
     setSuggestion('')
+    setFallbackModel('')
   }
 
   function stopReply() {
     request.current?.abort()
     setBusy(false)
     setReply('')
+    setFallbackModel('')
   }
 
   function applySuggestion(append: boolean) {
@@ -240,6 +269,7 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
       setSharePage(false)
     }
     setSuggestion('')
+    setFallbackModel('')
     setTab(next)
   }
 
@@ -271,7 +301,9 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
                       setModels([])
                     }}>{config.label || PROVIDERS[config.provider].label} <small>{config.model}</small></button>
                     <button className="icon-button" title="Remove connection" aria-label={'Remove ' + (config.label || config.model)} disabled={busy} onClick={() => {
-                      const next = configs.filter(item => item.id !== config.id)
+                      const routeId = 'provider:' + config.id
+                      const next = configs.filter(item => item.id !== config.id).map(item => item.fallback?.includes(routeId)
+                        ? { ...item, fallback: item.fallback.filter(id => id !== routeId) } : item)
                       void run(signal => persist(next, active === config.id ? next[0]?.id ?? '' : active, signal))
                       if (draft.id === config.id) setDraft(newConnection())
                     }}><Trash2 size={15} /></button>
@@ -305,6 +337,8 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
                     <input type="password" autoComplete="off" value={draft.apiKey ?? ''} disabled={busy} onChange={event => setDraft({ ...draft, apiKey: event.target.value })} />
                   </label>}
                   {definition.signupUrl && <a className="assistant-provider-link" href={definition.signupUrl} target="_blank" rel="noopener noreferrer">Get a {definition.label} key <ArrowUpRight size={14} /></a>}
+                  <FallbackModelSettings routes={allRoutes.filter(route => route.id !== 'provider:' + draft.id)}
+                    chain={draft.fallback ?? []} disabled={busy} onChange={fallback => setDraft({ ...draft, fallback })} />
                   <div className="assistant-actions">
                     <button type="button" className="secondary-button" disabled={busy} onClick={() => void run(async signal => {
                       const result = await testProviderConnection(draft, { signal })
@@ -331,6 +365,8 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
                   telemetry={telemetry?.key === modelKey ? telemetry.result : undefined} />
                 <p className="assistant-hint">{tab === 'local' || (selected && providerDefinition(selected.provider).local)
                   ? text('localSelection') : selected ? text('remoteSelection', { provider: PROVIDERS[selected.provider].label }) : text('needsModel')}</p>
+                {fallbackHint}
+                {fallbackStatus}
                 {editorRequest.action === 'translate' && <label>{text('language')}
                   <select value={language} disabled={busy} onChange={event => {
                     setLanguage(event.target.value as typeof language)
@@ -347,7 +383,7 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
                 <div className="assistant-actions">
                   {busy ? <button type="button" className="secondary-button" onClick={stopReply}><Square size={14} /> {text('stop')}</button>
                     : <>
-                      <button className={suggestion ? 'secondary-button' : 'primary-button'} disabled={!sendPrompt}>{text(suggestion ? 'retry' : 'generate')}</button>
+                      <button className={suggestion ? 'secondary-button' : 'primary-button'} disabled={!primary}>{text(suggestion ? 'retry' : 'generate')}</button>
                       {suggestion && <>
                         <button type="button" className="icon-button" aria-label={text('copy')} title={text('copy')} onClick={() => {
                           setError('')
@@ -373,6 +409,7 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
                 <BotBarModelPicker choices={modelChoices} selected={modelKey} disabled={busy} onChange={pickModel}
                   telemetry={telemetry?.key === modelKey ? telemetry.result : undefined} />
                 {tab === 'local' && deviceModel && <p className="assistant-hint">{desktopText('localModelActive', { model: deviceModel.label })}</p>}
+                {fallbackStatus}
                 {messages.length > 0 && <ol className="assistant-thread" aria-label="Conversation">
                   {messages.map((message, index) => <li key={index} data-role={message.role}>
                     <p>{message.content}</p>
@@ -386,10 +423,11 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
                 </label>
                 <label className="assistant-share"><input type="checkbox" checked={sharePage} onChange={event => setSharePage(event.target.checked)} /> Include this page with my request</label>
                 {tab !== 'local' && selected && <p className="assistant-hint">Requests go directly to {PROVIDERS[selected.provider].label} using this connection.</p>}
+                {fallbackHint}
                 <div className="assistant-actions">
                   {busy
                     ? <button type="button" className="secondary-button" onClick={stopReply}><Square size={14} /> Stop</button>
-                    : <button className="primary-button" disabled={!sendPrompt || !prompt.trim()}><Send size={15} /> Send</button>}
+                    : <button className="primary-button" disabled={!primary || !prompt.trim()}><Send size={15} /> Send</button>}
                 </div>
               </form>
             )}

@@ -1,5 +1,5 @@
 import { strFromU8 } from 'fflate'
-import { providerDefinition, type ProviderConfig } from './provider-registry'
+import { MAX_FALLBACK_MODELS, providerDefinition, type ProviderConfig } from './provider-registry'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
@@ -28,9 +28,13 @@ function validateConfigs(value: unknown): ProviderConfig[] {
       throw new Error('Invalid provider configuration.')
     }
     providerDefinition(config.provider)
+    const fallback: unknown = config.fallback
+    if (fallback !== undefined && (!Array.isArray(fallback) || fallback.length > MAX_FALLBACK_MODELS ||
+      fallback.some(id => typeof id !== 'string' || id.length > 270 || !/^(provider|device):.+$/.test(id)) ||
+      new Set(fallback).size !== fallback.length)) throw new Error('Invalid model fallback chain.')
     ids.add(config.id)
     const { id, provider, model, label, baseUrl, apiKey } = config
-    return { id, provider, model, label, baseUrl, apiKey }
+    return { id, provider, model, label, baseUrl, apiKey, ...(fallback === undefined ? {} : { fallback: fallback as string[] }) }
   })
 }
 
