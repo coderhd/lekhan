@@ -16,6 +16,8 @@ export const PROVIDERS = {
   gemini: { label: 'Google Gemini', protocol: 'gemini', requiresKey: true, baseUrl: 'https://generativelanguage.googleapis.com/v1beta', docsUrl: 'https://ai.google.dev/gemini-api/docs', signupUrl: 'https://aistudio.google.com/app/apikey' },
   groq: { label: 'Groq', protocol: 'openai', requiresKey: true, baseUrl: 'https://api.groq.com/openai/v1', docsUrl: 'https://console.groq.com/docs', signupUrl: 'https://console.groq.com/keys' },
   zai: { label: 'Z.AI', protocol: 'openai', requiresKey: true, baseUrl: 'https://api.z.ai/api/paas/v4', docsUrl: 'https://docs.z.ai', signupUrl: 'https://z.ai/manage-apikey/apikey-list' },
+  deepseek: { label: 'DeepSeek', protocol: 'openai', requiresKey: true, baseUrl: 'https://api.deepseek.com', docsUrl: 'https://api-docs.deepseek.com', signupUrl: 'https://platform.deepseek.com/api_keys' },
+  qwen: { label: 'Qwen', protocol: 'openai', requiresKey: true, baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', docsUrl: 'https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope', signupUrl: 'https://www.alibabacloud.com/help/en/model-studio/get-api-key' },
   sarvam: { label: 'Sarvam', protocol: 'openai', requiresKey: true, baseUrl: 'https://api.sarvam.ai/v2', docsUrl: 'https://docs.sarvam.ai/api-reference/chat/chat-completions-v2', signupUrl: 'https://dashboard.sarvam.ai' },
   ollama: { label: 'Ollama', protocol: 'ollama', requiresKey: false, local: true, baseUrl: 'http://localhost:11434', docsUrl: 'https://docs.ollama.com/faq' },
   lmstudio: { label: 'LM Studio', protocol: 'openai', requiresKey: false, local: true, baseUrl: 'http://localhost:1234/v1', docsUrl: 'https://lmstudio.ai/docs/developer/core/server/settings' },
@@ -39,12 +41,12 @@ export const MAX_FALLBACK_MODELS = 5
 export const LOCAL_PROVIDERS = ['ollama', 'lmstudio', 'llamacpp'] as const
 export type LocalProviderId = typeof LOCAL_PROVIDERS[number]
 export const FREE_PRESETS = [
-  { provider: 'openrouter', model: 'openrouter/free', label: 'OpenRouter Free Models Router', sourceUrl: 'https://openrouter.ai/openrouter/free' },
-  { provider: 'gemini', model: 'gemini-3.1-flash-lite', label: 'Gemini Flash-Lite', sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing' },
-  { provider: 'groq', model: 'openai/gpt-oss-20b', label: 'GPT OSS 20B', sourceUrl: 'https://console.groq.com/docs/models' },
-  { provider: 'zai', model: 'glm-4.7-flash', label: 'GLM 4.7 Flash', sourceUrl: 'https://docs.z.ai/guides/llm/glm-4.7' },
+  { provider: 'openrouter', model: 'openrouter/free', label: 'OpenRouter Free Models Router', contextTokens: null, sourceUrl: 'https://openrouter.ai/openrouter/free' },
+  { provider: 'gemini', model: 'gemini-3.1-flash-lite', label: 'Gemini Flash-Lite', contextTokens: 1_048_576, sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing' },
+  { provider: 'groq', model: 'openai/gpt-oss-20b', label: 'GPT OSS 20B', contextTokens: 131_072, sourceUrl: 'https://console.groq.com/docs/rate-limits' },
+  { provider: 'zai', model: 'glm-4.7-flash', label: 'GLM 4.7 Flash', contextTokens: null, sourceUrl: 'https://docs.z.ai/guides/overview/pricing' },
 ].map(preset => ({
-  ...preset, provider: preset.provider as ProviderId, verifiedDate: '2026-11-21',
+  ...preset, provider: preset.provider as ProviderId, verifiedDate: '2026-11-24',
   description: 'Availability and quota depend on your provider account.', tosFlag: true,
 }))
 
@@ -58,9 +60,16 @@ export function providerConnectionKind(config: Pick<ProviderConfig, 'provider' |
   return FREE_PRESETS.some(preset => preset.provider === config.provider && preset.model === config.model) ? 'free' : 'cloud'
 }
 
+export function allowsProviderEndpoint(provider: ProviderId) {
+  return Boolean(providerDefinition(provider).local) || provider === 'custom' || provider === 'qwen'
+}
+
+const qwenLegacyHosts = new Set(['dashscope.aliyuncs.com', 'dashscope-intl.aliyuncs.com', 'dashscope-us.aliyuncs.com'])
+const qwenWorkspaceHost = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.maas\.aliyuncs\.com$/
+
 export function endpointFor(config: ProviderConfig) {
   const definition = providerDefinition(config.provider)
-  if (config.baseUrl?.trim() && !definition.local && config.provider !== 'custom') {
+  if (config.baseUrl?.trim() && !allowsProviderEndpoint(config.provider)) {
     throw new Error('Use the provider’s default endpoint or add a custom connection.')
   }
   let url: URL
@@ -74,6 +83,11 @@ export function endpointFor(config: ProviderConfig) {
     throw new Error('Set a clean HTTPS endpoint or a localhost HTTP endpoint.')
   }
   if (definition.local && !local) throw new Error('Local model connections must use a localhost endpoint.')
+  if (config.provider === 'qwen' && (url.protocol !== 'https:' || url.port ||
+    url.pathname.replace(/\/+$/, '') !== '/compatible-mode/v1' ||
+    !(qwenLegacyHosts.has(url.hostname) || qwenWorkspaceHost.test(url.hostname)))) {
+    throw new Error('Use the HTTPS Chat Completions base URL from Alibaba Cloud Model Studio.')
+  }
   return url.toString().replace(/\/+$/, '')
 }
 

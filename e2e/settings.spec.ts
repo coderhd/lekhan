@@ -71,3 +71,35 @@ test('provider settings select the model used by the assistant and can update th
   await dialog.getByRole('button', { name: 'Unlock', exact: true }).click()
   await expect(dialog.getByRole('combobox', { name: 'Model', exact: true })).toHaveValue('provider:remote')
 })
+
+test('filters provider presets and uses a preset without replacing a saved connection', async ({ page }) => {
+  const { createProviderVault } = await import('../lib/ai/vault')
+  const passphrase = 'catalog settings passphrase'
+  const vault = await createProviderVault(passphrase, [{ id: 'saved', provider: 'ollama', model: 'fixture-local' }])
+  await page.addInitScript(payload => {
+    localStorage.setItem('lekhan:provider-vault:v1', payload)
+  }, await vault.seal())
+
+  await page.setViewportSize({ width: 390, height: 820 })
+  await page.goto('/settings')
+  await page.getByLabel('Passphrase', { exact: true }).fill(passphrase)
+  await page.getByRole('button', { name: 'Unlock', exact: true }).click()
+  await page.getByRole('button', { name: /Ollama fixture-local/ }).click()
+  await page.getByText('Browse model presets', { exact: true }).click()
+  await expect(page.getByText('21 models', { exact: true })).toBeVisible()
+  await page.getByRole('combobox', { name: 'Languages', exact: true }).selectOption('indic')
+  await expect(page.getByText('2 models', { exact: true })).toBeVisible()
+  await page.getByRole('combobox', { name: 'Languages', exact: true }).selectOption('')
+  await page.getByRole('searchbox', { name: 'Search models' }).fill('qwen flash')
+  await expect(page.getByText('1 model', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Use Qwen Flash' }).click()
+  await expect(page.getByRole('heading', { name: 'Add a connection' })).toBeVisible()
+  await expect(page.getByRole('combobox', { name: 'Provider', exact: true })).toHaveValue('qwen')
+  await expect(page.getByLabel('Model ID')).toHaveValue('qwen-flash')
+  await expect(page.getByLabel('API key', { exact: true })).toBeFocused()
+  await page.getByLabel('API key', { exact: true }).fill('fixture-key')
+  await page.getByRole('button', { name: 'Save connection' }).click()
+  await expect(page.getByRole('button', { name: /Ollama fixture-local/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Qwen qwen-flash/ })).toBeVisible()
+})

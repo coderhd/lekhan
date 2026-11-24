@@ -77,6 +77,7 @@ function chatRequest(config: ProviderConfig, options: ChatOptions) {
     body: {
       model, messages, stream: true, ...(maxTokens ? tokenField : {}),
       ...(config.provider === 'openai' ? { stream_options: { include_usage: true } } : {}),
+      ...(config.provider === 'deepseek' ? { thinking: { type: 'disabled' } } : {}),
     },
   }
 }

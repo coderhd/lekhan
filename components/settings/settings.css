@@ -157,3 +157,68 @@
   background: var(--hover);
 }
 [data-editor-theme=dark] .settings-dialog::backdrop { background: #07100a99; }
+
+.provider-catalog {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.provider-catalog summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 13px;
+  cursor: pointer;
+  font-weight: 700;
+  list-style: none;
+}
+.provider-catalog summary::-webkit-details-marker { display: none; }
+.provider-catalog[open] summary svg { transform: rotate(180deg); }
+.provider-catalog-content { display: grid; gap: 10px; padding: 0 13px 12px; }
+.provider-catalog-content p { margin: 0; }
+.provider-catalog .provider-catalog-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 9px;
+  color: var(--muted);
+}
+.provider-catalog-search svg { flex: none; }
+.provider-catalog-search:focus-within { outline: 2px solid var(--pine); outline-offset: 1px; }
+.provider-catalog .provider-catalog-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  padding: 8px 0;
+  outline: none;
+}
+.provider-catalog-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 115px), 1fr));
+  gap: 8px;
+}
+.provider-catalog-filters select { width: 100%; min-width: 0; }
+.provider-catalog-count { color: var(--muted); font-size: 12px; }
+.provider-catalog-list {
+  max-height: 265px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.provider-catalog-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+.provider-catalog-model { display: grid; min-width: 0; gap: 3px; overflow-wrap: anywhere; }
+.provider-catalog-model span { color: var(--muted); font-size: 12px; }
+.provider-catalog-actions { display: flex; flex: none; align-items: center; gap: 3px; }
+.provider-catalog-actions a { display: inline-grid; place-items: center; }

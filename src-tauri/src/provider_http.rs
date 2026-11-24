@@ -91,6 +91,29 @@ fn is_loopback(url: &Url) -> bool {
     matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
 }
 
+fn is_qwen_host(host: &str) -> bool {
+    if matches!(
+        host,
+        "dashscope.aliyuncs.com" | "dashscope-intl.aliyuncs.com" | "dashscope-us.aliyuncs.com"
+    ) {
+        return true;
+    }
+    let Some((workspace, region)) = host
+        .strip_suffix(".maas.aliyuncs.com")
+        .and_then(|name| name.split_once('.'))
+    else {
+        return false;
+    };
+    [workspace, region].into_iter().all(|label| {
+        !label.is_empty()
+            && !label.starts_with('-')
+            && !label.ends_with('-')
+            && label
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    })
+}
+
 fn checked_url(provider: &str, target: &str, has_body: bool) -> Result<Url, &'static str> {
     if target.len() > 2048 || target.contains('\\') {
         return Err("invalid");
@@ -105,6 +128,15 @@ fn checked_url(provider: &str, target: &str, has_body: bool) -> Result<Url, &'st
     {
         return Err("invalid");
     }
+    if provider == "qwen" {
+        let allowed = has_body
+            && url.scheme() == "https"
+            && url.port().is_none()
+            && url.query().is_none()
+            && url.host_str().is_some_and(is_qwen_host)
+            && url.path() == "/compatible-mode/v1/chat/completions";
+        return allowed.then_some(url).ok_or("invalid");
+    }
     let base = match provider {
         "openai" => "https://api.openai.com/v1",
         "openrouter" => "https://openrouter.ai/api/v1",
@@ -112,6 +144,7 @@ fn checked_url(provider: &str, target: &str, has_body: bool) -> Result<Url, &'st
         "gemini" => "https://generativelanguage.googleapis.com/v1beta",
         "groq" => "https://api.groq.com/openai/v1",
         "zai" => "https://api.z.ai/api/paas/v4",
+        "deepseek" => "https://api.deepseek.com",
         "sarvam" => "https://api.sarvam.ai/v2",
         "ollama" | "lmstudio" | "llamacpp" if !loopback => return Err("invalid"),
         "ollama" | "lmstudio" | "llamacpp" | "custom" => "",
@@ -304,6 +337,15 @@ mod tests {
             ),
             ("groq", "https://api.groq.com/openai/v1/chat/completions"),
             ("zai", "https://api.z.ai/api/paas/v4/chat/completions"),
+            ("deepseek", "https://api.deepseek.com/chat/completions"),
+            (
+                "qwen",
+                "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions",
+            ),
+            (
+                "qwen",
+                "https://ws-example.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions",
+            ),
             ("sarvam", "https://api.sarvam.ai/v2/chat/completions"),
             ("custom", "https://model.example/openai/v1/chat/completions"),
             ("custom", "http://localhost:9444/v1/chat/completions"),
@@ -328,6 +370,22 @@ mod tests {
                 "https://generativelanguage.googleapis.com/v1beta/models/a/b:streamGenerateContent?alt=sse",
             ),
             ("lmstudio", "https://elsewhere.example/v1/chat/completions"),
+            (
+                "qwen",
+                "https://dashscope-intl.aliyuncs.com.other.example/compatible-mode/v1/chat/completions",
+            ),
+            (
+                "qwen",
+                "https://extra.ws-example.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions",
+            ),
+            (
+                "qwen",
+                "https://dashscope-intl.aliyuncs.com:444/compatible-mode/v1/chat/completions",
+            ),
+            (
+                "qwen",
+                "https://dashscope-intl.aliyuncs.com/elsewhere/chat/completions",
+            ),
             ("custom", "http://elsewhere.example/v1/chat/completions"),
             (
                 "custom",

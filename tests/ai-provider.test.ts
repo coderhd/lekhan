@@ -21,6 +21,22 @@ function stream(parts: string[], contentType = 'text/event-stream') {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('browser-direct inference', () => {
+  it('uses the dedicated DeepSeek and Qwen chat routes with provider-scoped bearer keys', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () =>
+      stream(['data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n', 'data: [DONE]\n\n']))
+    vi.stubGlobal('fetch', fetch)
+    const qwenBase = 'https://ws-example.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1'
+    await expect(streamChat(config('deepseek', { model: 'deepseek-flash' }), { messages })).resolves.toMatchObject({ text: 'Hi' })
+    await expect(streamChat(config('qwen', { model: 'qwen-plus', baseUrl: qwenBase }), { messages })).resolves.toMatchObject({ text: 'Hi' })
+    const [[deepSeekUrl, deepSeekRequest], [qwenUrl, qwenRequest]] = fetch.mock.calls
+    expect(String(deepSeekUrl)).toBe('https://api.deepseek.com/chat/completions')
+    expect(String(qwenUrl)).toBe(qwenBase + '/chat/completions')
+    expect(deepSeekRequest?.headers).toMatchObject({ Authorization: 'Bearer test-key' })
+    expect(qwenRequest?.headers).toMatchObject({ Authorization: 'Bearer test-key' })
+    expect(JSON.parse(String(deepSeekRequest?.body))).toMatchObject({ model: 'deepseek-flash', thinking: { type: 'disabled' } })
+    expect(JSON.parse(String(qwenRequest?.body))).toMatchObject({ model: 'qwen-plus', stream: true })
+  })
+
   it('streams split SSE events and returns the usage reported by OpenAI', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(stream([
       ': heartbeat\r\nda', 'ta: {"choices":[{"delta":{"content":"Hi"}}]}\r\n\r\n',

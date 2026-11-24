@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { Page } from '@/lib/types'
 import { probeLocalProviders, streamChat, testProviderConnection, type ChatMessage, type ChatOptions, type LocalProviderProbe, type ProviderTransport } from '@/lib/ai/client'
-import { endpointFor, FREE_PRESETS, PROVIDERS, providerConnectionKind, providerDefinition, type ProviderConfig, type ProviderId } from '@/lib/ai/provider-registry'
+import { allowsProviderEndpoint, endpointFor, FREE_PRESETS, PROVIDERS, providerConnectionKind, providerDefinition, type ProviderConfig, type ProviderId } from '@/lib/ai/provider-registry'
 import { editorActionMessages, translationLanguages, type EditorAction } from '@/lib/ai/editor-actions'
 import { runFallback } from '@/lib/ai/fallback'
 import { createProviderVault, unlockProviderVault } from '@/lib/ai/vault'
@@ -16,6 +16,7 @@ import { Dialog } from './workspace-dialogs'
 import BotBarModelPicker, { type ModelTelemetry } from './editor/bot-bar-model-picker'
 import FallbackModelSettings from './editor/fallback-model-settings'
 import LocalProviderDiscovery from './editor/local-provider-discovery'
+import ProviderCatalog from './settings/provider-catalog'
 
 const defaultVaultKey = 'lekhan:provider-vault:v1'
 const newConnection = (): ProviderConfig => ({ id: crypto.randomUUID(), provider: 'ollama', model: '' })
@@ -32,7 +33,7 @@ function newDraftFor(kind: ConnectionKind) {
 
 function modelLabel(config: ProviderConfig) {
   let destination = PROVIDERS[config.provider].label
-  if (config.provider === 'custom') {
+  if (config.provider === 'custom' || config.provider === 'qwen') {
     try { destination = new URL(endpointFor(config)).host } catch { /* The connection will need repair. */ }
   }
   return [config.label !== destination ? config.label : undefined, destination, config.model].filter(Boolean).join(' · ')
@@ -518,6 +519,15 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
                     }}><Trash2 size={15} /></button>
                   </li>)}
                 </ul>}
+                {settingsPanel === 'models' && <ProviderCatalog disabled={busy} onSelect={model => {
+                  setConnectionKind(providerConnectionKind(model))
+                  setDraft({ ...newConnection(), provider: model.provider, model: model.model })
+                  setModels([])
+                  setError('')
+                  setFeedback(text(model.access === 'local' ? 'catalogLocalSelected' : 'catalogSelected', { model: model.label }))
+                  if (model.access === 'local') modelInput.current?.focus()
+                  else keyInput.current?.focus()
+                }} />}
                 <form className="assistant-form" onSubmit={saveProvider}>
                   <h3>{configs.some(item => item.id === draft.id) ? 'Edit connection' : 'Add a connection'}</h3>
                   {settingsPanel === 'models' && <div className="assistant-navigation" role="group" aria-label={settingsText('connectionTypes')}>
@@ -541,7 +551,7 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
                         .map(id => <option key={id} value={id}>{PROVIDERS[id].label}</option>)}
                     </select>
                   </label>}
-                  {(definition.local || draft.provider === 'custom') && <label>API endpoint
+                  {allowsProviderEndpoint(draft.provider) && <label>API endpoint
                     <input type="url" value={draft.baseUrl ?? ''} placeholder={definition.baseUrl ?? 'https://'} disabled={busy} onChange={event => setDraft({ ...draft, baseUrl: event.target.value })} />
                   </label>}
                   <label>Model ID
