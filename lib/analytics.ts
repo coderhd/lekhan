@@ -106,6 +106,7 @@ export function consumeAnalyticsReceipts() {
     if (!receipts.includes(name + '=1')) continue
     document.cookie = name + '=; Path=/; SameSite=Lax; Max-Age=0'
     if (event === 'signup') track('signup_completed', 'email')
+    if (event === 'signupGoogle') track('signup_completed', 'google')
     if (event === 'workspace') track('workspace_created', 'cloud')
     if (event === 'page') trackMilestone('page_created')
     if (event === 'collaborators') track('paywall_hit', 'collaborators')

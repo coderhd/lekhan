@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { authConfig, siteOrigin } from '@/lib/auth/config'
+import { googleOAuthEnabled } from '@/lib/auth/google-oauth'
 import { invitationPath, referralCode, workspaceTransferPath, type AuthMode } from '@/lib/auth/input'
 import { AccountForm } from './account-form'
 import LocaleSwitcher from './locale-switcher'
@@ -32,7 +33,9 @@ export default async function AccountScreen({ mode, notice, invite, referral, tr
         {mode === 'forgot' && <p>{t('forgotIntro')}</p>}
         {notice === 'confirm' && <p className="account-error" role="alert">{t('confirmError')}</p>}
         {notice === 'signout' && <p className="account-error" role="alert">{t('signoutError')}</p>}
+        {notice === 'google' && <p className="account-error" role="alert">{t('googleError')}</p>}
         {ready ? <AccountForm mode={mode} invite={token} referral={ref}
+          google={googleOAuthEnabled() && !!siteOrigin() && !ref && (mode === 'login' || mode === 'signup')}
           transfer={workspaceTransferPath(transfer) ? transfer : undefined} /> : <p role="status">{t('unavailable')}</p>}
         <div className="account-links">
           {mode === 'login' && <Link href="/forgot-password">{t('forgot')}</Link>}

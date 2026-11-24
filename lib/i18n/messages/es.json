@@ -401,6 +401,12 @@
     "description": "Escribe, organiza y conecta tus páginas en Lekhan."
   },
   "auth": {
+    "googleContinue": "Continuar con Google",
+    "googleError": "No se pudo completar el inicio de sesión con Google. Inténtalo de nuevo.",
+    "googleDesktopTitle": "Volver a Lekhan",
+    "googleDesktopOpen": "Abrir Lekhan",
+    "googleDesktopIntro": "Continúa en la ventana de escritorio donde empezaste a iniciar sesión.",
+    "googleDesktopInvalid": "Este enlace de inicio de sesión no es válido. Vuelve a intentarlo en la aplicación de escritorio.",
     "login": "Iniciar sesión",
     "signup": "Crear una cuenta",
     "forgot": "Olvidé mi contraseña",

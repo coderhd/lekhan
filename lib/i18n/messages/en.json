@@ -401,6 +401,12 @@
     "description": "Write, organize, and connect your pages in Lekhan."
   },
   "auth": {
+    "googleContinue": "Continue with Google",
+    "googleError": "Google sign-in could not be completed. Start again to retry.",
+    "googleDesktopTitle": "Return to Lekhan",
+    "googleDesktopOpen": "Open Lekhan",
+    "googleDesktopIntro": "Continue in the desktop window that started sign-in.",
+    "googleDesktopInvalid": "This sign-in link is invalid. Start again in the desktop app.",
     "login": "Sign in",
     "signup": "Create an account",
     "forgot": "Forgot password",

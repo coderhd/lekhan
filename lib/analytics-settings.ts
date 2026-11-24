@@ -5,6 +5,7 @@ export const googleClientId = /^[0-9]{1,20}\.[0-9]{1,20}$/
 export const posthogClientId = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/
 export const analyticsReceipts = {
   signup: 'lekhan_analytics_signup',
+  signupGoogle: 'lekhan_analytics_signup_google',
   workspace: 'lekhan_analytics_workspace',
   page: 'lekhan_analytics_page',
   collaborators: 'lekhan_analytics_collaborators',

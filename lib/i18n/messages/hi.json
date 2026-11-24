@@ -401,6 +401,12 @@
     "description": "Lekhan में अपने पेज लिखें, व्यवस्थित करें और लिंक के ज़रिए जोड़ें।"
   },
   "auth": {
+    "googleContinue": "Google से जारी रखें",
+    "googleError": "Google साइन-इन पूरा नहीं हो सका। फिर से शुरू करें।",
+    "googleDesktopTitle": "Lekhan पर लौटें",
+    "googleDesktopOpen": "Lekhan खोलें",
+    "googleDesktopIntro": "जिस डेस्कटॉप विंडो में साइन-इन शुरू किया था, उसमें जारी रखें।",
+    "googleDesktopInvalid": "यह साइन-इन लिंक अमान्य है। डेस्कटॉप ऐप में फिर से शुरू करें।",
     "login": "साइन इन करें",
     "signup": "खाता बनाएँ",
     "forgot": "पासवर्ड भूल गए",

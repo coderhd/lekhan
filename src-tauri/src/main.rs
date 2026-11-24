@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app_updates;
+mod desktop_oauth;
 mod local_models;
 mod provider_http;
 mod vault;
@@ -37,6 +38,21 @@ fn hosted_origin() -> &'static Url {
 
 fn hosted_url(path: &str) -> Url {
     hosted_origin().join(path).expect("valid Lekhan URL")
+}
+
+fn desktop_auth_origin() -> Option<&'static Url> {
+    static ORIGIN: std::sync::OnceLock<Option<Url>> = std::sync::OnceLock::new();
+    ORIGIN
+        .get_or_init(|| {
+            option_env!("LEKHAN_DESKTOP_AUTH_ORIGIN")
+                .filter(|value| !value.is_empty())
+                .map(|value| {
+                    parse_hosted_origin(value).expect(
+                        "LEKHAN_DESKTOP_AUTH_ORIGIN must be an HTTPS or loopback HTTP origin",
+                    )
+                })
+        })
+        .as_ref()
 }
 
 fn is_writer_url(url: &Url) -> bool {
@@ -85,11 +101,19 @@ fn show_cloud(app: &AppHandle, destination: Option<Url>) -> tauri::Result<()> {
         .title("Lekhan Cloud")
         .inner_size(1160.0, 820.0)
         .min_inner_size(640.0, 500.0)
+        .initialization_script(
+            "Object.defineProperty(window, '__LEKHAN_CLOUD_DESKTOP__', { value: true });",
+        )
         .on_navigation(move |url| {
             if url.origin() == allowed.origin() {
                 return true;
             }
-            if url.scheme() == "https" {
+            let signing_in = opener.state::<desktop_oauth::DesktopOAuth>().begin(
+                url,
+                allowed,
+                desktop_auth_origin(),
+            );
+            if signing_in || url.scheme() == "https" {
                 let _ = opener.opener().open_url(url.as_str(), None::<&str>);
             }
             false
@@ -110,13 +134,19 @@ async fn open_cloud_workspace(app: AppHandle) -> Result<(), String> {
 }
 
 fn handle_links(app: &AppHandle, links: &[Url]) {
-    let Some(url) = links.iter().find_map(hosted_link) else {
+    let Some(url) = links.iter().find_map(|link| {
+        hosted_link(link).or_else(|| {
+            app.get_webview_window("cloud")?;
+            app.state::<desktop_oauth::DesktopOAuth>()
+                .finish(link, hosted_origin())
+        })
+    }) else {
         return;
     };
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        if let Err(error) = show_cloud(&app, Some(url)) {
-            eprintln!("Could not open the Lekhan link: {error}");
+        if show_cloud(&app, Some(url)).is_err() {
+            eprintln!("Could not open the Lekhan link.");
         }
     });
 }
@@ -137,6 +167,7 @@ fn main() {
         .manage(local_models::LocalModels::default())
         .manage(provider_http::ProviderRequests::default())
         .manage(app_updates::InstallLock::default())
+        .manage(desktop_oauth::DesktopOAuth::default())
         .invoke_handler(tauri::generate_handler![
             open_cloud_workspace,
             vault::restore_vault,

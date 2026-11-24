@@ -401,6 +401,12 @@
     "description": "在 Lekhan 中编写、整理并连接你的页面。"
   },
   "auth": {
+    "googleContinue": "使用 Google 继续",
+    "googleError": "未能完成 Google 登录，请重新开始。",
+    "googleDesktopTitle": "返回 Lekhan",
+    "googleDesktopOpen": "打开 Lekhan",
+    "googleDesktopIntro": "请在发起登录的桌面窗口中继续。",
+    "googleDesktopInvalid": "此登录链接无效，请在桌面应用中重新开始。",
     "login": "登录",
     "signup": "创建账户",
     "forgot": "忘记密码",

@@ -551,6 +551,7 @@ kbd {
 .account-card h1 { font: 620 clamp(32px, 5.4vw, 47px)/1.05 var(--serif); margin: 0 0 15px; }
 .account-card p { color: var(--muted); margin: 0 0 15px; }
 .account-form { display: grid; gap: 13px; }
+.account-google { margin-top: 12px; }
 .account-form label { display: grid; gap: 5px; font-weight: 750; }
 .account-form input { min-width: 0; width: 100%; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); padding: 8px; }
 .account-card .account-error { margin: 0; color: var(--danger); }

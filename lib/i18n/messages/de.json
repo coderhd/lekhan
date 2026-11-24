@@ -401,6 +401,12 @@
     "description": "Schreibe, organisiere und verknüpfe deine Seiten in Lekhan."
   },
   "auth": {
+    "googleContinue": "Mit Google fortfahren",
+    "googleError": "Die Google-Anmeldung konnte nicht abgeschlossen werden. Starte sie erneut.",
+    "googleDesktopTitle": "Zu Lekhan zurückkehren",
+    "googleDesktopOpen": "Lekhan öffnen",
+    "googleDesktopIntro": "Fahre in dem Desktopfenster fort, in dem du die Anmeldung gestartet hast.",
+    "googleDesktopInvalid": "Dieser Anmeldelink ist ungültig. Starte die Anmeldung in der Desktop-App erneut.",
     "login": "Anmelden",
     "signup": "Konto erstellen",
     "forgot": "Passwort vergessen",
