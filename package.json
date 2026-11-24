@@ -19,6 +19,8 @@
   "dependencies": {
     "@fontsource-variable/manrope": "5.2.8",
     "@fontsource-variable/newsreader": "5.2.10",
+    "@sentry/browser": "11.17.0",
+    "@sentry/node": "11.17.0",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.119.2",
     "@tauri-apps/api": "2.12.5",

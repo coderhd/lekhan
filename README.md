@@ -60,3 +60,7 @@ In desktop **Settings → AI Providers & Models**, **Find local models** checks 
 Configure the public Supabase project URL, publishable key, and canonical application origin using the variables in `.env.example`. Enable email/password authentication and allow the configured application's `/auth/confirm` redirect in Supabase. This route accepts verified token-hash confirmation and the PKCE exchange code. Configure the recovery template with `type=recovery` for token-hash links. Use the default Supabase recovery redirect flow for PKCE.
 
 Guest pages and signed-in account pages have separate browser replicas. Account access does not move existing guest pages or send them to Supabase. Use Markdown export and import to move local material explicitly.
+
+## Observability
+
+The [observability guide](docs/operations/observability.md) covers error reporting, retention-job alerts, sync relay logs, and external availability checks.

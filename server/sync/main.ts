@@ -13,7 +13,15 @@ import { pruneAttachments } from './prune-attachments.ts'
 import { recordPageImages, reservePageImages } from './media-usage.ts'
 import { setPageSyncPreference } from '../../lib/sync/preferences.ts'
 import { drainWaitlist } from '../../lib/waitlist/brevo.ts'
+import { createRelayFaultReporter, createRelayLogs } from '../../lib/observability/relay-logs.ts'
+import { flushObservability, initServerObservability, reportException } from '../../lib/observability/sentry-node.ts'
 
+initServerObservability('relay')
+const logs = createRelayLogs()
+const reportFault = createRelayFaultReporter((operation, error) => {
+  logs.log(operation, 'error')
+  reportException(error, operation)
+})
 const client = createServerAdmin()
 const origin = siteOrigin()
 const secret = getTicketSecret()
@@ -41,10 +49,10 @@ const hub = createSyncHub({
     const { access, imagePolicy, preference } = await relayedPageAuthority(client, ticket, false)
     return access === 'write' && preference !== 'paused' ? imagePolicy : null
   },
-  onFault: operation => console.error('[sync] ' + operation + ' failed'),
+  onFault: reportFault,
 })
 
-hub.server.listen(port, () => console.log('[sync] listening on port ' + port))
+hub.server.listen(port, () => logs.log('listening', 'info'))
 let ongoingPrune: Promise<unknown> | undefined
 let pruneTimer: ReturnType<typeof setInterval> | undefined
 const pruneCheckpoints = process.env.LEKHAN_PRUNE_CHECKPOINTS === '1'
@@ -52,15 +60,15 @@ const pruneImportReceipts = process.env.LEKHAN_PRUNE_IMPORT_RECEIPTS === '1'
 const prune = () => {
   if (ongoingPrune) return
   const checkpoints = pruneCheckpoints ? pruneExpiredCheckpoints(client).then(({ pruned, failures, deferred }) => {
-    if (pruned || failures || deferred) console.log('[checkpoints] pruned=' + pruned + ' failures=' + failures + ' deferred=' + deferred)
-  }).catch(() => { console.error('[checkpoints] retention failed') }) : null
+    if (pruned || failures || deferred) logs.log('checkpoints', failures || deferred ? 'error' : 'info', { pruned, failures, deferred: Number(deferred) })
+  }).catch(error => { reportFault('retention', error) }) : null
   const receipts = pruneImportReceipts ? client.rpc('cleanup_import_batches', { retain_days: 30 }).then(({ data, error }) => {
-    if (error) console.error('[imports] receipt retention failed')
-    else if (data) console.log('[imports] removed receipts=' + data)
+    if (error) reportFault('retention', error)
+    else if (data) logs.log('import receipts', 'info', { removed: data })
   }) : null
   const attachments = pruneCheckpoints ? pruneAttachments(client).then(({ removed, failures }) => {
-    if (removed || failures) console.log('[attachments] removed=' + removed + ' failures=' + failures)
-  }).catch(() => { console.error('[attachments] cleanup failed') }) : null
+    if (removed || failures) logs.log('attachments', failures ? 'error' : 'info', { removed, failures })
+  }).catch(error => { reportFault('retention', error) }) : null
   ongoingPrune = Promise.allSettled([checkpoints, receipts, attachments]).finally(() => { ongoingPrune = undefined })
 }
 if (pruneCheckpoints || pruneImportReceipts) {
@@ -73,7 +81,7 @@ let waitlistTimer: ReturnType<typeof setInterval> | undefined
 let ongoingDelivery: Promise<void> | undefined
 const deliverWaitlist = () => {
   if (ongoingDelivery) return
-  ongoingDelivery = drainWaitlist(client).catch(() => { console.error('[waitlist] delivery drain failed') })
+  ongoingDelivery = drainWaitlist(client).catch(error => { reportFault('waitlist', error) })
     .finally(() => { ongoingDelivery = undefined })
 }
 if (process.env.LEKHAN_DRAIN_WAITLIST === '1') {
@@ -89,8 +97,14 @@ function shutdown() {
   if (pruneTimer) clearInterval(pruneTimer)
   if (waitlistTimer) clearInterval(waitlistTimer)
   void Promise.all([hub.close(), ongoingPrune, ongoingDelivery]).then(([saved]) => {
-    if (!saved) process.exitCode = 1
-  }).catch(() => { process.exitCode = 1 })
+    if (!saved) {
+      reportFault('shutdown', new Error('Relay shutdown left snapshots pending'))
+      process.exitCode = 1
+    }
+  }).catch(error => {
+    reportFault('shutdown', error)
+    process.exitCode = 1
+  }).finally(() => Promise.all([logs.flush(), flushObservability()]))
 }
 process.on('SIGINT', shutdown)
 process.on('SIGTERM', shutdown)

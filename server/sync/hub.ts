@@ -8,6 +8,7 @@ import * as encoding from 'lib0/encoding'
 import * as sync from 'y-protocols/sync'
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from 'y-protocols/awareness'
 import { syncProtocol, verifySyncTicket, type SyncTicket } from '../../lib/sync/ticket.ts'
+import type { RelayFailure } from '../../lib/observability/events.ts'
 import type { RelayAccess } from '../../lib/sync/authority.ts'
 import {
   imageLimitCloseCode, maxPageUpdateBytes, maxSyncFrameBytes, maxSyncMessageBytes, payloadLimitCloseCode,
@@ -43,7 +44,7 @@ interface HubOptions {
   setPageSync?: (pageId: string, subject: string, enabled: boolean) => Promise<PageSyncPreference | 'denied'>
   checkpointTransfer?: (request: IncomingMessage, response: ServerResponse) => Promise<void>
   attachmentTransfer?: (request: IncomingMessage, response: ServerResponse) => Promise<void>
-  onFault?: (operation: string) => void
+  onFault?: (operation: Extract<RelayFailure, 'persist' | 'receive' | 'cloud transfer' | 'open'>, error: unknown) => void
 }
 
 interface Peer {
@@ -160,8 +161,8 @@ class Room {
     const delay = retryDelay ?? Math.max(0, Math.min(idleFlush, this.dirtySince + maxFlush - Date.now()))
     this.timer = setTimeout(() => {
       this.timer = undefined
-      void this.flush().catch(() => {
-        this.options.onFault?.('persist')
+      void this.flush().catch(error => {
+        this.options.onFault?.('persist', error)
         if (this.dirtySince && !this.timer) this.scheduleFlush(maxFlush)
       })
     }, delay)
@@ -431,8 +432,8 @@ export function createSyncHub(options: HubOptions) {
 
   function queue(peer: Peer, room: Room, message: Uint8Array) {
     peer.pending++
-    void room.receive(peer, message).catch(() => {
-      options.onFault?.('receive')
+    void room.receive(peer, message).catch(error => {
+      options.onFault?.('receive', error)
       peer.socket.close(1011, 'Could not accept update')
     }).finally(() => {
       peer.pending--
@@ -509,8 +510,8 @@ export function createSyncHub(options: HubOptions) {
       : req.url?.startsWith('/attachments/') ? options.attachmentTransfer : undefined
     if (transfer) {
       if (!healthy) { response.writeHead(503, { 'Cache-Control': 'no-store' }).end(); return }
-      void transfer(req, response).catch(() => {
-        options.onFault?.('cloud transfer')
+      void transfer(req, response).catch(error => {
+        options.onFault?.('cloud transfer', error)
         if (!response.headersSent) response.writeHead(503).end()
         else response.destroy()
       })
@@ -569,8 +570,8 @@ export function createSyncHub(options: HubOptions) {
         })
         room.show(peer)
       })
-    } catch {
-      options.onFault?.('open')
+    } catch (error) {
+      options.onFault?.('open', error)
       reject(socket, '503 Service Unavailable')
     } finally {
       clearTimeout(expired)

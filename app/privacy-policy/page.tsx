@@ -54,6 +54,10 @@ export default function PrivacyPolicyPage () {
 									<h3>Usage Data</h3>
 									<p>If you opt in, we use Google Analytics and PostHog to understand how people discover Lekhan and use features such as the editor, imports, and the writing assistant. Our usage events include feature names and coarse counts. They exclude account identifiers, page titles and content, filenames, AI prompts, and provider credentials.</p>
 								</div>
+								<div>
+									<h3>Service Diagnostics</h3>
+									<p>We use Sentry for error reporting and Better Stack for service availability and sync diagnostics when these services are configured. Error reports carry a software version, code locations, and failure categories. Browser error reporting follows your usage analytics preference. Document routes, account identifiers, request data, and note content are excluded from error reports.</p>
+								</div>
 							</div>
 						</section>
 
@@ -97,6 +101,8 @@ export default function PrivacyPolicyPage () {
 								<li><span>Vercel</span> — Application hosting and deployment</li>
 								<li><span>Google Analytics</span> — Optional usage measurement</li>
 								<li><span>PostHog</span> — Optional feature usage measurement, hosted in the EU</li>
+								<li><span>Sentry</span> — Error reporting and scheduled job monitoring</li>
+								<li><span>Better Stack</span> — Service availability and sync diagnostics</li>
 							</ul>
 							<p>
 								Each of these services has their own privacy policies that govern their handling of your data.
