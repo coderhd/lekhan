@@ -9,6 +9,7 @@ import { endpointFor, FREE_PRESETS, PROVIDERS, providerDefinition, type Provider
 import { editorActionMessages, translationLanguages, type EditorAction } from '@/lib/ai/editor-actions'
 import { runFallback } from '@/lib/ai/fallback'
 import { createProviderVault, unlockProviderVault } from '@/lib/ai/vault'
+import { encryptedVaultRevision, providerVaultLimit, readAccountVault, validProviderEnvelope, writeAccountVault, ProviderVaultConflict, vaultRevisionPattern, type CloudProviderVault } from '@/lib/ai/vault-sync'
 import { track } from '@/lib/analytics'
 import { useLocale, useTranslations } from '@/lib/i18n/client'
 import { Dialog } from './workspace-dialogs'
@@ -55,6 +56,15 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
   const text = useTranslations('editor-ai')
   const locale = useLocale()
   const vaultKey = storageScope === 'personal' ? defaultVaultKey : defaultVaultKey + ':' + storageScope
+  const account = storageScope.startsWith('account:') ? storageScope.slice('account:'.length) : null
+  const baseKey = vaultKey + ':cloud-revision'
+  const [accountVault, setAccountVault] = useState<CloudProviderVault | null | 'unavailable'>()
+  const [cloudBase, setCloudBase] = useState(() => {
+    const revision = readVault(baseKey)
+    return revision && vaultRevisionPattern.test(revision) ? revision : null
+  })
+  const [restoreAccount, setRestoreAccount] = useState(false)
+  const [importedVault, setImportedVault] = useState<string>()
   const [envelope, setEnvelope] = useState(() => readVault(vaultKey))
   const [vault, setVault] = useState<VaultSession | null>(null)
   const [configs, setConfigs] = useState<ProviderConfig[]>([])
@@ -80,6 +90,7 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
   const request = useRef<AbortController | null>(null)
   const modelInput = useRef<HTMLInputElement>(null)
   const keyInput = useRef<HTMLInputElement>(null)
+  const vaultFile = useRef<HTMLInputElement>(null)
   const selected = configs.find(config => config.id === active)
   const definition = providerDefinition(draft.provider)
   const installed = localModels ?? (localModel ? [localModel] : [])
@@ -102,7 +113,45 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
   </p>
   const dialogTitle = editorRequest ? text(editorRequest.action) : 'Writing assistant'
 
+  const remote = typeof accountVault === 'object' ? accountVault : null
+  const openingFromAccount = !importedVault && !!remote && (!envelope || restoreAccount)
+  const unlockEnvelope = importedVault ?? (openingFromAccount ? remote.envelope : envelope)
+  const vaultConflict = !!remote && !!envelope && remote.envelope !== envelope && remote.revision !== cloudBase
+
   useEffect(() => () => request.current?.abort(), [])
+
+  useEffect(() => {
+    if (!account) return
+    const controller = new AbortController()
+    void readAccountVault(account, controller.signal).then(
+      backup => { if (!controller.signal.aborted) setAccountVault(backup) },
+      () => { if (!controller.signal.aborted) setAccountVault('unavailable') },
+    )
+    return () => controller.abort()
+  }, [account])
+
+  function rememberAccountVault(encrypted: string, revision: string) {
+    setCloudBase(revision)
+    if (readVault(vaultKey) === encrypted) {
+      try { localStorage.setItem(baseKey, revision) } catch { /* Sync can confirm the backup again. */ }
+    }
+  }
+
+  async function syncVault(encrypted: string, previous: string | null, signal: AbortSignal) {
+    if (!account) return
+    try {
+      const revision = await writeAccountVault(account, encrypted, previous, signal)
+      signal.throwIfAborted()
+      rememberAccountVault(encrypted, revision)
+      setAccountVault({ envelope: encrypted, revision })
+    } catch (error) {
+      if (signal.aborted) return
+      if (error instanceof ProviderVaultConflict) {
+        const latest = await readAccountVault(account, signal).catch(() => 'unavailable' as const)
+        if (!signal.aborted) setAccountVault(latest)
+      } else setAccountVault('unavailable')
+    }
+  }
 
   async function run(task: (signal: AbortSignal) => Promise<void>) {
     if (request.current) return
@@ -129,9 +178,29 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
   function openVault(event: FormEvent) {
     event.preventDefault()
     void run(async signal => {
-      const opened = envelope ? await unlockProviderVault(passphrase, envelope) : await createProviderVault(passphrase)
+      let adopted = openingFromAccount ? remote : null
+      let opened: VaultSession | null = null
+      if (!adopted && !importedVault && envelope && remote && cloudBase && remote.revision !== cloudBase &&
+        await encryptedVaultRevision(envelope) === cloudBase) {
+        // Only refresh an unchanged copy. A backup encrypted under another passphrase needs explicit recovery.
+        opened = await unlockProviderVault(passphrase, remote.envelope).catch(() => null)
+        if (opened) adopted = remote
+      }
+      const ciphertext = adopted?.envelope ?? unlockEnvelope
+      opened ??= ciphertext ? await unlockProviderVault(passphrase, ciphertext) : await createProviderVault(passphrase)
       if (signal.aborted) return
-      if (!envelope) {
+      if (importedVault) {
+        await storeVault(vaultKey, envelope, importedVault, signal)
+        setEnvelope(importedVault)
+        setImportedVault(undefined)
+        setCloudBase(null)
+        try { localStorage.removeItem(baseKey) } catch { /* The device copy is already saved. */ }
+      } else if (adopted) {
+        await storeVault(vaultKey, envelope, adopted.envelope, signal)
+        setEnvelope(adopted.envelope)
+        rememberAccountVault(adopted.envelope, adopted.revision)
+        setRestoreAccount(false)
+      } else if (!envelope) {
         const encrypted = await opened.seal()
         if (signal.aborted) return
         await storeVault(vaultKey, null, encrypted, signal)
@@ -158,6 +227,7 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
       setReply('')
       setSharePage(false)
     }
+    if (cloudBase) await syncVault(encrypted, cloudBase, signal)
   }
 
   function saveProvider(event: FormEvent) {
@@ -277,6 +347,80 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
     setTab(next)
   }
 
+  function exportEncryptedVault(encrypted: string, name: 'device' | 'account') {
+    const url = URL.createObjectURL(new Blob([encrypted], { type: 'text/plain' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'lekhan-provider-vault-' + name + '.txt'
+    link.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  function lockForRestore() {
+    setVault(null)
+    setConfigs([])
+    setActive('')
+    setDraft(newConnection())
+    setModels([])
+    setMessages([])
+    setReply('')
+    setSuggestion('')
+    setSharePage(false)
+    setPassphrase('')
+    setError('')
+    setFeedback('')
+    setTab('providers')
+  }
+
+  const accountSyncControls = account && <section className="account-vault-status" aria-label={text('vaultSyncTitle')}>
+    <h3>{text('vaultSyncTitle')}</h3>
+    <p>{text(accountVault === undefined ? 'vaultSyncChecking'
+      : accountVault === 'unavailable' ? 'vaultSyncUnavailable'
+        : vaultConflict ? 'vaultSyncConflict'
+          : remote && remote.envelope === envelope ? 'vaultSyncSaved'
+            : remote ? 'vaultSyncExists'
+              : cloudBase ? 'vaultSyncPending' : 'vaultSyncIntro')}</p>
+    <div className="assistant-actions">
+      {vault && envelope && !vaultConflict && remote?.envelope !== envelope &&
+        <button className="secondary-button" type="button" disabled={busy || accountVault === undefined}
+          onClick={() => void run(signal => syncVault(envelope, cloudBase, signal))}>{text('vaultSyncNow')}</button>}
+      {vaultConflict && <button className="secondary-button" type="button" disabled={busy || restoreAccount || !!importedVault} onClick={() => {
+        lockForRestore()
+        setRestoreAccount(true)
+      }}>{text('vaultUseAccount')}</button>}
+      {vaultConflict && <button className="secondary-button" type="button" disabled={busy}
+        onClick={() => exportEncryptedVault(envelope, 'device')}>{text('vaultExportEncrypted')}</button>}
+      {accountVault === 'unavailable' && <button className="secondary-button" type="button" disabled={busy} onClick={() => void run(async signal => {
+        setAccountVault(await readAccountVault(account, signal).catch(() => 'unavailable' as const))
+      })}>{text('vaultCheckAgain')}</button>}
+      {!importedVault && !restoreAccount && <button type="button" className="secondary-button" disabled={busy}
+        onClick={() => vaultFile.current?.click()}>{text('vaultImportEncrypted')}</button>}
+    </div>
+    <input ref={vaultFile} hidden type="file" accept=".txt,text/plain" onChange={event => {
+      const file = event.currentTarget.files?.[0]
+      event.currentTarget.value = ''
+      if (!file) return
+      void run(async signal => {
+        if (file.size > providerVaultLimit) throw new Error(text('vaultInvalidFile'))
+        const encrypted = (await file.text()).trim()
+        signal.throwIfAborted()
+        if (!validProviderEnvelope(encrypted)) throw new Error(text('vaultInvalidFile'))
+        lockForRestore()
+        setImportedVault(encrypted)
+      })
+    }} />
+    {vaultConflict && vault && <details className="vault-replace">
+      <summary>{text('vaultChooseDevice')}</summary>
+      <p>{text('vaultReplaceAccountHint')}</p>
+      <div className="assistant-actions">
+        <button type="button" className="secondary-button" disabled={busy}
+          onClick={() => exportEncryptedVault(remote.envelope, 'account')}>{text('vaultExportAccount')}</button>
+        <button type="button" className="danger-button" disabled={busy}
+          onClick={() => void run(signal => syncVault(envelope, remote.revision, signal))}>{text('vaultReplaceAccount')}</button>
+      </div>
+    </details>}
+  </section>
+
   return (
     <Dialog title={dialogTitle} className="assistant-dialog" onClose={onClose}>
       <div className="form-dialog">
@@ -288,16 +432,26 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
         </div>}
         {!vault && tab !== 'local' ? (
           <form className="assistant-form" onSubmit={openVault}>
-            <p>{envelope ? 'Unlock the connections saved on this device.' : 'Create a passphrase to encrypt your provider connections on this device.'}</p>
+            <p>{importedVault ? text('vaultImportHint') : openingFromAccount ? text(restoreAccount ? 'vaultReplaceDevice' : 'vaultUnlockAccount')
+              : envelope ? 'Unlock the connections saved on this device.' : 'Create a passphrase to encrypt your provider connections on this device.'}</p>
             <label>Passphrase
-              <input type="password" autoComplete={envelope ? 'current-password' : 'new-password'} minLength={12} value={passphrase} onChange={event => setPassphrase(event.target.value)} required />
+              <input type="password" autoComplete={unlockEnvelope ? 'current-password' : 'new-password'} minLength={12} value={passphrase} onChange={event => setPassphrase(event.target.value)} required />
             </label>
-            <button className="primary-button" disabled={busy}><LockKeyhole size={15} /> {envelope ? 'Unlock' : 'Create provider vault'}</button>
+            <div className="assistant-actions">
+              <button className="primary-button" disabled={busy || (!!account && !envelope && !importedVault && accountVault === undefined)}>
+                <LockKeyhole size={15} /> {importedVault ? text('vaultUnlockFile') : openingFromAccount ? text(restoreAccount ? 'vaultUnlockReplace' : 'vaultUnlockRestore')
+                  : envelope ? 'Unlock' : 'Create provider vault'}
+              </button>
+              {(restoreAccount || importedVault) && <button className="secondary-button" type="button" disabled={busy}
+                onClick={() => { setRestoreAccount(false); setImportedVault(undefined); setPassphrase(''); setError('') }}>{text('vaultKeepDevice')}</button>}
+            </div>
+            {accountSyncControls}
           </form>
         ) : (
           <>
             {tab === 'providers' ? (
               <>
+                {accountSyncControls}
                 {configs.length > 0 && <ul className="assistant-connections">
                   {configs.map(config => <li key={config.id}>
                     <button className="connection-name" onClick={() => {

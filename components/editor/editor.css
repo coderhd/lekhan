@@ -436,3 +436,33 @@
   display: block;
   margin-block-start: 6px;
 }
+
+.account-vault-status {
+  display: grid;
+  gap: 8px;
+  margin-block: 12px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--context);
+}
+
+.account-vault-status h3,
+.form-dialog .account-vault-status p {
+  margin: 0;
+}
+
+.account-vault-status p,
+.vault-replace summary {
+  font-size: 13px;
+}
+
+.vault-replace summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.vault-replace[open] {
+  display: grid;
+  gap: 8px;
+}

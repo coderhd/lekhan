@@ -1,5 +1,6 @@
 import { strFromU8 } from 'fflate'
 import { MAX_FALLBACK_MODELS, providerDefinition, type ProviderConfig } from './provider-registry'
+import { providerVaultLimit } from './vault-sync'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder('utf-8', { fatal: true })
@@ -45,7 +46,9 @@ function session(key: CryptoKey, salt: Uint8Array<ArrayBuffer>, configs: Provide
       const iv = crypto.getRandomValues(new Uint8Array(12))
       const clear = encoder.encode(JSON.stringify(validateConfigs(next)))
       const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: context }, key, clear)
-      return ['v1', encode(salt), encode(iv), encode(new Uint8Array(data))].join('.')
+      const envelope = ['v1', encode(salt), encode(iv), encode(new Uint8Array(data))].join('.')
+      if (envelope.length > providerVaultLimit) throw new Error('The provider vault exceeded the size limit.')
+      return envelope
     },
   }
 }
@@ -58,7 +61,7 @@ export async function createProviderVault(passphrase: string, configs: ProviderC
 
 export async function unlockProviderVault(passphrase: string, envelope: string) {
   try {
-    if (envelope.length > 1_000_000) throw new Error('Vault exceeds limit')
+    if (envelope.length > providerVaultLimit) throw new Error('Vault exceeds limit')
     const [version, encodedSalt, encodedIv, encodedData, extra] = envelope.split('.')
     if (version !== 'v1' || extra !== undefined) throw new Error('Invalid envelope')
     const salt = decode(encodedSalt)

@@ -33,6 +33,14 @@ test('private cloud routes and sync tickets require an authenticated session', a
   const search = await page.request.get('/api/search?q=private')
   expect(search.status()).toBe(401)
   expect(search.headers()['cache-control']).toContain('no-store')
+  const vault = await page.request.get('/api/ai/vault', { headers: { 'X-Lekhan-Account': id } })
+  expect(vault.status()).toBe(401)
+  expect(vault.headers()['cache-control']).toContain('no-store')
+  const rejectedBackup = await page.request.put('/api/ai/vault', {
+    headers: { 'X-Lekhan-Account': id, Origin: 'https://unrelated.example' },
+    data: { envelope: 'invalid', previous: null },
+  })
+  expect(rejectedBackup.status()).toBe(403)
   const imported = await page.request.post('/api/import', { data: { importId: id, index: 0, pages: [] } })
   expect(imported.status()).toBe(401)
   expect(imported.headers()['cache-control']).toContain('no-store')
