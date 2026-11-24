@@ -97,7 +97,7 @@ class WorkspaceSearchIndex {
     }
   }
 
-  query(input: string, limit = 15): SearchHit[] {
+  query(input: string, limit = 15, titleOnly = false): SearchHit[] {
     const term = normalize(input)
     const ranked: (SearchHit & { score: number })[] = []
     const push = (record: SearchRecord, surface: SearchHit['surface'], score: number, context?: string) => {
@@ -116,7 +116,7 @@ class WorkspaceSearchIndex {
       else if (record.title === term) push(record, 'title', 6)
       else if (record.title.startsWith(term)) push(record, 'title', 5)
       else if (record.title.includes(term)) push(record, 'title', 4)
-      else {
+      else if (!titleOnly) {
         const tag = record.tags.find(item => item.key.includes(term))
         const link = record.targets.find(item => item.key.includes(term))
         if (tag) push(record, 'tag', 3, tag.text)

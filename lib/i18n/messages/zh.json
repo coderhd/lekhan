@@ -59,6 +59,12 @@
     "externalReload": "打开已保存的版本会丢弃未保存的编辑。请先导出以保留副本。"
   },
   "app-shell": {
+    "keyboardShortcuts": "键盘快捷键",
+    "quickSwitch": "快速切换",
+    "findPageTitle": "搜索页面标题",
+    "toggleNavigation": "显示或隐藏导航",
+    "previousPage": "上一页",
+    "nextPage": "下一页",
     "openingWorkspace": "正在打开工作区",
     "saving": "正在保存…",
     "savedLocally": "已保存到本地",

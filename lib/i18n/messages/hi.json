@@ -59,6 +59,12 @@
     "externalReload": "सहेजी गई प्रति खोलने से बिना सहेजे बदलाव हट जाएँगे। उन्हें रखने के लिए पहले निर्यात करें।"
   },
   "app-shell": {
+    "keyboardShortcuts": "कीबोर्ड शॉर्टकट",
+    "quickSwitch": "पेज पर तुरंत जाएँ",
+    "findPageTitle": "पेज का शीर्षक खोजें",
+    "toggleNavigation": "नेविगेशन दिखाएँ या छिपाएँ",
+    "previousPage": "पिछला पेज",
+    "nextPage": "अगला पेज",
     "openingWorkspace": "कार्यस्थान खुल रहा है",
     "saving": "सहेज रहे हैं…",
     "savedLocally": "इस डिवाइस पर सहेजा गया",

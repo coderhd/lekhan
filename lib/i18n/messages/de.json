@@ -59,6 +59,12 @@
     "externalReload": "Beim Öffnen der gespeicherten Kopie gehen ungespeicherte Änderungen verloren. Exportiere sie vorher."
   },
   "app-shell": {
+    "keyboardShortcuts": "Tastenkürzel",
+    "quickSwitch": "Schnellwechsel",
+    "findPageTitle": "Seitentitel suchen",
+    "toggleNavigation": "Navigation ein- oder ausblenden",
+    "previousPage": "Vorherige Seite",
+    "nextPage": "Nächste Seite",
     "openingWorkspace": "Arbeitsbereich wird geöffnet",
     "saving": "Wird gespeichert…",
     "savedLocally": "Lokal gespeichert",

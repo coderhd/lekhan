@@ -2,11 +2,11 @@
 
 import {
   ArrowDownToLine, ArrowUpFromLine, BookOpen, CalendarDays, Check, ChevronDown,
-  ChevronRight, CircleAlert, FileText, FolderClosed, List, LoaderCircle, Menu, MoreHorizontal,
+  ChevronRight, CircleAlert, FileText, FolderClosed, Keyboard, List, LoaderCircle, Menu, MoreHorizontal,
   Cloud, PanelRight, Plus, Search, Star, X, Link2, MoveRight, Trash2, Pencil, CornerDownRight, NotebookPen, Sparkles,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChangeEvent, FormEvent, ReactNode } from 'react'
+import type { ChangeEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
 import type { Page } from '@/lib/types'
 import {
   applyVaultImport, createPage, deletePage, getBacklinks, pageChoices, pageHeadings,
@@ -15,9 +15,11 @@ import {
 import { pageTags, workspaceSearch } from '@/lib/workspace-search'
 import { downloadPage, downloadWorkspace } from '@/lib/downloads'
 import { useWorkspace } from '@/lib/use-workspace'
+import { workspaceShortcut } from '@/lib/workspace-shortcuts'
 import type { SaveStatus } from '@/lib/use-workspace'
 import type { WorkspaceStorage } from '@/lib/storage'
 import { Dialog, SearchDialog } from './workspace-dialogs'
+import WorkspaceShortcutHelp from './workspace-shortcut-help'
 import { useLocale, useTranslations } from '@/lib/i18n/client'
 import AssistantDialog, { type LocalAssistantModel } from './assistant-dialog'
 import type { ProviderTransport } from '@/lib/ai/client'
@@ -43,6 +45,18 @@ function scrollToHeading(target: HTMLElement) {
   target.scrollIntoView({ block: 'start' })
 }
 
+function navigatePageRows(event: ReactKeyboardEvent<HTMLElement>) {
+  if (event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+  const rows = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('.page-row-link'))
+  const current = rows.findIndex(row => row === event.target)
+  if (current < 0) return
+  event.preventDefault()
+  if (event.key === 'Home') rows[0]?.focus()
+  else if (event.key === 'End') rows.at(-1)?.focus()
+  else rows[current + (event.key === 'ArrowDown' ? 1 : -1)]?.focus()
+}
+
 export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled = false, automaticMirror = false,
   sidebarControls, openCloudPage, storage, workspaceName, pageAttachments, localModel, localModels, providerTransport }: {
   storageScope?: string; mirrorEnabled?: boolean; automaticMirror?: boolean
@@ -62,8 +76,11 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [vaultOpen, setVaultOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [switcherOpen, setSwitcherOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [navigationOpen, setNavigationOpen] = useState(false)
+  const [sidebarHidden, setSidebarHidden] = useState(false)
   const [contextOpen, setContextOpen] = useState(true)
   const [mobileContext, setMobileContext] = useState(false)
   const [collapsed, setCollapsed] = useState<string[]>([])
@@ -83,7 +100,9 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
   const navigationToggle = useRef<HTMLButtonElement>(null)
   const contextToggle = useRef<HTMLButtonElement>(null)
   const navClose = useRef<HTMLButtonElement>(null)
+  const searchTrigger = useRef<HTMLButtonElement>(null)
   const contextClose = useRef<HTMLButtonElement>(null)
+  const pageHistory = useRef<{ ids: string[]; position: number }>({ ids: [], position: -1 })
 
   const pages = workspace?.pages ?? emptyPages
   const page = pages.find(item => item.id === workspace?.activePageId) ?? pages[0]
@@ -121,6 +140,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
     change(state => state.activePageId === id ? state : { ...state, activePageId: id })
     setFocusTitle(null)
     setSearchOpen(false)
+    setSwitcherOpen(false)
     setSearchQuery('')
     setNavigationOpen(false)
     setMobileContext(false)
@@ -143,9 +163,34 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
   }, [change])
 
   useEffect(() => {
+    if (!page?.id) return
+    const history = pageHistory.current
+    if (history.ids[history.position] === page.id) return
+    const ids = [...history.ids.slice(0, history.position + 1), page.id].slice(-100)
+    pageHistory.current = { ids, position: ids.length - 1 }
+  }, [page?.id])
+
+  const toggleNavigation = useCallback(() => {
+    if (window.matchMedia('(max-width: 680px)').matches) {
+      setMobileContext(false)
+      setNavigationOpen(value => !value)
+      if (navigationOpen) requestAnimationFrame(() => navigationToggle.current?.focus())
+    } else {
+      setNavigationOpen(false)
+      setSidebarHidden(value => !value)
+      requestAnimationFrame(() => {
+        if (sidebarHidden) searchTrigger.current?.focus()
+        else navigationToggle.current?.focus()
+      })
+    }
+  }, [navigationOpen, sidebarHidden])
+
+  useEffect(() => {
     function shortcuts(event: KeyboardEvent) {
-      if (event.isComposing) return
+      if (event.isComposing || event.defaultPrevented) return
       if (event.key === 'Escape') {
+        if (navigationOpen) requestAnimationFrame(() => navigationToggle.current?.focus())
+        if (mobileContext) requestAnimationFrame(() => contextToggle.current?.focus())
         setNavigationOpen(false)
         setMobileContext(false)
         if (pageMenu.current?.open) {
@@ -153,20 +198,57 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
           pageMenu.current.querySelector('summary')?.focus()
         }
       }
-      if (!(event.metaKey || event.ctrlKey) || event.altKey) return
-      if (event.key.toLowerCase() === 'k' && !event.shiftKey && !event.defaultPrevented) {
-        event.preventDefault()
-        setSearchQuery('')
-        setSearchOpen(previous => !previous)
-      }
-      if (event.shiftKey && event.key.toLowerCase() === 'n' && workspace) {
-        event.preventDefault()
-        add()
+      const command = workspaceShortcut(event)
+      if (!command) return
+      const activeDialog = document.querySelector('dialog[open]')
+      if (activeDialog && !((searchOpen || switcherOpen) && (command === 'searchPages' || command === 'quickSwitch'))
+        && !(shortcutsOpen && command === 'keyboardShortcuts')) return
+      event.preventDefault()
+      switch (command) {
+        case 'searchPages':
+          setSearchQuery('')
+          setSwitcherOpen(false)
+          setSearchOpen(!searchOpen)
+          break
+        case 'quickSwitch':
+          setSearchOpen(false)
+          setSearchQuery('')
+          setSwitcherOpen(!switcherOpen)
+          break
+        case 'keyboardShortcuts':
+          setShortcutsOpen(!shortcutsOpen)
+          break
+        case 'newPage':
+          if (workspace) add()
+          break
+        case 'toggleNavigation':
+          toggleNavigation()
+          break
+        case 'previousPage':
+        case 'nextPage': {
+          const step = command === 'previousPage' ? -1 : 1
+          const history = pageHistory.current
+          for (let index = history.position + step; index >= 0 && index < history.ids.length; index += step) {
+            const id = history.ids[index]
+            if (id !== page?.id && pages.some(item => item.id === id)) {
+              history.position = index
+              open(id)
+              break
+            }
+          }
+          break
+        }
+        case 'exportMarkdown':
+          if (page) downloadPage(page)
+          break
+        case 'deletePage':
+          if (page && page.cloudMirror?.state !== 'pending' && syncingPage !== page.id) setAction({ kind: 'delete', id: page.id })
+          break
       }
     }
     window.addEventListener('keydown', shortcuts)
     return () => window.removeEventListener('keydown', shortcuts)
-  }, [add, workspace])
+  }, [add, workspace, page, pages, open, navigationOpen, mobileContext, searchOpen, switcherOpen, shortcutsOpen, syncingPage, toggleNavigation])
 
   function openToday() {
     const now = new Date()
@@ -381,6 +463,15 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
   }, [navigationOpen])
 
   useEffect(() => {
+    const layout = window.matchMedia('(max-width: 680px)')
+    function closeMobileNavigation(event: MediaQueryListEvent) {
+      if (!event.matches) setNavigationOpen(false)
+    }
+    layout.addEventListener('change', closeMobileNavigation)
+    return () => layout.removeEventListener('change', closeMobileNavigation)
+  }, [])
+
+  useEffect(() => {
     if (mobileContext) contextClose.current?.focus()
   }, [mobileContext])
 
@@ -413,7 +504,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
   const words = page?.markdown.trim().match(/[\p{L}\p{N}][\p{L}\p{N}'’_-]*/gu)?.length ?? 0
 
   return (
-    <div className="workspace" data-context={contextOpen ? 'open' : 'closed'}>
+    <div className="workspace" data-context={contextOpen ? 'open' : 'closed'} data-navigation={sidebarHidden ? 'hidden' : undefined}>
       {navigationOpen && <button className="pane-scrim nav-scrim" aria-label={t('closeNavigation')} onClick={() => setNavigationOpen(false)} />}
       <aside className={`sidebar ${navigationOpen ? 'pane-open' : ''}`} aria-label={t('workspaceNavigation')} inert={mobileContext}>
         <div className="identity">
@@ -424,14 +515,14 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
           </button>
         </div>
         <div className="sidebar-actions">
-          <button className="search-trigger" onClick={() => setSearchOpen(true)}>
+          <button className="search-trigger" ref={searchTrigger} onClick={() => setSearchOpen(true)} aria-keyshortcuts="Meta+K Control+K">
             <Search size={17} /><span>{t('findPage')}</span><kbd>⌘ K</kbd>
           </button>
           <button className="nav-action" onClick={openToday} disabled={!workspace}>
             <CalendarDays size={17} /><span>{t('today')}</span>
           </button>
         </div>
-        <nav className="page-nav" aria-label={t('pages')}>
+        <nav className="page-nav" aria-label={t('pages')} onKeyDown={navigatePageRows}>
           {favorites.length > 0 && (
             <section className="nav-section" aria-label={t('favorites')}>
               <div className="nav-heading"><span>{t('favorites')}</span></div>
@@ -469,12 +560,15 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
             setVaultOpen(true)
           }}><FolderClosed size={15} /> Import vault</button>
           {typeof sidebarControls === 'function' ? sidebarControls(!workspace || status === 'saved') : sidebarControls}
+          <button className="nav-action" type="button" aria-keyshortcuts="Meta+/ Control+/" onClick={() => setShortcutsOpen(true)}>
+            <Keyboard size={16} aria-hidden="true" /> {t('keyboardShortcuts')}
+          </button>
         </div>
       </aside>
 
       <main className="main-panel" inert={navigationOpen || mobileContext}>
         <header className="topbar">
-          <button className="icon-button open-sidebar" ref={navigationToggle} aria-label={t('openNavigation')} aria-expanded={navigationOpen} onClick={() => setNavigationOpen(true)}><Menu size={21} /></button>
+          <button className="icon-button open-sidebar" ref={navigationToggle} aria-label={t('openNavigation')} aria-expanded={navigationOpen} onClick={toggleNavigation}><Menu size={21} /></button>
           <nav className="breadcrumbs" aria-label={t('breadcrumb')}>
             <BookOpen className="breadcrumb-icon" size={16} aria-hidden="true" />
             {trail.length === 0 && <span>{t('workspace')}</span>}
@@ -686,6 +780,8 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
         })
       }} />}
       {vaultOpen && <VaultImportDialog onClose={() => setVaultOpen(false)} onImport={importVault} saveStatus={status} />}
+      {shortcutsOpen && <WorkspaceShortcutHelp onClose={() => setShortcutsOpen(false)} />}
+      {switcherOpen && <SearchDialog titleOnly pages={pages} onOpen={open} onClose={() => setSwitcherOpen(false)} />}
       {searchOpen && <SearchDialog pages={pages} initialQuery={searchQuery} onOpen={open}
         onOpenCloud={openCloudPage ? id => {
           setSearchOpen(false)

@@ -52,14 +52,17 @@ export function SearchDialog({
   onOpen,
   onOpenCloud,
   onClose,
+  titleOnly = false,
 }: {
   pages?: Page[]
   initialQuery?: string
   onOpen?: (id: string) => void
   onOpenCloud?: (id: string) => void
   onClose: () => void
+  titleOnly?: boolean
 }) {
   const t = useTranslations('app-shell')
+  const label = t(titleOnly ? 'quickSwitch' : 'searchPages')
   const resultsId = useId()
   const [query, setQuery] = useState(initialQuery)
   const [highlight, setHighlight] = useState(0)
@@ -71,7 +74,7 @@ export function SearchDialog({
   const loading = cloud && remote?.query !== term
   const failed = cloud && !loading && remote?.pages === null
   const results = cloud ? loading ? [] : remote?.pages ?? []
-    : pages ? workspaceSearch(pages).query(query, term ? 15 : 8).map(({ page, context }) => ({
+    : pages ? workspaceSearch(pages).query(query, term ? 15 : 8, titleOnly).map(({ page, context }) => ({
       id: page.id, title: page.title, context,
     })) : []
   const selected = Math.min(highlight, results.length - 1)
@@ -103,7 +106,7 @@ export function SearchDialog({
   }, [selected])
 
   return (
-    <Dialog title={t('searchPages')} onClose={onClose} className="search-dialog">
+    <Dialog title={label} onClose={onClose} className="search-dialog">
       <div className="search-input-row">
         <Search size={19} aria-hidden="true" />
         <input
@@ -111,12 +114,12 @@ export function SearchDialog({
           autoFocus
           type="search"
           role="combobox"
-          aria-label={t('searchPages')}
+          aria-label={label}
           aria-autocomplete="list"
           aria-expanded="true"
           aria-controls={resultsId}
           aria-activedescendant={selected >= 0 ? `${resultsId}-${results[selected].id}` : undefined}
-          placeholder={t('findPageOrPhrase')}
+          placeholder={t(titleOnly ? 'findPageTitle' : 'findPageOrPhrase')}
           maxLength={cloud ? 160 : undefined}
           value={query}
           onChange={event => {
