@@ -323,6 +323,8 @@
     "close": "关闭"
   },
   "editor-chrome": {
+    "checkingCloudCopy": "正在显示本地副本 · 检查同步",
+    "checkingCloudAccess": "正在检查编辑权限",
     "pageTitle": "页面标题",
     "wordCount": "{count, number} 个词",
     "quickSearch": "快速搜索",

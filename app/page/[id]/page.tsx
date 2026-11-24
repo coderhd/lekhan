@@ -1,16 +1,30 @@
 import Link from 'next/link'
+import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import CloudPageEditor from '@/components/cloud-page-editor'
 import CloudSearch from '@/components/cloud-search'
 import { accountContext, createAuthClient } from '@/lib/auth/server'
-import { listCloudChildren, listCloudPages, pageAccess } from '@/lib/cloud/graph'
+import { listCloudChildren, listCloudLinkChoices, pageAccess } from '@/lib/cloud/graph'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { syncUrl } from '@/lib/sync/config'
 import { getTicketSecret } from '@/lib/sync/ticket'
 import { addCloudPage } from '@/app/cloud/actions'
 import { renameCloudPage } from '@/app/cloud/page-actions'
 import { getPublicPage, readPublicContent } from '@/lib/cloud/public-page'
 import { PublicPage } from '@/components/public-page'
+
+async function CloudSubpages({ client, id, after }: { client: SupabaseClient; id: string; after?: string }) {
+  const children = await listCloudChildren(client, id, after).catch(() => null)
+  if (!children?.pages.length) return null
+  return <section aria-label="Subpages" className="cloud-subpages">
+    <h2>Subpages</h2>
+    <ul className="cloud-pages">{children.pages.map(child => <li key={child.id}>
+      <Link href={'/page/' + child.id}>{child.title}</Link>
+    </li>)}</ul>
+    {children.next && <Link href={'/page/' + id + '?children=' + children.next}>More subpages</Link>}
+  </section>
+}
 
 export default async function CloudPageRoute({ params, searchParams }: {
   params: Promise<{ id: string }>
@@ -29,13 +43,7 @@ export default async function CloudPageRoute({ params, searchParams }: {
   }
 
   const { error, children: after } = await searchParams
-  const [owned, shared, children] = await Promise.all([
-    listCloudPages(account.client, account.subject, false).catch(() => null),
-    listCloudPages(account.client, account.subject, true).catch(() => null),
-    listCloudChildren(account.client, id, after).catch(() => null),
-  ])
-  const choices = [...(owned?.pages ?? []), ...(shared?.pages ?? [])].filter(page => page.id !== id)
-    .map(page => ({ id: page.id, title: page.title, path: page.title }))
+  const choices = listCloudLinkChoices(account.client, account.subject, id).catch(() => [])
   const settings = await getTranslations('settings')
 
   return (
@@ -55,16 +63,10 @@ export default async function CloudPageRoute({ params, searchParams }: {
           {error === 'title' ? 'Enter a title up to 160 characters.' : 'Could not update the page.'}
         </p>}
         <CloudPageEditor
-          key={account.subject + ':' + id} page={access.page} choices={choices}
+          key={account.subject + ':' + id + ':' + access.role} page={access.page} linkChoices={choices} role={access.role}
           subject={account.subject} enabled={!!syncUrl() && !!getTicketSecret()}
         />
-        {children && children.pages.length > 0 && <section aria-label="Subpages" className="cloud-subpages">
-          <h2>Subpages</h2>
-          <ul className="cloud-pages">{children.pages.map(child => <li key={child.id}>
-            <Link href={'/page/' + child.id}>{child.title}</Link>
-          </li>)}</ul>
-          {children.next && <Link href={'/page/' + id + '?children=' + children.next}>More subpages</Link>}
-        </section>}
+        <Suspense><CloudSubpages client={account.client} id={id} after={after} /></Suspense>
         {access.role === 'owner' && <details className="cloud-page-actions">
           <summary>Page settings</summary>
           <form className="cloud-create" action={renameCloudPage.bind(null, id)}>

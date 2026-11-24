@@ -323,6 +323,8 @@
     "close": "बंद करें"
   },
   "editor-chrome": {
+    "checkingCloudCopy": "स्थानीय कॉपी · सिंक की जाँच जारी है",
+    "checkingCloudAccess": "संपादन की अनुमति जाँची जा रही है",
     "pageTitle": "पेज का शीर्षक",
     "wordCount": "{count, plural, one {# शब्द} other {# शब्द}}",
     "quickSearch": "त्वरित खोज",

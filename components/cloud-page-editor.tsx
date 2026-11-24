@@ -1,10 +1,11 @@
 'use client'
 
-import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Cloud, CloudOff, Download, History, LoaderCircle, LockKeyhole, Paperclip } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import type { PageChoice } from '@/lib/types'
-import type { CloudPage } from '@/lib/cloud/graph'
+import type { CloudPage, PageRole } from '@/lib/cloud/graph'
+import { useTranslations } from '@/lib/i18n/client'
 import { useCloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
 import { replaceSourceText } from '@/lib/sync/replace-source'
 import { downloadPage } from '@/lib/downloads'
@@ -30,20 +31,29 @@ function useReplicaSource(document: ReturnType<typeof useCloudCollaboration>['se
   return useSyncExternalStore(subscribe, get, () => null)
 }
 
-export default function CloudPageEditor({ page, subject, choices, enabled }: {
+function CloudLinkChoices({ source, onLoad }: { source: Promise<PageChoice[]>; onLoad: (choices: PageChoice[]) => void }) {
+  const choices = use(source)
+  useEffect(() => { onLoad(choices) }, [choices, onLoad])
+  return null
+}
+
+export default function CloudPageEditor({ page, subject, linkChoices, role, enabled }: {
   page: CloudPage
   subject: string
-  choices: PageChoice[]
+  linkChoices: Promise<PageChoice[]>
+  role: PageRole
   enabled: boolean
 }) {
+  const t = useTranslations('editor-chrome')
   const { spellcheck } = useEditorPreferences()
-  const replica = useCloudCollaboration(page.id, subject, enabled)
+  const replica = useCloudCollaboration(page.id, subject, enabled, role !== 'viewer')
   const source = useReplicaSource(replica.session)
   const largeSource = source !== null && source.length >= 1024 * 1024
   const references = useMemo(() => source === null ? [] : [...new Map(
     wikiLinks(source).map(link => [link.target, link]),
   ).values()], [source])
   const router = useRouter()
+  const [choices, setChoices] = useState<PageChoice[]>([])
   const [markdown, setMarkdown] = useState<string | null>(null)
   const [schemaError, setSchemaError] = useState(false)
   const [linkMissing, setLinkMissing] = useState(false)
@@ -56,12 +66,13 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
   const editable = replica.writable && !schemaError
   const syncPaused = replica.status === 'image-limit' || replica.status === 'payload-limit' || replica.status === 'workspace-media-limit'
   const localOnly = replica.status === 'local-only'
+  const checkingSync = replica.status === 'opening' && !!replica.session
   const networkLabel = !enabled ? 'Cloud sync unavailable' : replica.status === 'live' ? 'Live'
     : replica.status === 'offline' ? replica.session ? 'Offline copy' : 'Waiting for sync'
     : replica.status === 'denied' ? 'Access expired'
     : replica.status === 'limit' ? 'Collaborator limit reached'
     : localOnly ? 'Cloud sync paused'
-    : syncPaused ? 'Sync paused' : 'Opening cloud page'
+    : syncPaused ? 'Sync paused' : checkingSync ? t('checkingCloudCopy') : 'Opening cloud page'
   const exportable = !!replica.session && !schemaError && (source !== null || markdown !== null)
 
   async function openLink(target: string) {
@@ -111,13 +122,14 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
 
   return (
     <div className="cloud-editor">
+      <Suspense><CloudLinkChoices source={linkChoices} onLoad={setChoices} /></Suspense>
       <div className="cloud-editor-status">
         <span role="status">
-          {replica.status === 'live' ? <Cloud size={16} /> : replica.status === 'opening' && enabled
+          {replica.status === 'live' ? <Cloud size={16} /> : replica.status === 'opening' && enabled && !checkingSync
             ? <LoaderCircle size={16} className="spin" /> : <CloudOff size={16} />}
           {networkLabel}
         </span>
-        {replica.session && !editable && <span><LockKeyhole size={15} /> Viewing access</span>}
+        {replica.session && !editable && <span><LockKeyhole size={15} /> {checkingSync && role !== 'viewer' ? t('checkingCloudAccess') : 'Viewing access'}</span>}
         {source !== null && <button type="button" className="secondary-button" aria-pressed={preview} onClick={() => setPreview(value => !value)}>
           Preview Markdown
         </button>}

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { PageChoice } from '../types'
 
 export type PageRole = 'owner' | 'editor' | 'viewer'
 
@@ -15,6 +16,8 @@ export interface CloudPage {
 
 export const uuidPattern = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i
 const fields = 'id,workspace_id,parent_id,owner_id,title,properties,is_public,updated_at'
+const linkFields = 'id,title'
+type LinkPage = Pick<CloudPage, 'id' | 'title'>
 const batchSize = 24
 
 export function pageTitle(raw: unknown) {
@@ -63,12 +66,24 @@ export async function listCloudPages(client: SupabaseClient, subject: string, sh
 }
 
 export async function listCloudChildren(client: SupabaseClient, parentId: string, after?: string) {
-  let query = client.from('pages').select(fields).eq('parent_id', parentId)
+  let query = client.from('pages').select(linkFields).eq('parent_id', parentId)
   if (after && uuidPattern.test(after)) query = query.gt('id', after)
-  const { data, error } = await query.order('id').limit(batchSize + 1).returns<CloudPage[]>()
+  const { data, error } = await query.order('id').limit(batchSize + 1).returns<LinkPage[]>()
   if (error) throw error
   const pages = data.slice(0, batchSize)
   return { pages, next: data.length > batchSize ? pages.at(-1)?.id : undefined }
+}
+
+export async function listCloudLinkChoices(client: SupabaseClient, subject: string, pageId: string): Promise<PageChoice[]> {
+  const [owned, shared] = await Promise.all([
+    client.from('pages').select(linkFields).eq('owner_id', subject).neq('id', pageId)
+      .order('updated_at', { ascending: false }).order('id').limit(batchSize).returns<LinkPage[]>(),
+    client.from('pages').select(linkFields + ',page_members!inner(user_id)').eq('page_members.user_id', subject).neq('id', pageId)
+      .order('updated_at', { ascending: false }).order('id').limit(batchSize).returns<LinkPage[]>(),
+  ])
+  return [...new Map([...(owned.data ?? []), ...(shared.data ?? [])].map(({ id, title }) => [
+    id, { id, title, path: title },
+  ])).values()]
 }
 
 export async function ensureCloudWorkspace(client: SupabaseClient, subject: string): Promise<{ id: string; created: boolean }> {

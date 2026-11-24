@@ -323,6 +323,8 @@
     "close": "Schließen"
   },
   "editor-chrome": {
+    "checkingCloudCopy": "Lokale Kopie · Synchronisierung wird geprüft",
+    "checkingCloudAccess": "Bearbeitungsrechte werden geprüft",
     "pageTitle": "Seitentitel",
     "wordCount": "{count, plural, one {# Wort} other {# Wörter}}",
     "quickSearch": "Schnellsuche",
