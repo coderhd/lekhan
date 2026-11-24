@@ -53,6 +53,11 @@ export function providerDefinition(provider: ProviderId): ProviderDefinition {
   return PROVIDERS[provider]
 }
 
+export function providerConnectionKind(config: Pick<ProviderConfig, 'provider' | 'model'>) {
+  if (providerDefinition(config.provider).local) return 'local'
+  return FREE_PRESETS.some(preset => preset.provider === config.provider && preset.model === config.model) ? 'free' : 'cloud'
+}
+
 export function endpointFor(config: ProviderConfig) {
   const definition = providerDefinition(config.provider)
   if (config.baseUrl?.trim() && !definition.local && config.provider !== 'custom') {

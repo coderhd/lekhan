@@ -4,6 +4,7 @@ import { accountContext } from '@/lib/auth/server'
 import { resolveOwnerWorkspaceEntitlement } from '@/lib/billing/entitlements'
 import { syncUrl } from '@/lib/sync/config'
 import { getTicketSecret } from '@/lib/sync/ticket'
+import { getPlanLimits } from '@/lib/tier-limits'
 
 export default async function WorkspacePage() {
   const enabled = !!authConfig()
@@ -14,5 +15,7 @@ export default async function WorkspacePage() {
     ? await resolveOwnerWorkspaceEntitlement(account.subject, account.client).catch(() => null)
     : null
   return <WebWorkspace key={scope} storageScope={scope} cloudEnabled={enabled} signedIn={!!account}
+    profile={account ? { subject: account.subject, email: account.email, displayName: account.displayName } : undefined}
+    plan={plan ? { tier: plan.tier, ...getPlanLimits(plan.tier, plan.seats) } : undefined}
     mirrorEnabled={mirrorEnabled} automaticMirror={!!plan && plan.tier !== 'free' && !plan.relayReadOnly} />
 }

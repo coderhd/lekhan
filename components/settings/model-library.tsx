@@ -2,12 +2,12 @@ import { invoke } from '@tauri-apps/api/core'
 import { ArrowDownToLine, ArrowUpRight, Check, Plus, Search } from 'lucide-react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useEffect, useState } from 'react'
-import { Dialog } from '../components/workspace-dialogs'
-import type { CatalogModel, LocalLibrary, LocalModel } from './local-models'
+import { Dialog } from '../workspace-dialogs'
+import type { CatalogModel, LocalLibrary, LocalModel } from '../../desktop/local-models'
 
 export default function ModelLibrary({ library, selected, onSelect, refresh, onClose }: {
   library?: LocalLibrary; selected: string | null; onSelect: (id: string | null) => void
-  refresh: () => Promise<LocalLibrary | undefined>; onClose: () => void
+  refresh: () => Promise<LocalLibrary | undefined>; onClose?: () => void
 }) {
   const t = useTranslations('desktop')
   const locale = useLocale()
@@ -78,6 +78,7 @@ export default function ModelLibrary({ library, selected, onSelect, refresh, onC
     const capacity = library?.capacity
     const needsMemory = capacity?.totalMemory != null && model.memory > capacity.totalMemory
     const needsDisk = capacity?.freeDisk != null && model.bytes - model.downloaded > capacity.freeDisk
+    const hasRoom = !!library?.runtimeAvailable && capacity?.totalMemory != null && capacity.freeDisk != null && !needsMemory && !needsDisk
     const active = ['downloading', 'verifying', 'pausing'].includes(model.phase)
     const progressing = active || model.downloaded > 0
     const progress = t('modelProgress', { downloaded: formatSize(model.downloaded), total: formatSize(model.bytes) })
@@ -90,6 +91,7 @@ export default function ModelLibrary({ library, selected, onSelect, refresh, onC
       </div>
       <p className="model-catalog-description">{t('modelStrength_' + model.strength)}</p>
       <p className="model-catalog-meta">{formatSize(model.bytes)} · Q4_K_M · {t('modelMemoryEstimate', { memory: formatSize(model.memory) })}</p>
+      {!installed && !active && hasRoom && <p className="model-catalog-fit"><Check size={14} aria-hidden="true" /> {t('fitsDevice')}</p>}
       {!installed && progressing && <div className="model-download-progress">
         <progress max={model.bytes} value={model.downloaded} aria-label={t('modelDownloadProgress', { model: model.label })} />
         <small>{model.phase === 'verifying' ? t('verifyingModel') : model.phase === 'pausing' ? t('pausingModel') : progress}</small>
@@ -115,8 +117,7 @@ export default function ModelLibrary({ library, selected, onSelect, refresh, onC
   const matching = library?.catalog.filter(model => model.label.toLocaleLowerCase(locale).includes(query.trim().toLocaleLowerCase(locale))) ?? []
   const used = library?.models.reduce((total, model) => total + model.bytes, 0) ?? 0
 
-  return <Dialog title={t('modelLibrary')} className="assistant-dialog model-library-dialog" onClose={onClose}>
-    <div className="form-dialog">
+  const content = <div className={onClose ? 'form-dialog' : 'form-dialog embedded-model-library'}>
       <h2>{t('modelLibrary')}</h2>
       <p>{t('localModelDescription')}</p>
       {!library ? <button className="secondary-button" type="button" disabled={busy} onClick={() => void run(async () => {
@@ -150,11 +151,11 @@ export default function ModelLibrary({ library, selected, onSelect, refresh, onC
       </>}
       {error && <p className="account-error" role="alert">{error}</p>}
       <div className="dialog-actions">
-        <button className="secondary-button" type="button" onClick={onClose}>{t('closeModels')}</button>
+        {onClose && <button className="secondary-button" type="button" onClick={onClose}>{t('closeModels')}</button>}
         <button className="primary-button" type="button" disabled={busy || !library?.runtimeAvailable} onClick={() => void run(importModel)}>
           <Plus size={16} aria-hidden="true" /> {busy ? t('workingWithModels') : t('importLocalModel')}
         </button>
       </div>
     </div>
-  </Dialog>
+  return onClose ? <Dialog title={t('modelLibrary')} className="assistant-dialog model-library-dialog" onClose={onClose}>{content}</Dialog> : content
 }

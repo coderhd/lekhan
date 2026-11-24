@@ -1,14 +1,17 @@
 import { invoke } from '@tauri-apps/api/core'
-import { Cloud, Cpu, FolderOpen } from 'lucide-react'
+import { Cloud, Cpu, FolderOpen, Settings2 } from 'lucide-react'
 import { NextIntlClientProvider, useTranslations } from 'next-intl'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import '@fontsource-variable/manrope'
 import '@fontsource-variable/newsreader'
 import '@/app/globals.css'
+import '@/components/settings/settings.css'
 import './desktop.css'
 import LocaleSelect from '@/components/locale-select'
 import WorkspaceApp from '@/components/workspace-app'
+import { SettingsDialog } from '@/components/settings/settings-content'
+import { EditorAppearance } from '@/components/settings/appearance-settings'
 import { downloadWorkspace } from '@/lib/downloads'
 import { getCatalog } from '@/lib/i18n/catalog'
 import { localeDirection, resolveLocale, type Locale } from '@/lib/i18n/locales'
@@ -16,7 +19,7 @@ import { loadWorkspace } from '@/lib/storage'
 import type { Page } from '@/lib/types'
 import { vaultStorage, type VaultAsset, type VaultHandle } from './vault-storage'
 import AttachmentPanel from './attachment-panel'
-import ModelLibrary from './model-library'
+import ModelLibrary from '@/components/settings/model-library'
 import { sendToLocalModel, type LocalLibrary } from './local-models'
 
 type DesktopLocale = { locale: Locale; messages: Awaited<ReturnType<typeof getCatalog>> }
@@ -25,6 +28,7 @@ const selectedModelKey = 'lekhan:desktop:local-model'
 
 function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) => Promise<void> }) {
   const t = useTranslations('desktop')
+  const settings = useTranslations('settings')
   const [handle, setHandle] = useState<VaultHandle | null>(null)
   const [restoring, setRestoring] = useState(true)
   const [choosing, setChoosing] = useState(false)
@@ -36,6 +40,7 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
   const [library, setLibrary] = useState<LocalLibrary>()
   const libraryRead = useRef(0)
   const [modelLibraryOpen, setModelLibraryOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem(selectedModelKey))
   const [catalog, setCatalog] = useState<{ token: string; paths: Map<string, string>; assets: VaultAsset[] }>()
   const storage = useMemo(() => handle && vaultStorage(handle, {
@@ -115,6 +120,10 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
       setModelLibraryOpen(true)
       void refreshLibrary()
     }}><Cpu size={15} aria-hidden="true" /> {t('modelLibrary')}</button>
+    <button type="button" className="nav-action" onClick={() => {
+      setSettingsOpen(true)
+      void refreshLibrary()
+    }}><Settings2 size={15} aria-hidden="true" /> {settings('title')}</button>
     <button type="button" className="nav-action account-link" disabled={opening} onClick={() => void openCloud()}>
       <Cloud size={15} /> {t('cloudWorkspace')}
     </button>
@@ -123,6 +132,10 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
   </>
   const libraryDialog = modelLibraryOpen && <ModelLibrary library={library} selected={selectedModel} onSelect={selectModel}
     refresh={refreshLibrary} onClose={() => setModelLibraryOpen(false)} />
+  const settingsDialog = settingsOpen && <SettingsDialog scope="desktop" workspace={handle?.label ?? settings('localWorkspace')}
+    general={<LocaleSelect onSelect={selectLanguage} />} localModel={localModel} localModels={localModels}
+    modelLibrary={<ModelLibrary library={library} selected={selectedModel} onSelect={selectModel} refresh={refreshLibrary} />}
+    onClose={() => setSettingsOpen(false)} />
   const failure = vaultFailed && <p className="locale-error desktop-cloud-error" role="alert">{t('openFailed')}</p>
 
   if (handle && storage) return <div className="desktop-writer" inert={choosing}>
@@ -139,6 +152,7 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
         {commonControls}
       </>} />
     {libraryDialog}
+    {settingsDialog}
   </div>
 
   return <main className="desktop-vault">
@@ -153,6 +167,7 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
       <div className="desktop-vault-controls">{commonControls}</div>
     </div>
     {libraryDialog}
+    {settingsDialog}
   </main>
 }
 
@@ -167,6 +182,7 @@ function Desktop({ initial }: { initial: DesktopLocale }) {
   }
 
   return <NextIntlClientProvider locale={locale} messages={messages} timeZone="UTC">
+    <EditorAppearance />
     <DesktopWriter selectLanguage={selectLanguage} />
   </NextIntlClientProvider>
 }

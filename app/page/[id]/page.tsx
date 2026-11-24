@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
 import CloudPageEditor from '@/components/cloud-page-editor'
 import CloudSearch from '@/components/cloud-search'
 import { accountContext, createAuthClient } from '@/lib/auth/server'
@@ -35,6 +36,7 @@ export default async function CloudPageRoute({ params, searchParams }: {
   ])
   const choices = [...(owned?.pages ?? []), ...(shared?.pages ?? [])].filter(page => page.id !== id)
     .map(page => ({ id: page.id, title: page.title, path: page.title }))
+  const settings = await getTranslations('settings')
 
   return (
     <main className="cloud-screen">
@@ -43,6 +45,7 @@ export default async function CloudPageRoute({ params, searchParams }: {
         <div className="cloud-header-actions">
           {access.page.parent_id && <Link className="account-link" href={'/page/' + access.page.parent_id}>Parent page</Link>}
           {access.role === 'owner' && <Link className="account-link" href={'/page/' + id + '/share'}>Share</Link>}
+          <Link className="account-link" href="/settings">{settings('title')}</Link>
           <CloudSearch />
         </div>
       </header>

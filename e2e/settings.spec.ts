@@ -1,0 +1,73 @@
+import { expect, test } from '@playwright/test'
+
+test('shares five settings tabs between the workspace drawer and direct settings route', async ({ page }) => {
+  await page.goto('/workspace')
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+  await expect(dialog.getByRole('tab')).toHaveCount(5)
+  await dialog.getByRole('tab', { name: 'AI Providers & Models' }).press('ArrowRight')
+  await expect(dialog.getByRole('tab', { name: 'General & Profile' })).toBeFocused()
+  await expect(dialog.getByRole('combobox', { name: 'Language' })).toBeVisible()
+  await dialog.getByRole('tab', { name: 'Editor & Appearance' }).click()
+  await dialog.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('dark')
+  await dialog.getByRole('combobox', { name: 'Editor font' }).selectOption('mono')
+  await dialog.getByRole('combobox', { name: 'Line spacing' }).selectOption('relaxed')
+  await dialog.getByLabel('Check spelling').check()
+  await dialog.getByRole('button', { name: 'Close settings' }).click()
+  const editor = page.getByRole('textbox', { name: 'Page content' })
+  await expect(editor).toHaveAttribute('spellcheck', 'true')
+  await expect(editor).toHaveCSS('font-family', /ui-monospace/)
+  await expect(page.locator('html')).toHaveAttribute('data-editor-theme', 'dark')
+  await expect(page.locator('html')).toHaveAttribute('data-editor-spacing', 'relaxed')
+
+  await page.setViewportSize({ width: 390, height: 820 })
+  await page.goto('/settings?tab=editor')
+  await expect(page.getByRole('tab', { name: 'Editor & Appearance' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('combobox', { name: 'Theme', exact: true })).toHaveValue('dark')
+  await expect(page.getByRole('combobox', { name: 'Editor font' })).toHaveValue('mono')
+  await expect(page.getByRole('combobox', { name: 'Line spacing' })).toHaveValue('relaxed')
+  await page.getByRole('tab', { name: 'Plan & Usage' }).click()
+  await expect(page).toHaveURL(/tab=plan/)
+  await expect(page.getByText('Cloud plans apply to signed-in workspaces.', { exact: false })).toBeVisible()
+  await page.getByRole('tab', { name: 'Privacy & Encryption' }).click()
+  await expect(page.getByRole('heading', { name: 'Provider vault' })).toBeVisible()
+})
+
+test('provider settings select the model used by the assistant and can update the vault passphrase', async ({ page }) => {
+  const { createProviderVault } = await import('../lib/ai/vault')
+  const oldPassphrase = 'original settings passphrase'
+  const newPassphrase = 'updated settings passphrase'
+  const vault = await createProviderVault(oldPassphrase, [
+    { id: 'local', provider: 'ollama', model: 'fixture-local' },
+    { id: 'remote', provider: 'openai', model: 'fixture-remote', apiKey: 'fixture-key' },
+  ])
+  await page.addInitScript(payload => {
+    const key = 'lekhan:provider-vault:v1'
+    if (!localStorage.getItem(key)) localStorage.setItem(key, payload)
+  }, await vault.seal())
+  await page.goto('/settings')
+  await page.getByLabel('Passphrase', { exact: true }).fill(oldPassphrase)
+  await page.getByRole('button', { name: 'Unlock', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: 'Model', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Free keys', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: 'Free-key presets' })).toBeVisible()
+  await page.getByRole('button', { name: 'Cloud providers', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: 'Provider', exact: true })).toHaveValue('openai')
+  await page.getByRole('combobox', { name: 'Model', exact: true }).selectOption('provider:remote')
+  await page.getByRole('tab', { name: 'Privacy & Encryption' }).click()
+  await page.getByLabel('Passphrase', { exact: true }).fill(oldPassphrase)
+  await page.getByRole('button', { name: 'Unlock', exact: true }).click()
+  await page.getByLabel('New passphrase', { exact: true }).fill(newPassphrase)
+  await page.getByLabel('Confirm new passphrase').fill(newPassphrase)
+  await page.getByRole('button', { name: 'Update passphrase' }).click()
+  await expect(page.getByText('Vault passphrase updated.')).toBeVisible()
+  await page.getByRole('link', { name: 'Back to workspace' }).click()
+  await page.getByRole('button', { name: 'Writing assistant' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Writing assistant' })
+  await dialog.getByLabel('Passphrase').fill(oldPassphrase)
+  await dialog.getByRole('button', { name: 'Unlock', exact: true }).click()
+  await expect(dialog.getByRole('alert')).toContainText('Could not unlock')
+  await dialog.getByLabel('Passphrase').fill(newPassphrase)
+  await dialog.getByRole('button', { name: 'Unlock', exact: true }).click()
+  await expect(dialog.getByRole('combobox', { name: 'Model', exact: true })).toHaveValue('provider:remote')
+})

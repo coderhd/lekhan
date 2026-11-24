@@ -15,6 +15,7 @@ import CheckpointDialog from './checkpoint-dialog'
 import CloudImageControl from './editor/cloud-image-control'
 import CloudAttachments from './cloud-attachments'
 import { AssistedMarkdownSource } from './editor/selection-ai'
+import { useEditorPreferences } from './settings/appearance-settings'
 
 function useReplicaSource(document: ReturnType<typeof useCloudCollaboration>['session']) {
   const subscribe = useCallback((changed: () => void) => {
@@ -35,6 +36,7 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
   choices: PageChoice[]
   enabled: boolean
 }) {
+  const { spellcheck } = useEditorPreferences()
   const replica = useCloudCollaboration(page.id, subject, enabled)
   const source = useReplicaSource(replica.session)
   const largeSource = source !== null && source.length >= 1024 * 1024
@@ -178,7 +180,7 @@ export default function CloudPageEditor({ page, subject, choices, enabled }: {
       /> : preview ? <PageEditor
         pageId={page.id} markdown={source} choices={choices} onChange={() => {}} showModePicker={false} editable={false} onOpenLink={openLink}
       /> : <AssistedMarkdownSource key={page.id} ref={sourceInput} className={largeSource ? 'writer-source writer-source-bounded' : 'writer-source'}
-        wrap={largeSource ? 'off' : 'soft'} aria-label="Markdown source" markdown={source} readOnly={!editable}
+        wrap={largeSource ? 'off' : 'soft'} aria-label="Markdown source" markdown={source} readOnly={!editable} spellCheck={spellcheck}
         assistant={{ storageScope: 'account:' + subject }} onChange={writeSource} onApply={writeSource} />)}
       {references.length > 0 && <details className="cloud-page-actions cloud-references">
         <summary>Page links ({references.length})</summary>

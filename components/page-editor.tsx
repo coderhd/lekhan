@@ -16,6 +16,7 @@ import { FormatToolbar } from './editor/format-toolbar'
 import CloudImageControl from './editor/cloud-image-control'
 import { requiresMarkdownSource } from './editor/source-mode'
 import { AssistedMarkdownSource, RichSelectionAI, type EditorAssistant } from './editor/selection-ai'
+import { useEditorPreferences } from './settings/appearance-settings'
 import { collaborativeWritingExtensions, writingExtensions } from './editor/writing-extensions'
 import './editor/editor.css'
 
@@ -114,6 +115,7 @@ export default function PageEditor(props: PageEditorProps) {
 
 function PageEditorView(props: PageEditorProps) {
   const editorText = useTranslations('editor-chrome')
+  const { spellcheck } = useEditorPreferences()
   const { markdown, onChange, editable = true, focusOnMount = false, showModePicker = true } = props
   const sourceOnly = useMemo(() => requiresMarkdownSource(markdown), [markdown])
   const [preferSource, setPreferSource] = useState(sourceOnly)
@@ -162,7 +164,7 @@ function PageEditorView(props: PageEditorProps) {
         autoFocus={focusBody}
         markdown={markdown}
         readOnly={!editable}
-        spellCheck={false}
+        spellCheck={spellcheck}
         placeholder={editorText('markdownPlaceholder')}
         onChange={(value) => {
           setPreferSource(true)
@@ -191,6 +193,7 @@ function PageEditorSession({
   assistant,
 }: PageEditorProps & { modePicker: ReactNode }) {
   const editorText = useTranslations('editor-chrome')
+  const { spellcheck } = useEditorPreferences()
   const menuId = useId()
   const [menu, setMenu] = useState<MenuState | null>(null)
   const menuState = useRef<MenuState | null>(null)
@@ -337,6 +340,7 @@ function PageEditorSession({
         role: 'textbox',
         'aria-label': editorText('pageContent'),
         'aria-multiline': 'true',
+        spellcheck: String(spellcheck),
         'aria-placeholder': editorText('writePlaceholder'),
         style: '--writer-placeholder: ' + JSON.stringify(editorText('writePlaceholder')),
         ...(menuOpen ? { 'aria-controls': menuId } : {}),

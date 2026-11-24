@@ -168,3 +168,11 @@
   width: 100%;
   accent-color: var(--pine);
 }
+
+.model-catalog-fit {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--pine);
+}

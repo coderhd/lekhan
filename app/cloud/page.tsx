@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
 import { Cloud, FileText, Plus } from 'lucide-react'
 import CloudSearch from '@/components/cloud-search'
 import CloudVaultImport from '@/components/cloud-vault-import'
@@ -15,6 +16,7 @@ export default async function CloudWorkspace({ searchParams }: {
   const account = await accountContext()
   if (!account) redirect('/login')
   const { after, error, view, notice } = await searchParams
+  const settings = await getTranslations('settings')
   const tab = view === 'shared' || view === 'invitations' ? view : 'mine'
   const result = tab === 'invitations' ? null : await listCloudPages(account.client, account.subject, tab === 'shared', after).catch(() => null)
   const invitations = tab === 'invitations' && account.email ? await account.client.from('page_invitations')
@@ -26,7 +28,7 @@ export default async function CloudWorkspace({ searchParams }: {
       <header className="account-header">
         <Link className="account-brand" href="/"><span className="brand-mark" aria-hidden="true">L</span> Lekhan</Link>
         <div className="cloud-header-actions">
-          <Link className="account-link" href="/billing">Billing</Link>
+          <Link className="account-link" href="/settings">{settings('title')}</Link>
           <Link className="account-link" href="/workspace">Local workspace</Link>
           <CloudSearch />
         </div>

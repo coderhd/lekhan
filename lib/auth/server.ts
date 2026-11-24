@@ -28,7 +28,9 @@ export async function accountContext() {
   const { data, error } = await client.auth.getClaims()
   const subject = data?.claims.sub
   const email = typeof data?.claims.email === 'string' ? data.claims.email : null
-  return !error && typeof subject === 'string' ? { client, subject, email } : null
+  const name = data?.claims.user_metadata?.full_name
+  const displayName = typeof name === 'string' ? name.slice(0, 100) : ''
+  return !error && typeof subject === 'string' ? { client, subject, email, displayName } : null
 }
 
 export async function accountSubject() {
