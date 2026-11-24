@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server'
+import { createServerAdmin } from '@/lib/auth/admin'
 import { accountContext } from '@/lib/auth/server'
 import { pageAccess, uuidPattern } from '@/lib/cloud/graph'
 
@@ -13,10 +14,12 @@ export async function GET(request: NextRequest) {
   try {
     const source = await pageAccess(account.client, pageId, account.subject)
     if (!source?.privateAccess) return NextResponse.json({ id: null }, { status: 404, headers })
-    const { data, error } = await account.client.from('page_links').select('to_page_id')
-      .eq('from_page_id', pageId).eq('to_title', target).maybeSingle()
+    const admin = createServerAdmin()
+    if (!admin) return NextResponse.json({ id: null }, { status: 503, headers })
+    const { data, error } = await admin.rpc('rebuild_resolve_page_links', { source_page: pageId, targets: [target] })
+      .maybeSingle<{ page_id: string | null }>()
     if (error) throw error
-    const resolved = data?.to_page_id && await pageAccess(account.client, data.to_page_id, account.subject)
+    const resolved = data?.page_id ? await pageAccess(account.client, data.page_id, account.subject) : null
     return NextResponse.json({ id: resolved?.privateAccess ? resolved.page.id : null }, { headers })
   } catch {
     return NextResponse.json({ id: null }, { status: 503, headers })

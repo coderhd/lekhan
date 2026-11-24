@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import type { PageChoice } from '@/lib/types'
 import type { CloudPage, PageRole } from '@/lib/cloud/graph'
 import { forgetCloudSearchPage, rememberCloudSearchPage } from '@/lib/cloud/local-search'
+import { importPathKey } from '@/lib/cloud/graph-index'
 import { useTranslations } from '@/lib/i18n/client'
 import { useCloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
 import { replaceSourceText } from '@/lib/sync/replace-source'
@@ -39,6 +40,14 @@ function CloudLinkChoices({ source, onLoad }: { source: Promise<PageChoice[]>; o
   const choices = use(source)
   useEffect(() => { onLoad(choices) }, [choices, onLoad])
   return null
+}
+
+function scrollToHeading(root: HTMLElement, anchor: string) {
+  const key = anchor.trim().normalize('NFC').toLowerCase()
+  const heading = Array.from(root.querySelectorAll<HTMLElement>('.writer-content :is(h1,h2,h3,h4,h5,h6)'))
+    .find(item => item.textContent?.trim().normalize('NFC').toLowerCase() === key)
+  heading?.scrollIntoView({ block: 'start' })
+  return !!heading
 }
 
 export default function CloudPageEditor({ page, subject, linkChoices, role, enabled, offlineChoices, onAccessLost }: {
@@ -76,6 +85,8 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
   const [changingSync, setChangingSync] = useState(false)
   const [preferenceError, setPreferenceError] = useState('')
   const [preview, setPreview] = useState(false)
+  const [heading, setHeading] = useState('')
+  const editorRoot = useRef<HTMLDivElement>(null)
   const sourceInput = useRef<HTMLTextAreaElement>(null)
   const editable = replica.writable && !schemaError
   const syncPaused = replica.status === 'image-limit' || replica.status === 'payload-limit' || replica.status === 'workspace-media-limit'
@@ -92,6 +103,35 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
   const frontmatter = exportOpen ? replica.session?.document.getMap('lekhan').get('frontmatter') : null
 
   useEffect(() => {
+    function readHeading() {
+      const hash = window.location.hash
+      if (!hash.startsWith('#heading=')) return
+      try {
+        setHeading(decodeURIComponent(hash.slice('#heading='.length)))
+        setPreview(true)
+      } catch { /* An invalid fragment does not affect the page. */ }
+    }
+    readHeading()
+    window.addEventListener('hashchange', readHeading)
+    return () => window.removeEventListener('hashchange', readHeading)
+  }, [])
+
+  useEffect(() => {
+    const root = editorRoot.current
+    if (!heading || !root) return
+    const reveal = () => {
+      if (scrollToHeading(root, heading)) {
+        observer.disconnect()
+        setHeading('')
+      }
+    }
+    const observer = new MutationObserver(reveal)
+    observer.observe(root, { childList: true, characterData: true, subtree: true })
+    const frame = window.requestAnimationFrame(reveal)
+    return () => { observer.disconnect(); window.cancelAnimationFrame(frame) }
+  }, [heading])
+
+  useEffect(() => {
     if (replica.status === 'denied' || replica.status === 'limit') {
       void forgetCloudSearchPage(subject, page.id).catch(() => undefined).finally(() => onAccessLost?.())
       return
@@ -106,19 +146,21 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
   }, [onAccessLost, page.id, page.title, page.properties, page.updated_at, replica.session, replica.status, replica.verifiedAt, role, schemaError, searchableText, subject])
 
   async function openLink(target: string) {
-    const [title, anchor] = target.split('#', 2)
+    const [title, anchor] = target.split('#', 2).map(part => part.trim())
     if (!title && anchor) {
-      const heading = Array.from(document.querySelectorAll<HTMLElement>('.writer-content :is(h1,h2,h3,h4,h5,h6)'))
-        .find(item => item.textContent?.trim().toLowerCase() === anchor.toLowerCase())
-      heading?.scrollIntoView({ block: 'start' })
+      setPreview(true)
+      if (!editorRoot.current || !scrollToHeading(editorRoot.current, anchor)) setHeading(anchor)
       return
     }
     setLinkMissing(false)
+    const fragment = anchor ? '#heading=' + encodeURIComponent(anchor) : ''
+    const key = importPathKey(title)
+    const matches = choices.filter(choice => importPathKey(choice.path) === key)
     if (offlineShell) {
-      const matches = choices.filter(choice => choice.path.toLowerCase() === title.trim().toLowerCase())
       if (matches.length === 1) {
         const target = new URL('/cloud-offline', window.location.origin)
         target.searchParams.set('page', matches[0].id)
+        target.hash = fragment
         window.location.assign(target.href)
       } else setLinkMissing(true)
       return
@@ -129,13 +171,15 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
       })
       if (response.ok) {
         const { id } = await response.json()
-        if (id) { router.push('/page/' + id); return }
+        if (id) router.push('/page/' + id + fragment)
+        else setLinkMissing(true)
+        return
       }
+      if (response.status < 500) { setLinkMissing(true); return }
     } catch {
       // The open document still knows about recently listed pages when offline.
     }
-    const matches = choices.filter(choice => choice.path.toLowerCase() === title.trim().toLowerCase())
-    if (matches.length === 1) router.push('/page/' + matches[0].id)
+    if (matches.length === 1) router.push('/page/' + matches[0].id + fragment)
     else setLinkMissing(true)
   }
 
@@ -179,7 +223,7 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
   }
 
   return (
-    <div className="cloud-editor">
+    <div className="cloud-editor" ref={editorRoot}>
       {linkChoices && <Suspense><CloudLinkChoices source={linkChoices} onLoad={setChoices} /></Suspense>}
       <div className="cloud-editor-status">
         <span role="status">

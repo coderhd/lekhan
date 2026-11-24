@@ -6,7 +6,7 @@ import CloudPageEditor from '@/components/cloud-page-editor'
 import CloudSearch from '@/components/cloud-search'
 import { DiscardOfflineAccess, PrepareOfflineWorkspace } from '@/components/prepare-offline-workspace'
 import { accountContext, createAuthClient } from '@/lib/auth/server'
-import { listCloudChildren, listCloudLinkChoices, pageAccess } from '@/lib/cloud/graph'
+import { listCloudBacklinks, listCloudChildren, listCloudLinkChoices, pageAccess } from '@/lib/cloud/graph'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { syncUrl } from '@/lib/sync/config'
 import { getTicketSecret } from '@/lib/sync/ticket'
@@ -27,9 +27,22 @@ async function CloudSubpages({ client, id, after }: { client: SupabaseClient; id
   </section>
 }
 
+async function CloudBacklinks({ client, id, after }: { client: SupabaseClient; id: string; after?: string }) {
+  const backlinks = await listCloudBacklinks(client, id, after).catch(() => null)
+  if (!backlinks?.pages.length) return null
+  const t = await getTranslations('app-shell')
+  return <details className="cloud-page-actions" open={after !== undefined}>
+    <summary>{t('backlinks')}</summary>
+    <ul className="cloud-pages">{backlinks.pages.map(page => <li key={page.id}>
+      <Link href={'/page/' + page.id}>{page.title}</Link>
+    </li>)}</ul>
+    {backlinks.next && <Link href={'/page/' + id + '?backlinks=' + backlinks.next}>{t('showMoreBacklinks')}</Link>}
+  </details>
+}
+
 export default async function CloudPageRoute({ params, searchParams }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ error?: string; children?: string }>
+  searchParams: Promise<{ error?: string; children?: string; backlinks?: string }>
 }) {
   const { id } = await params
   const account = await accountContext()
@@ -46,8 +59,8 @@ export default async function CloudPageRoute({ params, searchParams }: {
     </>
   }
 
-  const { error, children: after } = await searchParams
-  const choices = listCloudLinkChoices(account.client, account.subject, id).catch(() => [])
+  const { error, children: after, backlinks } = await searchParams
+  const choices = listCloudLinkChoices(account.client, account.subject, access.page).catch(() => [])
   const settings = await getTranslations('settings')
 
   return (
@@ -72,6 +85,7 @@ export default async function CloudPageRoute({ params, searchParams }: {
           subject={account.subject} enabled={!!syncUrl() && !!getTicketSecret()}
         />
         <Suspense><CloudSubpages client={account.client} id={id} after={after} /></Suspense>
+        <Suspense><CloudBacklinks client={account.client} id={id} after={backlinks} /></Suspense>
         {access.role === 'owner' && <details className="cloud-page-actions">
           <summary>Page settings</summary>
           <form className="cloud-create" action={renameCloudPage.bind(null, id)}>

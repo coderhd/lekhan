@@ -74,16 +74,30 @@ export async function listCloudChildren(client: SupabaseClient, parentId: string
   return { pages, next: data.length > batchSize ? pages.at(-1)?.id : undefined }
 }
 
-export async function listCloudLinkChoices(client: SupabaseClient, subject: string, pageId: string): Promise<PageChoice[]> {
+export async function listCloudLinkChoices(client: SupabaseClient, subject: string, source: Pick<CloudPage, 'id' | 'workspace_id'>): Promise<PageChoice[]> {
   const [owned, shared] = await Promise.all([
-    client.from('pages').select(linkFields).eq('owner_id', subject).neq('id', pageId)
+    client.from('pages').select(linkFields).eq('workspace_id', source.workspace_id).eq('owner_id', subject).neq('id', source.id)
       .order('updated_at', { ascending: false }).order('id').limit(batchSize).returns<LinkPage[]>(),
-    client.from('pages').select(linkFields + ',page_members!inner(user_id)').eq('page_members.user_id', subject).neq('id', pageId)
+    client.from('pages').select(linkFields + ',page_members!inner(user_id)').eq('workspace_id', source.workspace_id)
+      .eq('page_members.user_id', subject).neq('id', source.id)
       .order('updated_at', { ascending: false }).order('id').limit(batchSize).returns<LinkPage[]>(),
   ])
-  return [...new Map([...(owned.data ?? []), ...(shared.data ?? [])].map(({ id, title }) => [
-    id, { id, title, path: title },
-  ])).values()]
+  const pages = new Map([...(owned.data ?? []), ...(shared.data ?? [])].map(page => [page.id, page]))
+  if (!pages.size) return []
+  const paths = await client.rpc('rebuild_page_link_paths', { target_pages: [...pages.keys()] })
+    .overrideTypes<{ id: string; path: string }[], { merge: false }>()
+  const byId = new Map((Array.isArray(paths.data) ? paths.data : []).map(({ id, path }) => [id, path]))
+  return [...pages.values()].map(({ id, title }) => ({ id, title, path: byId.get(id) ?? title }))
+}
+
+export async function listCloudBacklinks(client: SupabaseClient, pageId: string, after?: string) {
+  const { data, error } = await client.rpc('rebuild_page_backlinks', {
+    target_page: pageId, after_page: after && uuidPattern.test(after) ? after : null,
+  }).overrideTypes<LinkPage[], { merge: false }>()
+  if (error) throw error
+  if (!Array.isArray(data)) throw new Error('Could not load backlinks.')
+  const pages = data.slice(0, batchSize)
+  return { pages, next: data.length > batchSize ? pages.at(-1)?.id : undefined }
 }
 
 export async function ensureCloudWorkspace(client: SupabaseClient, subject: string): Promise<{ id: string; created: boolean }> {

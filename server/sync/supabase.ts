@@ -54,25 +54,10 @@ async function syncGraph(client: SupabaseClient, pageId: string, text: string) {
     const title = target.split('#')[0].trim()
     if (title && Buffer.byteLength(title) <= 2048 && !links.has(toTitleKey(title))) links.set(toTitleKey(title), title)
   }
-  const exact = new Map<string, string | null>()
-  if (links.size) {
-    const { data: indexed, error: linkError } = await client.from('page_links').select('to_title,to_page_id')
-      .eq('from_page_id', pageId).not('to_page_id', 'is', null).limit(4000)
-    if (linkError) throw linkError
-    for (const link of indexed) exact.set(toTitleKey(link.to_title), link.to_page_id)
-  }
-  const names = [...links.values()].filter(title => !title.includes('/') && !exact.has(toTitleKey(title)))
-  for (let index = 0; index < names.length; index += 35) {
-    const response = await client.from('pages').select('id,title').eq('workspace_id', page.workspace_id).in('title', names.slice(index, index + 35))
-    if (response.error) throw response.error
-    for (const candidate of response.data) {
-      const key = toTitleKey(candidate.title)
-      exact.set(key, exact.has(key) ? null : candidate.id)
-    }
-  }
+  const names = [...links.values()].slice(0, 4000)
   const { error: writeError } = await client.rpc('sync_page_graph', {
     p_page_id: pageId, p_workspace_id: page.workspace_id, p_searchable_text: text,
-    p_links: [...links].map(([key, title]) => ({ to_title: title, to_page_id: exact.get(key) ?? null })),
+    p_links: names.map(title => ({ to_title: title })),
     p_tags: scanTags(text, page.properties).map(tag => ({ tag })),
   })
   if (writeError) throw writeError
