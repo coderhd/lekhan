@@ -54,7 +54,7 @@ export default async function CloudPageRoute({ params, searchParams }: {
           {access.page.parent_id && <Link className="account-link" href={'/page/' + access.page.parent_id}>Parent page</Link>}
           {access.role === 'owner' && <Link className="account-link" href={'/page/' + id + '/share'}>Share</Link>}
           <Link className="account-link" href="/settings">{settings('title')}</Link>
-          <CloudSearch />
+          <CloudSearch subject={account.subject} />
         </div>
       </header>
       <article className="cloud-library">

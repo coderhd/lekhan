@@ -5,6 +5,7 @@ import { Cloud, CloudOff, Download, History, LoaderCircle, LockKeyhole, Papercli
 import { useRouter } from 'next/navigation'
 import type { PageChoice } from '@/lib/types'
 import type { CloudPage, PageRole } from '@/lib/cloud/graph'
+import { forgetCloudSearchPage, rememberCloudSearchPage } from '@/lib/cloud/local-search'
 import { useTranslations } from '@/lib/i18n/client'
 import { useCloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
 import { replaceSourceText } from '@/lib/sync/replace-source'
@@ -74,6 +75,21 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
     : localOnly ? 'Cloud sync paused'
     : syncPaused ? 'Sync paused' : checkingSync ? t('checkingCloudCopy') : 'Opening cloud page'
   const exportable = !!replica.session && !schemaError && (source !== null || markdown !== null)
+  const searchableText = source ?? markdown
+
+  useEffect(() => {
+    if (replica.status === 'denied' || replica.status === 'limit') {
+      void forgetCloudSearchPage(subject, page.id).catch(() => undefined)
+      return
+    }
+    if (!replica.session || replica.status === 'opening' || schemaError || searchableText === null) return
+    const timer = setTimeout(() => {
+      void rememberCloudSearchPage(subject, {
+        id: page.id, title: page.title, markdown: searchableText, properties: page.properties ?? undefined, updatedAt: page.updated_at,
+      }).catch(() => undefined)
+    }, 350)
+    return () => clearTimeout(timer)
+  }, [page.id, page.title, page.properties, page.updated_at, replica.session, replica.status, schemaError, searchableText, subject])
 
   async function openLink(target: string) {
     const [title, anchor] = target.split('#', 2)

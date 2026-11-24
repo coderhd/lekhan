@@ -14,6 +14,16 @@ interface RankedPage extends CloudSearchResult {
   surface: 'title' | 'tag' | 'link' | 'content'
 }
 
+export async function visibleCloudSearchCopies(client: SupabaseClient, subject: string, ids: string[]) {
+  const [owned, shared] = await Promise.all([
+    client.from('pages').select('id').in('id', ids).eq('owner_id', subject).returns<{ id: string }[]>(),
+    client.from('pages').select('id,page_members!inner(user_id)').in('id', ids).eq('page_members.user_id', subject).returns<{ id: string }[]>(),
+  ])
+  if (owned.error) throw owned.error
+  if (shared.error) throw shared.error
+  return [...new Set([...owned.data, ...shared.data].map(({ id }) => id))]
+}
+
 export async function findCloudPages(client: SupabaseClient, subject: string, rawQuery: string) {
   const query = rawQuery.trim()
   if (query) {

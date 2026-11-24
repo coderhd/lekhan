@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { CornerDownLeft, FileText, Search, X } from 'lucide-react'
 import { useTranslations } from '@/lib/i18n/client'
@@ -8,6 +8,7 @@ import type { Page } from '@/lib/types'
 import { pagePath } from '@/lib/workspace'
 import { workspaceSearch } from '@/lib/workspace-search'
 import type { CloudSearchResult } from '@/lib/cloud/search'
+import { forgetCloudSearchPage, readCloudSearchPages, subscribeCloudSearchPages } from '@/lib/cloud/local-search'
 
 export function Dialog({
   title,
@@ -48,6 +49,7 @@ export function Dialog({
 
 export function SearchDialog({
   pages,
+  cloudSubject,
   initialQuery = '',
   onOpen,
   onOpenCloud,
@@ -55,6 +57,7 @@ export function SearchDialog({
   titleOnly = false,
 }: {
   pages?: Page[]
+  cloudSubject?: string
   initialQuery?: string
   onOpen?: (id: string) => void
   onOpenCloud?: (id: string) => void
@@ -67,39 +70,79 @@ export function SearchDialog({
   const [query, setQuery] = useState(initialQuery)
   const [highlight, setHighlight] = useState(0)
   const [cloud, setCloud] = useState(!pages)
-  const [remote, setRemote] = useState<{ query: string; pages: CloudSearchResult[] | null }>()
+  const [remote, setRemote] = useState<{
+    subject?: string; query: string; pages: CloudSearchResult[] | null; denied?: boolean; inaccessible?: string[]
+  }>()
+  const [cachedCloud, setCachedCloud] = useState<{ subject: string; pages: Page[] }>()
   const term = query.trim()
   const input = useRef<HTMLInputElement>(null)
   const row = useRef<HTMLButtonElement>(null)
-  const loading = cloud && remote?.query !== term
-  const failed = cloud && !loading && remote?.pages === null
-  const results = cloud ? loading ? [] : remote?.pages ?? []
-    : pages ? workspaceSearch(pages).query(query, term ? 15 : 8, titleOnly).map(({ page, context }) => ({
-      id: page.id, title: page.title, context,
-    })) : []
+  const currentRemote = remote?.subject === cloudSubject ? remote : undefined
+  const loading = cloud && currentRemote?.query !== term
+  const failed = cloud && !loading && currentRemote?.pages === null
+  const indexedPages = cloud
+    ? !currentRemote?.denied && cachedCloud?.subject === cloudSubject ? cachedCloud?.pages : undefined
+    : pages
+  const immediate = useMemo(() => indexedPages
+    ? workspaceSearch(indexedPages).query(query, term ? 15 : 8, titleOnly).map(({ page, context }) => ({
+      id: page.id, title: page.title, context: context ?? null,
+    })) : [], [indexedPages, query, term, titleOnly])
+  const copyIds = cloud ? immediate.map(({ id }) => id).join(',') : ''
+  const verified = cloud && !loading ? currentRemote?.pages : undefined
+  const candidates = verified?.length ? [...new Map([...immediate, ...verified].map(match => [match.id, match])).values()] : immediate
+  const inaccessible = cloud ? currentRemote?.inaccessible : undefined
+  const results = inaccessible?.length ? candidates.filter(match => !inaccessible.includes(match.id)) : candidates
   const selected = Math.min(highlight, results.length - 1)
   const open = cloud ? onOpenCloud : onOpen
+
+  useEffect(() => {
+    if (!cloud || !cloudSubject) return
+    let version = 0
+    function refresh(subject: string) {
+      const revision = ++version
+      void readCloudSearchPages(subject).then(pages => {
+        if (revision === version) setCachedCloud({ subject, pages })
+      }).catch(() => undefined)
+    }
+    const unsubscribe = subscribeCloudSearchPages(cloudSubject, () => refresh(cloudSubject))
+    refresh(cloudSubject)
+    return () => { version++; unsubscribe() }
+  }, [cloud, cloudSubject])
 
   useEffect(() => {
     if (!cloud) return
     const request = new AbortController()
     const timer = setTimeout(async () => {
       try {
-        const reply = await fetch('/api/search?' + new URLSearchParams({ q: term }), {
+        const reply = await fetch('/api/search?' + new URLSearchParams({ q: term, ...(copyIds ? { copies: copyIds } : {}) }), {
           cache: 'no-store', signal: AbortSignal.any([request.signal, AbortSignal.timeout(8000)]),
         })
+        if (reply.status === 401 || reply.status === 403) {
+          if (!request.signal.aborted) setRemote({ subject: cloudSubject, query: term, pages: null, denied: true })
+          return
+        }
         if (!reply.ok) throw new Error('Search failed.')
-        const { pages }: { pages: CloudSearchResult[] } = await reply.json()
-        if (!request.signal.aborted) setRemote({ query: term, pages })
+        const { pages, copies }: { pages: CloudSearchResult[]; copies?: string[] } = await reply.json()
+        if (request.signal.aborted) return
+        const inaccessible = copies ? copyIds.split(',').filter(id => id && !copies.includes(id)) : []
+        setRemote(previous => ({
+          subject: cloudSubject, query: term, pages,
+          inaccessible: [...new Set([...(previous?.subject === cloudSubject ? previous?.inaccessible ?? [] : []), ...inaccessible])],
+        }))
+        if (cloudSubject) for (const id of inaccessible) void forgetCloudSearchPage(cloudSubject, id).catch(() => undefined)
       } catch {
-        if (!request.signal.aborted) setRemote({ query: term, pages: null })
+        if (!request.signal.aborted) setRemote(previous => ({
+          subject: cloudSubject, query: term, pages: null,
+          denied: previous?.subject === cloudSubject && previous?.denied,
+          inaccessible: previous?.subject === cloudSubject ? previous?.inaccessible : undefined,
+        }))
       }
     }, term ? 100 : 0)
     return () => {
       clearTimeout(timer)
       request.abort()
     }
-  }, [term, cloud])
+  }, [term, cloud, cloudSubject, copyIds])
 
   useEffect(() => {
     row.current?.scrollIntoView({ block: 'nearest' })
@@ -162,7 +205,7 @@ export function SearchDialog({
       </div>}
       <div className="search-results">
         <p className="section-label">{query.trim() ? t('results') : t('recentPages')}</p>
-        <div id={resultsId} role="listbox" aria-label={t('matchingPages')} aria-busy={loading}>
+        <div id={resultsId} role="listbox" aria-label={t('matchingPages')} aria-busy={loading && results.length === 0}>
         {results.map(({ id, title, context }, index) => {
           const ancestors = !cloud && pages ? pagePath(pages, id).slice(0, -1) : []
           return (
@@ -192,6 +235,7 @@ export function SearchDialog({
         {results.length === 0 && <p className="dialog-empty" role="status">
           {t(loading ? 'searchLoading' : failed ? 'searchUnavailable' : 'noResults')}
         </p>}
+        {failed && results.length > 0 && <p className="dialog-empty" role="status">{t('searchLocalCloudCopies')}</p>}
       </div>
       <div className="search-help">
         <span><kbd>↑</kbd><kbd>↓</kbd> {t('navigate')}</span>

@@ -23,6 +23,7 @@ export default function WebWorkspace({ storageScope, cloudEnabled, signedIn, mir
   const settings = useTranslations('settings')
   const [open, setOpen] = useState(false)
   return <><WorkspaceApp storageScope={storageScope} mirrorEnabled={mirrorEnabled} automaticMirror={automaticMirror}
+    cloudSearchSubject={profile?.subject}
     openCloudPage={signedIn ? id => router.push('/page/' + id) : undefined}
     sidebarControls={<>
       <LocaleSwitcher />

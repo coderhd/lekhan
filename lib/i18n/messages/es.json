@@ -69,6 +69,7 @@
     "externalReload": "Al abrir la copia guardada, se perderán los cambios sin guardar. Expórtalos primero para conservarlos."
   },
   "app-shell": {
+    "searchLocalCloudCopies": "La búsqueda en la nube no está disponible. Se muestran las copias de este dispositivo.",
     "showMorePages": "Mostrar más páginas",
     "showMoreFavorites": "Mostrar más favoritos",
     "showMoreBacklinks": "Mostrar más enlaces entrantes",

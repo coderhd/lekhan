@@ -68,7 +68,7 @@ function restoreListFocus(button: HTMLButtonElement, list: Element | null, rows:
 }
 
 export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled = false, automaticMirror = false,
-  sidebarControls, openCloudPage, storage, workspaceName, pageAttachments, localModel, localModels, providerTransport }: {
+  sidebarControls, openCloudPage, storage, workspaceName, pageAttachments, localModel, localModels, providerTransport, cloudSearchSubject }: {
   storageScope?: string; mirrorEnabled?: boolean; automaticMirror?: boolean
   sidebarControls?: ReactNode | ((canSwitch: boolean) => ReactNode); openCloudPage?: (id: string) => void
   storage?: WorkspaceStorage; workspaceName?: string
@@ -76,6 +76,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
   localModel?: LocalAssistantModel
   localModels?: readonly LocalAssistantModel[]
   providerTransport?: ProviderTransport
+  cloudSearchSubject?: string
 }) {
   const t = useTranslations('app-shell')
   const desktopText = useTranslations('desktop')
@@ -803,7 +804,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
       {vaultOpen && <VaultImportDialog onClose={() => setVaultOpen(false)} onImport={importVault} saveStatus={status} />}
       {shortcutsOpen && <WorkspaceShortcutHelp onClose={() => setShortcutsOpen(false)} />}
       {switcherOpen && <SearchDialog titleOnly pages={pages} onOpen={open} onClose={() => setSwitcherOpen(false)} />}
-      {searchOpen && <SearchDialog pages={pages} initialQuery={searchQuery} onOpen={open}
+      {searchOpen && <SearchDialog pages={pages} initialQuery={searchQuery} onOpen={open} cloudSubject={cloudSearchSubject}
         onOpenCloud={openCloudPage ? id => {
           setSearchOpen(false)
           setSearchQuery('')

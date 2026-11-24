@@ -69,6 +69,7 @@
     "externalReload": "Opening the saved copy discards unsaved edits. Export them first to keep a copy."
   },
   "app-shell": {
+    "searchLocalCloudCopies": "Cloud search is unavailable. Showing copies on this device.",
     "showMorePages": "Show more pages",
     "showMoreFavorites": "Show more favorites",
     "showMoreBacklinks": "Show more backlinks",

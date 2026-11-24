@@ -30,7 +30,7 @@ export default async function CloudWorkspace({ searchParams }: {
         <div className="cloud-header-actions">
           <Link className="account-link" href="/settings">{settings('title')}</Link>
           <Link className="account-link" href="/workspace">Local workspace</Link>
-          <CloudSearch />
+          <CloudSearch subject={account.subject} />
         </div>
       </header>
       <section className="cloud-library" aria-labelledby="cloud-heading">
