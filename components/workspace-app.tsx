@@ -363,9 +363,9 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
     return report
   }
 
-  function exportAll() {
+  async function exportAll() {
     try {
-      downloadWorkspace(pages)
+      await downloadWorkspace(pages)
       setNotice(t('exportStarted'))
     } catch {
       setNotice(t('exportFailed'))

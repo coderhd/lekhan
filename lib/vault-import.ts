@@ -1,5 +1,6 @@
 import { strFromU8 } from 'fflate'
 import { parseDocument } from 'yaml'
+import { readWorkspaceArchiveMetadata, workspaceManifestPath, type ArchivedNote } from './archive-metadata'
 import { splitYamlFrontmatter } from './markdown'
 import { fromMarkdownFile } from './workspace'
 import type { VaultContents } from './vault-reader'
@@ -18,6 +19,7 @@ export interface VaultImportPlan {
   directories: string[]
   images: Map<string, string>
   invalidProperties: number
+  workspaceArchive?: true
 }
 
 export interface ImportReport {
@@ -51,10 +53,11 @@ function digest(data: Uint8Array<ArrayBuffer>) {
   )
 }
 
-export function markdownNote(path: string, source: string): ImportNote & { invalidProperties?: boolean } {
+export function markdownNote(path: string, source: string, exported?: ArchivedNote): ImportNote & { invalidProperties?: boolean } {
   const metadata = splitYamlFrontmatter(source)
-  if (!metadata) return { sourcePath: path, ...fromMarkdownFile(path, source) }
-  if (metadata.raw.length > 256_000) return { sourcePath: path, ...fromMarkdownFile(path, source), invalidProperties: true }
+  const read = (body: string) => fromMarkdownFile(path, body, exported?.title, exported?.generatedHeading)
+  if (!metadata) return { sourcePath: path, ...read(source) }
+  if (metadata.raw.length > 256_000) return { sourcePath: path, ...read(source), invalidProperties: true }
 
   try {
     const document = parseDocument(metadata.yaml, { uniqueKeys: true })
@@ -62,12 +65,12 @@ export function markdownNote(path: string, source: string): ImportNote & { inval
     // Disallow YAML aliases in imported metadata to avoid cycles and expansion.
     const properties: unknown = document.toJS({ maxAliasCount: 0 })
     if (properties === null || typeof properties !== 'object' || Array.isArray(properties)) throw new Error('Expected a property map')
-    const imported = fromMarkdownFile(path, metadata.body)
-    const title = 'title' in properties && typeof properties.title === 'string' && properties.title.trim()
-      ? properties.title : imported.title
+    const imported = read(metadata.body)
+    const title = exported?.title ?? ('title' in properties && typeof properties.title === 'string' && properties.title.trim()
+      ? properties.title : imported.title)
     return { sourcePath: path, title, markdown: imported.markdown, properties: properties as Record<string, unknown>, frontmatter: metadata.raw }
   } catch {
-    return { sourcePath: path, ...fromMarkdownFile(path, source), invalidProperties: true }
+    return { sourcePath: path, ...read(source), invalidProperties: true }
   }
 }
 
@@ -75,20 +78,27 @@ export async function planVaultImport(contents: VaultContents): Promise<VaultImp
   const notes: ImportNote[] = []
   const images = new Map<string, string>()
   const files = [...contents.files].sort((left, right) => left.path < right.path ? -1 : Number(left.path !== right.path))
+  const manifest = files.find(file => file.path === workspaceManifestPath)
+  const archive = manifest && readWorkspaceArchiveMetadata(decoder.decode(manifest.data))
   const directories = new Set(contents.directories)
   if (!files.some(file => /\.(md|markdown)$/i.test(file.path))) throw new Error('No Markdown notes found in this vault.')
 
   let invalidProperties = 0
   const fingerprints = []
   for (const file of files) {
+    if (file.path === workspaceManifestPath) {
+      if (archive) fingerprints.push([file.path, await digest(new Uint8Array(file.data))])
+      continue
+    }
     const isMarkdown = /\.(md|markdown)$/i.test(file.path)
     if (isMarkdown) {
-      const { invalidProperties: invalid, ...note } = markdownNote(file.path, decoder.decode(file.data))
+      const exported = archive && Object.hasOwn(archive.notes, file.path) ? archive.notes[file.path] : undefined
+      const { invalidProperties: invalid, ...note } = markdownNote(file.path, decoder.decode(file.data), exported)
       if (invalid) invalidProperties++
       notes.push(note)
       const segments = file.path.split('/')
       for (let depth = 1; depth < segments.length; depth++) directories.add(segments.slice(0, depth).join('/'))
-      if (notes.length + directories.size > 2000) throw new Error('A vault import can contain at most 2,000 pages and folders.')
+      if (notes.length > 2000 || (!archive && notes.length + directories.size > 2000)) throw new Error('A vault import can contain at most 2,000 pages and folders.')
     } else {
       const mime = rasterMime(file.data)
       if (!mime) continue
@@ -97,11 +107,20 @@ export async function planVaultImport(contents: VaultContents): Promise<VaultImp
     fingerprints.push([file.path, await digest(new Uint8Array(file.data))])
   }
 
+  if (archive && !notes.some(note => note.sourcePath.startsWith(archive.attachments + '/'))) {
+    directories.delete(archive.attachments)
+  }
+  if (archive) {
+    const notePaths = new Set(notes.map(note => note.sourcePath.replace(/\.md$/i, '')))
+    const folders = [...directories].filter(directory => !notePaths.has(directory))
+    if (notes.length + folders.length > 2000) throw new Error('A vault import can contain at most 2,000 pages and folders.')
+  }
   return {
     fingerprint: await digest(encoder.encode(JSON.stringify([[...directories].sort(), fingerprints]))),
     notes,
     directories: [...directories].sort(),
     images,
     invalidProperties,
+    ...(archive ? { workspaceArchive: true } : {}),
   }
 }

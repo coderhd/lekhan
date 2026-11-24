@@ -1,9 +1,11 @@
 import { lexer, type Token, type Tokens } from 'marked'
+import { stringify } from 'yaml'
 import type { Page, PageChoice, Workspace } from './types'
 import { wikiLinks } from './markdown-references'
+import { mapMarkdownDestinations } from './markdown-destinations'
 export { searchPages } from './workspace-search'
 import { hasYamlFrontmatter } from './markdown'
-import type { ImportReport, VaultImportPlan } from './vault-import'
+import type { ImportNote, ImportReport, VaultImportPlan } from './vault-import'
 
 type PageInput = Partial<Pick<Page, 'title' | 'parentId' | 'markdown' | 'frontmatter' | 'properties'>>
 type PagePatch = PageInput & Partial<Pick<Page, 'favorite'>>
@@ -218,14 +220,23 @@ export function applyVaultImport(workspace: Workspace, plan: VaultImportPlan): {
   const pages = [...workspace.pages]
   const folders = new Map<string, string>()
   const directoryOf = (path: string) => path.split('/').slice(0, -1).join('/')
+  const folderNotes = new Map<string, ImportNote>()
+  if (plan.workspaceArchive) {
+    for (const note of plan.notes) folderNotes.set(note.sourcePath.replace(/\.md$/i, ''), note)
+  }
+  const mergedFolders = new Map<string, Page>()
   for (const folder of plan.directories) {
+    const note = folderNotes.get(folder)
     const title = folder.split('/').at(-1) ?? folder
-    const created = newPage(pages, { title }, folders.get(directoryOf(folder)) ?? null, now)
+    const created = newPage(pages, note ?? { title }, folders.get(directoryOf(folder)) ?? null, now)
+    if (note) mergedFolders.set(note.sourcePath, created)
     pages.push(created)
     folders.set(folder, created.id)
   }
 
   const importedNotes = plan.notes.map(note => {
+    const merged = mergedFolders.get(note.sourcePath)
+    if (merged) return { note, page: merged }
     const page = newPage(pages, note, folders.get(directoryOf(note.sourcePath)) ?? null, now)
     pages.push(page)
     return { note, page }
@@ -237,7 +248,7 @@ export function applyVaultImport(workspace: Workspace, plan: VaultImportPlan): {
   const images = new Map([...plan.images].map(([path, data]) => [normalize(path), data]))
   const usedImages = new Set<string>()
   const report: ImportReport = {
-    notes: importedNotes.length, folders: folders.size, images: 0,
+    notes: importedNotes.length, folders: folders.size - mergedFolders.size, images: 0,
     resolved: 0, unresolved: 0, degraded: 0, invalidProperties: plan.invalidProperties,
   }
   let outputSize = 0
@@ -255,18 +266,32 @@ export function applyVaultImport(workspace: Workspace, plan: VaultImportPlan): {
         const width = /^\d{1,4}(?:x\d{1,4})?$/.test(link.alias ?? '') ? ' "lekhan-size:' + link.alias + '"' : ''
         body += '![' + label + '](' + picture + width + ')'
       } else {
-        if (link.embed) report.degraded++
-        const target = findVaultTarget(notePaths, pathWithoutExtension(path), note.sourcePath)
+        if (link.embed && !plan.workspaceArchive) report.degraded++
+        const target = (plan.workspaceArchive ? notePaths.get(pathWithoutExtension(path)) : undefined)
+          ?? findVaultTarget(notePaths, pathWithoutExtension(path), note.sourcePath)
           ?? resolveTarget(link.target, page.id)
         if (target) report.resolved++
         else report.unresolved++
         const parsedTarget = target && path ? canonicalPath(target, true) + anchor : link.target
-        body += '[[' + parsedTarget + (link.alias === undefined ? '' : '|' + link.alias) + ']]'
+        if (plan.workspaceArchive && !target) body += note.markdown.slice(link.start, link.end)
+        else body += (link.embed && plan.workspaceArchive ? '!' : '') + '[[' + parsedTarget
+          + (link.alias === undefined ? '' : '|' + link.alias) + ']]'
       }
       if (outputSize + body.length > 140_000_000) throw new Error('Embedded images make this vault too large to import.')
       cursor = link.end
     }
     page.markdown = body + note.markdown.slice(cursor)
+    if (plan.workspaceArchive && plan.images.size) {
+      page.markdown = mapMarkdownDestinations(page.markdown, target => {
+        if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(target)) return
+        let path: string
+        try { path = decodeURIComponent(target) }
+        catch { return }
+        const image = findVaultTarget(images, path, note.sourcePath)
+        if (image) usedImages.add(image)
+        return image
+      })
+    }
     outputSize += page.markdown.length
     if (outputSize > 140_000_000) throw new Error('Embedded images make this vault too large to import.')
   }
@@ -369,17 +394,24 @@ export function pageHeadings(markdown: string) {
     })
 }
 
-export function fromMarkdownFile(filename: string, source: string) {
+export function fromMarkdownFile(filename: string, source: string, exportedTitle?: string, stripTitle = true) {
   const basename = filename.split(/[/\\]/).at(-1) ?? ''
-  const title = cleanTitle(basename.replace(/\.(?:md|markdown|mdown|txt)$/i, ''))
+  const title = exportedTitle ?? cleanTitle(basename.replace(/\.(?:md|markdown|mdown|txt)$/i, ''))
   const heading = /^\uFEFF?#\s+([^\r\n]+)\r?\n(?:\r?\n)?/.exec(source)
   return {
     title,
-    markdown: heading && normalize(heading[1]) === normalize(title) ? source.slice(heading[0].length) : source,
+    markdown: stripTitle && heading && normalize(heading[1]) === normalize(title) ? source.slice(heading[0].length) : source,
   }
 }
 
 export function exportPage(page: Page) {
-  if (page.frontmatter) return page.frontmatter + page.markdown
-  return hasYamlFrontmatter(page.markdown) ? page.markdown : `# ${page.title}\n\n${page.markdown}`
+  if (page.frontmatter) {
+    const separator = page.markdown && !page.frontmatter.endsWith('\n') ? '\n' : ''
+    return page.frontmatter + separator + page.markdown
+  }
+  if (hasYamlFrontmatter(page.markdown)) return page.markdown
+  if (page.properties && Object.keys(page.properties).length) {
+    return `---\n${stringify(page.properties)}---\n${page.markdown}`
+  }
+  return `# ${page.title}\n\n${page.markdown}`
 }

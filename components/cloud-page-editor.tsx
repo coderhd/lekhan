@@ -169,6 +169,7 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
           downloadPage({
             id: page.id, parentId: page.parent_id, title: page.title, markdown: source ?? markdown ?? '',
             ...(typeof raw === 'string' ? { frontmatter: raw } : {}),
+            ...(page.properties ? { properties: page.properties } : {}),
             favorite: false, createdAt: page.updated_at, updatedAt: page.updated_at,
           })
         }}><Download size={15} /> Export page</button>}

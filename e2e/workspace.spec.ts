@@ -160,7 +160,7 @@ test('shows formatted headings in the outline and follows their wikilink anchors
   })).toBe(true)
 })
 
-test('imports an Obsidian ZIP with nested pages, properties, callouts and local images', async ({ page }) => {
+test('round-trips a vault with nested pages, properties, callouts and local images', async ({ page, browser }) => {
   await page.goto('/workspace')
   await expect(page.getByRole('status')).toHaveText('Saved locally')
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jQ1sAAAAASUVORK5CYII=', 'base64')
@@ -188,6 +188,36 @@ test('imports an Obsidian ZIP with nested pages, properties, callouts and local 
   await expect(palette.getByRole('combobox')).toHaveValue('#fieldwork')
   await expect(palette.getByRole('option', { name: /Field notes.*#fieldwork/ })).toBeVisible()
   await expect(page.getByRole('button', { name: 'config', exact: true })).toHaveCount(0)
+
+  await page.keyboard.press('Escape')
+  const exported = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export', exact: true }).click()
+  const bytes = await readFile(await (await exported).path())
+  const files = unzipSync(bytes)
+  expect(Buffer.from(files['Attachments/image-1.png'])).toEqual(png)
+  expect(strFromU8(files['Vault/Index.md'])).toContain('![stamp.png](../Attachments/image-1.png)')
+
+  const restored = await browser.newPage()
+  try {
+    await restored.goto(new URL('/workspace', page.url()).href)
+    await restored.getByRole('button', { name: 'Import vault' }).click()
+    const importDialog = restored.getByRole('dialog', { name: 'Import an Obsidian vault' })
+    await importDialog.locator('input[type=file]').first().setInputFiles({
+      name: 'Lekhan workspace.zip', mimeType: 'application/zip', buffer: bytes,
+    })
+    await expect(importDialog.getByRole('status')).toHaveText('Import saved locally')
+    await importDialog.getByRole('button', { name: 'Open workspace' }).click()
+    await restored.getByRole('button', { name: 'Index', exact: true }).click()
+    await expect(restored.locator('aside[data-vault-callout=note]')).toContainText('Read this first')
+    await expect(restored.getByRole('img', { name: 'stamp.png' })).toBeVisible()
+    await restored.getByRole('link', { name: 'the field notes' }).click()
+    await expect(restored.getByRole('textbox', { name: 'Page title' })).toHaveValue('Field notes')
+    await expect(restored.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Guide')
+    await expect(restored.getByRole('complementary', { name: 'Page context' })).toContainText('fieldwork')
+    await expect(restored.getByRole('button', { name: 'Attachments', exact: true })).toHaveCount(0)
+  } finally {
+    await restored.close()
+  }
 })
 
 test('keeps the selected workspace language across reload', async ({ page }) => {

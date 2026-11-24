@@ -1,4 +1,5 @@
 import { Inflate, strFromU8 } from 'fflate'
+import { workspaceManifestPath } from './archive-metadata'
 
 export type VaultEntry = { path: string; data: Uint8Array }
 export type VaultContents = { files: VaultEntry[]; directories: string[] }
@@ -36,6 +37,7 @@ function skipDirectory(segments: string[]) {
 
 function isVaultFile(segments: string[]) {
   const name = segments.at(-1) ?? ''
+  if (segments.length === 1 && name === workspaceManifestPath) return true
   return !name.startsWith('.') &&
     !skipDirectory(segments.slice(0, -1)) &&
     (MARKDOWN_EXTENSION.test(name) || IMAGE_EXTENSION.test(name))

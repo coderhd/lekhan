@@ -16,6 +16,8 @@ Sign in, open **Cloud workspace**, and choose **Import files**. Select Markdown 
 ## Export
 
 - From a local or cloud page, use the page’s **Export Markdown** or **Export page** action to download a Markdown file.
-- In the local sidebar, choose **Export** to download a ZIP of Markdown files arranged by page hierarchy.
+- In the local sidebar, choose **Export** to download a ZIP of Markdown files arranged by page hierarchy. Embedded raster images go in an attachments folder, and resolved wikilinks point to the filenames in the ZIP.
+
+Extract the ZIP to open it as a vault in Obsidian. To restore the workspace in Lekhan, choose **Import vault** and select the original ZIP. Keep its hidden `.lekhan-workspace.json` file if you unpack and repackage it. Lekhan uses that file to recover page titles and match each parent note to its child folder. Vault imports accept up to 2,000 pages and folders, with 100 MB unpacked and 10 MB per file.
 
 Markdown source keeps syntax the visual editor cannot represent. When source mode is available, work there to preserve that syntax, and check the exported copy in the destination app. [Import an Obsidian vault](/docs/getting-started/obsidian-import) · [Local and cloud workspaces](/docs/concepts/workspaces)
