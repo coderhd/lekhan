@@ -32,6 +32,7 @@ const verifiedModels: ModelCard[] = [
   { verifiedDate: checked, ...sarvam, model: 'gemma4', label: 'Gemma 4', contextTokens: 262_144, capabilities: multilingual },
   { verifiedDate: checked, ...anthropic, model: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', contextTokens: 1_000_000, capabilities: multilingual },
   { verifiedDate: checked, ...anthropic, model: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', contextTokens: 1_000_000, capabilities: multilingual },
+  { verifiedDate: checked, access: 'byok', provider: 'mistral', model: 'mistral-small-2603', label: 'Mistral Small 4', contextTokens: 256_000, capabilities: multilingual, sourceUrl: 'https://docs.mistral.ai/models/mistral-small-4-0-26-03' },
 ]
 
 export const AI_REGISTRY: AIRegistryState = {

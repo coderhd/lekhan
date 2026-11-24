@@ -86,7 +86,7 @@ test('filters provider presets and uses a preset without replacing a saved conne
   await page.getByRole('button', { name: 'Unlock', exact: true }).click()
   await page.getByRole('button', { name: /Ollama fixture-local/ }).click()
   await page.getByText('Browse model presets', { exact: true }).click()
-  await expect(page.getByText('21 models', { exact: true })).toBeVisible()
+  await expect(page.getByText('22 models', { exact: true })).toBeVisible()
   await page.getByRole('combobox', { name: 'Languages', exact: true }).selectOption('indic')
   await expect(page.getByText('2 models', { exact: true })).toBeVisible()
   await page.getByRole('combobox', { name: 'Languages', exact: true }).selectOption('')

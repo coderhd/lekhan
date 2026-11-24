@@ -124,7 +124,7 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
   const fallbackStatus = fallbackModel && <p className="assistant-hint" role="status">
     {text(busy ? 'tryingFallback' : error ? 'failedFallback' : 'usedFallback', { model: fallbackModel })}
   </p>
-  const dialogTitle = editorRequest ? text(editorRequest.action) : 'Writing assistant'
+  const dialogTitle = editorRequest ? text(editorRequest.action) : text('writingAssistant')
 
   const remote = typeof accountVault === 'object' ? accountVault : null
   const openingFromAccount = !importedVault && !!remote && (!envelope || restoreAccount)
@@ -249,8 +249,8 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
     void run(async signal => {
       const endpoint = endpointFor(draft)
       const config = { ...draft, model: draft.model.trim(), apiKey: draft.apiKey?.trim() || undefined }
-      if (!config.model) throw new Error('Choose a model to save.')
-      if (definition.requiresKey && !config.apiKey) throw new Error('Add your API key to save this connection.')
+      if (!config.model) throw new Error(text('missingModelForSave'))
+      if (definition.requiresKey && !config.apiKey) throw new Error(text('missingKeyForSave'))
       const existing = configs.some(item => item.id === config.id)
       await persist(existing ? configs.map(item => item.id === config.id ? config : item) : [...configs, config], config.id, signal)
       if (!existing) {
@@ -260,7 +260,7 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
       }
       setDraft(settingsPanel === 'models' ? newDraftFor(connectionKind) : newConnection())
       setModels([])
-      setFeedback('Connection saved.')
+      setFeedback(text('connectionSaved'))
     })
   }
 
@@ -446,22 +446,22 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
 
   const content = <div className={settingsPanel ? 'form-dialog embedded-assistant' : 'form-dialog'}>
         {!settingsPanel && <h2>{dialogTitle}</h2>}
-        {!settingsPanel && (vault || installed.length > 0) && <div className="assistant-navigation" role="group" aria-label="Assistant view">
+        {!settingsPanel && (vault || installed.length > 0) && <div className="assistant-navigation" role="group" aria-label={text('assistantView')}>
           {installed.length > 0 && <button className="secondary-button" disabled={busy} aria-pressed={tab === 'local'} onClick={() => openTab('local')}>{desktopText('onThisDevice')}</button>}
-          {vault && <button className="secondary-button" disabled={busy} aria-pressed={tab === 'chat'} onClick={() => openTab('chat')}>{editorRequest ? text('providerModels') : 'Ask'}</button>}
-          <button className="secondary-button" disabled={busy} aria-pressed={tab === 'providers'} onClick={() => openTab('providers')}>Providers</button>
+          {vault && <button className="secondary-button" disabled={busy} aria-pressed={tab === 'chat'} onClick={() => openTab('chat')}>{editorRequest ? text('providerModels') : text('assistantAsk')}</button>}
+          <button className="secondary-button" disabled={busy} aria-pressed={tab === 'providers'} onClick={() => openTab('providers')}>{text('assistantProviders')}</button>
         </div>}
         {!vault && tab !== 'local' ? (
           <form className="assistant-form" onSubmit={openVault}>
             <p>{importedVault ? text('vaultImportHint') : openingFromAccount ? text(restoreAccount ? 'vaultReplaceDevice' : 'vaultUnlockAccount')
-              : envelope ? 'Unlock the connections saved on this device.' : 'Create a passphrase to encrypt your provider connections on this device.'}</p>
-            <label>Passphrase
+              : text(envelope ? 'unlockDeviceHint' : 'createVaultHint')}</p>
+            <label>{text('vaultPassphrase')}
               <input type="password" autoComplete={unlockEnvelope ? 'current-password' : 'new-password'} minLength={12} value={passphrase} onChange={event => setPassphrase(event.target.value)} required />
             </label>
             <div className="assistant-actions">
               <button className="primary-button" disabled={busy || (!!account && !envelope && !importedVault && accountVault === undefined)}>
                 <LockKeyhole size={15} /> {importedVault ? text('vaultUnlockFile') : openingFromAccount ? text(restoreAccount ? 'vaultUnlockReplace' : 'vaultUnlockRestore')
-                  : envelope ? 'Unlock' : 'Create provider vault'}
+                  : text(envelope ? 'vaultUnlockDevice' : 'createVault')}
               </button>
               {(restoreAccount || importedVault) && <button className="secondary-button" type="button" disabled={busy}
                 onClick={() => { setRestoreAccount(false); setImportedVault(undefined); setPassphrase(''); setError('') }}>{text('vaultKeepDevice')}</button>}
@@ -510,7 +510,7 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
                       setModels([])
                       setConnectionKind(providerConnectionKind(config))
                     }}>{config.label || PROVIDERS[config.provider].label} <small>{config.model}</small></button>
-                    <button className="icon-button" title="Remove connection" aria-label={'Remove ' + (config.label || config.model)} disabled={busy} onClick={() => {
+                    <button className="icon-button" title={text('removeConnection')} aria-label={text('removeNamedConnection', { name: config.label || config.model })} disabled={busy} onClick={() => {
                       const routeId = 'provider:' + config.id
                       const next = configs.filter(item => item.id !== config.id).map(item => item.fallback?.includes(routeId)
                         ? { ...item, fallback: item.fallback.filter(id => id !== routeId) } : item)
@@ -529,39 +529,39 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
                   else keyInput.current?.focus()
                 }} />}
                 <form className="assistant-form" onSubmit={saveProvider}>
-                  <h3>{configs.some(item => item.id === draft.id) ? 'Edit connection' : 'Add a connection'}</h3>
+                  <h3>{text(configs.some(item => item.id === draft.id) ? 'editConnection' : 'addConnection')}</h3>
                   {settingsPanel === 'models' && <div className="assistant-navigation" role="group" aria-label={settingsText('connectionTypes')}>
                     {connectionKinds.map(kind => <button key={kind} className="secondary-button" type="button" disabled={busy}
                       aria-pressed={connectionKind === kind} onClick={() => chooseConnectionKind(kind)}>{settingsText('connection_' + kind)}</button>)}
                   </div>}
-                  {(!settingsPanel || connectionKind === 'free') && <><label>Free-key presets
-                    <select value="" disabled={busy} onChange={event => {
+                  {(!settingsPanel || connectionKind === 'free') && <><label>{text('freeKeyPresets')}
+                    <select value={FREE_PRESETS.find(item => item.provider === draft.provider && item.model === draft.model)?.model ?? ''} disabled={busy} onChange={event => {
                       const preset = FREE_PRESETS.find(item => item.model === event.target.value)
                       if (preset) setProvider(preset.provider, preset.model)
                     }}>
-                      <option value="">Choose a preset</option>
+                      <option value="" disabled>{text('choosePreset')}</option>
                       {FREE_PRESETS.map(preset => <option key={preset.model} value={preset.model}>{preset.label}</option>)}
                     </select>
                   </label>
-                  <p className="assistant-hint">Your provider sets free-model availability, speed, and quota.</p></>}
-                  {(!settingsPanel || connectionKind !== 'free') && <label>Provider
+                  <p className="assistant-hint">{text('freeKeyHint')}</p></>}
+                  {(!settingsPanel || connectionKind !== 'free') && <label>{text('providerName')}
                     <select value={draft.provider} disabled={busy} onChange={event => setProvider(event.target.value as ProviderId)}>
                       {(Object.keys(PROVIDERS) as ProviderId[]).filter(id => !settingsPanel ||
                         Boolean(providerDefinition(id).local) === (connectionKind === 'local'))
                         .map(id => <option key={id} value={id}>{PROVIDERS[id].label}</option>)}
                     </select>
                   </label>}
-                  {allowsProviderEndpoint(draft.provider) && <label>API endpoint
+                  {allowsProviderEndpoint(draft.provider) && <label>{text('apiEndpoint')}
                     <input type="url" value={draft.baseUrl ?? ''} placeholder={definition.baseUrl ?? 'https://'} disabled={busy} onChange={event => setDraft({ ...draft, baseUrl: event.target.value })} />
                   </label>}
-                  <label>Model ID
-                    <input ref={modelInput} list="assistant-discovered-models" value={draft.model} placeholder="Enter a model ID" disabled={busy} onChange={event => setDraft({ ...draft, model: event.target.value })} />
+                  <label>{text('modelId')}
+                    <input ref={modelInput} list="assistant-discovered-models" value={draft.model} placeholder={text('modelIdPlaceholder')} disabled={busy} onChange={event => setDraft({ ...draft, model: event.target.value })} />
                     <datalist id="assistant-discovered-models">{models.map(model => <option key={model} value={model} />)}</datalist>
                   </label>
-                  <label>{definition.local ? text('optionalLocalKey') : 'API key'}
+                  <label>{definition.local ? text('optionalLocalKey') : text('apiKey')}
                     <input ref={keyInput} type="password" autoComplete="off" value={draft.apiKey ?? ''} disabled={busy} onChange={event => setDraft({ ...draft, apiKey: event.target.value })} />
                   </label>
-                  {definition.signupUrl && <a className="assistant-provider-link" href={definition.signupUrl} target="_blank" rel="noopener noreferrer">Get a {definition.label} key <ArrowUpRight size={14} /></a>}
+                  {definition.signupUrl && <a className="assistant-provider-link" href={definition.signupUrl} target="_blank" rel="noopener noreferrer">{text('getProviderKey', { provider: definition.label })} <ArrowUpRight size={14} /></a>}
                   <FallbackModelSettings routes={allRoutes.filter(route => route.id !== 'provider:' + draft.id)}
                     chain={draft.fallback ?? []} disabled={busy} onChange={fallback => setDraft({ ...draft, fallback })} />
                   <div className="assistant-actions">
@@ -571,15 +571,15 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
                       setModels(result.models)
                       if (!draft.model && result.models[0]) setDraft({ ...draft, model: result.models[0] })
                       setTelemetry({ key: 'provider:' + draft.id, result: { elapsedMs: result.latencyMs } })
-                      setFeedback('Connected to ' + definition.label + '.')
-                    })}>Test connection</button>
+                      setFeedback(text('connectedToProvider', { provider: definition.label }))
+                    })}>{text('testConnection')}</button>
                     {(!settingsPanel || connectionKind === 'local') && <button type="button" className="secondary-button" disabled={busy} onClick={() => void run(async signal => {
                       const results = await probeLocalProviders({ signal, transport })
                       if (signal.aborted) return
                       setLocalProbes(results)
                       setFeedback(text('localDiscoveryComplete'))
                     })}>{text(localProbes ? 'rescanLocalModels' : 'findLocalModels')}</button>}
-                    <button className="primary-button" disabled={busy}><Plus size={15} /> Save connection</button>
+                    <button className="primary-button" disabled={busy}><Plus size={15} /> {text('saveConnection')}</button>
                   </div>
                   {localProbes && (!settingsPanel || connectionKind === 'local') && <LocalProviderDiscovery
                     results={localProbes} disabled={busy} native={!!transport} onSelect={(probe, model) => {
@@ -642,24 +642,24 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
                   telemetry={telemetry?.key === modelKey ? telemetry.result : undefined} />
                 {tab === 'local' && deviceModel && <p className="assistant-hint">{desktopText('localModelActive', { model: deviceModel.label })}</p>}
                 {fallbackStatus}
-                {messages.length > 0 && <ol className="assistant-thread" aria-label="Conversation">
+                {messages.length > 0 && <ol className="assistant-thread" aria-label={text('conversation')}>
                   {messages.map((message, index) => <li key={index} data-role={message.role}>
                     <p>{message.content}</p>
-                    {message.role === 'assistant' && <button className="secondary-button" type="button" onClick={() => { onInsert?.(message.content); onClose?.() }}>Insert in page</button>}
+                    {message.role === 'assistant' && <button className="secondary-button" type="button" onClick={() => { onInsert?.(message.content); onClose?.() }}>{text('insertInPage')}</button>}
                   </li>)}
                 </ol>}
                 {tab === 'local' && busy && !reply && <p className="assistant-hint" role="status">{desktopText('localModelPreparing')}</p>}
                 {reply && <p className="assistant-partial" role="status">{reply}</p>}
-                <label>Prompt
-                  <textarea value={prompt} maxLength={12_000} onChange={event => setPrompt(event.target.value)} rows={3} placeholder="What would you like help writing?" />
+                <label>{text('prompt')}
+                  <textarea value={prompt} maxLength={12_000} onChange={event => setPrompt(event.target.value)} rows={3} placeholder={text('promptPlaceholder')} />
                 </label>
-                <label className="assistant-share"><input type="checkbox" checked={sharePage} onChange={event => setSharePage(event.target.checked)} /> Include this page with my request</label>
-                {tab !== 'local' && selected && <p className="assistant-hint">Requests go directly to {PROVIDERS[selected.provider].label} using this connection.</p>}
+                <label className="assistant-share"><input type="checkbox" checked={sharePage} onChange={event => setSharePage(event.target.checked)} /> {text('shareCurrentPage')}</label>
+                {tab !== 'local' && selected && <p className="assistant-hint">{text('directRequest', { provider: PROVIDERS[selected.provider].label })}</p>}
                 {fallbackHint}
                 <div className="assistant-actions">
                   {busy
-                    ? <button type="button" className="secondary-button" onClick={stopReply}><Square size={14} /> Stop</button>
-                    : <button className="primary-button" disabled={!primary || !prompt.trim()}><Send size={15} /> Send</button>}
+                    ? <button type="button" className="secondary-button" onClick={stopReply}><Square size={14} /> {text('stop')}</button>
+                    : <button className="primary-button" disabled={!primary || !prompt.trim()}><Send size={15} /> {text('sendPrompt')}</button>}
                 </div>
               </form>
             )}

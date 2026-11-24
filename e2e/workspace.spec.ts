@@ -198,6 +198,12 @@ test('keeps the selected workspace language across reload', async ({ page }) => 
   await page.reload()
   await expect(page.locator('html')).toHaveAttribute('lang', 'es')
   await expect(page.getByRole('textbox', { name: 'Título de la página' })).toHaveValue('Field guide')
+  await page.getByRole('button', { name: 'Asistente de escritura' }).click()
+  const assistant = page.getByRole('dialog', { name: 'Asistente de escritura' })
+  await assistant.getByLabel('Frase de contraseña').fill('fixture spanish vault')
+  await assistant.getByRole('button', { name: 'Crear caja fuerte de proveedores' }).click()
+  await expect(assistant.getByRole('button', { name: 'Guardar conexión' })).toBeVisible()
+  await expect(assistant.getByRole('button', { name: 'Probar conexión' })).toBeVisible()
 })
 
 test('uses the workspace shortcuts while preserving modal and editor behavior', async ({ page }) => {

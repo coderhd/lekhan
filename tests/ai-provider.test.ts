@@ -37,6 +37,16 @@ describe('browser-direct inference', () => {
     expect(JSON.parse(String(qwenRequest?.body))).toMatchObject({ model: 'qwen-plus', stream: true })
   })
 
+  it('streams Mistral Small from Mistral Studio with the caller’s key', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      stream(['data: {"choices":[{"delta":{"content":"Salut"}}]}\n\n', 'data: [DONE]\n\n']))
+    vi.stubGlobal('fetch', fetch)
+    await expect(streamChat(config('mistral', { model: 'mistral-small-2603' }), { messages }))
+      .resolves.toMatchObject({ text: 'Salut' })
+    expect(String(fetch.mock.calls[0][0])).toBe('https://api.mistral.ai/v1/chat/completions')
+    expect(fetch.mock.calls[0][1]?.headers).toMatchObject({ Authorization: 'Bearer test-key' })
+  })
+
   it('streams split SSE events and returns the usage reported by OpenAI', async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(stream([
       ': heartbeat\r\nda', 'ta: {"choices":[{"delta":{"content":"Hi"}}]}\r\n\r\n',

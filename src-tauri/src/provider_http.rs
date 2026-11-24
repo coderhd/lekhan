@@ -144,6 +144,7 @@ fn checked_url(provider: &str, target: &str, has_body: bool) -> Result<Url, &'st
         "gemini" => "https://generativelanguage.googleapis.com/v1beta",
         "groq" => "https://api.groq.com/openai/v1",
         "zai" => "https://api.z.ai/api/paas/v4",
+        "mistral" => "https://api.mistral.ai/v1",
         "deepseek" => "https://api.deepseek.com",
         "sarvam" => "https://api.sarvam.ai/v2",
         "ollama" | "lmstudio" | "llamacpp" if !loopback => return Err("invalid"),
@@ -337,6 +338,7 @@ mod tests {
             ),
             ("groq", "https://api.groq.com/openai/v1/chat/completions"),
             ("zai", "https://api.z.ai/api/paas/v4/chat/completions"),
+            ("mistral", "https://api.mistral.ai/v1/chat/completions"),
             ("deepseek", "https://api.deepseek.com/chat/completions"),
             (
                 "qwen",

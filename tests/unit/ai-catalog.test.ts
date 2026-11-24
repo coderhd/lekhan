@@ -21,6 +21,8 @@ describe('model catalog', () => {
     expect(filterModels({ access: 'local', locality: 'cloud' })).toEqual([])
     expect(filterModels({ locality: 'cloud', hardware: 'compact' })).toEqual([])
     expect(filterModels({ capability: 'indic' }).map(model => model.model)).toEqual(['sarvam-105b', 'sarvam-105b-conversations'])
+    expect(filterModels({ query: 'mistral', access: 'free' })).toEqual([])
+    expect(filterModels({ query: 'mistral', access: 'byok' }).map(model => model.model)).toEqual(['mistral-small-2603'])
   })
 })
 

@@ -80,6 +80,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
   const t = useTranslations('app-shell')
   const desktopText = useTranslations('desktop')
   const editorText = useTranslations('editor-chrome')
+  const aiText = useTranslations('editor-ai')
   const locale = useLocale()
   const dateLabel = useMemo(() => new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', year: 'numeric' }), [locale])
   const { workspace, status, change, persistChange, retry, reload } = useWorkspace(storageScope, storage)
@@ -619,7 +620,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
                   aria-pressed={page.favorite}
                   onClick={() => change(state => updatePage(state, page.id, { favorite: !page.favorite }))}
                 ><Star size={18} fill={page.favorite ? 'currentColor' : 'none'} /></button>
-                {!localReadOnly && <button className="icon-button" aria-label="Writing assistant" title="Writing assistant" onClick={() => setAssistantOpen(true)}><Sparkles size={17} /></button>}
+                {!localReadOnly && <button className="icon-button" aria-label={aiText('writingAssistant')} title={aiText('writingAssistant')} onClick={() => setAssistantOpen(true)}><Sparkles size={17} /></button>}
                 <details className="page-menu" ref={pageMenu}>
                   <summary className="icon-button" aria-label={t('pageActions')} title={t('pageActions')}><MoreHorizontal size={21} /></summary>
                   <div className="page-menu-content">
