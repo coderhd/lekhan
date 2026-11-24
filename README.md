@@ -53,6 +53,8 @@ Open **Model Library → Discover** to find a curated model. Each listing shows 
 
 Open **Installed** to select a model for the writing assistant, see storage usage, or remove the library copy. **Add GGUF model** copies a model you already have. Discard a partial download from its listing to reclaim the space. Prompts sent through **On this device** go to the local runtime. Windows and Linux runtime verification remains open.
 
+In desktop **Settings → AI Providers & Models**, **Find local models** checks Ollama, LM Studio, and llama.cpp over loopback. The bundled writer connects directly to the chosen model server or HTTPS provider through its native transport. Local catalog checks work without a browser CORS setting. Provider credentials go to the chosen endpoint, and HTTP redirects end the request.
+
 ## Account access
 
 Configure the public Supabase project URL, publishable key, and canonical application origin using the variables in `.env.example`. Enable email/password authentication and allow the configured application's `/auth/confirm` redirect in Supabase. This route accepts verified token-hash confirmation and the PKCE exchange code. Configure the recovery template with `type=recovery` for token-hash links. Use the default Supabase recovery redirect flow for PKCE.

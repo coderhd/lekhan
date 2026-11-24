@@ -6,10 +6,13 @@ import { AlignLeft, Languages, PenLine, Sparkles, SpellCheck } from 'lucide-reac
 import { useTranslations } from '@/lib/i18n/client'
 import { type EditorAction, maxEditorActionChars, replaceSourceRange, selectedSourceRange } from '@/lib/ai/editor-actions'
 import AssistantDialog, { type LocalAssistantModel } from '../assistant-dialog'
+import type { ProviderTransport } from '@/lib/ai/client'
 import { suggestionTransaction } from './selection-edits'
 
 type Selection = { text: string; apply: (result: string, append: boolean) => boolean }
-export type EditorAssistant = { storageScope: string; localModel?: LocalAssistantModel; localModels?: readonly LocalAssistantModel[] }
+export type EditorAssistant = {
+  storageScope: string; localModel?: LocalAssistantModel; localModels?: readonly LocalAssistantModel[]; transport?: ProviderTransport
+}
 
 const actions = [
   ['polish', Sparkles], ['summarize', AlignLeft], ['translate', Languages], ['grammar', SpellCheck], ['continue', PenLine],

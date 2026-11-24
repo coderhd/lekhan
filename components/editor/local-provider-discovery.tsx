@@ -5,10 +5,11 @@ import type { LocalProviderProbe } from '@/lib/ai/client'
 import { localCorsCommand, localSetupPlatform, type LocalSetupPlatform } from '@/lib/ai/local-provider-setup'
 import { PROVIDERS } from '@/lib/ai/provider-registry'
 
-export default function LocalProviderDiscovery({ results, disabled, onSelect }: {
+export default function LocalProviderDiscovery({ results, disabled, onSelect, native }: {
   results: readonly LocalProviderProbe[]
   disabled: boolean
   onSelect: (probe: LocalProviderProbe, model: string) => void
+  native?: boolean
 }) {
   const t = useTranslations('editor-ai')
   const origin = typeof location === 'undefined' ? '' : location.origin
@@ -55,7 +56,7 @@ export default function LocalProviderDiscovery({ results, disabled, onSelect }: 
             : <p>{t('probeEmptyModels')}</p>)}
           {probe.status === 'authorization_needed' && <button className="secondary-button" type="button" disabled={disabled}
             onClick={() => onSelect(probe, '')}><PlugZap size={15} aria-hidden="true" /> {t('configureLocalAccess')}</button>}
-          {probe.status === 'offline' && <p>{t('probeOfflineHelp')}</p>}
+          {probe.status === 'offline' && <p>{t(native ? 'probeNativeOfflineHelp' : 'probeOfflineHelp')}</p>}
           {probe.status === 'unexpected_response' && <p>{t('probeUnexpectedHelp')}</p>}
           {probe.status === 'cors_blocked' && <details className="local-setup">
             <summary>{t('probeSetup')}</summary>

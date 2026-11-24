@@ -21,6 +21,7 @@ import { vaultStorage, type VaultAsset, type VaultHandle } from './vault-storage
 import AttachmentPanel from './attachment-panel'
 import ModelLibrary from '@/components/settings/model-library'
 import { sendToLocalModel, type LocalLibrary } from './local-models'
+import { desktopProviderTransport } from './provider-transport'
 
 type DesktopLocale = { locale: Locale; messages: Awaited<ReturnType<typeof getCatalog>> }
 const languageKey = 'lekhan:desktop:language'
@@ -133,13 +134,14 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
   const libraryDialog = modelLibraryOpen && <ModelLibrary library={library} selected={selectedModel} onSelect={selectModel}
     refresh={refreshLibrary} onClose={() => setModelLibraryOpen(false)} />
   const settingsDialog = settingsOpen && <SettingsDialog scope="desktop" workspace={handle?.label ?? settings('localWorkspace')}
-    general={<LocaleSelect onSelect={selectLanguage} />} localModel={localModel} localModels={localModels}
+    general={<LocaleSelect onSelect={selectLanguage} />} localModel={localModel} localModels={localModels} transport={desktopProviderTransport}
     modelLibrary={<ModelLibrary library={library} selected={selectedModel} onSelect={selectModel} refresh={refreshLibrary} />}
     onClose={() => setSettingsOpen(false)} />
   const failure = vaultFailed && <p className="locale-error desktop-cloud-error" role="alert">{t('openFailed')}</p>
 
   if (handle && storage) return <div className="desktop-writer" inert={choosing}>
-    <WorkspaceApp key={handle.token} storageScope="desktop" storage={storage} workspaceName={handle.label} localModel={localModel} localModels={localModels}
+    <WorkspaceApp key={handle.token} storageScope="desktop" storage={storage} workspaceName={handle.label}
+      localModel={localModel} localModels={localModels} providerTransport={desktopProviderTransport}
       pageAttachments={(page, insert) => <AttachmentPanel key={page.id} token={handle.token} page={page}
         path={catalog?.token === handle.token ? catalog.paths.get(page.id) ?? '' : ''}
         assets={catalog?.token === handle.token ? catalog.assets : []} onAttach={storage.rememberAttachment} onInsert={insert} />}

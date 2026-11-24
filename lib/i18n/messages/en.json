@@ -184,6 +184,7 @@
     "useDiscoveredModel": "Choose a model",
     "probeEmptyModels": "The server has no models available. Load or download a model and check again.",
     "configureLocalAccess": "Configure access",
+    "probeNativeOfflineHelp": "Start the server on this port and check its local endpoint in the server settings.",
     "probeOfflineHelp": "Start the server on this port. If it is running, check the browser’s local network permission.",
     "probeUnexpectedHelp": "A service responded without a usable model catalog. Check the port and the provider’s API settings.",
     "probeSetup": "Allow browser access",

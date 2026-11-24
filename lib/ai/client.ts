@@ -1,5 +1,5 @@
 import {
-  endpointFor, LOCAL_PROVIDERS, localConnectionHelp, providerDefinition, type LocalProviderId, type ProviderConfig,
+  endpointFor, LOCAL_PROVIDERS, localConnectionHelp, providerDefinition, type LocalProviderId, type ProviderConfig, type ProviderId,
 } from './provider-registry'
 
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
@@ -10,6 +10,17 @@ export type ChatOptions = {
   onText?: (text: string) => void
   maxTokens?: number
 }
+
+type ProviderResponse = { ok: boolean; status: number; body: ReadableStream<Uint8Array> | null }
+export type ProviderTransport = (request: {
+  provider: ProviderId
+  url: string
+  headers: Record<string, string>
+  body?: string
+  signal: AbortSignal
+}) => Promise<ProviderResponse>
+
+export class ProviderTransportFailure extends Error {}
 
 export class ProviderHttpError extends Error {
   constructor(readonly status: number, message: string) {
@@ -74,14 +85,18 @@ function requestSignal(signal: AbortSignal | undefined, timeout: number) {
   return signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout)
 }
 
-async function fetchProvider(config: ProviderConfig, url: string, signal: AbortSignal, body?: unknown) {
+async function fetchProvider(config: ProviderConfig, url: string, signal: AbortSignal, body?: unknown, transport?: ProviderTransport) {
   const headers = headersFor(config)
-  let response: Response
+  const serialized = body === undefined ? undefined : JSON.stringify(body)
+  let response: ProviderResponse
   try {
-    response = await fetch(url, {
+    if (transport) {
+      delete headers['anthropic-dangerous-direct-browser-access']
+      response = await transport({ provider: config.provider, url, headers, body: serialized, signal })
+    } else response = await fetch(url, {
       method: body === undefined ? 'GET' : 'POST',
       headers: { ...headers, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: serialized,
       credentials: 'omit',
       mode: 'cors',
       referrerPolicy: 'no-referrer',
@@ -89,11 +104,13 @@ async function fetchProvider(config: ProviderConfig, url: string, signal: AbortS
       redirect: 'error',
       signal,
     })
-  } catch {
+  } catch (error) {
     if (signal.aborted) {
       if (signal.reason?.name === 'TimeoutError') throw new ProviderTimeoutError('The provider did not respond in time.')
       throw new Error('The request was cancelled.')
     }
+    if (error instanceof ProviderTransportFailure) throw error
+    if (transport) throw new ProviderNetworkError('Could not reach the provider from the desktop app.')
     if (providerDefinition(config.provider).local) throw new ProviderNetworkError(localConnectionHelp(config.provider))
     throw new ProviderNetworkError('The browser could not reach this provider. Check your connection and whether the endpoint allows browser requests.')
   }
@@ -168,11 +185,11 @@ function addUsage(next: Usage, values: [unknown, unknown, unknown]) {
   }
 }
 
-export async function streamChat(config: ProviderConfig, options: ChatOptions): Promise<{ text: string; usage?: Usage }> {
+export async function streamChat(config: ProviderConfig, options: ChatOptions, transport?: ProviderTransport): Promise<{ text: string; usage?: Usage }> {
   if (!options.messages.some(message => message.role === 'user')) throw new Error('Add a prompt before sending.')
   const request = chatRequest(config, options)
   const signal = requestSignal(options.signal, 120_000)
-  const response = await fetchProvider(config, request.url, signal, request.body)
+  const response = await fetchProvider(config, request.url, signal, request.body, transport)
   if (!response.body) throw new Error('The provider returned an empty response.')
   const protocol = providerDefinition(config.provider).protocol
   return readChatStream(response.body, protocol, signal, options.onText)
@@ -186,6 +203,7 @@ export async function readChatStream(body: ReadableStream<Uint8Array>, protocol:
 
   try {
     for await (const packet of packets(body, protocol === 'ollama')) {
+      signal.throwIfAborted()
       if (packet === '[DONE]') {
         complete = true
         break
@@ -225,6 +243,7 @@ export async function readChatStream(body: ReadableStream<Uint8Array>, protocol:
         onText?.(segment)
       }
     }
+    signal.throwIfAborted()
     if (!complete) throw new Error('The provider stream ended early. Try again.')
   } catch (error) {
     if (signal.aborted) throw new Error(signal.reason?.name === 'TimeoutError' ? 'The provider did not respond in time.' : 'The request was cancelled.')
@@ -234,20 +253,20 @@ export async function readChatStream(body: ReadableStream<Uint8Array>, protocol:
   return Object.keys(usage).length ? { text, usage } : { text }
 }
 
-export async function testProviderConnection(config: ProviderConfig, options: { signal?: AbortSignal } = {}) {
+export async function testProviderConnection(config: ProviderConfig, options: { signal?: AbortSignal; transport?: ProviderTransport } = {}) {
   const started = performance.now()
   if (!providerDefinition(config.provider).local) {
     const reply = await streamChat(config, {
       messages: [{ role: 'user', content: 'Reply with OK.' }],
       maxTokens: 128,
       signal: requestSignal(options.signal, 20_000),
-    })
+    }, options.transport)
     if (!reply.text.trim()) throw new Error('The selected model returned no text.')
     return { models: [config.model], latencyMs: Math.round(performance.now() - started) }
   }
 
   const ollama = config.provider === 'ollama'
-  const response = await fetchProvider(config, localCatalogUrl(config), requestSignal(options.signal, 4_000))
+  const response = await fetchProvider(config, localCatalogUrl(config), requestSignal(options.signal, 4_000), undefined, options.transport)
   const catalog = await readLocalCatalog(response)
   const modelRows = ollama ? catalog.models : catalog.data
   if (!Array.isArray(modelRows)) throw new Error('This local endpoint did not return a model catalog.')
@@ -260,7 +279,7 @@ function localCatalogUrl(config: ProviderConfig) {
   return endpointFor(config) + (config.provider === 'ollama' ? '/api/tags' : '/models')
 }
 
-async function readLocalCatalog(response: Response) {
+async function readLocalCatalog(response: ProviderResponse) {
   const reader = response.body?.getReader()
   if (!reader) throw new Error('This local endpoint did not return a model catalog.')
   const decoder = new TextDecoder()
@@ -288,19 +307,20 @@ export type LocalProviderProbe = LocalProbeEndpoint & (
   { status: 'cors_blocked' | 'offline' | 'authorization_needed' | 'unexpected_response' }
 )
 
-export async function probeLocalProviders({ signal }: { signal?: AbortSignal } = {}): Promise<LocalProviderProbe[]> {
+export async function probeLocalProviders({ signal, transport }: { signal?: AbortSignal; transport?: ProviderTransport } = {}): Promise<LocalProviderProbe[]> {
   return Promise.all(LOCAL_PROVIDERS.map(async (provider): Promise<LocalProviderProbe> => {
     signal?.throwIfAborted()
     const config = { id: provider, provider, model: '' }
     const endpoint = { provider, baseUrl: endpointFor(config) }
     try {
-      return { ...endpoint, status: 'connected', ...await testProviderConnection(config, { signal }) }
+      return { ...endpoint, status: 'connected', ...await testProviderConnection(config, { signal, transport }) }
     } catch (error) {
       signal?.throwIfAborted()
       if (error instanceof ProviderHttpError && (error.status === 401 || error.status === 403)) {
         return { ...endpoint, status: 'authorization_needed' }
       }
       if (error instanceof ProviderNetworkError) {
+        if (transport) return { ...endpoint, status: 'offline' }
         try {
           const response = await fetch(localCatalogUrl(config), {
             // Browsers require the follow redirect mode for an opaque fetch. Use a bodyless HEAD.

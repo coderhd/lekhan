@@ -184,6 +184,7 @@
     "useDiscoveredModel": "Elige un modelo",
     "probeEmptyModels": "No hay modelos disponibles. Carga o descarga uno y vuelve a comprobar.",
     "configureLocalAccess": "Configurar el acceso",
+    "probeNativeOfflineHelp": "Inicia el servidor en este puerto y revisa el endpoint local en sus ajustes.",
     "probeOfflineHelp": "Inicia el servidor en este puerto. Si ya está en marcha, revisa el permiso de red local del navegador.",
     "probeUnexpectedHelp": "Un servicio respondió sin un catálogo válido. Revisa el puerto y los ajustes de la API.",
     "probeSetup": "Permitir el acceso del navegador",

@@ -184,6 +184,7 @@
     "useDiscoveredModel": "选择模型",
     "probeEmptyModels": "服务器上没有可用模型。加载或下载模型后重新检查。",
     "configureLocalAccess": "配置访问权限",
+    "probeNativeOfflineHelp": "请在此端口启动服务器，并在服务器设置中检查本地端点。",
     "probeOfflineHelp": "在此端口启动服务器。如果服务器正在运行，请检查浏览器的本地网络权限。",
     "probeUnexpectedHelp": "服务已响应，但未提供可用的模型目录。请检查端口和 API 设置。",
     "probeSetup": "允许浏览器访问",

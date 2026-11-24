@@ -20,6 +20,7 @@ import type { WorkspaceStorage } from '@/lib/storage'
 import { Dialog, SearchDialog } from './workspace-dialogs'
 import { useLocale, useTranslations } from '@/lib/i18n/client'
 import AssistantDialog, { type LocalAssistantModel } from './assistant-dialog'
+import type { ProviderTransport } from '@/lib/ai/client'
 import PageEditor from './page-editor'
 import { VaultImportDialog } from './vault-import-dialog'
 import type { ImportReport, VaultImportPlan } from '@/lib/vault-import'
@@ -43,13 +44,14 @@ function scrollToHeading(target: HTMLElement) {
 }
 
 export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled = false, automaticMirror = false,
-  sidebarControls, openCloudPage, storage, workspaceName, pageAttachments, localModel, localModels }: {
+  sidebarControls, openCloudPage, storage, workspaceName, pageAttachments, localModel, localModels, providerTransport }: {
   storageScope?: string; mirrorEnabled?: boolean; automaticMirror?: boolean
   sidebarControls?: ReactNode | ((canSwitch: boolean) => ReactNode); openCloudPage?: (id: string) => void
   storage?: WorkspaceStorage; workspaceName?: string
   pageAttachments?: (page: Page, insert: ((markdown: string) => void) | undefined) => ReactNode
   localModel?: LocalAssistantModel
   localModels?: readonly LocalAssistantModel[]
+  providerTransport?: ProviderTransport
 }) {
   const t = useTranslations('app-shell')
   const desktopText = useTranslations('desktop')
@@ -588,7 +590,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
                 pageId={page.id}
                 choices={choices}
                 editable={!localReadOnly}
-                assistant={{ storageScope, localModel, localModels }}
+                assistant={{ storageScope, localModel, localModels, transport: providerTransport }}
                 onChange={markdown => { if (!localReadOnly) change(state => updatePage(state, page.id, { markdown })) }}
                 onOpenLink={handleLink}
               />}
@@ -676,7 +678,8 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
       </aside>
 
       <input hidden type="file" multiple ref={importInput} accept=".md,.markdown,.txt,text/markdown,text/plain" onChange={importFiles} />
-      {assistantOpen && page && !localReadOnly && <AssistantDialog key={page.id} page={page} storageScope={storageScope} localModel={localModel} localModels={localModels} onClose={() => setAssistantOpen(false)} onInsert={text => {
+      {assistantOpen && page && !localReadOnly && <AssistantDialog key={page.id} page={page} storageScope={storageScope}
+        localModel={localModel} localModels={localModels} transport={providerTransport} onClose={() => setAssistantOpen(false)} onInsert={text => {
         change(state => {
           const current = state.pages.find(item => item.id === page.id)
           return current ? updatePage(state, current.id, { markdown: [current.markdown, text].filter(Boolean).join('\n\n') }) : state

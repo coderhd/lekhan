@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod local_models;
+mod provider_http;
 mod vault;
 
 use tauri::webview::NewWindowResponse;
@@ -133,6 +134,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .manage(vault::VaultState::default())
         .manage(local_models::LocalModels::default())
+        .manage(provider_http::ProviderRequests::default())
         .invoke_handler(tauri::generate_handler![
             open_cloud_workspace,
             vault::restore_vault,
@@ -150,6 +152,8 @@ fn main() {
             local_models::remove_local_model,
             local_models::generate_local_reply,
             local_models::cancel_local_reply,
+            provider_http::stream_provider_request,
+            provider_http::cancel_provider_request,
         ])
         .setup(|app| {
             let opener = app.handle().clone();

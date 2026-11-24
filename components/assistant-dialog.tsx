@@ -4,7 +4,7 @@ import { ArrowUpRight, Check, Copy, LockKeyhole, Plus, Send, Square, Trash2 } fr
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { Page } from '@/lib/types'
-import { probeLocalProviders, streamChat, testProviderConnection, type ChatMessage, type ChatOptions, type LocalProviderProbe } from '@/lib/ai/client'
+import { probeLocalProviders, streamChat, testProviderConnection, type ChatMessage, type ChatOptions, type LocalProviderProbe, type ProviderTransport } from '@/lib/ai/client'
 import { endpointFor, FREE_PRESETS, PROVIDERS, providerConnectionKind, providerDefinition, type ProviderConfig, type ProviderId } from '@/lib/ai/provider-registry'
 import { editorActionMessages, translationLanguages, type EditorAction } from '@/lib/ai/editor-actions'
 import { runFallback } from '@/lib/ai/fallback'
@@ -54,9 +54,10 @@ async function storeVault(vaultKey: string, previous: string | null, encrypted: 
   else write()
 }
 
-export default function AssistantDialog({ page, storageScope, onInsert, onClose, localModel, localModels, editorRequest, settingsPanel }: {
+export default function AssistantDialog({ page, storageScope, onInsert, onClose, localModel, localModels, editorRequest, settingsPanel, transport }: {
   storageScope: string
   localModel?: LocalAssistantModel; localModels?: readonly LocalAssistantModel[]
+  transport?: ProviderTransport
 } & ({ page: Page; onInsert: (text: string) => void; onClose: () => void; editorRequest?: never; settingsPanel?: never }
   | { editorRequest: EditorRequest; onClose: () => void; page?: never; onInsert?: never; settingsPanel?: never }
   | { settingsPanel: 'models' | 'privacy'; page?: never; onInsert?: never; onClose?: never; editorRequest?: never })) {
@@ -111,7 +112,7 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
   const providerRoutes = configs.map(config => ({
     id: 'provider:' + config.id,
     label: modelLabel(config),
-    send: (options: ChatOptions) => streamChat(config, options),
+    send: (options: ChatOptions) => streamChat(config, options, transport),
   }))
   const allRoutes = [...deviceRoutes, ...providerRoutes]
   const modelChoices = tab === 'local' ? deviceRoutes : providerRoutes
@@ -555,7 +556,7 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
                     chain={draft.fallback ?? []} disabled={busy} onChange={fallback => setDraft({ ...draft, fallback })} />
                   <div className="assistant-actions">
                     <button type="button" className="secondary-button" disabled={busy} onClick={() => void run(async signal => {
-                      const result = await testProviderConnection(draft, { signal })
+                      const result = await testProviderConnection(draft, { signal, transport })
                       if (signal.aborted) return
                       setModels(result.models)
                       if (!draft.model && result.models[0]) setDraft({ ...draft, model: result.models[0] })
@@ -563,14 +564,15 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
                       setFeedback('Connected to ' + definition.label + '.')
                     })}>Test connection</button>
                     {(!settingsPanel || connectionKind === 'local') && <button type="button" className="secondary-button" disabled={busy} onClick={() => void run(async signal => {
-                      const results = await probeLocalProviders({ signal })
+                      const results = await probeLocalProviders({ signal, transport })
                       if (signal.aborted) return
                       setLocalProbes(results)
                       setFeedback(text('localDiscoveryComplete'))
                     })}>{text(localProbes ? 'rescanLocalModels' : 'findLocalModels')}</button>}
                     <button className="primary-button" disabled={busy}><Plus size={15} /> Save connection</button>
                   </div>
-                  {localProbes && (!settingsPanel || connectionKind === 'local') && <LocalProviderDiscovery results={localProbes} disabled={busy} onSelect={(probe, model) => {
+                  {localProbes && (!settingsPanel || connectionKind === 'local') && <LocalProviderDiscovery
+                    results={localProbes} disabled={busy} native={!!transport} onSelect={(probe, model) => {
                     setDraft({ id: crypto.randomUUID(), provider: probe.provider, baseUrl: probe.baseUrl, model })
                     setModels(probe.status === 'connected' ? probe.models : [])
                     setFeedback(text('localModelReadyToConfigure', { provider: PROVIDERS[probe.provider].label }))

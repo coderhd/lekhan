@@ -4,6 +4,7 @@ import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'rea
 import { CircleUserRound, CreditCard, LockKeyhole, SlidersHorizontal, Sparkles, X } from 'lucide-react'
 import { useTranslations } from '@/lib/i18n/client'
 import type { LocalAssistantModel } from '../assistant-dialog'
+import type { ProviderTransport } from '@/lib/ai/client'
 import AIProviderSettings from './ai-provider-settings'
 import { Dialog } from '../workspace-dialogs'
 import { AppearanceSettings } from './appearance-settings'
@@ -27,17 +28,18 @@ type SettingsContentProps = {
   modelLibrary?: ReactNode
   localModel?: LocalAssistantModel
   localModels?: readonly LocalAssistantModel[]
+  transport?: ProviderTransport
   onClose?: () => void
   onTabChange?: (tab: SettingsTab) => void
 }
 
-export function SettingsContent({ scope, initialTab = 'ai', workspace, general, plan, privacy, modelLibrary, localModel, localModels,
+export function SettingsContent({ scope, initialTab = 'ai', workspace, general, plan, privacy, modelLibrary, localModel, localModels, transport,
   onClose, onTabChange }: SettingsContentProps) {
   const t = useTranslations('settings')
   const [tab, setTab] = useState<SettingsTab>(initialTab)
   const id = useId()
   const controls = useRef<HTMLButtonElement[]>([])
-  const provider = { scope, localModel, localModels }
+  const provider = { scope, localModel, localModels, transport }
 
   function select(next: SettingsTab) {
     setTab(next)
