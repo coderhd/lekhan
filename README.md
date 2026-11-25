@@ -59,7 +59,9 @@ The [desktop release guide](docs/operations/desktop-release.md) covers the packa
 
 ## Account access
 
-Configure the public Supabase project URL, publishable key, and canonical application origin using the variables in `.env.example`. Enable email/password authentication and allow the configured application's `/auth/confirm` redirect in Supabase. This route accepts verified token-hash confirmation and the PKCE exchange code. Configure the recovery template with `type=recovery` for token-hash links. Use the default Supabase recovery redirect flow for PKCE.
+Choose **Sign in** from the public header or the guest notebook. For a local checkout, use `.env.local` to set the staging project URL and publishable key plus `LEKHAN_PUBLIC_URL=http://localhost:3000`. The sign-in screen shows its unavailable state until the app has a valid Supabase configuration.
+
+Enable email/password authentication and allow the configured application's `/auth/confirm` redirect in Supabase. This route accepts verified token-hash confirmation and the PKCE exchange code. Configure the recovery template with `type=recovery` for token-hash links. Use the default Supabase recovery redirect flow for PKCE. [Supabase redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls)
 
 To offer Google sign-in, enable Google for the Supabase Auth project and set `LEKHAN_GOOGLE_OAUTH=1` on the hosted app. Use the canonical app origin as the Supabase Auth Site URL. Google Cloud uses your Supabase project's callback URI. The app receives the PKCE code at `/auth/confirm` for web sign-in and `/auth/desktop-return` for desktop sign-in. The system browser offers **Open Lekhan** to return to the cloud window that started the request. For a custom Supabase Auth hostname, build the desktop app with `LEKHAN_DESKTOP_AUTH_ORIGIN` set to that HTTPS origin. Referral signup links use the email flow so the code is recorded with the account. [Google provider setup](https://supabase.com/docs/guides/auth/social-sign-in/auth-google) · [Supabase redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls)
 

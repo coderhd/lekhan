@@ -715,6 +715,7 @@ kbd {
 .marketing-header nav a[aria-current=page], .marketing-header nav a:hover, .marketing-footer nav a:hover { text-decoration: underline; text-underline-offset: 4px; }
 .marketing-header-action, .marketing-text-link { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; color: var(--pine); text-underline-offset: 4px; }
 .marketing-header-action:hover { text-decoration: underline; }
+.marketing-header-actions { display: flex; gap: 18px; align-items: center; }
 .marketing-footer { border-block-start: 1px solid var(--line); padding-block: 25px 34px; }
 .marketing-hero { min-height: calc(100svh - 81px); padding-block: 36px 70px; display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr); gap: clamp(28px, 4.3vw, 64px); align-items: center; }
 .marketing-hero h1, .marketing-lead h1 { margin: 0; font: 610 clamp(49px, 6.1vw, 91px)/.94 var(--serif); letter-spacing: -.048em; overflow-wrap: anywhere; text-wrap: balance; }
@@ -779,7 +780,7 @@ kbd {
   .marketing-width { width: calc(100% - 34px); }
   .marketing-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding-block: 12px; }
   .marketing-header .account-brand { grid-column: 1; }
-  .marketing-header-action { grid-column: 2; grid-row: 1; font-size: 12px; }
+  .marketing-header-actions { grid-column: 2; grid-row: 1; gap: 12px; font-size: 12px; }
   .marketing-header nav { grid-column: 1 / -1; gap: 17px; font-size: 13px; }
   .marketing-principles dl > div { grid-template-columns: minmax(0, 1fr); }
 }

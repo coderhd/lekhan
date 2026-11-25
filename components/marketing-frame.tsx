@@ -11,7 +11,7 @@ import { UsageAnalyticsControl } from './usage-analytics'
 const marketingLinks = { about: '/about', faq: '/faq', contact: '/contact' } as const
 
 export default async function MarketingFrame({ children, path }: { children: ReactNode; path?: MarketingPath }) {
-  const [t, locale] = await Promise.all([getTranslations('marketing'), getLocale()])
+  const [t, auth, locale] = await Promise.all([getTranslations('marketing'), getTranslations('auth'), getLocale()])
   const link = (target: MarketingPath) => marketingLink(target, resolveLocale(locale))
   const docs = docsOrigin()
   return <div className="marketing-site">
@@ -22,7 +22,10 @@ export default async function MarketingFrame({ children, path }: { children: Rea
         {(['about', 'faq', 'contact'] as const).map(item => <Link
           aria-current={path === marketingLinks[item] ? 'page' : undefined} key={item} href={link(marketingLinks[item])}>{t(item)}</Link>)}
       </nav>
-      <Link href="/workspace" className="marketing-header-action">{t('workspace')} <ArrowUpRight size={15} aria-hidden="true" /></Link>
+      <div className="marketing-header-actions">
+        <Link href="/login" className="marketing-header-action">{auth('login')}</Link>
+        <Link href="/workspace" className="marketing-header-action">{t('workspace')} <ArrowUpRight size={15} aria-hidden="true" /></Link>
+      </div>
     </header>
     <main id="marketing-main" tabIndex={-1}>{children}</main>
     <footer className="marketing-footer marketing-width">

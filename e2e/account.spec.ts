@@ -1,5 +1,17 @@
 import { expect, test } from '@playwright/test'
 
+test('sign-in is reachable from the public site and the guest notebook', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 820 })
+  await page.goto('/')
+  await page.getByRole('link', { name: 'Sign in', exact: true }).click()
+  await expect(page).toHaveURL('/login')
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
+  await page.getByRole('link', { name: 'Open the local workspace' }).click()
+  await page.getByRole('button', { name: 'Open navigation' }).click()
+  await page.getByRole('link', { name: 'Sign in', exact: true }).click()
+  await expect(page).toHaveURL('/login')
+})
+
 test('account links fail closed when the backend has not been configured', async ({ page }) => {
   await page.goto('/login?error=confirm')
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()

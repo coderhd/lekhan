@@ -21,6 +21,7 @@ export default function WebWorkspace({ storageScope, cloudEnabled, signedIn, mir
   const router = useRouter()
   const t = useTranslations('auth')
   const settings = useTranslations('settings')
+  const cloud = useTranslations('cloud-workspace')
   const [open, setOpen] = useState(false)
   return <><WorkspaceApp storageScope={storageScope} mirrorEnabled={mirrorEnabled} automaticMirror={automaticMirror}
     cloudSearchSubject={profile?.subject}
@@ -29,10 +30,10 @@ export default function WebWorkspace({ storageScope, cloudEnabled, signedIn, mir
       <LocaleSwitcher />
       <UsageAnalyticsControl />
       <button type="button" className="nav-action" onClick={() => setOpen(true)}><Settings2 size={16} aria-hidden="true" /> {settings('title')}</button>
-      {cloudEnabled && signedIn && <Link className="nav-action account-link" href="/cloud"><Cloud size={15} /> Cloud workspace</Link>}
-      {cloudEnabled && (signedIn
+      {cloudEnabled && signedIn && <Link className="nav-action account-link" href="/cloud"><Cloud size={15} /> {cloud('title')}</Link>}
+      {signedIn
         ? <form action={signOut}><button className="nav-action" type="submit"><LogOut size={15} /> {t('signout')}</button></form>
-        : <Link className="nav-action account-link" href="/login"><LogIn size={15} /> {t('login')}</Link>)}
+        : <Link className="nav-action account-link" href="/login"><LogIn size={15} /> {t('login')}</Link>}
     </>} />
     {open && <WebSettings scope={storageScope} profile={profile} available={cloudEnabled} planSummary={plan} onClose={() => setOpen(false)} />}
   </>
