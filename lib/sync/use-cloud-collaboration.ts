@@ -52,6 +52,8 @@ async function requestTicket(pageId: string, subject: string, signal: AbortSigna
   return result as Ticket
 }
 
+export class SyncPreferenceConflict extends Error {}
+
 export function useCloudCollaboration(pageId: string, subject: string, enabled: boolean, serverCanWrite: boolean, offlineShell = false) {
   const [state, setState] = useState<CloudStatus>(empty)
   const resume = useRef<() => void>(() => {})
@@ -228,7 +230,7 @@ export function useCloudCollaboration(pageId: string, subject: string, enabled: 
       const response = await fetch('/api/sync/preferences?' + new URLSearchParams({ pageId }), {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: next }), signal: cancel.signal,
       })
-      if (response.status === 409) throw new Error('The current sharing or workspace plan keeps this page synced.')
+      if (response.status === 409) throw new SyncPreferenceConflict()
       if (!response.ok) throw new Error('Could not change cloud sync. Try again.')
       const result = await response.json()
       if (cancel.signal.aborted) return

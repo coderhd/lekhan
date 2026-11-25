@@ -47,6 +47,12 @@ describe('workspace catalogs', () => {
     expect(es('editor-chrome.wordCount', { count: 2 })).toBe('2 palabras')
     expect(es('app-shell.deletePageTitle', { title: 'Roadmap' })).toBe('¿Eliminar Roadmap?')
   })
+
+  it.each(locales)('formats cloud access labels and link counts in %s', async locale => {
+    const translate = createTranslator({ locale, messages: await getCatalog(locale), namespace: 'cloud-workspace' })
+    expect(translate('accessFor', { person: 'ada@example.test' })).toContain('ada@example.test')
+    expect(translate('pageLinks', { count: 1250 })).toContain(new Intl.NumberFormat(locale).format(1250))
+  })
 })
 
 describe('public language routes', () => {

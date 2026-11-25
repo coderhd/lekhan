@@ -8,7 +8,7 @@ import type { CloudPage, PageRole } from '@/lib/cloud/graph'
 import { forgetCloudSearchPage, rememberCloudSearchPage } from '@/lib/cloud/local-search'
 import { importPathKey } from '@/lib/cloud/graph-index'
 import { useTranslations } from '@/lib/i18n/client'
-import { useCloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
+import { SyncPreferenceConflict, useCloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
 import { replaceSourceText } from '@/lib/sync/replace-source'
 import { transferCloudAttachment, transferredFilename } from '@/lib/cloud/attachment-client'
 import { attachmentReference } from '@/lib/local-attachments'
@@ -60,6 +60,7 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
   enabled: boolean
 }) {
   const t = useTranslations('editor-chrome')
+  const cloudText = useTranslations('cloud-workspace')
   const exportText = useTranslations('cloud-export')
   const offlineText = useTranslations('cloud-offline')
   const { spellcheck } = useEditorPreferences()
@@ -83,7 +84,7 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
   const [attachmentDownload, setAttachmentDownload] = useState<'running' | 'failed' | null>(null)
   useEffect(() => () => download.current?.abort(), [])
   const [changingSync, setChangingSync] = useState(false)
-  const [preferenceError, setPreferenceError] = useState('')
+  const [preferenceError, setPreferenceError] = useState<'syncPreferenceRequired' | 'syncPreferenceFailed' | null>(null)
   const [preview, setPreview] = useState(false)
   const [heading, setHeading] = useState('')
   const editorRoot = useRef<HTMLDivElement>(null)
@@ -92,12 +93,12 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
   const syncPaused = replica.status === 'image-limit' || replica.status === 'payload-limit' || replica.status === 'workspace-media-limit'
   const localOnly = replica.status === 'local-only'
   const checkingSync = replica.status === 'opening' && !!replica.session
-  const networkLabel = !enabled ? 'Cloud sync unavailable' : replica.status === 'live' ? 'Live'
+  const networkLabel = !enabled ? cloudText('syncUnavailable') : replica.status === 'live' ? cloudText('live')
     : replica.status === 'offline' ? replica.session ? offlineText('offlineCopy') : offlineText('waiting')
     : replica.status === 'denied' ? offlineText('accessExpired')
-    : replica.status === 'limit' ? 'Collaborator limit reached'
-    : localOnly ? 'Cloud sync paused'
-    : syncPaused ? 'Sync paused' : checkingSync ? t('checkingCloudCopy') : 'Opening cloud page'
+    : replica.status === 'limit' ? cloudText('collaboratorLimitReached')
+    : localOnly ? cloudText('cloudPaused')
+    : syncPaused ? cloudText('syncPaused') : checkingSync ? t('checkingCloudCopy') : cloudText('openingPage')
   const exportable = !!replica.session && !schemaError && (source !== null || markdown !== null)
   const searchableText = source ?? markdown
   const frontmatter = exportOpen ? replica.session?.document.getMap('lekhan').get('frontmatter') : null
@@ -216,9 +217,9 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
 
   async function toggleCloudSync() {
     setChangingSync(true)
-    setPreferenceError('')
+    setPreferenceError(null)
     try { await replica.changeSyncPreference(replica.preference === 'paused') }
-    catch (error) { setPreferenceError(error instanceof Error ? error.message : 'Could not change cloud sync.') }
+    catch (error) { setPreferenceError(error instanceof SyncPreferenceConflict ? 'syncPreferenceRequired' : 'syncPreferenceFailed') }
     finally { setChangingSync(false) }
   }
 
@@ -245,39 +246,35 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
             writeSource(input.value.slice(0, from) + `\n\n![${alt}](${src})\n\n` + input.value.slice(to))
           }} />}
         {replica.session && !offlineShell && <button type="button" className="secondary-button" onClick={() => setHistoryOpen(true)}>
-          <History size={15} /> Version history
+          <History size={15} /> {cloudText('history')}
         </button>}
         {replica.session && !offlineShell && !localOnly && <button type="button" className="secondary-button" onClick={() => setAttachmentsOpen(true)}>
-          <Paperclip size={15} /> Attachments
+          <Paperclip size={15} /> {cloudText('attachments')}
         </button>}
         {exportable && <button type="button" className="secondary-button" onClick={() => setExportOpen(true)}>
           <Download size={15} /> {exportText('title')}
         </button>}
         {!offlineShell && (replica.preference === 'personal' || replica.preference === 'paused') && <button type="button" className="secondary-button"
           disabled={changingSync || (!localOnly && replica.status !== 'live')} onClick={() => void toggleCloudSync()}>
-          {replica.preference === 'paused' ? 'Resume cloud sync' : 'Pause cloud sync'}
+          {replica.preference === 'paused' ? cloudText('resumeSync') : cloudText('pauseSync')}
         </button>}
       </div>
       {attachmentDownload === 'running' && <p role="status">{exportText('downloadingAttachment')}</p>}
       {attachmentDownload === 'failed' && <p role="alert" className="account-error">{exportText('attachmentUnavailable')}</p>}
-      {preferenceError && <p className="account-error" role="alert">{preferenceError}</p>}
+      {preferenceError && <p className="account-error" role="alert">{cloudText(preferenceError)}</p>}
       {localOnly && <p className="billing-notice">{replica.session
-        ? 'Your writing stays in this browser until cloud sync resumes.'
-        : 'This device has no local copy. Resume cloud sync to open the last saved cloud version.'}</p>}
-      {linkMissing && <p className="account-error" role="status">{offlineShell ? offlineText('linkMissing') : 'There is no matching page in this link picker. Find the page in your cloud workspace.'}</p>}
-      {replica.status === 'limit' && <p>Ask the page owner to review sharing or change the workspace plan.</p>}
+        ? cloudText('localOnlyCopy')
+        : cloudText('localCopyMissing')}</p>}
+      {linkMissing && <p className="account-error" role="status">{offlineShell ? offlineText('linkMissing') : cloudText('linkUnavailable')}</p>}
+      {replica.status === 'limit' && <p>{cloudText('reviewSharing')}</p>}
       {syncPaused && <div className="billing-notice" role="status">
-        <p>{replica.status === 'payload-limit' ? 'This draft exceeds the page sync size limit.'
-          : replica.status === 'workspace-media-limit' ? 'This workspace has reached its cloud storage limit.'
-          : replica.imagePolicy === 'paid' ? 'A new image exceeds the 20 MB cloud limit.'
-            : 'New images on Free must be WebP, up to 500 KB and 1,600 pixels per side.'} Your edits are in this browser.
-          {replica.status === 'payload-limit' ? ' Reduce the draft size and try again.'
-            : replica.status === 'workspace-media-limit' ? ' Free up workspace storage or remove the new image and retry.'
-              : ' Remove or replace the image to resume sharing.'}</p>
-        <button type="button" className="secondary-button" onClick={replica.retrySync}>Retry sync</button>
+        <p>{cloudText(replica.status === 'payload-limit' ? 'draftTooLarge'
+          : replica.status === 'workspace-media-limit' ? 'workspaceFull'
+          : replica.imagePolicy === 'paid' ? 'paidImageTooLarge' : 'freeImageTooLarge')}</p>
+        <button type="button" className="secondary-button" onClick={replica.retrySync}>{cloudText('retrySync')}</button>
       </div>}
       {offlineShell && !replica.session && replica.status === 'offline' && <p role="alert">{offlineText('missingCopy')}</p>}
-      {schemaError && <p className="account-error" role="alert">This page contains blocks the editor cannot open safely. Editing and export are paused for this page.</p>}
+      {schemaError && <p className="account-error" role="alert">{cloudText('unsupportedBlocks')}</p>}
       {replica.session && (source === null ? <PageEditor
         pageId={page.id}
         markdown=""
@@ -296,7 +293,7 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
         wrap={largeSource ? 'off' : 'soft'} aria-label={t('markdownSource')} markdown={source} readOnly={!editable} spellCheck={spellcheck}
         assistant={offlineShell && replica.status !== 'live' ? undefined : { storageScope: 'account:' + subject }} onChange={writeSource} onApply={writeSource} />)}
       {references.length > 0 && <details className="cloud-page-actions cloud-references">
-        <summary>Page links ({references.length})</summary>
+        <summary>{cloudText('pageLinks', { count: references.length })}</summary>
         <ul>{references.map(link => <li key={link.target}>
           <button className="account-link" type="button" onClick={() => void openLink(link.target)}>{link.alias || link.target}</button>
         </li>)}</ul>

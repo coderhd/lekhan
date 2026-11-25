@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
 import { createServerAdmin } from '@/lib/auth/admin'
 import { invitationPath } from '@/lib/auth/input'
 import { accountContext } from '@/lib/auth/server'
@@ -23,26 +24,27 @@ export default async function InvitationPage({ params, searchParams }: {
   if (invite?.status === 'accepted') redirect('/page/' + invite.page_id)
   if (invite?.status === 'declined') redirect('/cloud?view=invitations&notice=declined')
 
+  const t = await getTranslations('cloud-workspace')
   return <main className="account-screen">
     <header className="account-header">
-      <Link className="account-brand" href="/cloud"><span className="brand-mark" aria-hidden="true">L</span> Cloud workspace</Link>
+      <Link className="account-brand" href="/cloud"><span className="brand-mark" aria-hidden="true">L</span> {t('title')}</Link>
     </header>
     <section className="account-card" aria-labelledby="invitation-heading">
-      <h1 id="invitation-heading">Page invitation</h1>
+      <h1 id="invitation-heading">{t('invitationTitle')}</h1>
       {invite ? <>
         <p><strong>{invite.title}</strong></p>
-        <p>{invite.role === 'editor' ? 'You’re invited to edit this page.' : 'You’re invited to view this page.'}</p>
+        <p>{invite.role === 'editor' ? t('invitedToEdit') : t('invitedToView')}</p>
         {result && <p role="alert" className="account-error">{result === 'limit'
-          ? 'This page has reached its collaborator limit. Ask the owner to review access.'
-          : result === 'plan_changed' ? 'The workspace plan changed. Try accepting the invitation again.'
-            : 'Could not respond to this invitation. Try again in a moment.'}</p>}
+          ? t('recipientLimit')
+          : result === 'plan_changed' ? t('planChangedAccept')
+            : t('respondFailed')}</p>}
         <form className="invitation-actions" action={respondToInvitation.bind(null, token)}>
-          <button className="primary-button" name="response" value="accepted">Accept invitation</button>
-          <button className="secondary-button" name="response" value="declined">Decline</button>
+          <button className="primary-button" name="response" value="accepted">{t('acceptInvitation')}</button>
+          <button className="secondary-button" name="response" value="declined">{t('decline')}</button>
         </form>
       </> : <>
-        <p>This invitation is unavailable. Check that you’re signed in with the invited email address.</p>
-        <Link className="account-link" href={'/login?' + new URLSearchParams({ invite: token })}>Sign in with another account</Link>
+        <p>{t('invalidRecipient')}</p>
+        <Link className="account-link" href={'/login?' + new URLSearchParams({ invite: token })}>{t('switchAccount')}</Link>
       </>}
     </section>
   </main>

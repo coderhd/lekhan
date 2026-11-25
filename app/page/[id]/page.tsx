@@ -18,12 +18,13 @@ import { PublicPage } from '@/components/public-page'
 async function CloudSubpages({ client, id, after }: { client: SupabaseClient; id: string; after?: string }) {
   const children = await listCloudChildren(client, id, after).catch(() => null)
   if (!children?.pages.length) return null
-  return <section aria-label="Subpages" className="cloud-subpages">
-    <h2>Subpages</h2>
+  const t = await getTranslations('cloud-workspace')
+  return <section aria-label={t('subpages')} className="cloud-subpages">
+    <h2>{t('subpages')}</h2>
     <ul className="cloud-pages">{children.pages.map(child => <li key={child.id}>
       <Link href={'/page/' + child.id}>{child.title}</Link>
     </li>)}</ul>
-    {children.next && <Link href={'/page/' + id + '?children=' + children.next}>More subpages</Link>}
+    {children.next && <Link href={'/page/' + id + '?children=' + children.next}>{t('moreSubpages')}</Link>}
   </section>
 }
 
@@ -61,16 +62,16 @@ export default async function CloudPageRoute({ params, searchParams }: {
 
   const { error, children: after, backlinks } = await searchParams
   const choices = listCloudLinkChoices(account.client, account.subject, access.page).catch(() => [])
-  const settings = await getTranslations('settings')
+  const [settings, t] = await Promise.all([getTranslations('settings'), getTranslations('cloud-workspace')])
 
   return (
     <main className="cloud-screen">
       <PrepareOfflineWorkspace />
       <header className="account-header">
-        <Link className="account-brand" href="/cloud"><span className="brand-mark" aria-hidden="true">L</span> Cloud workspace</Link>
+        <Link className="account-brand" href="/cloud"><span className="brand-mark" aria-hidden="true">L</span> {t('title')}</Link>
         <div className="cloud-header-actions">
-          {access.page.parent_id && <Link className="account-link" href={'/page/' + access.page.parent_id}>Parent page</Link>}
-          {access.role === 'owner' && <Link className="account-link" href={'/page/' + id + '/share'}>Share</Link>}
+          {access.page.parent_id && <Link className="account-link" href={'/page/' + access.page.parent_id}>{t('parentPage')}</Link>}
+          {access.role === 'owner' && <Link className="account-link" href={'/page/' + id + '/share'}>{t('share')}</Link>}
           <Link className="account-link" href="/settings">{settings('title')}</Link>
           <CloudSearch subject={account.subject} />
         </div>
@@ -78,7 +79,7 @@ export default async function CloudPageRoute({ params, searchParams }: {
       <article className="cloud-library">
         <h1>{access.page.title}</h1>
         {error && <p role="alert" className="account-error">
-          {error === 'title' ? 'Enter a title up to 160 characters.' : 'Could not update the page.'}
+          {error === 'title' ? t('titleLimit') : t('updateFailed')}
         </p>}
         <CloudPageEditor
           key={account.subject + ':' + id + ':' + access.role} page={access.page} linkChoices={choices} role={access.role}
@@ -87,15 +88,15 @@ export default async function CloudPageRoute({ params, searchParams }: {
         <Suspense><CloudSubpages client={account.client} id={id} after={after} /></Suspense>
         <Suspense><CloudBacklinks client={account.client} id={id} after={backlinks} /></Suspense>
         {access.role === 'owner' && <details className="cloud-page-actions">
-          <summary>Page settings</summary>
+          <summary>{t('pageSettings')}</summary>
           <form className="cloud-create" action={renameCloudPage.bind(null, id)}>
-            <label>Page title <input name="title" defaultValue={access.page.title} maxLength={160} required /></label>
-            <button className="secondary-button">Rename</button>
+            <label>{t('pageTitle')} <input name="title" defaultValue={access.page.title} maxLength={160} required /></label>
+            <button className="secondary-button">{t('rename')}</button>
           </form>
           <form className="cloud-create" action={addCloudPage}>
             <input type="hidden" name="parentId" value={id} />
-            <label>Subpage title <input name="title" maxLength={160} required /></label>
-            <button className="secondary-button">Add subpage</button>
+            <label>{t('subpageTitle')} <input name="title" maxLength={160} required /></label>
+            <button className="secondary-button">{t('addSubpage')}</button>
           </form>
         </details>}
       </article>
