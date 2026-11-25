@@ -1,18 +1,21 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight, ArrowUpRight } from 'lucide-react'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { resolveLocale } from '@/lib/i18n/locales'
 import MarketingFrame from '@/components/marketing-frame'
 import { marketingMetadata } from '@/lib/marketing/metadata'
+import { marketingLink } from '@/lib/marketing/routes'
 
 export async function generateMetadata() {
   const t = await getTranslations('marketing')
-  return marketingMetadata('/', t('homeTitle'), t('heroDescription'))
+  return marketingMetadata('/', resolveLocale(await getLocale()), t('homeTitle'), t('heroDescription'))
 }
 
 export default async function HomePage() {
-  const t = await getTranslations('marketing')
-  return <MarketingFrame>
+  const [t, language] = await Promise.all([getTranslations('marketing'), getLocale()])
+  const locale = resolveLocale(language)
+  return <MarketingFrame path="/">
     <section className="marketing-hero marketing-width" aria-labelledby="marketing-title">
       <div className="marketing-hero-copy" data-enter>
         <h1 id="marketing-title">{t('heroTitle')}</h1>
@@ -40,7 +43,7 @@ export default async function HomePage() {
             <li>{t('moveLinks')}</li>
             <li>{t('moveExport')}</li>
           </ul>
-          <Link href="/faq#transfer" className="marketing-text-link">{t('migrationDetails')} <ArrowUpRight size={15} aria-hidden="true" /></Link>
+          <Link href={marketingLink('/faq', locale) + '#transfer'} className="marketing-text-link">{t('migrationDetails')} <ArrowUpRight size={15} aria-hidden="true" /></Link>
         </div>
       </div>
     </section>

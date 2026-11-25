@@ -1,16 +1,17 @@
 import { ArrowUpRight, Github, Mail } from 'lucide-react'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { resolveLocale } from '@/lib/i18n/locales'
 import MarketingFrame from '@/components/marketing-frame'
 import { marketingMetadata } from '@/lib/marketing/metadata'
 
 export async function generateMetadata() {
   const t = await getTranslations('marketing')
-  return marketingMetadata('/contact', t('contact') + ' · Lekhan', t('contactIntro'))
+  return marketingMetadata('/contact', resolveLocale(await getLocale()), t('contact') + ' · Lekhan', t('contactIntro'))
 }
 
 export default async function ContactPage() {
   const t = await getTranslations('marketing')
-  return <MarketingFrame current="contact">
+  return <MarketingFrame path="/contact">
     <section className="marketing-contact marketing-width" aria-labelledby="contact-title">
       <header className="marketing-lead" data-enter>
         <h1 id="contact-title">{t('contactTitle')}</h1>

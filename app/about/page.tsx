@@ -1,18 +1,19 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { resolveLocale } from '@/lib/i18n/locales'
 import MarketingFrame from '@/components/marketing-frame'
 import { marketingMetadata } from '@/lib/marketing/metadata'
 
 export async function generateMetadata() {
   const t = await getTranslations('marketing')
-  return marketingMetadata('/about', t('about') + ' · Lekhan', t('aboutIntro'))
+  return marketingMetadata('/about', resolveLocale(await getLocale()), t('about') + ' · Lekhan', t('aboutIntro'))
 }
 
 export default async function AboutPage() {
   const t = await getTranslations('marketing')
-  return <MarketingFrame current="about">
+  return <MarketingFrame path="/about">
     <section className="marketing-about marketing-width" aria-labelledby="about-title">
       <header className="marketing-lead" data-enter>
         <h1 id="about-title">{t('aboutTitle')}</h1>

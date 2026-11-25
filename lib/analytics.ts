@@ -1,6 +1,7 @@
 'use client'
 
 import { wikiLinks } from './markdown-references'
+import { localizedMarketingRoute, marketingPaths } from './marketing/routes'
 import type { Currency, Cycle, PaidTier } from './billing/catalog'
 import {
   analyticsConfigured, analyticsConsentCookie, analyticsId as id, analyticsPreference, analyticsReceipts,
@@ -220,13 +221,14 @@ export function track(...event: Event) {
   }
 }
 
-const marketingRoutes = new Set(['/', '/about', '/contact', '/faq', '/early'])
+const marketingRoutes = new Set<string>([...marketingPaths, '/early'])
 
 export function trackMarketingPage(path: string) {
   if (!ga4Configured || !analyticsAllowed() || lastMarketingPath === path) return
   lastMarketingPath = path
-  if (!marketingRoutes.has(path)) return
-  try { enableUsageAnalytics()('event', 'page_view', context(path)) } catch { return }
+  const route = localizedMarketingRoute(path)?.path ?? path
+  if (!marketingRoutes.has(route)) return
+  try { enableUsageAnalytics()('event', 'page_view', context(route)) } catch { return }
 }
 
 export function trackDailyEdit() {

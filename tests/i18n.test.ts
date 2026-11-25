@@ -2,6 +2,8 @@ import { createTranslator } from 'next-intl'
 import { describe, expect, it } from 'vitest'
 import { getCatalog, loadRawCatalog, withEnglishFallback } from '../lib/i18n/catalog'
 import { localeDirection, locales, resolveLocale } from '../lib/i18n/locales'
+import { marketingLanguageUrls } from '../lib/marketing/metadata'
+import { localizedMarketingRoute } from '../lib/marketing/routes'
 
 describe('workspace locale', () => {
   it('honors a supported preference and defaults to English for unknown values', () => {
@@ -44,5 +46,19 @@ describe('workspace catalogs', () => {
     expect(en('editor-chrome.wordCount', { count: 2 })).toBe('2 words')
     expect(es('editor-chrome.wordCount', { count: 2 })).toBe('2 palabras')
     expect(es('app-shell.deletePageTitle', { title: 'Roadmap' })).toBe('¿Eliminar Roadmap?')
+  })
+})
+
+describe('public language routes', () => {
+  it('exposes each translation and keeps private paths out of the localized route set', () => {
+    expect(localizedMarketingRoute('/hi')).toEqual({ locale: 'hi', path: '/' })
+    expect(localizedMarketingRoute('/es/faq')).toEqual({ locale: 'es', path: '/faq' })
+    expect(localizedMarketingRoute('/es/page/private-note')).toBeNull()
+    expect(localizedMarketingRoute('/xx/faq')).toBeNull()
+    expect(marketingLanguageUrls('/about', 'https://lekhan.example')).toEqual({
+      en: 'https://lekhan.example/en/about', hi: 'https://lekhan.example/hi/about',
+      zh: 'https://lekhan.example/zh/about', es: 'https://lekhan.example/es/about',
+      de: 'https://lekhan.example/de/about', 'x-default': 'https://lekhan.example/about',
+    })
   })
 })

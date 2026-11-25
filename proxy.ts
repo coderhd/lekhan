@@ -2,8 +2,25 @@ import { createServerClient } from '@supabase/ssr'
 import { type NextRequest, NextResponse } from 'next/server'
 import { authConfig } from './lib/auth/config'
 import { authSessionCookie, offlineAccountCookie } from './lib/cloud/offline-account'
+import { localeCookie } from './lib/i18n/locales'
+import { localizedMarketingRoute } from './lib/marketing/routes'
 
 export async function proxy(request: NextRequest) {
+  const localized = localizedMarketingRoute(request.nextUrl.pathname)
+  if (localized) {
+    const url = request.nextUrl.clone()
+    url.pathname = localized.path
+    const changed = request.cookies.get(localeCookie)?.value !== localized.locale
+    request.cookies.set(localeCookie, localized.locale)
+    const response = NextResponse.rewrite(url, { request: { headers: new Headers(request.headers) } })
+    if (changed && request.method === 'GET') {
+      response.cookies.set(localeCookie, localized.locale, {
+        path: '/', sameSite: 'lax', secure: request.nextUrl.protocol === 'https:', maxAge: 365 * 24 * 60 * 60,
+      })
+    }
+    response.headers.set('Cache-Control', 'private, no-store')
+    return response
+  }
   let response = NextResponse.next({ request })
   const settings = authConfig()
   if (!settings) return response
@@ -35,4 +52,4 @@ export async function proxy(request: NextRequest) {
   return response
 }
 
-export const config = { matcher: ['/workspace', '/login', '/signup', '/forgot-password', '/reset-password', '/cloud/:path*', '/billing', '/page/:path*', '/invite/:path*', '/api/billing', '/api/billing/plan-change', '/api/sync/:path*', '/api/search', '/api/checkpoints', '/api/import', '/api/page-link'] }
+export const config = { matcher: ['/:locale(en|hi|zh|es|de)', '/:locale(en|hi|zh|es|de)/:section(about|faq|contact)', '/workspace', '/login', '/signup', '/forgot-password', '/reset-password', '/cloud/:path*', '/billing', '/page/:path*', '/invite/:path*', '/api/billing', '/api/billing/plan-change', '/api/sync/:path*', '/api/search', '/api/checkpoints', '/api/import', '/api/page-link'] }

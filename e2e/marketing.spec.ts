@@ -34,3 +34,22 @@ test('marketing navigation exposes import details, contact, and the original leg
   await expect(page).toHaveURL('/terms-of-service', { timeout: 12_000 })
   await expect(page.getByRole('heading', { name: 'Terms of Service' })).toBeVisible()
 })
+
+test('shared marketing URLs open in their own language and carry it into the notebook', async ({ page, context }) => {
+  await context.addCookies([{ name: 'lek-locale', value: 'hi', url: 'http://localhost:3182' }])
+  await page.goto('/es')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+  await page.getByRole('main').locator('a[href="/es/faq#transfer"]').click()
+  await expect(page).toHaveURL('/es/faq#transfer')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+
+  await page.locator('select').selectOption('de')
+  await expect(page).toHaveURL('/de/faq#transfer')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'de')
+  await page.locator('header a[href="/workspace"]').click()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'de')
+
+  await page.goto('/en/contact')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  await expect(page.getByRole('link', { name: /Send an email/ })).toBeVisible()
+})
