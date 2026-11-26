@@ -1,3 +1,4 @@
+import { VaultImportError } from './vault-import-error'
 import { lexer, type Token, type Tokens } from 'marked'
 import { stringify } from 'yaml'
 import type { LocalAttachment, Page, PageChoice, Workspace } from './types'
@@ -300,7 +301,7 @@ export function applyVaultImport(workspace: Workspace, plan: VaultImportPlan, { 
         else body += (link.embed && plan.workspaceArchive ? '!' : '') + '[[' + parsedTarget
           + (link.alias === undefined ? '' : '|' + link.alias) + ']]'
       }
-      if (outputSize + body.length > 140_000_000) throw new Error('Embedded images make this vault too large to import.')
+      if (outputSize + body.length > 140_000_000) throw new VaultImportError('embeddedImagesLimit', 'Embedded images make this vault too large to import.')
       cursor = link.end
     }
     page.markdown = body + note.markdown.slice(cursor)
@@ -324,7 +325,7 @@ export function applyVaultImport(workspace: Workspace, plan: VaultImportPlan, { 
     }
     if (files.size) page.files = [...files.values()]
     outputSize += page.markdown.length
-    if (outputSize > 140_000_000) throw new Error('Embedded images make this vault too large to import.')
+    if (outputSize > 140_000_000) throw new VaultImportError('embeddedImagesLimit', 'Embedded images make this vault too large to import.')
   }
   report.images = usedImages.size
   if (plan.attachments?.size) report.files = usedFiles.size

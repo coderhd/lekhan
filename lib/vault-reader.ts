@@ -1,3 +1,4 @@
+import { VaultImportError } from './vault-import-error'
 import { Inflate, strFromU8 } from 'fflate'
 import { workspaceManifestPath } from './archive-metadata'
 
@@ -21,12 +22,12 @@ function canonicalSegments(rawPath: string) {
     /[\u0000-\u001f\u007f]/u.test(path) ||
     segments.includes('..')
   ) {
-    throw new Error(`The vault contains an unsafe path: "${rawPath}".`)
+    throw new VaultImportError('unsafePath', `The vault contains an unsafe path: "${rawPath}".`, { path: rawPath })
   }
 
   const relative = segments.filter(segment => segment !== '' && segment !== '.')
   if (/^[a-z]:/i.test(relative[0] ?? '')) {
-    throw new Error(`The vault contains an unsafe path: "${rawPath}".`)
+    throw new VaultImportError('unsafePath', `The vault contains an unsafe path: "${rawPath}".`, { path: rawPath })
   }
 
   return relative
@@ -57,7 +58,7 @@ class VaultCollector {
     let path = ''
     for (const segment of segments) {
       path = path ? `${path}/${segment}` : segment
-      if (this.files.has(path)) throw new Error(`The vault contains a duplicate path: "${path}".`)
+      if (this.files.has(path)) throw new VaultImportError('duplicatePath', `The vault contains a duplicate path: "${path}".`, { path })
       this.directories.add(path)
     }
   }
@@ -66,27 +67,27 @@ class VaultCollector {
     const attachment = this.includeAttachments && path !== workspaceManifestPath
       && (!MARKDOWN_EXTENSION.test(path) && !IMAGE_EXTENSION.test(path) || /^(?:Files|Attachments(?: \(\d+\))?\/Files)\//.test(path))
     const limit = attachment ? MAX_ATTACHMENT_BYTES : maxVaultInlineBytes
-    if (bytes > limit) throw new Error(`"${path}" exceeds the ${attachment ? 50 : 10} MB per-file limit.`)
+    if (bytes > limit) throw new VaultImportError('fileSizeLimit', `"${path}" exceeds the ${attachment ? 50 : 10} MB per-file limit.`, { path, size: attachment ? 50 : 10 })
     if (this.totalBytes + bytes > MAX_TOTAL_BYTES) {
-      throw new Error('The vault exceeds the 100 MB total unpacked size limit.')
+      throw new VaultImportError('archiveSizeLimit', 'The vault exceeds the 100 MB total unpacked size limit.')
     }
   }
 
   async addFile(segments: string[], size: number, read: (path: string) => Promise<Uint8Array>) {
     const path = segments.join('/')
     if (this.files.has(path) || this.directories.has(path)) {
-      throw new Error(`The vault contains a duplicate path: "${path}".`)
+      throw new VaultImportError('duplicatePath', `The vault contains a duplicate path: "${path}".`, { path })
     }
     const isImage = IMAGE_EXTENSION.test(path)
     if (isImage && this.imageCount >= MAX_IMAGES) {
-      throw new Error('The vault exceeds the limit of 1,000 image attachments.')
+      throw new VaultImportError('archiveImageLimit', 'The vault exceeds the limit of 1,000 image attachments.')
     }
 
     this.checkSize(path, size)
     const data = await read(path)
     this.checkSize(path, data.byteLength)
     if (MARKDOWN_EXTENSION.test(path) || isImage || path === workspaceManifestPath) this.addDirectory(segments.slice(0, -1))
-    if (this.files.size >= 5_000) throw new Error('The vault exceeds the limit of 5,000 files.')
+    if (this.files.size >= 5_000) throw new VaultImportError('archiveFileLimit', 'The vault exceeds the limit of 5,000 files.')
     this.files.set(path, data)
     this.totalBytes += data.byteLength
     if (isImage) this.imageCount += 1
@@ -101,7 +102,7 @@ class VaultCollector {
 }
 
 function invalidZip() {
-  return new Error('This file is an invalid ZIP archive.')
+  return new VaultImportError('invalidZip', 'This file is an invalid ZIP archive.')
 }
 
 async function viewOf(blob: Blob, start: number, length: number) {
@@ -169,9 +170,9 @@ export async function readVaultZip(zip: File, includeAttachments = false): Promi
       if (!skipDirectory(segments)) vault.addDirectory(segments)
     } else if (isVaultFile(segments, includeAttachments)) {
       await vault.addFile(segments, size, async path => {
-        if (flags & 1) throw new Error('The vault contains an encrypted ZIP entry.')
+        if (flags & 1) throw new VaultImportError('encryptedZip', 'The vault contains an encrypted ZIP entry.')
         if (method !== 0 && method !== 8) {
-          throw new Error('The ZIP archive uses an unsupported compression method.')
+          throw new VaultImportError('unsupportedZip', 'The ZIP archive uses an unsupported compression method.')
         }
 
         if (localOffset + 30 > directory.start) throw invalidZip()

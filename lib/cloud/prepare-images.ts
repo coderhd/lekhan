@@ -1,3 +1,4 @@
+import { VaultImportError } from '../vault-import-error'
 import { cloudImageAllowed, FREE_IMAGE_BYTES, FREE_IMAGE_EDGE, inlineCloudImages, PAID_IMAGE_BYTES, type CloudImagePolicy } from './image-policy'
 import { isEmbeddedRaster } from '../markdown'
 import type { CloudImportBatch } from './import-plan'
@@ -77,7 +78,7 @@ export async function prepareCloudImportImages(batches: CloudImportBatch[], sett
           try {
             replacement = await resizeForCloud(image.source)
           } catch {
-            throw new Error(`An image in “${page.title}” could not be prepared for Free cloud import. Try a smaller image or import the vault locally.`)
+            throw new VaultImportError('imagePreparationFailed', `An image in “${page.title}” could not be prepared for Free cloud import. Try a smaller image or import the vault locally.`, { name: page.title })
           }
           optimized.set(image.source, replacement)
         }

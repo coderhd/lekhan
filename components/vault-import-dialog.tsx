@@ -7,10 +7,12 @@ import { Dialog } from './workspace-dialogs'
 import { planVaultImport, type ImportReport, type VaultImportPlan } from '@/lib/vault-import'
 import type { SaveStatus } from '@/lib/use-workspace'
 import { pickVaultFolder, readVaultFiles, readVaultZip, type VaultContents } from '@/lib/vault-reader'
-import { uploadImportedAttachment } from '@/lib/cloud/attachment-client'
+import { AttachmentTransferError, uploadImportedAttachment } from '@/lib/cloud/attachment-client'
 import type { BoundCloudFile, cloudImportPlan, CloudImportReceipt } from '@/lib/cloud/import-plan'
 import type { CloudImportImageContext } from '@/lib/cloud/prepare-images'
 import { consumeAnalyticsReceipts, track } from '@/lib/analytics'
+import { useLocale, useTranslations } from '@/lib/i18n/client'
+import { VaultImportError } from '@/lib/vault-import-error'
 
 type Destination = { cloud: true; onOpenPage: (id: string) => void }
   | { cloud?: false; onImport: (plan: VaultImportPlan) => ImportReport | null; includeAttachments?: boolean; saveStatus: SaveStatus }
@@ -18,6 +20,9 @@ type CloudDraft = Omit<ReturnType<typeof cloudImportPlan>, 'files'> & { files: B
 
 export function VaultImportDialog(props: Destination & { onClose: () => void }) {
   const { onClose } = props
+  const t = useTranslations('vault-import')
+  const fileText = useTranslations('cloud-dialogs')
+  const numbers = new Intl.NumberFormat(useLocale())
   const includeAttachments = props.cloud || props.includeAttachments === true
   const zip = useRef<HTMLInputElement>(null)
   const directory = useRef<HTMLInputElement>(null)
@@ -56,19 +61,19 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
         })
         if (result.status === 413 || result.status === 409) {
           const detail = await result.json().catch(() => null)
-          if (detail?.error === 'import_free_image_limit') throw new Error('Free cloud imports use WebP images up to 500 KB and 1,600 pixels per side.')
-          if (detail?.error === 'import_paid_image_limit') throw new Error('A cloud image exceeds the 20 MB limit.')
-          if (detail?.error === 'import_workspace_media_limit') throw new Error('These images would exceed the workspace’s storage limit. Free up space and resume the import.')
+          if (detail?.error === 'import_free_image_limit') throw new VaultImportError('freeImageLimit')
+          if (detail?.error === 'import_paid_image_limit') throw new VaultImportError('paidImageLimit')
+          if (detail?.error === 'import_workspace_media_limit') throw new VaultImportError('workspaceImageLimit')
           if (detail?.error === 'import_image_policy_changed') {
             setDraft(null)
-            throw new Error('The workspace image limits changed. Choose the original files again to resume.')
+            throw new VaultImportError('imagePolicyChanged')
           }
         }
-        if (result.status === 413) throw new Error('The cloud host rejected the size of this batch. Earlier batches are still saved.')
-        if (result.status === 403) throw new Error('Sign back into the account that started this import.')
-        if (result.status === 400) throw new Error('A note has a title, path, or property that the cloud workspace could not accept.')
-        if (result.status === 409) throw new Error('This batch conflicts with a saved import. Select the original files to continue.')
-        if (!result.ok) throw new Error('Could not finish the cloud upload. Resume to continue from the saved batches.')
+        if (result.status === 413) throw new VaultImportError('batchSizeLimit')
+        if (result.status === 401 || result.status === 403) throw new VaultImportError('accountChanged')
+        if (result.status === 400) throw new VaultImportError('invalidNote')
+        if (result.status === 409) throw new VaultImportError('batchConflict')
+        if (!result.ok) throw new VaultImportError('uploadFailed')
         const receipt: CloudImportReceipt = await result.json()
         consumeAnalyticsReceipts()
         const firstIndex = batch.pages.findIndex(page => page.ordinal === plan.firstNote)
@@ -80,18 +85,19 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
         for (const file of plan.files) {
           if (!targets.has(file.ordinal)) continue
           const target = targets.get(file.ordinal)
-          if (!target) throw new Error('An attachment could not be matched to its imported page.')
+          if (!target) throw new VaultImportError('attachmentPageMissing')
           const replayed = await uploadImportedAttachment(target, file, plan.account)
           files++
           if (replayed) reusedFiles++
           updateProgress()
         }
       }
-      if (files !== plan.files.length) throw new Error('Some files could not be matched to their imported pages.')
+      if (files !== plan.files.length) throw new VaultImportError('attachmentPageMissing')
       setReport({ ...plan.report, ...(files ? { files } : {}), repeated: saved === resumed && files === reusedFiles })
       if (saved > resumed || files > reusedFiles) track('import_completed', source.current, plan.report.notes)
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Could not finish the cloud upload.')
+      setError(failure instanceof AttachmentTransferError ? fileText(failure.code)
+        : failure instanceof VaultImportError ? t(failure.code, failure.values) : t('uploadFailed'))
     } finally {
       setUploading(false)
     }
@@ -111,6 +117,8 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
     setReading('vault')
     setError('')
     setReport(null)
+    setProgress(null)
+    setFirstPage(null)
     setOptimizedImages(0)
     try {
       const contents = await read()
@@ -121,9 +129,10 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
         const { bindCloudImportFiles, cloudImportPlan } = await import('@/lib/cloud/import-plan')
         const baseline = cloudImportPlan(plan)
         const attempt = baseline.batches[0]?.importId
-        if (!attempt) throw new Error('No pages are ready to import.')
+        if (!attempt) throw new VaultImportError('noMarkdown')
         const response = await fetch('/api/import?' + new URLSearchParams({ attempt }), { cache: 'no-store' })
-        if (!response.ok) throw new Error('Cloud import could not check the workspace’s image limits.')
+        if (response.status === 401 || response.status === 403) throw new VaultImportError('accountChanged')
+        if (!response.ok) throw new VaultImportError('checkPlanFailed')
         const settings: CloudImportImageContext = await response.json()
         const { prepareCloudImportImages } = await import('@/lib/cloud/prepare-images')
         const bound = await bindCloudImportFiles(baseline, settings.account, settings.current)
@@ -136,11 +145,11 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
         return
       }
       const result = props.onImport(plan)
-      if (!result) throw new Error('The workspace is still opening. Try again when it is ready.')
+      if (!result) throw new VaultImportError('workspaceOpening')
       setReport(result)
     } catch (failure) {
       if (!(failure instanceof DOMException && failure.name === 'AbortError')) {
-        setError(failure instanceof Error ? failure.message : 'The vault could not be read.')
+        setError(failure instanceof VaultImportError ? t(failure.code, failure.values) : t('readFailed'))
       }
     } finally {
       busy.current = false
@@ -162,63 +171,64 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
 
   const saved = report && (props.cloud || props.saveStatus === 'saved')
   const saveFailed = report && !props.cloud && (props.saveStatus === 'error' || props.saveStatus === 'conflict')
-  const title = props.cloud ? 'Import to cloud workspace' : 'Import an Obsidian vault'
+  const title = props.cloud ? t('cloudTitle') : t('localTitle')
 
   return (
     <Dialog title={title} onClose={() => { if (!busy.current) onClose() }}>
       <div className="form-dialog vault-dialog">
         <h2>{title}</h2>
-        <p>{props.cloud ? 'Upload Markdown files or an Obsidian vault to your private cloud workspace.'
-          : 'Choose a ZIP archive or vault folder. Lekhan keeps your note hierarchy, properties, and page links.'}</p>
-        <input ref={zip} type="file" accept=".zip,application/zip" hidden aria-label="Vault ZIP" onChange={selectZip} />
-        <input ref={directory} type="file" {...{ webkitdirectory: "" }} multiple hidden aria-label="Vault folder" onChange={selectFolder} />
-        {props.cloud && <input ref={markdown} type="file" accept=".md,.markdown,text/markdown" multiple hidden aria-label="Markdown files" onChange={event => selectFolder(event, 'markdown')} />}
+        <p>{props.cloud ? t('cloudIntro')
+          : t('localIntro')}</p>
+        <input ref={zip} type="file" accept=".zip,application/zip" hidden aria-label={t('vaultZip')} onChange={selectZip} />
+        <input ref={directory} type="file" {...{ webkitdirectory: "" }} multiple hidden aria-label={t('vaultFolder')} onChange={selectFolder} />
+        {props.cloud && <input ref={markdown} type="file" accept=".md,.markdown,text/markdown" multiple hidden aria-label={t('markdownFiles')} onChange={event => selectFolder(event, 'markdown')} />}
         {!report && !draft && <div className="vault-options">
-          <button className="secondary-button" disabled={!!reading} onClick={() => zip.current?.click()}><Archive size={17} /> Choose ZIP</button>
+          <button className="secondary-button" disabled={!!reading} onClick={() => zip.current?.click()}><Archive size={17} /> {t('chooseZip')}</button>
           <button className="secondary-button" disabled={!!reading} onClick={() => {
             if (!('showDirectoryPicker' in window) || !window.isSecureContext) {
               directory.current?.click()
             } else {
               void run(() => pickVaultFolder(includeAttachments))
             }
-          }}><FolderOpen size={17} /> Choose folder</button>
-          {props.cloud && <button className="secondary-button" disabled={!!reading} onClick={() => markdown.current?.click()}><FileText size={17} /> Choose Markdown</button>}
+          }}><FolderOpen size={17} /> {t('chooseFolder')}</button>
+          {props.cloud && <button className="secondary-button" disabled={!!reading} onClick={() => markdown.current?.click()}><FileText size={17} /> {t('chooseMarkdown')}</button>}
         </div>}
         {reading && <div role="status" className="vault-status">
-          <LoaderCircle size={16} className="spin" /> {reading === 'cloud' ? 'Preparing cloud import…' : 'Reading vault…'}
+          <LoaderCircle size={16} className="spin" /> {reading === 'cloud' ? t('preparing') : t('reading')}
         </div>}
         {progress && <div role="status" className="vault-status">
           {uploading && <LoaderCircle size={16} className="spin" />}
-          {progress.saved} of {progress.total} pages saved{progress.resumed ? ` · ${progress.resumed} already imported` : ''}
-          {progress.filesTotal ? ` · ${progress.files} of ${progress.filesTotal} files saved` : ''}
+          <span>{t('pagesProgress', { saved: progress.saved, total: progress.total })}
+            {progress.resumed ? ' · ' + t('resumedProgress', { count: progress.resumed }) : ''}
+            {progress.filesTotal ? ' · ' + t('filesProgress', { saved: progress.files, total: progress.filesTotal }) : ''}</span>
         </div>}
-        {error && <div role="alert" className="vault-status vault-error"><AlertCircle size={16} /> {error}</div>}
+        {error && <div role="alert" className="vault-status vault-error"><AlertCircle size={16} /> <span>{error}</span></div>}
         {report && <>
           <div role="status" className="vault-status">
             {saved ? <Check size={16} /> : saveFailed ? <AlertCircle size={16} /> : <LoaderCircle size={16} className="spin" />}
-            {saved ? report.repeated ? 'Vault already imported' : props.cloud ? 'Import saved to cloud workspace' : 'Import saved locally'
-              : saveFailed ? 'Import is open but could not be saved' : 'Saving imported pages…'}
+            {saved ? report.repeated ? t('alreadyImported') : props.cloud ? t('cloudSaved') : t('localSaved')
+              : saveFailed ? t('localSaveFailed') : t('saving')}
           </div>
           <dl className="vault-report">
             {[
-              ['Notes', report.notes], ['Folders', report.folders], ['Images', report.images],
-              ...(report.files === undefined ? [] : [['Files saved', report.files]]),
-              ...(report.omittedFiles ? [['Files left in the archive', report.omittedFiles]] : []),
-              ['Resolved links', report.resolved], ['Unresolved links', report.unresolved],
-              ['Converted embeds', report.degraded],
-            ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
+              [t('notes'), report.notes], [t('folders'), report.folders], [t('images'), report.images],
+              ...(report.files === undefined ? [] : [[t('filesSaved'), report.files]]),
+              ...(report.omittedFiles ? [[t('filesOmitted'), report.omittedFiles]] : []),
+              [t('resolved'), report.resolved], [t('unresolved'), report.unresolved],
+              [t('converted'), report.degraded],
+            ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{numbers.format(Number(value))}</dd></div>)}
           </dl>
-          {!!report.omittedFiles && <p>Files without a page link or an archive attachment record stay in the source vault.</p>}
-          {report.degraded > 0 && <p>Attachments Lekhan couldn’t display were kept as links.</p>}
-          {optimizedImages > 0 && <p>{optimizedImages === 1 ? '1 image was' : `${optimizedImages} images were`} optimized for Free cloud storage.</p>}
-          {report.invalidProperties > 0 && <p>Some properties could not be read. Their original YAML is still in the page source.</p>}
+          {!!report.omittedFiles && <p>{t('omittedNotice')}</p>}
+          {report.degraded > 0 && <p>{t('degradedNotice')}</p>}
+          {optimizedImages > 0 && <p>{t('optimized', { count: optimizedImages })}</p>}
+          {report.invalidProperties > 0 && <p>{t('propertiesNotice')}</p>}
         </>}
         <div className="dialog-actions">
           <button className={saved && !props.cloud ? 'primary-button' : 'secondary-button'} onClick={onClose} disabled={!!reading || uploading}>
-            {report ? props.cloud ? 'Done' : 'Open workspace' : 'Cancel'}
+            {report ? props.cloud ? t('done') : t('openWorkspace') : t('cancel')}
           </button>
-          {props.cloud && error && draft && <button className="primary-button" disabled={uploading} onClick={resume}>Resume import</button>}
-          {props.cloud && report && firstPage && <button className="primary-button" onClick={() => props.onOpenPage(firstPage)}>Open first note</button>}
+          {props.cloud && error && draft && <button className="primary-button" disabled={uploading} onClick={resume}>{t('resume')}</button>}
+          {props.cloud && report && firstPage && <button className="primary-button" onClick={() => props.onOpenPage(firstPage)}>{t('openFirst')}</button>}
         </div>
       </div>
     </Dialog>

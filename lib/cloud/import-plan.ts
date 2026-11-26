@@ -1,3 +1,4 @@
+import { VaultImportError } from '../vault-import-error'
 import type { VaultImportPlan } from '../vault-import'
 import { attachmentDestination, attachmentReference } from '../local-attachments'
 import { mapMarkdownDestinations } from '../markdown-destinations'
@@ -77,7 +78,7 @@ export function cloudImportPlan(vault: VaultImportPlan) {
   let bytes = 100
   for (const page of pages) {
     const size = encoder.encode(JSON.stringify(page)).byteLength + 1
-    if (size + 100 > MAX_IMPORT_BATCH_BYTES) throw new Error(`“${page.title}” is too large to send in a single upload.`)
+    if (size + 100 > MAX_IMPORT_BATCH_BYTES) throw new VaultImportError('noteUploadLimit', `“${page.title}” is too large to send in a single upload.`, { name: page.title })
     if (batch.pages.length && (bytes + size > MAX_SMALL_IMPORT_BATCH_BYTES || batch.pages.length >= MAX_IMPORT_BATCH_PAGES)) {
       batches.push(batch)
       batch = { importId, index: batches.length, pages: [] }
@@ -94,16 +95,16 @@ export async function bindCloudImportFiles<T extends { batches: CloudImportBatch
   plan: T, account: string | undefined, policy: CloudImagePolicy,
 ): Promise<Omit<T, 'files'> & { files: BoundCloudFile[] }> {
   if (!plan.files.length) return { ...plan, files: [] }
-  if (!account) throw new Error('Could not verify the account for this file import.')
+  if (!account) throw new VaultImportError('verifyAccount', 'Could not verify the account for this file import.')
   const uploadLimit = policy === 'paid' ? PAID_ATTACHMENT_BYTES : FREE_ATTACHMENT_BYTES
   const byPage = new Map<number, Map<string, CloudArchiveFile>>()
   const digests = new Map<Uint8Array, string>()
   const files: BoundCloudFile[] = []
   for (const file of plan.files) {
     const filename = attachmentName(file.filename)
-    if (!filename || !file.data.byteLength) throw new Error(`“${file.filename}” is empty or has an unsupported filename.`)
+    if (!filename || !file.data.byteLength) throw new VaultImportError('invalidAttachment', `“${file.filename}” is empty or has an unsupported filename.`, { name: file.filename })
     if (file.data.byteLength > uploadLimit) {
-      throw new Error(`“${filename}” is larger than this workspace’s ${uploadLimit / 1_000_000} MB file limit.`)
+      throw new VaultImportError('workspaceFileLimit', `“${filename}” is larger than this workspace’s ${uploadLimit / 1_000_000} MB file limit.`, { name: filename, size: uploadLimit / 1_000_000 })
     }
     const page = byPage.get(file.ordinal) ?? new Map<string, CloudArchiveFile>()
     byPage.set(file.ordinal, page)

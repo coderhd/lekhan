@@ -62,6 +62,13 @@ describe('workspace catalogs', () => {
     expect(retention).toContain(new Intl.NumberFormat(locale).format(1250))
     expect(translate('checkpointRetention', { days: 1 })).not.toEqual(retention)
   })
+
+  it.each(locales)('formats import progress and preserves filenames in %s', async locale => {
+    const translate = createTranslator({ locale, messages: await getCatalog(locale), namespace: 'vault-import' })
+    expect(translate('filesProgress', { saved: 1250, total: 2000 })).toContain(new Intl.NumberFormat(locale).format(1250))
+    expect(translate('fileSizeLimit', { path: 'Folder/Record {2014}.pdf', size: 50 })).toContain('Folder/Record {2014}.pdf')
+    expect(translate('optimized', { count: 2 })).toContain('2')
+  })
 })
 
 describe('public language routes', () => {

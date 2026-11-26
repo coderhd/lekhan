@@ -1,3 +1,4 @@
+import { VaultImportError } from './vault-import-error'
 import { strFromU8 } from 'fflate'
 import { parseDocument } from 'yaml'
 import { readWorkspaceArchiveMetadata, workspaceManifestPath, type ArchivedNote } from './archive-metadata'
@@ -89,7 +90,7 @@ export async function planVaultImport(contents: VaultContents, includeAttachment
   const directories = new Set(contents.directories)
   const registeredFiles = new Set(archive
     ? Object.values(archive.notes).flatMap(note => note.files ?? []).filter(path => !Object.hasOwn(archive.notes, path)) : [])
-  if (!files.some(file => /\.(md|markdown)$/i.test(file.path))) throw new Error('No Markdown notes found in this vault.')
+  if (!files.some(file => /\.(md|markdown)$/i.test(file.path))) throw new VaultImportError('noMarkdown', 'No Markdown notes found in this vault.')
 
   let invalidProperties = 0
   const fingerprints = []
@@ -100,14 +101,14 @@ export async function planVaultImport(contents: VaultContents, includeAttachment
     }
     const isMarkdown = /\.(md|markdown)$/i.test(file.path) && !registeredFiles.has(file.path)
     if (isMarkdown) {
-      if (file.data.byteLength > maxVaultInlineBytes) throw new Error(`"${file.path}" exceeds the 10 MB per-file limit.`)
+      if (file.data.byteLength > maxVaultInlineBytes) throw new VaultImportError('fileSizeLimit', `"${file.path}" exceeds the 10 MB per-file limit.`, { path: file.path, size: 10 })
       const exported = archive && Object.hasOwn(archive.notes, file.path) ? archive.notes[file.path] : undefined
       const { invalidProperties: invalid, ...note } = markdownNote(file.path, decoder.decode(file.data), exported)
       if (invalid) invalidProperties++
       notes.push({ ...note, ...(includeAttachments && exported?.files ? { files: exported.files } : {}) })
       const segments = file.path.split('/')
       for (let depth = 1; depth < segments.length; depth++) directories.add(segments.slice(0, depth).join('/'))
-      if (notes.length > 2000 || (!archive && notes.length + directories.size > 2000)) throw new Error('A vault import can contain at most 2,000 pages and folders.')
+      if (notes.length > 2000 || (!archive && notes.length + directories.size > 2000)) throw new VaultImportError('archivePagesLimit', 'A vault import can contain at most 2,000 pages and folders.')
     } else {
       const mime = registeredFiles.has(file.path) || file.data.byteLength > maxVaultInlineBytes ? undefined : rasterMime(file.data)
       if (mime) images.set(file.path, 'data:image/' + mime + ';base64,' + btoa(strFromU8(file.data, true)))
@@ -134,11 +135,11 @@ export async function planVaultImport(contents: VaultContents, includeAttachment
       }
     }
   }
-  if (!notes.length) throw new Error('No Markdown notes found in this vault.')
+  if (!notes.length) throw new VaultImportError('noMarkdown', 'No Markdown notes found in this vault.')
   if (archive) {
     const notePaths = new Set(notes.map(note => note.sourcePath.replace(/\.md$/i, '')))
     const folders = [...directories].filter(directory => !notePaths.has(directory))
-    if (notes.length + folders.length > 2000) throw new Error('A vault import can contain at most 2,000 pages and folders.')
+    if (notes.length + folders.length > 2000) throw new VaultImportError('archivePagesLimit', 'A vault import can contain at most 2,000 pages and folders.')
   }
   return {
     fingerprint: await digest(encoder.encode(JSON.stringify([[...directories].sort(), fingerprints]))),

@@ -80,6 +80,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
   cloudSearchSubject?: string
 }) {
   const t = useTranslations('app-shell')
+  const importText = useTranslations('vault-import')
   const desktopText = useTranslations('desktop')
   const editorText = useTranslations('editor-chrome')
   const aiText = useTranslations('editor-ai')
@@ -589,7 +590,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
           <button className="nav-action vault-launch" disabled={!workspace} onClick={() => {
             setNavigationOpen(false)
             setVaultOpen(true)
-          }}><FolderClosed size={15} /> Import vault</button>
+          }}><FolderClosed size={15} /> {importText('openVaultImport')}</button>
           {typeof sidebarControls === 'function' ? sidebarControls(!workspace || status === 'saved') : sidebarControls}
           <button className="nav-action" type="button" aria-keyshortcuts="Meta+/ Control+/" onClick={() => setShortcutsOpen(true)}>
             <Keyboard size={16} aria-hidden="true" /> {t('keyboardShortcuts')}
