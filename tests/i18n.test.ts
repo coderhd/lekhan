@@ -69,6 +69,18 @@ describe('workspace catalogs', () => {
     expect(translate('fileSizeLimit', { path: 'Folder/Record {2014}.pdf', size: 50 })).toContain('Folder/Record {2014}.pdf')
     expect(translate('optimized', { count: 2 })).toContain('2')
   })
+
+  it.each(locales)('formats billing dates, quoted prices, and referral counts in %s', async locale => {
+    const translate = createTranslator({ locale, messages: await getCatalog(locale), namespace: 'billing' })
+    const date = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date('2027-01-15'))
+    expect(translate('renewsOn', { date })).toContain(date)
+    expect(translate('keepsThroughDate', { date })).toContain(date)
+    const price = new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(12)
+    expect(translate('pricePerSeat', { price })).toContain(price)
+    const count = (text: React.ReactNode) => '[' + text + ']'
+    expect(translate.rich('monthsBanked', { months: 1, count })).toContain('[1]')
+    expect(translate.rich('monthsBanked', { months: 1250, count })).toContain('[' + new Intl.NumberFormat(locale).format(1250) + ']')
+  })
 })
 
 describe('public language routes', () => {

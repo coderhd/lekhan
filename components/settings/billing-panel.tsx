@@ -1,4 +1,5 @@
 import { headers } from 'next/headers'
+import { getTranslations } from 'next-intl/server'
 import { accountContext } from '@/lib/auth/server'
 import { createServerAdmin } from '@/lib/auth/admin'
 import { siteOrigin } from '@/lib/auth/config'
@@ -15,8 +16,9 @@ export default async function BillingPanel({ account, query = {} }: {
   query?: { checkout?: string; transfer?: string }
 }) {
   const admin = createServerAdmin()
-  const [request, billing] = await Promise.all([
+  const [request, t, billing] = await Promise.all([
     headers(),
+    getTranslations('billing'),
     admin && siteOrigin()
       ? ownerWorkspace(account.client, account.subject)
         .then(async workspace => {
@@ -42,17 +44,17 @@ export default async function BillingPanel({ account, query = {} }: {
   ))) : []
 
   return <div className="settings-billing">
-      {query.transfer === 'accepted' && <p role="status" className="billing-notice">You now own this workspace.</p>}
+      {query.transfer === 'accepted' && <p role="status" className="billing-notice">{t('ownershipAccepted')}</p>}
       {summary ? <BillingSettings summary={summary} defaultCurrency={currency} available={available}
         returned={query.checkout === 'returned'} paused={query.checkout === 'paused'} />
-        : <p role="status">Billing is temporarily unavailable. You can still open your workspace and keep writing.</p>}
+        : <p role="status">{t('panelUnavailable')}</p>}
       {summary && billing?.storage && <WorkspaceStorage images={billing.storage.image_bytes} files={billing.storage.file_bytes} free={(summary.entitlement?.tier ?? 'free') === 'free'} />}
       {summary && <section className="billing-referrals" aria-labelledby="billing-referrals">
-        <h2 id="billing-referrals">Referrals</h2>
-        <p><strong>{summary.referralMonths}</strong> {summary.referralMonths === 1 ? 'month' : 'months'} banked</p>
-        <p>Earn a month when a friend starts a cloud workspace and another when they first subscribe.</p>
-        {summary.gateway === 'stripe' && <p>At renewal, banked months become Stripe credit toward a future invoice.</p>}
-        <InviteLink path={'/signup?' + new URLSearchParams({ ref: account.subject })} origin={siteOrigin()} label="Referral link" />
+        <h2 id="billing-referrals">{t('referrals')}</h2>
+        <p>{t.rich('monthsBanked', { months: summary.referralMonths, count: text => <strong>{text}</strong> })}</p>
+        <p>{t('referralEarn')}</p>
+        {summary.gateway === 'stripe' && <p>{t('referralRenewal')}</p>}
+        <InviteLink path={'/signup?' + new URLSearchParams({ ref: account.subject })} origin={siteOrigin()} label={t('referralLink')} />
       </section>}
       {billing?.workspace && <WorkspaceTransferInvite />}
     </div>

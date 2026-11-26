@@ -2,20 +2,21 @@
 
 import { useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from '@/lib/i18n/client'
 import InviteLink from './invite-link'
 
-const messages: Record<string, string> = {
-  transfer_invalid_recipient: 'Enter the verified email of another Lekhan account.',
-  transfer_recipient_has_workspace: 'The recipient already owns a cloud workspace. Each account can own one workspace.',
-  transfer_invalid_link: 'This transfer link is unavailable.',
-  transfer_plan_changed: 'The workspace plan changed. Try accepting again.',
-  transfer_checkout_pending: 'A checkout is still open. Ask the owner to resolve it before you accept.',
-  transfer_payment_pending: 'The subscription has a payment issue. Ask the current owner to resolve it first.',
-  transfer_referral_pending: 'A referral credit is still processing. Try again once it settles.',
-  transfer_renewal_unverified: 'The provider hasn’t confirmed cancellation. Try again before completing the transfer.',
-  remove_scheduled_change: 'Ask the current owner to remove the scheduled plan change before accepting.',
-  transfer_in_progress: 'Another billing change is in progress. Try again in a moment.',
-  billing_busy: 'Another billing change is in progress. Try again in a moment.',
+const messages = {
+  transfer_invalid_recipient: 'transferInvalidRecipient', transfer_recipient_has_workspace: 'recipientHasWorkspace',
+  transfer_invalid_link: 'transferInvalidLink', transfer_plan_changed: 'transferPlanChanged',
+  transfer_checkout_pending: 'transferCheckoutPending', transfer_payment_pending: 'transferPaymentPending',
+  transfer_referral_pending: 'transferReferralPending', transfer_renewal_unverified: 'transferRenewalUnverified',
+  remove_scheduled_change: 'removeBeforeTransfer', transfer_in_progress: 'transferInProgress', billing_busy: 'transferInProgress',
+} as const
+
+type TransferFailureCode = (typeof messages)[keyof typeof messages] | 'transferUpdateFailed'
+
+class TransferFailure extends Error {
+  constructor(readonly code: TransferFailureCode) { super(code) }
 }
 
 async function transferRequest(input: { action: 'invite'; email: string } | { action: 'accept'; token: string }) {
@@ -23,69 +24,71 @@ async function transferRequest(input: { action: 'invite'; email: string } | { ac
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
   })
   const result = await response.json()
-  if (!response.ok) throw new Error(messages[result.error] ?? 'Could not update workspace ownership. Try again in a moment.')
+  if (!response.ok) throw new TransferFailure(Object.hasOwn(messages, result.error) ? messages[result.error as keyof typeof messages] : 'transferUpdateFailed')
   return result
 }
 
 export function WorkspaceTransferInvite() {
+  const t = useTranslations('billing')
   const [url, setUrl] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<TransferFailureCode | 'transferInviteFailed' | null>(null)
 
   async function invite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const email = new FormData(event.currentTarget).get('email')
     if (busy || typeof email !== 'string') return
-    setError('')
+    setError(null)
     setBusy(true)
     try {
       const result = await transferRequest({ action: 'invite', email })
       setUrl(result.url)
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Could not create the transfer link.')
+      setError(failure instanceof TransferFailure ? failure.code : 'transferInviteFailed')
     } finally {
       setBusy(false)
     }
   }
 
   return <section className="billing-transfer" aria-labelledby="billing-transfer">
-    <h2 id="billing-transfer">Transfer workspace ownership</h2>
-    <p>The new owner takes responsibility for billing once they accept. Your subscription stops renewing and the workspace keeps its current paid period. Individual page permissions stay in place.</p>
+    <h2 id="billing-transfer">{t('transferOwnership')}</h2>
+    <p>{t('transferInviteIntro')}</p>
     <form className="account-form billing-transfer-form" onSubmit={invite}>
-      <label>Recipient’s account email<input name="email" type="email" required maxLength={254} autoComplete="off" /></label>
-      <button className="secondary-button" disabled={busy}>{busy ? 'Creating link…' : 'Create transfer link'}</button>
+      <label>{t('recipientEmail')} <input name="email" type="email" required maxLength={254} autoComplete="off" /></label>
+      <button className="secondary-button" disabled={busy}>{busy ? t('creatingTransferLink') : t('createTransferLink')}</button>
     </form>
-    {error && <p className="account-error" role="alert">{error}</p>}
+    {error && <p className="account-error" role="alert">{t(error)}</p>}
     {url && <>
-      <p role="status">Send this link to the recipient. It expires in seven days and replaces any earlier transfer link.</p>
-      <InviteLink key={url} path={url} origin={null} label="Workspace transfer link" />
+      <p role="status">{t('transferLinkReady')}</p>
+      <InviteLink key={url} path={url} origin={null} label={t('transferLink')} />
     </>}
   </section>
 }
 
 export function WorkspaceTransferAccept({ token }: { token: string }) {
   const router = useRouter()
+  const t = useTranslations('billing')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<TransferFailureCode | 'transferAcceptFailed' | null>(null)
 
   async function accept() {
     if (busy) return
-    setError('')
+    setError(null)
     setBusy(true)
     try {
       await transferRequest({ action: 'accept', token })
       router.replace('/billing?transfer=accepted')
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Could not accept the transfer.')
+      setError(failure instanceof TransferFailure ? failure.code : 'transferAcceptFailed')
       setBusy(false)
     }
   }
 
   return <>
-    <p>Accepting gives you control of workspace billing. The current paid period carries over. You can set up your own subscription after accepting.</p>
-    {error && <p className="account-error" role="alert">{error}</p>}
+    <p>{t('transferAcceptIntro')}</p>
+    {error && <p className="account-error" role="alert">{t(error)}</p>}
     <button className="primary-button" type="button" disabled={busy} onClick={accept}>
-      {busy ? 'Confirming transfer…' : 'Accept ownership'}
+      {busy ? t('confirmingTransfer') : t('acceptOwnership')}
     </button>
   </>
 }
