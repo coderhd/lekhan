@@ -5,7 +5,7 @@ import {
   ChevronRight, CircleAlert, FileText, FolderClosed, Keyboard, List, LoaderCircle, Menu, MoreHorizontal,
   Cloud, PanelRight, Plus, Search, Star, X, Link2, MoveRight, Trash2, Pencil, CornerDownRight, NotebookPen, Sparkles, Paperclip,
 } from 'lucide-react'
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
 import type { Page } from '@/lib/types'
 import {
@@ -124,16 +124,19 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
 
   const pages = workspace?.pages ?? emptyPages
   const page = pages.find(item => item.id === workspace?.activePageId) ?? pages[0]
+  const deferredPage = useDeferredValue(page)
   const mirror = page?.cloudMirror
   const localReadOnly = !!mirror || syncingPage === page?.id
   const pageId = page?.id
   const { childPages, favorites, path } = useMemo(() => notebookNavigation(pages), [pages])
   const trail = useMemo(() => pageId ? path(pageId) : emptyTrail, [path, pageId])
   const links = useMemo(() => page ? getBacklinks(pages, page.id) : [], [pages, page])
-  const headings = useMemo(() => page ? pageHeadings(page.markdown) : [], [page])
+  const headings = useMemo(() => deferredPage ? pageHeadings(deferredPage.markdown) : [], [deferredPage])
   const choices = useMemo(() => pageChoices(pages), [pages])
-  const tags = useMemo(() => page ? pageTags(page) : [], [page])
+  const tags = useMemo(() => deferredPage ? pageTags(deferredPage) : [], [deferredPage])
   const activePath = useMemo(() => new Map(trail.map(note => [note.parentId, note.id])), [trail])
+  const editorAssistant = useMemo(() => ({ storageScope, localModel, localModels, transport: providerTransport }),
+    [storageScope, localModel, localModels, providerTransport])
   const toggleBranch = useCallback((id: string) => {
     setCollapsed(previous => previous.includes(id) ? previous.filter(item => item !== id) : [...previous, id])
   }, [])
@@ -531,7 +534,10 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
     : []
   const deletingPendingPage = descendants.some(item => item.id === syncingPage || item.cloudMirror?.state === 'pending')
   const displayPage = page?.title || t('untitled')
-  const words = page?.markdown.trim().match(/[\p{L}\p{N}][\p{L}\p{N}'’_-]*/gu)?.length ?? 0
+  const words = useMemo(
+    () => deferredPage?.markdown.trim().match(/[\p{L}\p{N}][\p{L}\p{N}'’_-]*/gu)?.length ?? 0,
+    [deferredPage],
+  )
 
   return (
     <div className="workspace" data-context={contextOpen ? 'open' : 'closed'} data-navigation={sidebarHidden ? 'hidden' : undefined}>
@@ -720,7 +726,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
                 pageId={page.id}
                 choices={choices}
                 editable={!localReadOnly}
-                assistant={{ storageScope, localModel, localModels, transport: providerTransport }}
+                assistant={editorAssistant}
                 onChange={markdown => { if (!localReadOnly) change(state => updatePage(state, page.id, { markdown })) }}
                 onOpenLink={handleLink}
                 onOpenAttachment={href => {
@@ -780,7 +786,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
             </section>}
             {page.properties && Object.keys(page.properties).length > 0 && (
               <section className="context-section">
-                <h3><FileText size={16} /> Properties</h3>
+                <h3><FileText size={16} /> {t('properties')}</h3>
                 <dl className="page-properties">
                   {Object.entries(page.properties).map(([name, value]) => <div key={name}>
                     <dt>{name}</dt><dd>{typeof value === 'string' ? value : JSON.stringify(value)}</dd>
@@ -790,7 +796,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
             )}
             {tags.length > 0 && (
               <section className="context-section">
-                <h3><span aria-hidden="true">#</span> Tags</h3>
+                <h3><span aria-hidden="true">#</span> {t('tags')}</h3>
                 <div className="page-tags">
                   {tags.map(tag => <button key={tag} onClick={() => {
                     setMobileContext(false)

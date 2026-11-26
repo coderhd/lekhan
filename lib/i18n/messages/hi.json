@@ -116,6 +116,8 @@
     "importReadError": "चुनी गई फ़ाइलें पढ़ी नहीं जा सकीं।",
     "exportStarted": "कार्यस्थान का निर्यात शुरू हो गया।",
     "exportFailed": "कार्यस्थान का निर्यात नहीं हो सका।",
+    "properties": "गुण",
+    "tags": "टैग",
     "untitled": "बिना शीर्षक",
     "closeNavigation": "नेविगेशन बंद करें",
     "workspaceNavigation": "कार्यस्थान का नेविगेशन",
@@ -779,7 +781,10 @@
     "markdownSource": "Markdown सोर्स",
     "markdownPlaceholder": "Markdown में लिखना शुरू करें।",
     "pageContent": "पेज की सामग्री",
-    "writePlaceholder": "लिखना शुरू करें या ब्लॉक के लिए / टाइप करें।"
+    "writePlaceholder": "लिखना शुरू करें या ब्लॉक के लिए / टाइप करें।",
+    "completeTask": "{task} पूरा करें",
+    "taskFallback": "कार्य",
+    "collaborator": "सहयोगी"
   },
   "settings": {
     "connectionTypes": "कनेक्शन के प्रकार",

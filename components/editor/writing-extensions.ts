@@ -129,28 +129,50 @@ const baseStarter = {
 }
 
 
-export const writingExtensions = [
-  StarterKit.configure(baseStarter),
-  TaskList,
-  TaskItem.configure({
-    nested: true,
-    a11y: { checkboxLabel: (node) => `Complete ${node.textContent || 'task'}` },
-  }),
-  PageLink,
-  VaultImage,
-  InlineImageParagraph,
-  Callout,
-  Markdown,
-]
+export interface WritingExtensionLabels {
+  completeTask: (task: string) => string
+  defaultTask: string
+  collaborator: string
+}
 
-export function collaborativeWritingExtensions(session: CloudCollaboration) {
+const defaultLabels: WritingExtensionLabels = {
+  completeTask: (task) => `Complete ${task}`,
+  defaultTask: 'task',
+  collaborator: 'Collaborator',
+}
+
+function sharedExtensions(labels: Pick<WritingExtensionLabels, 'completeTask' | 'defaultTask'> = defaultLabels) {
+  return [
+    TaskList,
+    TaskItem.configure({
+      nested: true,
+      a11y: { checkboxLabel: (node) => labels.completeTask(node.textContent || labels.defaultTask) },
+    }),
+    PageLink,
+    VaultImage,
+    InlineImageParagraph,
+    Callout,
+    Markdown,
+  ]
+}
+
+export function createWritingExtensions(labels: Pick<WritingExtensionLabels, 'completeTask' | 'defaultTask'> = defaultLabels) {
+  return [
+    StarterKit.configure(baseStarter),
+    ...sharedExtensions(labels),
+  ]
+}
+
+export const writingExtensions = createWritingExtensions()
+
+export function collaborativeWritingExtensions(session: CloudCollaboration, labels: WritingExtensionLabels = defaultLabels) {
   return [
     StarterKit.configure({ ...baseStarter, undoRedo: false }),
-    ...writingExtensions.slice(1),
+    ...sharedExtensions(labels),
     Collaboration.configure({ document: session.document, field: 'default' }),
     CollaborationCaret.configure({
       provider: { awareness: session.awareness },
-      user: { name: 'Collaborator ' + session.subject.slice(0, 4), color: cursorColor(session.subject) },
+      user: { name: `${labels.collaborator} ${session.subject.slice(0, 4)}`, color: cursorColor(session.subject) },
       render: user => {
         const marker = document.createElement('span')
         marker.className = 'collaboration-carets__caret'
@@ -160,7 +182,7 @@ export function collaborativeWritingExtensions(session: CloudCollaboration) {
         const label = document.createElement('span')
         label.className = 'collaboration-carets__label'
         label.style.backgroundColor = color
-        label.textContent = typeof user.name === 'string' ? user.name.slice(0, 40) : 'Collaborator'
+        label.textContent = typeof user.name === 'string' ? user.name.slice(0, 40) : labels.collaborator
         marker.append(label)
         return marker
       },

@@ -45,6 +45,7 @@ describe('workspace catalogs', () => {
     expect(en('editor-chrome.wordCount', { count: 1 })).toBe('1 word')
     expect(en('editor-chrome.wordCount', { count: 2 })).toBe('2 words')
     expect(es('editor-chrome.wordCount', { count: 2 })).toBe('2 palabras')
+    expect(es('editor-chrome.completeTask', { task: es('editor-chrome.taskFallback') })).toBe('Completar tarea')
     expect(es('app-shell.deletePageTitle', { title: 'Roadmap' })).toBe('¿Eliminar Roadmap?')
   })
 

@@ -17,7 +17,7 @@ import CloudImageControl from './editor/cloud-image-control'
 import { requiresMarkdownSource } from './editor/source-mode'
 import { AssistedMarkdownSource, RichSelectionAI, type EditorAssistant } from './editor/selection-ai'
 import { useEditorPreferences } from './settings/appearance-settings'
-import { collaborativeWritingExtensions, writingExtensions } from './editor/writing-extensions'
+import { collaborativeWritingExtensions, createWritingExtensions } from './editor/writing-extensions'
 import './editor/editor.css'
 
 interface PageEditorProps {
@@ -322,7 +322,14 @@ function PageEditorSession({
     return true
   }
 
-  const extensions = useMemo(() => collaboration ? collaborativeWritingExtensions(collaboration) : writingExtensions, [collaboration])
+  const extensions = useMemo(() => {
+    const labels = {
+      completeTask: (task: string) => editorText('completeTask', { task }),
+      defaultTask: editorText('taskFallback'),
+      collaborator: editorText('collaborator'),
+    }
+    return collaboration ? collaborativeWritingExtensions(collaboration, labels) : createWritingExtensions(labels)
+  }, [collaboration, editorText])
 
   const editor: Editor | null = useEditor({
     immediatelyRender: false,
@@ -357,6 +364,10 @@ function PageEditorSession({
       if (collaboration) {
         currentMarkdown.current = current.getMarkdown()
         onChange(currentMarkdown.current)
+      } else {
+        setTimeout(() => {
+          if (!current.isDestroyed) current.getMarkdown()
+        }, 0)
       }
     },
     onUpdate: ({ editor: current, transaction }) => {
@@ -364,7 +375,9 @@ function PageEditorSession({
       const previous = currentMarkdown.current
       currentMarkdown.current = value
       onChange(value)
-      if (current.isEditable && !isChangeOrigin(transaction)) trackWritingEdit(previous, value)
+      if (current.isEditable && !isChangeOrigin(transaction)) {
+        setTimeout(() => trackWritingEdit(previous, value), 0)
+      }
     },
     onTransaction: ({ editor: current }) => {
       if (!current.isDestroyed && current.isInitialized) syncMenu(current)

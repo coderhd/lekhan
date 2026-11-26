@@ -408,7 +408,8 @@ export function applyVaultImport(workspace: Workspace, plan: VaultImportPlan, { 
 }
 
 export function updatePage(workspace: Workspace, id: string, patch: PagePatch): Workspace {
-  const page = workspace.pages.find((current) => current.id === id)
+  const index = workspace.pages.findIndex((current) => current.id === id)
+  const page = index < 0 ? undefined : workspace.pages[index]
   if (!page) return workspace
   const parentId = patch.parentId === undefined ? page.parentId : patch.parentId
   if (parentId) {
@@ -425,7 +426,8 @@ export function updatePage(workspace: Workspace, id: string, patch: PagePatch): 
 
   const now = new Date().toISOString()
   const updated = { ...page, parentId, title, markdown, favorite, updatedAt: now }
-  const pages = workspace.pages.map((current) => current.id === id ? updated : current)
+  const pages = workspace.pages.slice()
+  pages[index] = updated
   if (metadataChanged) return { ...workspace, pages: keepResolvedLinks(workspace.pages, pages, now) }
   // A content edit keeps paths and title resolution valid. Backlinks for the
   // edited page are recalculated from its new object when requested.

@@ -116,6 +116,8 @@
     "importReadError": "No se pudieron leer los archivos seleccionados.",
     "exportStarted": "Se inició la exportación del espacio de trabajo.",
     "exportFailed": "No se pudo exportar el espacio de trabajo.",
+    "properties": "Propiedades",
+    "tags": "Etiquetas",
     "untitled": "Sin título",
     "closeNavigation": "Cerrar navegación",
     "workspaceNavigation": "Navegación del espacio de trabajo",
@@ -779,7 +781,10 @@
     "markdownSource": "Código fuente Markdown",
     "markdownPlaceholder": "Empieza a escribir en Markdown.",
     "pageContent": "Contenido de la página",
-    "writePlaceholder": "Empieza a escribir o escribe / para ver los bloques."
+    "writePlaceholder": "Empieza a escribir o escribe / para ver los bloques.",
+    "completeTask": "Completar {task}",
+    "taskFallback": "tarea",
+    "collaborator": "Colaborador"
   },
   "settings": {
     "connectionTypes": "Tipos de conexión",

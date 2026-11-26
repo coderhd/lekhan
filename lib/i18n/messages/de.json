@@ -116,6 +116,8 @@
     "importReadError": "Die ausgewählten Dateien konnten nicht gelesen werden.",
     "exportStarted": "Der Export des Arbeitsbereichs wurde gestartet.",
     "exportFailed": "Der Arbeitsbereich konnte nicht exportiert werden.",
+    "properties": "Eigenschaften",
+    "tags": "Schlagwörter",
     "untitled": "Ohne Titel",
     "closeNavigation": "Navigation schließen",
     "workspaceNavigation": "Navigation im Arbeitsbereich",
@@ -779,7 +781,10 @@
     "markdownSource": "Markdown-Quelltext",
     "markdownPlaceholder": "Beginne, in Markdown zu schreiben.",
     "pageContent": "Seiteninhalt",
-    "writePlaceholder": "Beginne zu schreiben oder tippe / für Blöcke."
+    "writePlaceholder": "Beginne zu schreiben oder tippe / für Blöcke.",
+    "completeTask": "{task} abschließen",
+    "taskFallback": "Aufgabe",
+    "collaborator": "Mitwirkende Person"
   },
   "settings": {
     "connectionTypes": "Verbindungstypen",

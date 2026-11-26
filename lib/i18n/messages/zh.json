@@ -116,6 +116,8 @@
     "importReadError": "无法读取所选文件。",
     "exportStarted": "已开始导出工作区。",
     "exportFailed": "无法导出工作区。",
+    "properties": "属性",
+    "tags": "标签",
     "untitled": "无标题",
     "closeNavigation": "关闭导航",
     "workspaceNavigation": "工作区导航",
@@ -779,7 +781,10 @@
     "markdownSource": "Markdown 源码",
     "markdownPlaceholder": "开始使用 Markdown 写作。",
     "pageContent": "页面内容",
-    "writePlaceholder": "开始写作，或输入 / 选择内容块。"
+    "writePlaceholder": "开始写作，或输入 / 选择内容块。",
+    "completeTask": "完成 {task}",
+    "taskFallback": "任务",
+    "collaborator": "协作者"
   },
   "settings": {
     "connectionTypes": "连接类型",

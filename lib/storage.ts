@@ -163,6 +163,31 @@ export async function saveWorkspace(
             return
           }
 
+          // Steady-state content/metadata edits keep the same page IDs and attachments,
+          // so we can persist only changed records without scanning into Maps/Sets.
+          if (manifest && previousPages && previousPages.length === nextPages.length && manifest.pageIds.length === nextPages.length) {
+            const changed: Page[] = []
+            let structural = false
+            for (let index = 0; index < nextPages.length; index++) {
+              const prev = previousPages[index]
+              const next = nextPages[index]
+              if (prev === next) continue
+              if (prev.id !== next.id || prev.files !== next.files) {
+                structural = true
+                break
+              }
+              changed.push(next)
+            }
+            if (!structural) {
+              for (const page of changed) {
+                const { files: attachments, ...content } = page
+                pages.put({ ...content, ...(attachments ? { files: attachments.map(({ id, filename }) => ({ id, filename })) } : {}) }, [key, page.id])
+              }
+              store.put({ metadata, pageIds: manifest.pageIds, attachmentIds: manifest.attachmentIds } satisfies NotebookManifest, key)
+              return
+            }
+          }
+
           const previous = manifest && previousPages ? new Map(previousPages.map(page => [page.id, page])) : null
           const previousFiles = new Set(manifest?.attachmentIds ??
             (current && 'pages' in current ? current.pages.flatMap(page => page.files?.filter(file => !file.data).map(file => file.id) ?? []) : []))

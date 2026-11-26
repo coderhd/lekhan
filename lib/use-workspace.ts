@@ -16,11 +16,16 @@ export function useWorkspace(scope = 'personal', storage?: WorkspaceStorage) {
   const persisted = useRef<Workspace | null>(null)
   const busy = useRef(false)
   const conflict = useRef(false)
+  const flushTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const saveCallbacks = useRef<(() => void)[]>([])
   const durableChanges = useRef<{ resolve: () => void; reject: (failure: unknown) => void }[]>([])
   const load = useCallback(() => storage ? storage.load() : loadWorkspace(scope), [scope, storage])
 
   const flush = useCallback(async () => {
+    if (flushTimer.current) {
+      clearTimeout(flushTimer.current)
+      flushTimer.current = undefined
+    }
     if (busy.current || conflict.current) return
     busy.current = true
     try {
@@ -28,7 +33,7 @@ export function useWorkspace(scope = 'personal', storage?: WorkspaceStorage) {
         const snapshot: Workspace = current.current
         const pendingCallbacks = saveCallbacks.current.length
         const pendingReceipts = durableChanges.current.length
-        setStatus('saving')
+        setStatus(currentStatus => currentStatus === 'saving' ? currentStatus : 'saving')
         const saved = await (storage
           ? storage.save(snapshot, revision.current, persisted.current)
           : saveWorkspace(snapshot, revision.current, scope, persisted.current?.pages))
@@ -37,7 +42,7 @@ export function useWorkspace(scope = 'personal', storage?: WorkspaceStorage) {
         for (const receipt of durableChanges.current.splice(0, pendingReceipts)) receipt.resolve()
         for (const saved of saveCallbacks.current.splice(0, pendingCallbacks)) saved()
       }
-      setStatus('saved')
+      setStatus(currentStatus => currentStatus === 'saved' ? currentStatus : 'saved')
     } catch (error) {
       for (const receipt of durableChanges.current.splice(0)) receipt.reject(error)
       conflict.current = error instanceof WorkspaceConflictError
@@ -48,6 +53,10 @@ export function useWorkspace(scope = 'personal', storage?: WorkspaceStorage) {
   }, [scope, storage])
 
   const hydrate = useCallback((saved?: Workspace) => {
+    if (flushTimer.current) {
+      clearTimeout(flushTimer.current)
+      flushTimer.current = undefined
+    }
     const initial = saved ?? starterWorkspace()
     persisted.current = saved ?? null
     saveCallbacks.current = []
@@ -107,9 +116,25 @@ export function useWorkspace(scope = 'personal', storage?: WorkspaceStorage) {
       event.preventDefault()
       event.returnValue = ''
     }
+    function flushPending() {
+      if (current.current !== persisted.current) void flush()
+    }
+    function onVisibilityChange() {
+      if (document.visibilityState === 'hidden') flushPending()
+    }
     window.addEventListener('beforeunload', confirmUnsavedChanges)
-    return () => window.removeEventListener('beforeunload', confirmUnsavedChanges)
-  }, [status, workspace])
+    window.addEventListener('pagehide', flushPending)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      window.removeEventListener('beforeunload', confirmUnsavedChanges)
+      window.removeEventListener('pagehide', flushPending)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [flush, status, workspace])
+
+  useEffect(() => () => {
+    if (flushTimer.current) clearTimeout(flushTimer.current)
+  }, [])
 
   const change = useCallback((update: (previous: Workspace) => Workspace, onSaved?: () => void) => {
     const previous = current.current
@@ -119,8 +144,19 @@ export function useWorkspace(scope = 'personal', storage?: WorkspaceStorage) {
     const next = storage?.prepareChange?.(previous, updated, persisted.current) ?? updated
     current.current = next
     if (onSaved && analyticsAllowed()) saveCallbacks.current.push(onSaved)
-    setWorkspace(next)
-    void flush()
+    const contentOnly = next.activePageId === previous.activePageId && next.pages.length === previous.pages.length
+    if (contentOnly) {
+      setStatus(currentStatus => currentStatus === 'saving' ? currentStatus : 'saving')
+      setWorkspace(next)
+      if (flushTimer.current) clearTimeout(flushTimer.current)
+      flushTimer.current = setTimeout(() => {
+        flushTimer.current = undefined
+        void flush()
+      }, 120)
+    } else {
+      setWorkspace(next)
+      void flush()
+    }
   }, [flush, storage])
 
   const reload = useCallback(async () => {

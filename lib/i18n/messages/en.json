@@ -116,6 +116,8 @@
     "importReadError": "The selected files could not be read.",
     "exportStarted": "Workspace export started.",
     "exportFailed": "Workspace export failed.",
+    "properties": "Properties",
+    "tags": "Tags",
     "untitled": "Untitled",
     "closeNavigation": "Close navigation",
     "workspaceNavigation": "Workspace navigation",
@@ -779,7 +781,10 @@
     "markdownSource": "Markdown source",
     "markdownPlaceholder": "Start writing in Markdown.",
     "pageContent": "Page content",
-    "writePlaceholder": "Start writing, or type / for blocks."
+    "writePlaceholder": "Start writing, or type / for blocks.",
+    "completeTask": "Complete {task}",
+    "taskFallback": "task",
+    "collaborator": "Collaborator"
   },
   "settings": {
     "connectionTypes": "Connection types",
