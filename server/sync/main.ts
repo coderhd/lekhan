@@ -1,3 +1,5 @@
+import { constants } from 'node:fs'
+import { access, mkdir } from 'node:fs/promises'
 import { siteOrigin } from '../../lib/auth/config.ts'
 import { createServerAdmin } from '../../lib/auth/admin.ts'
 import { relayedPageAccess, relayedPageAuthority } from '../../lib/sync/authority.ts'
@@ -33,6 +35,8 @@ if (!client || !origin || !secret || !encryptionKey || !walDirectory) {
 
 const port = Number(process.env.PORT || 8080)
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid sync PORT.')
+await mkdir(walDirectory, { recursive: true, mode: 0o700 })
+await access(walDirectory, constants.W_OK | constants.X_OK)
 const cipher = snapshotCipher(encryptionKey, (process.env.LEKHAN_ENCRYPTION_PREVIOUS_KEYS ?? '').split(',').map(value => value.trim()).filter(Boolean))
 const hub = createSyncHub({
   secret,

@@ -1,6 +1,6 @@
 # Production observability
 
-Use a Sentry project for the Next.js app and a separate project for the sync relay. Set the private server environment variables in the corresponding deployment. The browser DSN uses the app project and is public by design. Build the app with the browser variables set. Omit the DSNs to run without remote error reporting.
+Use the `lekhan` Sentry project for the Next.js app and `lekhan-sync-relay` for the sync relay. Set the private server environment variables in the corresponding deployment. The browser DSN uses the app project and is public by design. Build the app with the browser variables set. Omit the DSNs to run without remote error reporting.
 
 | Scope | Configuration |
 |---|---|
@@ -15,7 +15,7 @@ Sentry error events carry a service, an error class, and allowlisted application
 
 ## Scheduled job
 
-In the Sentry app project, create a monitor for `30 5 * * *` UTC, matching the retention route in `vercel.json`. Allow for queueing and the route's five-minute execution limit. Set its slug in `SENTRY_RETENTION_MONITOR_SLUG`. Cron authentication still uses the existing `CRON_SECRET`. A retention response that needs retry is recorded as an error check-in.
+The `lekhan-retention-prune` monitor is configured in the app project for `30 5 * * *` UTC, matching the retention route in `vercel.json`. It allows 15 minutes for a late check-in and 10 minutes for execution. Set its slug in `SENTRY_RETENTION_MONITOR_SLUG`. Enable the monitor when the hosted cron has deployed and can deliver check-ins. Cron authentication still uses the existing `CRON_SECRET`. A retention response that needs retry is recorded as an error check-in.
 
 ## External availability and logs
 
