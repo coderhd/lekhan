@@ -7,6 +7,10 @@ on:
         description: Generate update artifacts with the release signing key
         type: boolean
         default: false
+      platform_signing:
+        description: Sign macOS and Windows packages for distribution
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -55,10 +59,64 @@ jobs:
       - name: Install JavaScript dependencies
         run: npm ci
 
+      - name: Prepare macOS notarization
+        if: runner.os == 'macOS' && inputs.platform_signing
+        shell: bash
+        env:
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$APPLE_API_PRIVATE_KEY" ]]; then
+            echo 'Set the App Store Connect notarization private key.'
+            exit 1
+          fi
+          umask 077
+          apple_key="$RUNNER_TEMP/lekhan-notarization.p8"
+          printf '%s\n' "$APPLE_API_PRIVATE_KEY" > "$apple_key"
+          openssl pkey -in "$apple_key" -noout
+          printf 'APPLE_API_KEY_PATH=%s\n' "$apple_key" >> "$GITHUB_ENV"
+
+      - name: Import Windows signing certificate
+        if: runner.os == 'Windows' && inputs.platform_signing
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if (!$env:WINDOWS_CERTIFICATE -or !$env:WINDOWS_CERTIFICATE_PASSWORD) {
+            throw 'Set the base64 code signing PFX and its password.'
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'lekhan-signing.pfx'
+          try {
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+            $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+            $certs = @(Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password |
+              Where-Object HasPrivateKey)
+            if ($certs.Count -ne 1 -or $certs[0].Thumbprint -notmatch '^[0-9A-F]{40}$') {
+              throw 'The PFX must provide one signing certificate with a private key.'
+            }
+            $config = @{
+              bundle = @{ windows = @{
+                certificateThumbprint = $certs[0].Thumbprint
+                digestAlgorithm = 'sha256'
+                timestampUrl = 'http://timestamp.digicert.com'
+                tsp = $true
+              } }
+            } | ConvertTo-Json -Depth 5 -Compress
+            "LEKHAN_WINDOWS_SIGNING_CONFIG=$config" >> $env:GITHUB_ENV
+            "LEKHAN_WINDOWS_SIGNER=$($certs[0].Thumbprint)" >> $env:GITHUB_ENV
+          } finally {
+            [IO.File]::Delete($pfx)
+          }
+
       - name: Build desktop package
         shell: bash
         env:
           APPIMAGE_EXTRACT_AND_RUN: 1
+          APPLE_CERTIFICATE: ${{ inputs.platform_signing && runner.os == 'macOS' && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ inputs.platform_signing && runner.os == 'macOS' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ inputs.platform_signing && runner.os == 'macOS' && vars.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_API_ISSUER: ${{ inputs.platform_signing && runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
+          APPLE_API_KEY: ${{ inputs.platform_signing && runner.os == 'macOS' && secrets.APPLE_API_KEY || '' }}
           LEKHAN_UPDATE_PUBLIC_KEY: ${{ inputs.signed_updates && vars.LEKHAN_UPDATE_PUBLIC_KEY || '' }}
           LEKHAN_UPDATE_MANIFEST_URL: ${{ inputs.signed_updates && vars.LEKHAN_UPDATE_MANIFEST_URL || '' }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ inputs.signed_updates && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
@@ -68,7 +126,38 @@ jobs:
             echo "Set the updater public key, HTTPS manifest URL, and signing secret for a signed build."
             exit 1
           fi
-          npm run desktop:package -- --ci --bundles ${{ matrix.bundles }}
+          if [[ '${{ inputs.platform_signing }}' == 'true' && "$RUNNER_OS" == macOS ]] &&
+            [[ "$APPLE_SIGNING_IDENTITY" != 'Developer ID Application: '* || -z "$APPLE_CERTIFICATE" || -z "$APPLE_CERTIFICATE_PASSWORD" || -z "$APPLE_API_ISSUER" || -z "$APPLE_API_KEY" ]]; then
+            echo 'Set the Developer ID Application identity, certificate, password, and notarization credentials.'
+            exit 1
+          fi
+          platform_config=()
+          if [[ -n "$LEKHAN_WINDOWS_SIGNING_CONFIG" ]]; then
+            platform_config=(--config "$LEKHAN_WINDOWS_SIGNING_CONFIG")
+          fi
+          npm run desktop:package -- --ci --bundles ${{ matrix.bundles }} "${platform_config[@]}"
+
+      - name: Verify the notarized macOS app
+        if: runner.os == 'macOS' && inputs.platform_signing
+        shell: bash
+        run: |
+          app=src-tauri/target/release/bundle/macos/Lekhan.app
+          codesign --verify --deep --strict "$app"
+          xcrun stapler validate "$app"
+          spctl --assess --type execute "$app"
+
+      - name: Verify signed Windows installer
+        if: runner.os == 'Windows' && inputs.platform_signing
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem -File 'src-tauri/target/release/bundle/nsis/*.exe')
+          if (!$installers.Count) { throw 'The NSIS installer was not produced.' }
+          foreach ($installer in $installers) {
+            $signature = Get-AuthenticodeSignature -FilePath $installer.FullName
+            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Thumbprint -ne $env:LEKHAN_WINDOWS_SIGNER -or !$signature.TimeStamperCertificate) {
+              throw "The installer has no valid timestamped release signature: $($installer.Name)"
+            }
+          }
 
       - name: Test desktop core
         env:
