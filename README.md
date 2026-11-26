@@ -59,6 +59,8 @@ The [desktop release guide](docs/operations/desktop-release.md) covers the packa
 
 ## Account access
 
+A protected Vercel Preview can use its generated origin for account links and callbacks. Set `LEKHAN_USE_VERCEL_PREVIEW_ORIGIN=1` on that deployment and leave `LEKHAN_PUBLIC_URL` unset. For a stable staging or production hostname, set `LEKHAN_PUBLIC_URL` to that origin and configure its callback URLs in Supabase Auth.
+
 Choose **Sign in** from the public header or the guest notebook. For a local checkout, use `.env.local` to set the staging project URL and publishable key plus `LEKHAN_PUBLIC_URL=http://localhost:3000`. The sign-in screen shows its unavailable state until the app has a valid Supabase configuration.
 
 Enable email/password authentication and allow the configured application's `/auth/confirm` redirect in Supabase. This route accepts verified token-hash confirmation and the PKCE exchange code. Configure the recovery template with `type=recovery` for token-hash links. Use the default Supabase recovery redirect flow for PKCE. [Supabase redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls)

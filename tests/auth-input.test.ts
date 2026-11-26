@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { authConfig, confirmationTarget } from '../lib/auth/config'
+import { authConfig, confirmationTarget, siteOrigin } from '../lib/auth/config'
 import { readConfirmation, readCredentials, workspaceTransferPath } from '../lib/auth/input'
 
 afterEach(() => vi.unstubAllEnvs())
@@ -23,6 +23,27 @@ describe('authentication input', () => {
     expect(readConfirmation(new URLSearchParams('code=example&flow=recovery')))
       .toEqual({ method: 'code', code: 'example', recovery: true })
     expect(readConfirmation(new URLSearchParams('token_hash=example&type=magiclink'))).toBeNull()
+  })
+
+  it('uses the generated Vercel origin only on opted-in previews without an explicit origin', () => {
+    vi.stubEnv('LEKHAN_PUBLIC_URL', undefined)
+    vi.stubEnv('VERCEL', '1')
+    vi.stubEnv('VERCEL_ENV', 'preview')
+    vi.stubEnv('VERCEL_URL', 'lekhan-staging-test.vercel.app')
+    vi.stubEnv('LEKHAN_USE_VERCEL_PREVIEW_ORIGIN', undefined)
+    expect(siteOrigin()).toBeNull()
+    vi.stubEnv('LEKHAN_USE_VERCEL_PREVIEW_ORIGIN', '1')
+    expect(confirmationTarget('recovery')).toBe('https://lekhan-staging-test.vercel.app/auth/confirm?flow=recovery')
+    vi.stubEnv('VERCEL_URL', 'preview.vercel.app.example.test')
+    expect(siteOrigin()).toBeNull()
+    vi.stubEnv('VERCEL_URL', 'lekhan-staging-test.vercel.app')
+    vi.stubEnv('VERCEL_ENV', 'production')
+    expect(siteOrigin()).toBeNull()
+    vi.stubEnv('VERCEL_ENV', 'preview')
+    vi.stubEnv('LEKHAN_PUBLIC_URL', 'https://lekhan.example')
+    expect(siteOrigin()).toBe('https://lekhan.example')
+    vi.stubEnv('LEKHAN_PUBLIC_URL', 'invalid')
+    expect(siteOrigin()).toBeNull()
   })
 
   it('trims email but does not change the entered password', () => {

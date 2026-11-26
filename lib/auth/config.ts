@@ -20,7 +20,12 @@ export function authConfig() {
 }
 
 export function siteOrigin() {
-  return configuredOrigin(process.env.LEKHAN_PUBLIC_URL)
+  const explicit = process.env.LEKHAN_PUBLIC_URL
+  if (explicit !== undefined) return configuredOrigin(explicit)
+  const { VERCEL, VERCEL_ENV, VERCEL_URL, LEKHAN_USE_VERCEL_PREVIEW_ORIGIN } = process.env
+  if (VERCEL !== '1' || VERCEL_ENV !== 'preview' || LEKHAN_USE_VERCEL_PREVIEW_ORIGIN !== '1') return null
+  if (!VERCEL_URL || !/^[a-z0-9][a-z0-9-]*\.vercel\.app$/i.test(VERCEL_URL)) return null
+  return configuredOrigin('https://' + VERCEL_URL)
 }
 
 export function docsOrigin() {
