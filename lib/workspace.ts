@@ -32,8 +32,10 @@ function uniqueTitle(pages: Page[], parentId: string | null, title: string, excl
   return candidate
 }
 
-function pathFromMap(pages: Map<string, Page>, id: string) {
-  const path: Page[] = []
+type PageLocation = Pick<Page, 'id' | 'title' | 'parentId'>
+
+function pathFromMap<T extends PageLocation>(pages: Map<string, T>, id: string) {
+  const path: T[] = []
   const visited = new Set<string>()
   let current = pages.get(id)
   while (current && !visited.has(current.id)) {
@@ -46,11 +48,14 @@ function pathFromMap(pages: Map<string, Page>, id: string) {
 
 const pagesBySnapshot = new WeakMap<Page[], Map<string, Page>>()
 interface PageResolver {
-  canonicalPath: (page: Page, explicit?: boolean) => string
-  resolveTarget: (target: string, sourceId?: string) => Page | undefined
+  canonicalPath: (page: PageLocation, explicit?: boolean) => string
+  resolveTarget: (target: string, sourceId?: string) => PageLocation | undefined
+  choices: () => PageChoice[]
+  backlink: (page: Page, targetId: string) => string | undefined
 }
 const resolversBySnapshot = new WeakMap<Page[], PageResolver>()
 const linksByPage = new WeakMap<Page, ReturnType<typeof wikiLinks>>()
+type Backlink = { start: number; end: number; excerpt?: string }
 
 function pageIndex(pages: Page[]) {
   let index = pagesBySnapshot.get(pages)
@@ -68,12 +73,15 @@ export function pagePath(pages: Page[], id: string) {
 function buildResolver(pages: Page[]): PageResolver {
   const cached = resolversBySnapshot.get(pages)
   if (cached) return cached
-  const pagesById = pageIndex(pages)
-  const pathsById = new Map(pages.map((page) => [page.id, pathFromMap(pagesById, page.id)]))
-  const byPath = new Map<string, Page>()
-  const byTitle = new Map<string, Page[]>()
+  const locations = pages.map(({ id, title, parentId }) => ({ id, title, parentId }))
+  const pagesById = new Map(locations.map(page => [page.id, page]))
+  const pathsById = new Map(locations.map(page => [page.id, pathFromMap(pagesById, page.id)]))
+  const byPath = new Map<string, PageLocation>()
+  const byTitle = new Map<string, PageLocation[]>()
+  const backlinksByPage = new WeakMap<Page, Map<string, Backlink>>()
+  let choices: PageChoice[] | undefined
 
-  for (const page of pages) {
+  for (const page of locations) {
     const title = normalize(page.title)
     const sameTitlePages = byTitle.get(title) ?? []
     sameTitlePages.push(page)
@@ -82,13 +90,13 @@ function buildResolver(pages: Page[]): PageResolver {
     if (path) byPath.set(path, page)
   }
 
-  function canonicalPath(page: Page, explicit = false) {
+  function canonicalPath(page: PageLocation, explicit = false) {
     const path = pathsById.get(page.id)?.map(({ title }) => title).join('/') ?? page.title
     const ambiguousRootTitle = (byTitle.get(normalize(page.title))?.length ?? 0) > 1
     return !page.parentId && (explicit || ambiguousRootTitle) ? `/${path}` : path
   }
 
-  function resolveTarget(target: string, sourceId?: string): Page | undefined {
+  function resolveTarget(target: string, sourceId?: string): PageLocation | undefined {
     const withoutAnchor = target.split('#', 1)[0]?.trim()
     if (!withoutAnchor) return sourceId ? pagesById.get(sourceId) : undefined
 
@@ -105,7 +113,7 @@ function buildResolver(pages: Page[]): PageResolver {
     const sourcePath = pathsById.get(sourceId)
     if (!sourcePath) return undefined
 
-    let best: Page | undefined
+    let best: PageLocation | undefined
     let bestDistance = Infinity
     for (const match of matches) {
       const matchPath = pathsById.get(match.id) ?? []
@@ -122,18 +130,49 @@ function buildResolver(pages: Page[]): PageResolver {
     return best
   }
 
-  const resolver = { canonicalPath, resolveTarget }
+  function backlink(page: Page, targetId: string) {
+    let targets = backlinksByPage.get(page)
+    if (!targets) {
+      targets = new Map()
+      let links = linksByPage.get(page)
+      if (!links) {
+        links = wikiLinks(page.markdown)
+        linksByPage.set(page, links)
+      }
+      for (const { target, start, end } of links) {
+        const match = resolveTarget(target, page.id)
+        if (match && !targets.has(match.id)) targets.set(match.id, { start, end })
+      }
+      backlinksByPage.set(page, targets)
+    }
+    const link = targets.get(targetId)
+    if (!link) return undefined
+    if (link.excerpt === undefined) {
+      const lineStart = page.markdown.lastIndexOf('\n', Math.max(0, link.start - 1)) + 1
+      const lineBreak = page.markdown.indexOf('\n', link.end)
+      const lineEnd = lineBreak < 0 ? page.markdown.length : lineBreak
+      const line = page.markdown.slice(lineStart, lineEnd).trim()
+      const excerpt = line.replace(/\[\[([^|\]]+)(?:\|([^\]]+))?\]\]/g, (_, target, alias) => alias ?? target.split('/').at(-1))
+      link.excerpt = excerpt.length > 155 ? `${excerpt.slice(0, 152).trimEnd()}…` : excerpt
+    }
+    return link.excerpt
+  }
+
+  const resolver = {
+    canonicalPath, resolveTarget, backlink,
+    choices: () => choices ??= locations.map(page => ({ id: page.id, title: page.title, path: canonicalPath(page) })),
+  }
   resolversBySnapshot.set(pages, resolver)
   return resolver
 }
 
 export function resolvePage(pages: Page[], target: string, sourceId?: string) {
-  return buildResolver(pages).resolveTarget(target, sourceId)
+  const match = buildResolver(pages).resolveTarget(target, sourceId)
+  return match && pageIndex(pages).get(match.id)
 }
 
 export function pageChoices(pages: Page[]): PageChoice[] {
-  const { canonicalPath } = buildResolver(pages)
-  return pages.map((page) => ({ id: page.id, title: page.title, path: canonicalPath(page) }))
+  return buildResolver(pages).choices()
 }
 
 function keepResolvedLinks(previous: Page[], next: Page[], now: string) {
@@ -361,7 +400,12 @@ export function updatePage(workspace: Workspace, id: string, patch: PagePatch): 
   const now = new Date().toISOString()
   const updated = { ...page, parentId, title, markdown, favorite, updatedAt: now }
   const pages = workspace.pages.map((current) => current.id === id ? updated : current)
-  return { ...workspace, pages: metadataChanged ? keepResolvedLinks(workspace.pages, pages, now) : pages }
+  if (metadataChanged) return { ...workspace, pages: keepResolvedLinks(workspace.pages, pages, now) }
+  // A content edit keeps paths and title resolution valid. Backlinks for the
+  // edited page are recalculated from its new object when requested.
+  const resolver = resolversBySnapshot.get(workspace.pages)
+  if (resolver) resolversBySnapshot.set(pages, resolver)
+  return { ...workspace, pages }
 }
 
 export function deletePage(workspace: Workspace, id: string): Workspace {
@@ -391,23 +435,14 @@ export function deletePage(workspace: Workspace, id: string): Workspace {
 }
 
 export function getBacklinks(pages: Page[], id: string) {
-  const { resolveTarget } = buildResolver(pages)
-  return pages.flatMap((page) => {
-    if (page.id === id) return []
-    let references = linksByPage.get(page)
-    if (!references) {
-      references = wikiLinks(page.markdown)
-      linksByPage.set(page, references)
-    }
-    const link = references.find(({ target }) => resolveTarget(target, page.id)?.id === id)
-    if (!link) return []
-    const lineStart = page.markdown.lastIndexOf('\n', Math.max(0, link.start - 1)) + 1
-    const lineBreak = page.markdown.indexOf('\n', link.end)
-    const lineEnd = lineBreak < 0 ? page.markdown.length : lineBreak
-    const line = page.markdown.slice(lineStart, lineEnd).trim()
-    const excerpt = line.replace(/\[\[([^|\]]+)(?:\|([^\]]+))?\]\]/g, (_, target, alias) => alias ?? target.split('/').at(-1))
-    return [{ page, excerpt: excerpt.length > 155 ? `${excerpt.slice(0, 152).trimEnd()}…` : excerpt }]
-  })
+  const { backlink } = buildResolver(pages)
+  const matches: { page: Page; excerpt: string }[] = []
+  for (const page of pages) {
+    if (page.id === id) continue
+    const excerpt = backlink(page, id)
+    if (excerpt !== undefined) matches.push({ page, excerpt })
+  }
+  return matches
 }
 
 function inlineText(tokens: Token[]): string {

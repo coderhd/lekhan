@@ -40,6 +40,25 @@ describe('page hierarchy', () => {
 })
 
 describe('page links', () => {
+  it('updates backlink targets and excerpts after editing a note and keeps paths current after a rename', () => {
+    const existing = workspace(
+      page('a', 'Projects'), page('b', 'Draft', 'a', 'See [[Notes|the old link]].'),
+      page('c', 'Notes'), page('d', 'Archive'),
+    )
+    expect(getBacklinks(existing.pages, 'c').map(link => link.excerpt)).toEqual(['See the old link.'])
+    const edited = updatePage(existing, 'b', { markdown: 'Open [[Archive|the new link]].', favorite: true })
+    expect(getBacklinks(edited.pages, 'c')).toEqual([])
+    expect(getBacklinks(edited.pages, 'd')).toEqual([{ page: edited.pages[1], excerpt: 'Open the new link.' }])
+    expect(resolvePage(edited.pages, 'Projects/Draft')).toBe(edited.pages[1])
+    expect(getBacklinks(existing.pages, 'c').map(link => link.excerpt)).toEqual(['See the old link.'])
+
+    const renamed = updatePage(edited, 'a', { title: 'Ideas' })
+    expect(resolvePage(renamed.pages, 'Projects/Draft')).toBeUndefined()
+    expect(resolvePage(renamed.pages, 'Ideas/Draft')).toBe(renamed.pages[1])
+    expect(pageChoices(renamed.pages).find(choice => choice.id === 'b')?.path).toBe('Ideas/Draft')
+    expect(getBacklinks(renamed.pages, 'd').map(link => link.excerpt)).toEqual(['Open the new link.'])
+  })
+
   it('resolves canonical paths and prefers the nearest unqualified match', () => {
     const pages = [
       page('a', 'Projects'), page('b', 'Reference'),
