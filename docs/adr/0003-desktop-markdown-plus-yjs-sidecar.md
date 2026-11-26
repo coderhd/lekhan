@@ -2,7 +2,7 @@
 
 Date: 2026-08-23
 Status: Accepted
-Applies to: H1 desktop app (Tauri, epic #43)
+Applies to: H0 desktop app (Tauri, epic [#88](https://github.com/coderhd/lekhan/issues/88))
 
 ## Context
 
@@ -32,7 +32,7 @@ IndexedDB remains a mobile-PWA-only storage backend.
 - The Obsidian importer degrades gracefully into "open folder as workspace": desktop reads `.md`
   natively; import becomes pointing at an existing vault.
 - Bidirectional file watching is required: external edits to `.md` (e.g., from Obsidian) must be
-  re-imported into the live doc. This is real work — its own ticket when #43 is specced.
+  re-imported into the live doc. This is real work — part of the desktop release.
 - E2E encryption applies only to data leaving the machine; local files stay plaintext (user's own
   disk) — consistent with ADR 0001.
 - Rich content that cannot survive markdown round-trip must either gain a serialization convention

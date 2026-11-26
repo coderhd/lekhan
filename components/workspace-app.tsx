@@ -1,0 +1,993 @@
+'use client'
+
+import {
+  ArrowDownToLine, ArrowUpFromLine, BookOpen, CalendarDays, Check, ChevronDown,
+  ChevronRight, CircleAlert, FileText, FolderClosed, Keyboard, List, LoaderCircle, Menu, MoreHorizontal,
+  Cloud, PanelRight, Plus, Search, Star, X, Link2, MoveRight, Trash2, Pencil, CornerDownRight, NotebookPen, Sparkles, Paperclip,
+} from 'lucide-react'
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import type { ChangeEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
+import type { Page } from '@/lib/types'
+import {
+  applyVaultImport, createPage, deletePage, getBacklinks, notebookNavigation, pageChoices, pageHeadings,
+  pagePath, resolvePage, updatePage, type PageLocation,
+} from '@/lib/workspace'
+import { pageTags, workspaceSearch } from '@/lib/workspace-search'
+import { attachmentReference } from '@/lib/local-attachments'
+import { downloadAttachment, downloadPage, downloadWorkspace } from '@/lib/downloads'
+import { useWorkspace } from '@/lib/use-workspace'
+import { workspaceShortcut } from '@/lib/workspace-shortcuts'
+import type { SaveStatus } from '@/lib/use-workspace'
+import type { WorkspaceStorage } from '@/lib/storage'
+import { Dialog, SearchDialog } from './workspace-dialogs'
+import WorkspaceShortcutHelp from './workspace-shortcut-help'
+import { useLocale, useTranslations } from '@/lib/i18n/client'
+import AssistantDialog, { type LocalAssistantModel } from './assistant-dialog'
+import type { ProviderTransport } from '@/lib/ai/client'
+import PageEditor from './page-editor'
+import { VaultImportDialog } from './vault-import-dialog'
+import type { ImportReport, VaultImportPlan } from '@/lib/vault-import'
+import { AttachmentTransferError } from '@/lib/cloud/attachment-client'
+import { VaultImportError } from '@/lib/vault-import-error'
+import { track, trackMilestone } from '@/lib/analytics'
+import { hasUnsupportedMirrorFile, localMirrorPlacement, MirrorFailure, MirrorRejected, nextAutomaticMirror, prepareLocalMirror, uploadLocalMirror } from '@/lib/cloud/local-mirror'
+
+const statusMessage: Record<SaveStatus, string> = {
+  loading: 'openingWorkspace', saving: 'saving', saved: 'savedLocally', error: 'saveUnavailable', conflict: 'unsavedChanges',
+}
+const navigationBatch = 48
+const backlinkBatch = 24
+
+type PageAction = { kind: 'move' | 'delete' | 'mirror'; id: string } | { kind: 'link'; target: string } | { kind: 'reload' }
+
+function renderedHeadings(container: ParentNode) {
+  return Array.from(container.querySelectorAll<HTMLElement>('.writer-content > :is(h1,h2,h3,h4,h5,h6)'))
+}
+
+function scrollToHeading(target: HTMLElement) {
+  target.closest<HTMLElement>('.writer-content')?.focus({ preventScroll: true })
+  window.getSelection()?.collapse(target, 0)
+  target.scrollIntoView({ block: 'start' })
+}
+
+function navigatePageRows(event: ReactKeyboardEvent<HTMLElement>) {
+  if (event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+  const rows = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('.page-row-link'))
+  const current = rows.findIndex(row => row === event.target)
+  if (current < 0) return
+  event.preventDefault()
+  if (event.key === 'Home') rows[0]?.focus()
+  else if (event.key === 'End') rows.at(-1)?.focus()
+  else rows[current + (event.key === 'ArrowDown' ? 1 : -1)]?.focus()
+}
+
+function restoreListFocus(button: HTMLButtonElement, list: Element | null, rows: string, firstNewRow: number) {
+  requestAnimationFrame(() => {
+    if (document.activeElement === button || !button.isConnected && document.activeElement === document.body) {
+      list?.querySelectorAll<HTMLButtonElement>(rows)[firstNewRow]?.focus()
+    }
+  })
+}
+
+export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled = false, automaticMirror = false,
+  sidebarControls, openCloudPage, storage, workspaceName, pageAttachments, localModel, localModels, providerTransport, cloudSearchSubject }: {
+  storageScope?: string; mirrorEnabled?: boolean; automaticMirror?: boolean
+  sidebarControls?: ReactNode | ((canSwitch: boolean) => ReactNode); openCloudPage?: (id: string) => void
+  storage?: WorkspaceStorage; workspaceName?: string
+  pageAttachments?: (page: Page, insert: ((markdown: string) => void) | undefined) => ReactNode
+  localModel?: LocalAssistantModel
+  localModels?: readonly LocalAssistantModel[]
+  providerTransport?: ProviderTransport
+  cloudSearchSubject?: string
+}) {
+  const t = useTranslations('app-shell')
+  const fileText = useTranslations('cloud-dialogs')
+  const importText = useTranslations('vault-import')
+  const desktopText = useTranslations('desktop')
+  const editorText = useTranslations('editor-chrome')
+  const aiText = useTranslations('editor-ai')
+  const locale = useLocale()
+  const dateLabel = useMemo(() => new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', year: 'numeric' }), [locale])
+  const { workspace, status, change, persistChange, retry, reload } = useWorkspace(storageScope, storage)
+  const [assistantOpen, setAssistantOpen] = useState(false)
+  const [vaultOpen, setVaultOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [switcherOpen, setSwitcherOpen] = useState(false)
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [navigationOpen, setNavigationOpen] = useState(false)
+  const [sidebarHidden, setSidebarHidden] = useState(false)
+  const [contextOpen, setContextOpen] = useState(true)
+  const [mobileContext, setMobileContext] = useState(false)
+  const [collapsed, setCollapsed] = useState<string[]>([])
+  const [favoriteLimit, setFavoriteLimit] = useState(navigationBatch)
+  const [action, setAction] = useState<PageAction | null>(null)
+  const [focusTitle, setFocusTitle] = useState<string | null>(null)
+  const [notice, setNotice] = useState('')
+  const [titleFocusRequest, setTitleFocusRequest] = useState(0)
+  const [titleDraft, setTitleDraft] = useState<{id: string; value: string} | null>(null)
+  const [syncingPage, setSyncingPage] = useState<string | null>(null)
+  const [syncFailure, setSyncFailure] = useState<{ id: string; failure: unknown } | null>(null)
+  const [paidSyncEnded, setPaidSyncEnded] = useState(false)
+  const mirrorRequest = useRef<AbortController | null>(null)
+  const importInput = useRef<HTMLInputElement>(null)
+  const titleInput = useRef<HTMLTextAreaElement>(null)
+  const pageMenu = useRef<HTMLDetailsElement>(null)
+  const anchorToOpen = useRef<string | null>(null)
+  const navigationToggle = useRef<HTMLButtonElement>(null)
+  const contextToggle = useRef<HTMLButtonElement>(null)
+  const navClose = useRef<HTMLButtonElement>(null)
+  const searchTrigger = useRef<HTMLButtonElement>(null)
+  const contextClose = useRef<HTMLButtonElement>(null)
+  const pageHistory = useRef<{ ids: string[]; position: number }>({ ids: [], position: -1 })
+
+  const pages = workspace?.pages ?? emptyPages
+  const page = pages.find(item => item.id === workspace?.activePageId) ?? pages[0]
+  const deferredPage = useDeferredValue(page)
+  const mirror = page?.cloudMirror
+  const localReadOnly = !!mirror || syncingPage === page?.id
+  const pageId = page?.id
+  const { childPages, favorites, path } = useMemo(() => notebookNavigation(pages), [pages])
+  const trail = useMemo(() => pageId ? path(pageId) : emptyTrail, [path, pageId])
+  const links = useMemo(() => page ? getBacklinks(pages, page.id) : [], [pages, page])
+  const headings = useMemo(() => deferredPage ? pageHeadings(deferredPage.markdown) : [], [deferredPage])
+  const choices = useMemo(() => pageChoices(pages), [pages])
+  const tags = useMemo(() => deferredPage ? pageTags(deferredPage) : [], [deferredPage])
+  const activePath = useMemo(() => new Map(trail.map(note => [note.parentId, note.id])), [trail])
+  const editorAssistant = useMemo(() => ({ storageScope, localModel, localModels, transport: providerTransport }),
+    [storageScope, localModel, localModels, providerTransport])
+  const toggleBranch = useCallback((id: string) => {
+    setCollapsed(previous => previous.includes(id) ? previous.filter(item => item !== id) : [...previous, id])
+  }, [])
+
+  useEffect(() => () => mirrorRequest.current?.abort(), [])
+
+  useEffect(() => {
+    if (!pages.length) return
+    const timer = setTimeout(() => { workspaceSearch(pages) }, 650)
+    return () => clearTimeout(timer)
+  }, [pages])
+
+  useEffect(() => {
+    if (titleFocusRequest) titleInput.current?.focus()
+  }, [titleFocusRequest])
+
+  useEffect(() => {
+    function closeOnOutside(event: PointerEvent) {
+      const menu = pageMenu.current
+      if (menu?.open && event.target instanceof Node && !menu.contains(event.target)) menu.open = false
+    }
+    document.addEventListener('pointerdown', closeOnOutside)
+    return () => document.removeEventListener('pointerdown', closeOnOutside)
+  }, [])
+
+  const open = useCallback((id: string) => {
+    change(state => state.activePageId === id ? state : { ...state, activePageId: id })
+    setFocusTitle(null)
+    setSearchOpen(false)
+    setSwitcherOpen(false)
+    setSearchQuery('')
+    setNavigationOpen(false)
+    setMobileContext(false)
+    if (pageMenu.current) pageMenu.current.open = false
+  }, [change])
+
+  const add = useCallback((parentId: string | null = null, title?: string, markdown?: string) => {
+    let createdId: string | null = null
+    change(state => {
+      const next = createPage(state, { parentId, title, markdown })
+      createdId = next.activePageId
+      return next
+    }, () => trackMilestone('page_created'))
+    if (parentId) setCollapsed(previous => previous.filter(id => id !== parentId))
+    setFocusTitle(createdId)
+    setNavigationOpen(false)
+    setSearchOpen(false)
+    setSearchQuery('')
+    setAction(null)
+  }, [change])
+
+  useEffect(() => {
+    if (!page?.id) return
+    const history = pageHistory.current
+    if (history.ids[history.position] === page.id) return
+    const ids = [...history.ids.slice(0, history.position + 1), page.id].slice(-100)
+    pageHistory.current = { ids, position: ids.length - 1 }
+  }, [page?.id])
+
+  const toggleNavigation = useCallback(() => {
+    if (window.matchMedia('(max-width: 680px)').matches) {
+      setMobileContext(false)
+      setNavigationOpen(value => !value)
+      if (navigationOpen) requestAnimationFrame(() => navigationToggle.current?.focus())
+    } else {
+      setNavigationOpen(false)
+      setSidebarHidden(value => !value)
+      requestAnimationFrame(() => {
+        if (sidebarHidden) searchTrigger.current?.focus()
+        else navigationToggle.current?.focus()
+      })
+    }
+  }, [navigationOpen, sidebarHidden])
+
+  useEffect(() => {
+    function shortcuts(event: KeyboardEvent) {
+      if (event.isComposing || event.defaultPrevented) return
+      if (event.key === 'Escape') {
+        if (navigationOpen) requestAnimationFrame(() => navigationToggle.current?.focus())
+        if (mobileContext) requestAnimationFrame(() => contextToggle.current?.focus())
+        setNavigationOpen(false)
+        setMobileContext(false)
+        if (pageMenu.current?.open) {
+          pageMenu.current.open = false
+          pageMenu.current.querySelector('summary')?.focus()
+        }
+      }
+      const command = workspaceShortcut(event)
+      if (!command) return
+      const activeDialog = document.querySelector('dialog[open]')
+      if (activeDialog && !((searchOpen || switcherOpen) && (command === 'searchPages' || command === 'quickSwitch'))
+        && !(shortcutsOpen && command === 'keyboardShortcuts')) return
+      event.preventDefault()
+      switch (command) {
+        case 'searchPages':
+          setSearchQuery('')
+          setSwitcherOpen(false)
+          setSearchOpen(!searchOpen)
+          break
+        case 'quickSwitch':
+          setSearchOpen(false)
+          setSearchQuery('')
+          setSwitcherOpen(!switcherOpen)
+          break
+        case 'keyboardShortcuts':
+          setShortcutsOpen(!shortcutsOpen)
+          break
+        case 'newPage':
+          if (workspace) add()
+          break
+        case 'toggleNavigation':
+          toggleNavigation()
+          break
+        case 'previousPage':
+        case 'nextPage': {
+          const step = command === 'previousPage' ? -1 : 1
+          const history = pageHistory.current
+          for (let index = history.position + step; index >= 0 && index < history.ids.length; index += step) {
+            const id = history.ids[index]
+            if (id !== page?.id && pages.some(item => item.id === id)) {
+              history.position = index
+              open(id)
+              break
+            }
+          }
+          break
+        }
+        case 'exportMarkdown':
+          if (page) downloadPage(page)
+          break
+        case 'deletePage':
+          if (page && page.cloudMirror?.state !== 'pending' && syncingPage !== page.id) setAction({ kind: 'delete', id: page.id })
+          break
+      }
+    }
+    window.addEventListener('keydown', shortcuts)
+    return () => window.removeEventListener('keydown', shortcuts)
+  }, [add, workspace, page, pages, open, navigationOpen, mobileContext, searchOpen, switcherOpen, shortcutsOpen, syncingPage, toggleNavigation])
+
+  function openToday() {
+    const now = new Date()
+    const date = [now.getFullYear(), now.getMonth() + 1, now.getDate()]
+      .map(value => String(value).padStart(2, '0')).join('-')
+    const title = `Daily · ${date}`
+    const existing = pages.find(item => item.title === title && item.parentId === null)
+    if (existing) open(existing.id)
+    else add(null, title, '## Notes\n\n## Tasks\n\n- [ ] ')
+  }
+
+  function handleLink(target: string) {
+    const match = resolvePage(pages, target, page?.id)
+    if (!match) {
+      setAction({ kind: 'link', target })
+      return
+    }
+    const anchor = target.split('#')[1]?.trim()
+    if (anchor && match.id === page?.id) {
+      const target = renderedHeadings(document).find(heading => heading.textContent.trim().toLowerCase() === anchor.toLowerCase())
+      if (target) scrollToHeading(target)
+    } else {
+      anchorToOpen.current = anchor || null
+      open(match.id)
+    }
+  }
+
+  function createLinkedPage(target: string) {
+    const parts = target.split('#')[0].split('/').map(part => part.trim()).filter(Boolean)
+    let newId: string | null = null
+    let created = false
+    change(state => {
+      let next = state
+      let parentId: string | null = null
+      for (const title of parts) {
+        const existing = next.pages.find(item => item.parentId === parentId && item.title.toLowerCase() === title.toLowerCase())
+        if (existing) {
+          parentId = existing.id
+        } else {
+          next = createPage(next, { parentId, title })
+          created = true
+          parentId = next.activePageId
+        }
+      }
+      newId = parentId
+      return parentId ? { ...next, activePageId: parentId } : next
+    }, () => { if (created) trackMilestone('page_created') })
+    setCollapsed([])
+    setFocusTitle(newId)
+    setAction(null)
+  }
+
+  async function importFiles(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ''
+    if (!files.length) return
+    try {
+      const supported = files.filter(file => /\.(md|markdown|txt)$/i.test(file.name))
+      if (!supported.length) {
+        setNotice(t('chooseImportFiles'))
+        return
+      }
+      if (supported.some(file => file.size > 8_000_000) || supported.reduce((sum, file) => sum + file.size, 0) > 32_000_000) {
+        setNotice(t('importSizeLimit'))
+        return
+      }
+      const { markdownNote } = await import('@/lib/vault-import')
+      const imported = await Promise.all(supported.map(async file => markdownNote(file.name, await file.text())))
+      change(state => imported.reduce((next, file) => createPage(next, file), state),
+        () => track('import_completed', 'markdown', imported.length))
+      setNotice(t('importedPages', { count: imported.length }))
+      setNavigationOpen(false)
+    } catch {
+      setNotice(t('importReadError'))
+    }
+  }
+
+  function importVault(plan: VaultImportPlan): ImportReport | null {
+    let report: ImportReport | null = null
+    change(state => {
+      const result = applyVaultImport(state, plan)
+      report = result.report
+      return result.workspace
+    }, () => {
+      if (report && !report.repeated) track('import_completed', 'obsidian', report.notes)
+    })
+    setCollapsed([])
+    return report
+  }
+
+  async function exportAll() {
+    try {
+      await downloadWorkspace(pages)
+      setNotice(t('exportStarted'))
+    } catch {
+      setNotice(t('exportFailed'))
+    }
+  }
+
+  function withMenuClosed(run: () => void) {
+    if (pageMenu.current) pageMenu.current.open = false
+    run()
+  }
+
+  function mirrorError(failure: unknown) {
+    if (failure instanceof MirrorFailure) return t(failure.code)
+    if (failure instanceof AttachmentTransferError) return fileText(failure.code)
+    if (failure instanceof VaultImportError) return importText(failure.code, failure.values)
+    return t('mirrorFailed')
+  }
+
+  const syncLocalPage = useCallback(async (note: Page, automatic = false) => {
+    if (mirrorRequest.current || !workspace || !mirrorEnabled || note.cloudMirror?.state === 'linked') return
+    const controller = new AbortController()
+    mirrorRequest.current = controller
+    setSyncFailure(null)
+    setSyncingPage(note.id)
+    if (!automatic) setAction(null)
+    let pending = note.cloudMirror
+    try {
+      if (!pending) {
+        const notebook = workspace.mirrorNotebookId ?? crypto.randomUUID()
+        const prepared = await prepareLocalMirror(note, controller.signal, localMirrorPlacement(workspace, note, notebook), automatic)
+        await persistChange(state => state.pages.includes(note) && (!state.mirrorNotebookId || state.mirrorNotebookId === notebook)
+          ? { ...state, mirrorNotebookId: notebook, pages: state.pages.map(item => item === note ? { ...item, cloudMirror: prepared } : item) } : state)
+        pending = prepared
+      }
+      const attempt = pending.batch.importId
+      controller.signal.throwIfAborted()
+      const cloudId = await uploadLocalMirror(pending, note.files ?? [], controller.signal, automatic)
+      controller.signal.throwIfAborted()
+      await persistChange(state => {
+        const existing = state.pages.find(item => item.id === note.id)
+        if (existing?.cloudMirror?.state !== 'pending' || existing.cloudMirror.batch.importId !== attempt) return state
+        return { ...state, pages: state.pages.map(item => item === existing
+          ? { ...item, cloudMirror: { state: 'linked', pageId: cloudId } } : item) }
+      })
+      if (!automatic) setNotice(t('mirrorSynced'))
+    } catch (failure) {
+      if (controller.signal.aborted) return
+      if (failure instanceof MirrorFailure && failure.code === 'mirrorAutomaticPaused') setPaidSyncEnded(true)
+      if (failure instanceof MirrorRejected && pending) {
+        const attempt = pending.batch.importId
+        await persistChange(state => {
+          const existing = state.pages.find(item => item.id === note.id)
+          if (existing?.cloudMirror?.state !== 'pending' || existing.cloudMirror.batch.importId !== attempt) return state
+          return { ...state, pages: state.pages.map(item => item === existing ? { ...item, cloudMirror: undefined } : item) }
+        }).catch(() => undefined)
+      }
+      setSyncFailure({ id: note.id, failure })
+    } finally {
+      mirrorRequest.current = null
+      if (!controller.signal.aborted) setSyncingPage(null)
+    }
+  }, [workspace, mirrorEnabled, persistChange, t])
+
+  useEffect(() => {
+    if (!automaticMirror || paidSyncEnded || status !== 'saved' || syncingPage || action || assistantOpen || vaultOpen) return
+    let timer: ReturnType<typeof setTimeout>
+    function schedule() {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        if (!navigator.onLine || syncFailure) return
+        const editing = document.activeElement?.closest('.document-title, .writer-content, .writer-source')
+        const next = nextAutomaticMirror(pages, editing ? page?.id : undefined)
+        if (next) void syncLocalPage(next, true)
+      }, 1100)
+    }
+    function reconnect() {
+      setSyncFailure(null)
+      schedule()
+    }
+    schedule()
+    window.addEventListener('online', reconnect)
+    document.addEventListener('focusout', schedule)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('online', reconnect)
+      document.removeEventListener('focusout', schedule)
+    }
+  }, [automaticMirror, paidSyncEnded, status, syncingPage, action, assistantOpen, vaultOpen, syncFailure, pages, page?.id, syncLocalPage])
+
+  function toggleContext() {
+    if (window.matchMedia('(max-width: 1180px)').matches) setMobileContext(previous => !previous)
+    else setContextOpen(previous => !previous)
+  }
+
+  function jumpToHeading(index: number) {
+    const moveFocus = () => {
+      const target = renderedHeadings(document)[index]
+      if (target) {
+        scrollToHeading(target)
+        return
+      }
+      const source = document.querySelector<HTMLTextAreaElement>('textarea.writer-source')
+      const heading = headings[index]
+      if (!source || !heading || heading.offset < 0) return
+      source.focus({ preventScroll: true })
+      source.setSelectionRange(heading.offset, heading.offset)
+      const before = source.value.slice(0, heading.offset).split('\n').length - 1
+      const lineHeight = Number.parseFloat(getComputedStyle(source).lineHeight)
+      const offset = before * lineHeight
+      if (source.scrollHeight > source.clientHeight) source.scrollTop = offset
+      else {
+        const panel = source.closest('.document-scroll')
+        if (panel) panel.scrollBy(0, source.getBoundingClientRect().top - panel.getBoundingClientRect().top + offset - 24)
+      }
+    }
+    if (mobileContext) {
+      setMobileContext(false)
+      requestAnimationFrame(moveFocus)
+    } else {
+      moveFocus()
+    }
+  }
+
+  useEffect(() => {
+    if (navigationOpen) navClose.current?.focus()
+  }, [navigationOpen])
+
+  useEffect(() => {
+    const layout = window.matchMedia('(max-width: 680px)')
+    function closeMobileNavigation(event: MediaQueryListEvent) {
+      if (!event.matches) setNavigationOpen(false)
+    }
+    layout.addEventListener('change', closeMobileNavigation)
+    return () => layout.removeEventListener('change', closeMobileNavigation)
+  }, [])
+
+  useEffect(() => {
+    if (mobileContext) contextClose.current?.focus()
+  }, [mobileContext])
+
+  useEffect(() => {
+    const anchor = anchorToOpen.current
+    if (!anchor) return
+    const container = document.querySelector('.document-scroll')
+    if (!container) return
+    const match = anchor.toLowerCase()
+    const findAnchor = () => {
+      const target = renderedHeadings(container)
+        .find(heading => heading.textContent.trim().toLowerCase() === match)
+      if (!target) return false
+      anchorToOpen.current = null
+      scrollToHeading(target)
+      return true
+    }
+    if (findAnchor()) return
+    const observer = new MutationObserver(() => { if (findAnchor()) observer.disconnect() })
+    observer.observe(container, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [page?.id])
+
+  const actionPage = action && 'id' in action ? pages.find(item => item.id === action.id) : undefined
+  const descendants = actionPage
+    ? pages.filter(item => pagePath(pages, item.id).some(ancestor => ancestor.id === actionPage.id))
+    : []
+  const deletingPendingPage = descendants.some(item => item.id === syncingPage || item.cloudMirror?.state === 'pending')
+  const displayPage = page?.title || t('untitled')
+  const words = useMemo(
+    () => deferredPage?.markdown.trim().match(/[\p{L}\p{N}][\p{L}\p{N}'’_-]*/gu)?.length ?? 0,
+    [deferredPage],
+  )
+
+  return (
+    <div className="workspace" data-context={contextOpen ? 'open' : 'closed'} data-navigation={sidebarHidden ? 'hidden' : undefined}>
+      {navigationOpen && <button className="pane-scrim nav-scrim" aria-label={t('closeNavigation')} onClick={() => setNavigationOpen(false)} />}
+      <aside className={`sidebar ${navigationOpen ? 'pane-open' : ''}`} aria-label={t('workspaceNavigation')} inert={mobileContext}>
+        <div className="identity">
+          <span className="brand-mark" aria-hidden="true">L</span>
+          <div><span className="brand-name">Lekhan</span><span className="workspace-name" title={workspaceName}>{workspaceName ?? t('personalWorkspace')}</span></div>
+          <button className="icon-button close-sidebar" ref={navClose} aria-label={t('closeNavigation')} onClick={() => { setNavigationOpen(false); requestAnimationFrame(() => navigationToggle.current?.focus()) }}>
+            <X size={18} />
+          </button>
+        </div>
+        <div className="sidebar-actions">
+          <button className="search-trigger" ref={searchTrigger} onClick={() => setSearchOpen(true)} aria-keyshortcuts="Meta+K Control+K">
+            <Search size={17} /><span>{t('findPage')}</span><kbd>⌘ K</kbd>
+          </button>
+          <button className="nav-action" onClick={openToday} disabled={!workspace}>
+            <CalendarDays size={17} /><span>{t('today')}</span>
+          </button>
+        </div>
+        <nav className="page-nav" aria-label={t('pages')} onKeyDown={navigatePageRows}>
+          {favorites.length > 0 && (
+            <section className="nav-section" aria-label={t('favorites')}>
+              <div className="nav-heading"><span>{t('favorites')}</span></div>
+              {favorites.slice(0, favoriteLimit).map(item => (
+                <button key={item.id} className="favorite-row" onClick={() => open(item.id)}>
+                  <Star size={14} aria-hidden="true" /><span>{item.title}</span>
+                </button>
+              ))}
+              {favorites.length > favoriteLimit && <button className="notebook-list-more" type="button"
+                onClick={({ currentTarget }) => {
+                  setFavoriteLimit(limit => limit + navigationBatch)
+                  restoreListFocus(currentTarget, currentTarget.parentElement, '.favorite-row', favoriteLimit)
+                }}>{t('showMoreFavorites')}</button>}
+            </section>
+          )}
+          <section className="nav-section" aria-label={t('allPages')}>
+            <div className="nav-heading">
+              <span>{t('pages')}</span>
+              <button className="icon-button small-icon" aria-label={t('addTopLevelPage')} title={t('addTopLevelPage')} disabled={!workspace} onClick={() => add()}><Plus size={16} /></button>
+            </div>
+            <PageTree
+              parentId={null}
+              childPages={childPages}
+              activePath={activePath}
+              currentId={page?.id}
+              collapsed={collapsed}
+              onOpen={open}
+              onToggle={toggleBranch}
+            />
+            {workspace && pages.length === 0 && <p className="nav-empty">{t('pagesEmpty')}</p>}
+          </section>
+        </nav>
+        <div className="sidebar-footer">
+          <button className="new-page-button" disabled={!workspace} onClick={() => add()}><Plus size={18} /> {t('newPage')}</button>
+          <div className="file-actions">
+            <button className="nav-action" disabled={!workspace} onClick={() => importInput.current?.click()}><ArrowUpFromLine size={15} /> {t('import')}</button>
+            <button className="nav-action" disabled={!pages.length} onClick={exportAll}><ArrowDownToLine size={15} /> {t('export')}</button>
+          </div>
+          <button className="nav-action vault-launch" disabled={!workspace} onClick={() => {
+            setNavigationOpen(false)
+            setVaultOpen(true)
+          }}><FolderClosed size={15} /> {importText('openVaultImport')}</button>
+          {typeof sidebarControls === 'function' ? sidebarControls(!workspace || status === 'saved') : sidebarControls}
+          <button className="nav-action" type="button" aria-keyshortcuts="Meta+/ Control+/" onClick={() => setShortcutsOpen(true)}>
+            <Keyboard size={16} aria-hidden="true" /> {t('keyboardShortcuts')}
+          </button>
+        </div>
+      </aside>
+
+      <main className="main-panel" inert={navigationOpen || mobileContext}>
+        <header className="topbar">
+          <button className="icon-button open-sidebar" ref={navigationToggle} aria-label={t('openNavigation')} aria-expanded={navigationOpen} onClick={toggleNavigation}><Menu size={21} /></button>
+          <nav className="breadcrumbs" aria-label={t('breadcrumb')}>
+            <BookOpen className="breadcrumb-icon" size={16} aria-hidden="true" />
+            {trail.length === 0 && <span>{t('workspace')}</span>}
+            {trail.map((item, index) => index === trail.length - 1
+              ? <span key={item.id} aria-current="page">{item.title}</span>
+              : <span className="crumb-parent" key={item.id}><button onClick={() => open(item.id)}>{item.title}</button><ChevronRight size={13} /></span>)}
+          </nav>
+          <div className="top-actions">
+            <span className="save-status" data-status={status} role="status">
+              {status === 'saved' ? <Check size={15} /> : status === 'saving' || status === 'loading'
+                ? <LoaderCircle className="spin" size={15} /> : <CircleAlert size={15} />}
+              <span>{t(statusMessage[status])}</span>
+            </span>
+            {page && (
+              <>
+                <button
+                  className="icon-button favorite-button"
+                  aria-label={page.favorite ? t('removeFavorite') : t('addFavorite')}
+                  title={page.favorite ? t('removeFavorite') : t('addFavorite')}
+                  aria-pressed={page.favorite}
+                  onClick={() => change(state => updatePage(state, page.id, { favorite: !page.favorite }))}
+                ><Star size={18} fill={page.favorite ? 'currentColor' : 'none'} /></button>
+                {!localReadOnly && <button className="icon-button" aria-label={aiText('writingAssistant')} title={aiText('writingAssistant')} onClick={() => setAssistantOpen(true)}><Sparkles size={17} /></button>}
+                <details className="page-menu" ref={pageMenu}>
+                  <summary className="icon-button" aria-label={t('pageActions')} title={t('pageActions')}><MoreHorizontal size={21} /></summary>
+                  <div className="page-menu-content">
+                    {!localReadOnly && <button onClick={() => withMenuClosed(() => setTitleFocusRequest(value => value + 1))}><Pencil size={16} /> {t('renamePage')}</button>}
+                    {mirrorEnabled && !mirror && <button disabled={!!syncingPage || status === 'error' || status === 'conflict'}
+                      onClick={() => withMenuClosed(() => setAction({ kind: 'mirror', id: page.id }))}><Cloud size={16} /> {t('mirrorPage')}</button>}
+                    <button onClick={() => withMenuClosed(() => add(page.id))}><CornerDownRight size={16} /> {t('newSubpage')}</button>
+                    <button onClick={() => withMenuClosed(() => setAction({ kind: 'move', id: page.id }))}><MoveRight size={16} /> {t('movePage')}</button>
+                    <button onClick={() => withMenuClosed(() => downloadPage(page))}><ArrowDownToLine size={16} /> {mirror?.state === 'linked' ? t('mirrorExportSnapshot') : t('exportMarkdown')}</button>
+                    {mirror?.state !== 'pending' && syncingPage !== page.id && <button className="destructive-text" onClick={() => withMenuClosed(() => setAction({ kind: 'delete', id: page.id }))}><Trash2 size={16} /> {t('deletePage')}</button>}
+                  </div>
+                </details>
+              </>
+            )}
+            <button className="icon-button context-trigger" ref={contextToggle} aria-label={t('toggleContext')} title={t('toggleContext')} onClick={toggleContext} disabled={!page}>
+              <PanelRight size={18} />
+            </button>
+          </div>
+        </header>
+
+        {workspace && (status === 'error' || status === 'conflict') && (
+          <div className="save-warning" role="alert">
+            {status === 'conflict' ? storage ? desktopText('externalConflict') : t('saveConflict') : t('saveError')}
+            <button onClick={exportAll} disabled={!pages.length}>{t('exportEdits')}</button>
+            {status === 'error' ? <button onClick={() => void retry()}>{t('retrySave')}</button> : <button onClick={() => setAction({ kind: 'reload' })}>{t('openSavedCopy')}</button>}
+          </div>
+        )}
+        {automaticMirror && !paidSyncEnded && syncFailure && syncFailure.id !== page?.id && (
+          <div className="save-warning" role="alert">
+            {mirrorError(syncFailure.failure)}
+            <button onClick={() => setSyncFailure(null)}>{t('mirrorRetryNotebook')}</button>
+          </div>
+        )}
+
+        {page ? (
+          <div className="document-scroll" key={page.id}>
+            <article className="document">
+              <div className="document-meta">
+                <span className="page-emblem"><NotebookPen size={22} strokeWidth={1.65} /></span>
+                <time dateTime={page.updatedAt}>{dateLabel.format(new Date(page.updatedAt))}</time>
+              </div>
+              <textarea
+                ref={titleInput}
+                rows={1}
+                maxLength={160}
+                className="document-title"
+                aria-label={editorText('pageTitle')}
+                value={titleDraft?.id === page.id ? titleDraft.value : displayPage}
+                autoFocus={focusTitle === page.id}
+                readOnly={localReadOnly}
+                spellCheck={false}
+                onFocus={event => {
+                  if (focusTitle === page.id) event.currentTarget.select()
+                }}
+                onChange={event => {
+                  const title = event.currentTarget.value
+                  setTitleDraft({ id: page.id, value: title })
+                  change(state => updatePage(state, page.id, { title }))
+                }}
+                onBlur={() => {
+                  setTitleDraft(null)
+                  if (focusTitle === page.id) setFocusTitle(null)
+                }}
+                onKeyDown={event => {
+                  if (event.nativeEvent.isComposing || event.key !== 'Enter') return
+                  event.preventDefault()
+                  event.currentTarget.blur()
+                  document.querySelector<HTMLElement>('.writer-content')?.focus()
+                }}
+              />
+              {syncFailure?.id === page.id && <div className="local-mirror-callout" role="alert">
+                <p>{mirrorError(syncFailure.failure)}</p>
+                {automaticMirror && !paidSyncEnded && !mirror &&
+                  <button type="button" className="secondary-button" onClick={() => setSyncFailure(null)}>{t('mirrorRetryNotebook')}</button>}
+              </div>}
+              {syncingPage === page.id && <p role="status">{t(page.files?.length ? 'mirrorSyncingFiles' : 'mirrorSyncing')}</p>}
+              {mirror?.state === 'pending' && syncingPage !== page.id && <div className="local-mirror-callout">
+                <p>{t('mirrorPending')}</p>
+                <button type="button" className="secondary-button" disabled={!mirrorEnabled || !!syncingPage || status !== 'saved'} onClick={() => void syncLocalPage(page)}>{t('mirrorRetry')}</button>
+              </div>}
+              {mirror?.state === 'linked' ? <div className="local-mirror-callout">
+                <p>{t('mirrorLinked')}</p>
+                <a className="primary-button" href={'/page/' + mirror.pageId} onClick={event => {
+                  if (!openCloudPage || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+                  event.preventDefault()
+                  openCloudPage(mirror.pageId)
+                }}><Cloud size={16} /> {t('mirrorOpen')}</a>
+              </div> : <PageEditor
+                markdown={page.markdown}
+                pageId={page.id}
+                choices={choices}
+                editable={!localReadOnly}
+                assistant={editorAssistant}
+                onChange={markdown => { if (!localReadOnly) change(state => updatePage(state, page.id, { markdown })) }}
+                onOpenLink={handleLink}
+                onOpenAttachment={href => {
+                  const link = attachmentReference(href)
+                  const file = link && page.files?.find(item => item.id === link.id)
+                  if (!file) return false
+                  downloadAttachment(file)
+                  return true
+                }}
+              />}
+            </article>
+          </div>
+        ) : (
+          <div className="workspace-empty">
+            <span className="page-emblem"><NotebookPen size={24} /></span>
+            <h1>{!workspace && status === 'error' ? t('workspaceUnavailable') : workspace ? t('startWithPage') : t('openingYourWorkspace')}</h1>
+            {workspace
+              ? <button className="primary-button" onClick={() => add()}><Plus size={17} /> {t('newPage')}</button>
+              : status === 'error'
+                ? <button className="primary-button" onClick={() => void reload()}>{t('tryAgain')}</button>
+                : <LoaderCircle className="spin" size={22} aria-hidden="true" />}
+          </div>
+        )}
+        <footer className="editor-footer">
+          <span>{page ? editorText('wordCount', { count: words }) : 'Lekhan'}</span>
+          {page && <button onClick={() => setSearchOpen(true)} aria-label={t('findPage')}><Search size={13} /> {editorText('quickSearch')}</button>}
+        </footer>
+      </main>
+
+      {mobileContext && <button className="pane-scrim context-scrim" aria-label={t('closeContext')} onClick={() => setMobileContext(false)} />}
+      <aside className={`context-panel ${mobileContext ? 'pane-open' : ''}`} aria-label={t('pageContext')}>
+        <div className="context-header">
+          <PanelRight size={17} aria-hidden="true" />
+          <h2>{t('pageContext')}</h2>
+          <button className="icon-button" ref={contextClose} aria-label={t('closeContext')} title={t('closeContext')} onClick={() => {
+            setContextOpen(false)
+            setMobileContext(false)
+            requestAnimationFrame(() => contextToggle.current?.focus())
+          }}><X size={16} /></button>
+        </div>
+        {page && (
+          <div className="context-body">
+            {pageAttachments?.(page, localReadOnly || status !== 'saved' ? undefined : markdown => {
+              change(state => {
+                const current = state.pages.find(note => note.id === page.id)
+                return current ? updatePage(state, current.id, { markdown: [current.markdown, markdown].filter(Boolean).join('\n\n') }) : state
+              })
+            })}
+            {!!page.files?.length && <section className="context-section">
+              <h3><Paperclip size={16} aria-hidden="true" /> {desktopText('attachments')}</h3>
+              <ul className="context-file-list">{page.files.map(file => <li key={file.id}>
+                <button type="button" onClick={() => downloadAttachment(file)}>
+                  <ArrowDownToLine size={14} aria-hidden="true" /> <span>{file.filename}</span>
+                </button>
+              </li>)}</ul>
+              {automaticMirror && !mirror && hasUnsupportedMirrorFile(page) && <p>{t('filesPreventSync')}</p>}
+            </section>}
+            {page.properties && Object.keys(page.properties).length > 0 && (
+              <section className="context-section">
+                <h3><FileText size={16} /> {t('properties')}</h3>
+                <dl className="page-properties">
+                  {Object.entries(page.properties).map(([name, value]) => <div key={name}>
+                    <dt>{name}</dt><dd>{typeof value === 'string' ? value : JSON.stringify(value)}</dd>
+                  </div>)}
+                </dl>
+              </section>
+            )}
+            {tags.length > 0 && (
+              <section className="context-section">
+                <h3><span aria-hidden="true">#</span> {t('tags')}</h3>
+                <div className="page-tags">
+                  {tags.map(tag => <button key={tag} onClick={() => {
+                    setMobileContext(false)
+                    setSearchQuery('#' + tag)
+                    setSearchOpen(true)
+                  }}>#{tag}</button>)}
+                </div>
+              </section>
+            )}
+            <section className="context-section">
+              <h3><List size={16} /> {t('onThisPage')}</h3>
+              {headings.length ? (
+                <ol className="outline-list">
+                  {headings.map((heading, index) => (
+                    <li key={`${heading.text}-${index}`}><button onClick={() => jumpToHeading(index)} style={{ paddingInlineStart: 8 + Math.max(0, heading.level - 2) * 10 }}>{heading.text}</button></li>
+                  ))}
+                </ol>
+              ) : <p className="context-empty">{t('headingsEmpty')}</p>}
+            </section>
+            <BacklinksSection key={'backlinks:' + page.id} links={links} onOpen={open} />
+          </div>
+        )}
+      </aside>
+
+      <input hidden type="file" multiple ref={importInput} accept=".md,.markdown,.txt,text/markdown,text/plain" onChange={importFiles} />
+      {assistantOpen && page && !localReadOnly && <AssistantDialog key={page.id} page={page} storageScope={storageScope}
+        localModel={localModel} localModels={localModels} transport={providerTransport} onClose={() => setAssistantOpen(false)} onInsert={text => {
+        change(state => {
+          const current = state.pages.find(item => item.id === page.id)
+          return current ? updatePage(state, current.id, { markdown: [current.markdown, text].filter(Boolean).join('\n\n') }) : state
+        })
+      }} />}
+      {vaultOpen && <VaultImportDialog onClose={() => setVaultOpen(false)} onImport={importVault} includeAttachments={!storage} saveStatus={status} />}
+      {shortcutsOpen && <WorkspaceShortcutHelp onClose={() => setShortcutsOpen(false)} />}
+      {switcherOpen && <SearchDialog titleOnly pages={pages} onOpen={open} onClose={() => setSwitcherOpen(false)} />}
+      {searchOpen && <SearchDialog pages={pages} initialQuery={searchQuery} onOpen={open} cloudSubject={cloudSearchSubject}
+        onOpenCloud={openCloudPage ? id => {
+          setSearchOpen(false)
+          setSearchQuery('')
+          openCloudPage(id)
+        } : undefined}
+        onClose={() => { setSearchOpen(false); setSearchQuery('') }} />}
+      {action?.kind === 'move' && actionPage && (
+        <Dialog title={t('movePage')} onClose={() => setAction(null)}>
+          <form className="form-dialog" onSubmit={(event: FormEvent<HTMLFormElement>) => {
+            event.preventDefault()
+            const parentId = new FormData(event.currentTarget).get('parent')?.toString() || null
+            change(state => updatePage(state, actionPage.id, { parentId }))
+            if (parentId) setCollapsed(previous => previous.filter(id => id !== parentId))
+            setAction(null)
+          }}>
+            <h2>{t('movePage')}</h2>
+            <label>{t('destination')}
+              <select name="parent" defaultValue={actionPage.parentId ?? ''} autoFocus>
+                <option value="">{t('topLevel')}</option>
+                {pages.filter(item => !descendants.some(child => child.id === item.id)).map(item => (
+                  <option key={item.id} value={item.id}>{pagePath(pages, item.id).map(parent => parent.title).join(' / ')}</option>
+                ))}
+              </select>
+            </label>
+            <div className="dialog-actions"><button type="button" className="secondary-button" onClick={() => setAction(null)}>{t('cancel')}</button><button className="primary-button">{t('movePage')}</button></div>
+          </form>
+        </Dialog>
+      )}
+      {action?.kind === 'delete' && actionPage && (
+        <Dialog title={t('deletePage')} onClose={() => setAction(null)}>
+          <div className="form-dialog">
+            <h2>{t('deletePageTitle', { title: actionPage.title })}</h2>
+            <p>{deletingPendingPage ? t('mirrorDeletePending')
+              : actionPage.cloudMirror?.state === 'linked' && descendants.length === 1
+                ? t('mirrorDeleteLocal')
+                : `${descendants.length > 1 ? t('deleteNested', { count: descendants.length - 1 }) : t('deleteFromWorkspace')} ${t('cannotUndo')}`}</p>
+            <div className="dialog-actions">
+              <button className="secondary-button" autoFocus onClick={() => setAction(null)}>{t('cancel')}</button>
+              <button className="danger-button" disabled={deletingPendingPage} onClick={() => {
+                change(state => deletePage(state, actionPage.id))
+                setAction(null)
+              }}>{t(descendants.length > 1 ? 'deletePages' : 'deletePage')}</button>
+            </div>
+          </div>
+        </Dialog>
+      )}
+      {action?.kind === 'mirror' && actionPage && <Dialog title={t('mirrorPage')} onClose={() => setAction(null)}>
+        <div className="form-dialog">
+          <h2>{t('mirrorPageTitle', { title: actionPage.title })}</h2>
+          <p>{t(actionPage.files?.length ? 'mirrorConfirmFiles' : 'mirrorConfirm')}</p>
+          <div className="dialog-actions">
+            <button type="button" className="secondary-button" onClick={() => setAction(null)}>{t('cancel')}</button>
+            <button type="button" className="primary-button" onClick={() => void syncLocalPage(actionPage)}>{t('mirrorPage')}</button>
+          </div>
+        </div>
+      </Dialog>}
+      {action?.kind === 'link' && (
+        <Dialog title={t('unresolvedLink')} onClose={() => setAction(null)}>
+          <div className="form-dialog">
+            <h2>{t('linkedAs', { target: action.target })}</h2>
+            <p>{t('unresolvedLinkHelp')}</p>
+            <div className="dialog-actions">
+              <button className="secondary-button" onClick={() => { setAction(null); setSearchOpen(true) }}>{t('searchPages')}</button>
+              <button className="primary-button" onClick={() => createLinkedPage(action.target)}>{t('createPage')}</button>
+            </div>
+          </div>
+        </Dialog>
+      )}
+      {action?.kind === 'reload' && (
+        <Dialog title={t('openSavedCopy')} onClose={() => setAction(null)}>
+          <div className="form-dialog">
+            <h2>{t('openSavedCopyTitle')}</h2>
+          <p>{storage ? desktopText('externalReload') : t('openSavedCopyHelp')}</p>
+            <div className="dialog-actions">
+              <button autoFocus className="secondary-button" onClick={() => setAction(null)}>{t('cancel')}</button>
+              <button className="primary-button" onClick={() => { setAction(null); void reload() }}>{t('openSavedCopy')}</button>
+            </div>
+          </div>
+        </Dialog>
+      )}
+      <div className={`notice ${notice ? 'visible' : ''}`} aria-live="polite">
+        {notice && <><span>{notice}</span><button className="icon-button" aria-label={t('dismissMessage')} onClick={() => setNotice('')}><X size={16} /></button></>}
+      </div>
+    </div>
+  )
+}
+
+const emptyPages: Page[] = []
+const emptyTrail: readonly PageLocation[] = []
+
+interface PageTreeProps {
+  parentId: string | null
+  childPages: ReadonlyMap<string | null, readonly PageLocation[]>
+  activePath: ReadonlyMap<string | null, string>
+  currentId: string | undefined
+  collapsed: string[]
+  onOpen: (id: string) => void
+  onToggle: (id: string) => void
+}
+
+const PageTree = memo(function PageTree({ parentId, childPages, activePath, currentId, collapsed, onOpen, onToggle }: PageTreeProps) {
+  const t = useTranslations('app-shell')
+  const [limit, setLimit] = useState(navigationBatch)
+  const children = childPages.get(parentId)
+  if (!children?.length) return null
+  const shown = children.slice(0, limit)
+  const active = children.find(page => page.id === activePath.get(parentId))
+  if (active && !shown.includes(active)) shown.push(active)
+  return (
+    <ul className={`page-tree ${parentId ? 'nested-tree' : ''}`}>
+      {shown.map(page => {
+        const hasChildren = childPages.has(page.id)
+        const expanded = !collapsed.includes(page.id)
+        return (
+          <li key={page.id}>
+            <div className="page-row" data-active={currentId === page.id}>
+              {hasChildren ? (
+                <button className="tree-toggle" aria-label={t(expanded ? 'collapsePage' : 'expandPage', { title: page.title })} aria-expanded={expanded} onClick={() => onToggle(page.id)}>
+                  {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                </button>
+              ) : <span className="tree-spacer" />}
+              <button className="page-row-link" aria-current={currentId === page.id ? 'page' : undefined} onClick={() => onOpen(page.id)}>
+                {hasChildren ? <FolderClosed size={16} /> : <FileText size={16} />}<span>{page.title}</span>
+              </button>
+            </div>
+            {expanded && hasChildren && <PageTree parentId={page.id} childPages={childPages} activePath={activePath}
+              currentId={currentId} collapsed={collapsed} onOpen={onOpen} onToggle={onToggle} />}
+          </li>
+        )
+      })}
+      {children.length > shown.length && <li><button className="notebook-list-more" type="button"
+        onClick={({ currentTarget }) => {
+          setLimit(previous => previous + navigationBatch)
+          restoreListFocus(currentTarget, currentTarget.closest('ul'), ':scope > li > .page-row > .page-row-link', limit)
+        }}>{t('showMorePages')}</button></li>}
+    </ul>
+  )
+})
+
+const BacklinksSection = memo(function BacklinksSection({ links, onOpen }: { links: ReturnType<typeof getBacklinks>; onOpen: (id: string) => void }) {
+  const t = useTranslations('app-shell')
+  const locale = useLocale()
+  const [limit, setLimit] = useState(backlinkBatch)
+  return <section className="context-section">
+    <h3><Link2 size={16} /> {t('backlinks')} <span className="count">{new Intl.NumberFormat(locale).format(links.length)}</span></h3>
+    {links.length ? links.slice(0, limit).map(({ page, excerpt }) => (
+      <button className="backlink" key={page.id} onClick={() => onOpen(page.id)}>
+        <span><FileText size={15} /> {page.title} <ChevronRight size={13} /></span>
+        {excerpt && <small>{excerpt}</small>}
+      </button>
+    )) : <p className="context-empty">{t('backlinksEmpty')}</p>}
+    {links.length > limit && <button className="notebook-list-more" type="button"
+      onClick={({ currentTarget }) => {
+        setLimit(previous => previous + backlinkBatch)
+        restoreListFocus(currentTarget, currentTarget.parentElement, '.backlink', limit)
+      }}>{t('showMoreBacklinks')}</button>}
+  </section>
+})

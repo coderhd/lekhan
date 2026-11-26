@@ -1,52 +1,30 @@
 ---
-title: Workspaces
-description: The root container for your pages, sharing, and billing.
+title: Local and cloud workspaces
+description: Understand where each copy is stored and when it is shared.
 ---
 
-A **workspace** is the root container of your knowledge graph. It is the unit of ownership and billing,
-and it is where your pages live.
+| Where you write | Where it is saved | How you use it |
+| --- | --- | --- |
+| Guest local workspace | IndexedDB in the current browser and site origin | Open the workspace without signing in. |
+| Account local workspace | A separate IndexedDB replica for the signed-in account | Sign in, then open the workspace. Paid workspaces sync saved notes automatically. |
+| Cloud workspace | Cloud pages and an account-scoped browser copy after opening the page | Sign in, open **Cloud workspace**, then create or import a page. |
 
-## One workspace, one graph
+Your guest notes stay in the guest workspace when you sign in. On Free, open **Page actions → Sync this page** in your signed-in local workspace to copy a selected note. On a paid plan, the local workspace starts syncing your saved notes when you’re online. A note you’re actively editing waits until you leave the editor. An interrupted transfer resumes when you reopen the workspace or reconnect.
 
-Everything inside a workspace shares one graph: pages, links, tags, search, and the graph view.
+Sync includes the files attached to the note. Free workspaces accept files up to 2 MB each, and paid workspaces accept files up to 50 MB each. A note with an unsupported file stays in your notebook. After an interrupted file transfer, the notebook may ask you to wait for cloud storage before trying again.
 
-## Sharing is per page
+**Open synced page** takes you to the cloud editor after the note and its files are saved. The original local Markdown snapshot remains available under **Page actions → Export local snapshot**. You can download individual files in page context, or export the notebook ZIP to keep copies of pages and files together. You can also use the cloud workspace’s import action to bring across a folder or vault.
 
-Collaboration today is scoped to individual pages, not to the workspace. Open a page and use **Share**
-to invite someone by email; the invite applies to that page only.
+## Reopen the local notebook during an outage
 
-| Role | Can read the page | Can edit the page | Can manage access |
-| --- | --- | --- | --- |
-| Owner | Yes | Yes | Yes |
-| Editor | Yes | Yes | No |
-| Viewer | Yes | No | No |
+After opening the workspace online, you can revisit its URL during an outage in the same browser. The **Offline notebook** opens your guest notebook or the notebook for the account last verified in that browser. You can keep writing, search the notebook, and export a copy. If you’ve switched accounts, sign in online before opening that account’s notebook.
 
-The page owner controls access. **Settings → Collaborators & Access** lists the pages you own so you can
-review and revoke access without opening each one.
+When service returns, choose **Open notebook online** in the sidebar. It opens the same local draft and resumes any eligible cloud sync.
 
-<Callout type="info" title="Workspace-level roles are planned">
-Workspace-wide members, roles, and ownership transfer ship with workspace billing. Until then every
-invitation is page-scoped, and the only way to hand over a workspace is to contact support.
-</Callout>
+If you sync a subpage first, it appears at the top level until you sync its parent. Once both are synced, the cloud workspace places the subpage under its parent.
 
-## Billing is per workspace
+You can work on a previously opened cloud page offline when its browser copy and writing access are available. The status bar shows when the connection is live again. Keep an export before clearing site data.
 
-- **Free** workspaces are fully usable offline and locally.
-- **Plus** and **Pro** attach to the workspace and unlock cloud sync, more collaborators, longer
-  history, and (on Pro) public sites.
-- **Team** adds per-seat billing, admin, shared templates, and guest access.
+On Free, use **Pause cloud sync** on a personal cloud page to keep new writing on this device. Other devices keep the last synced version they already opened. Choose **Resume cloud sync** to share your local edits again. Shared and published pages stay connected, as do pages in paid workspaces.
 
-See [Plans and billing](/docs/faq) for the full tier matrix, and **Settings → Billing** in the app to
-manage the plan.
-
-## Workspaces and vaults
-
-A workspace is Lekhan's owning container. A **vault** is an external Obsidian folder you import —
-Lekhan copies it into a workspace and never writes back to the original folder. See
-[Obsidian import](/docs/getting-started/obsidian-import).
-
-## Related
-
-- [Pages](/docs/concepts/pages)
-- [Links and backlinks](/docs/concepts/links-and-backlinks)
-- [Troubleshooting sync](/docs/troubleshooting)
+See [Markdown import and export](/docs/getting-started/markdown-import-export) and [Collaboration](/docs/guides/collaboration).

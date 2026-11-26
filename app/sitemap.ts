@@ -1,62 +1,14 @@
-import { MetadataRoute } from 'next'
- 
-export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = 'https://lekhan.online'
+import type { MetadataRoute } from 'next'
+import { siteOrigin } from '@/lib/auth/config'
+import { locales } from '@/lib/i18n/locales'
+import { marketingLanguageUrls } from '@/lib/marketing/metadata'
+import { marketingPathForLanguage, marketingPaths } from '@/lib/marketing/routes'
 
-  return [
-    {
-      url: baseUrl,
-      lastModified: new Date(),
-      changeFrequency: 'weekly',
-      priority: 1,
-    },
-    {
-      url: `${baseUrl}/early`,
-      lastModified: new Date(),
-      changeFrequency: 'weekly',
-      priority: 0.9,
-    },
-    {
-      url: `${baseUrl}/login`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.7,
-    },
-    {
-      url: `${baseUrl}/signup`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.8,
-    },
-    {
-      url: `${baseUrl}/faq`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.6,
-    },
-    {
-      url: `${baseUrl}/about`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.5,
-    },
-    {
-      url: `${baseUrl}/contact`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.5,
-    },
-    {
-      url: `${baseUrl}/privacy-policy`,
-      lastModified: new Date(),
-      changeFrequency: 'yearly',
-      priority: 0.3,
-    },
-    {
-      url: `${baseUrl}/terms-of-service`,
-      lastModified: new Date(),
-      changeFrequency: 'yearly',
-      priority: 0.3,
-    },
-  ]
+export default function sitemap(): MetadataRoute.Sitemap {
+  const origin = siteOrigin()
+  if (!origin) return []
+  return marketingPaths.flatMap(path => locales.map(locale => ({
+    url: new URL(marketingPathForLanguage(path, locale), origin).href,
+    alternates: { languages: marketingLanguageUrls(path, origin) },
+  })))
 }

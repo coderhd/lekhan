@@ -1,142 +1,161 @@
-import React, { useState, useMemo } from 'react'
-import { Search, CheckCircle2, Cpu, Zap, DollarSign } from 'lucide-react'
-import { providerRegistry, formatModelDescription } from '../../lib/ai/provider-registry'
-import { ModelCategory, CostTier } from '../../lib/ai/types'
-import { HardwareProfile, getHardwareRecommendation } from '../../lib/ai/hardware'
-import { Button } from '../ui/button'
+import { invoke } from '@tauri-apps/api/core'
+import { ArrowDownToLine, ArrowUpRight, Check, Plus, Search } from 'lucide-react'
+import { useLocale, useTranslations } from 'next-intl'
+import { useEffect, useState } from 'react'
+import { Dialog } from '../workspace-dialogs'
+import type { CatalogModel, LocalLibrary, LocalModel } from '../../desktop/local-models'
 
-interface ModelLibraryProps {
-	activeModelId: string
-	onSelectModel: (modelId: string, providerId: string) => void
-	hardwareProfile?: HardwareProfile
-}
+export default function ModelLibrary({ library, selected, onSelect, refresh, onClose }: {
+  library?: LocalLibrary; selected: string | null; onSelect: (id: string | null) => void
+  refresh: () => Promise<LocalLibrary | undefined>; onClose?: () => void
+}) {
+  const t = useTranslations('desktop')
+  const locale = useLocale()
+  const [tab, setTab] = useState<'discover' | 'installed'>(selected ? 'installed' : 'discover')
+  const [query, setQuery] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [removing, setRemoving] = useState<{ model: LocalModel; partial: boolean }>()
 
-export function ModelLibrary({ activeModelId, onSelectModel, hardwareProfile }: ModelLibraryProps) {
-	const [searchQuery, setSearchQuery] = useState('')
-	const [categoryFilter, setCategoryFilter] = useState<ModelCategory | 'all'>('all')
-	const [costFilter, setCostFilter] = useState<CostTier | 'all'>('all')
+  useEffect(() => {
+    const timer = setInterval(() => { void refresh() }, 900)
+    return () => clearInterval(timer)
+  }, [refresh])
 
-	const filteredModels = useMemo(() => {
-		return providerRegistry.listModels({ costTier: costFilter === 'all' ? undefined : costFilter, category: categoryFilter === 'all' ? undefined : categoryFilter, searchQuery: searchQuery || undefined })
-	}, [searchQuery, categoryFilter, costFilter])
+  async function run(work: () => Promise<void>) {
+    if (busy) return
+    setError('')
+    setBusy(true)
+    try {
+      await work()
+    } catch (error) {
+      setError(typeof error === 'string' ? error : t('modelLibraryError'))
+    } finally {
+      setBusy(false)
+    }
+  }
 
-	return (
-		<div className="flex flex-col space-y-6 w-full">
-			<div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-				<div className="relative w-full md:w-96">
-					<Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/50 dark:text-white/50" />
-					<input 
-						type="text" 
-						placeholder="Search models..." 
-						value={searchQuery}
-						onChange={(e) => setSearchQuery(e.target.value)}
-						className="w-full pl-10 pr-4 py-2 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-on-surface"
-					/>
-				</div>
-				<div className="flex flex-wrap gap-2">
-					<div className="flex bg-black/5 dark:bg-white/5 p-1 rounded-lg">
-						{(['all', 'general', 'reasoning', 'coding', 'indic'] as const).map(cat => (
-							<button
-								key={cat}
-								onClick={() => setCategoryFilter(cat)}
-								className={`px-3 py-1.5 text-xs font-medium rounded-md capitalize transition-colors ${
-									categoryFilter === cat ? 'bg-white dark:bg-surface-dim shadow-sm text-on-surface font-bold' : 'text-on-surface-variant hover:text-on-surface'
-								}`}
-								aria-pressed={categoryFilter === cat}
-							>
-								{cat}
-							</button>
-						))}
-					</div>
-					<div className="flex bg-black/5 dark:bg-white/5 p-1 rounded-lg">
-						{(['all', 'free', 'local', 'paid'] as const).map(cost => (
-							<button
-								key={cost}
-								onClick={() => setCostFilter(cost)}
-								className={`px-3 py-1.5 text-xs font-medium rounded-md capitalize transition-colors ${
-									costFilter === cost ? 'bg-white dark:bg-surface-dim shadow-sm text-on-surface font-bold' : 'text-on-surface-variant hover:text-on-surface'
-								}`}
-								aria-pressed={costFilter === cost}
-							>
-								{cost}
-							</button>
-						))}
-					</div>
-				</div>
-			</div>
+  async function importModel() {
+    const model = await invoke<LocalModel | null>('import_local_model')
+    if (!model) return
+    await refresh()
+    onSelect(model.id)
+    setTab('installed')
+  }
 
-			<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-				{filteredModels.map((model) => {
-					const isActive = activeModelId === model.id
-					const hwRec = hardwareProfile && model.hardwareTier 
-						? getHardwareRecommendation(hardwareProfile)
-						: null
+  async function removeModel(model: LocalModel, partial: boolean) {
+    await invoke(partial ? 'discard_model_download' : 'remove_local_model', { id: model.id })
+    if (!partial && model.id === selected) onSelect(null)
+    await refresh()
+    setRemoving(undefined)
+  }
 
-					return (
-						<div 
-							key={model.id}
-							className={`relative flex flex-col p-5 rounded-2xl border bg-white/5 dark:bg-surface-container-low backdrop-blur-md transition-all hover:shadow-md ${
-								isActive ? 'border-primary shadow-sm ring-1 ring-primary/30' : 'border-black/10 dark:border-white/10'
-							}`}
-						>
-							<div className="flex justify-between items-start mb-3">
-								<div>
-									<h3 className="font-semibold text-base leading-none tracking-tight flex items-center gap-2 text-on-surface">
-										{model.name}
-										{isActive && <CheckCircle2 className="w-4 h-4 text-primary" />}
-									</h3>
-									<p className="text-xs text-on-surface-variant mt-2 line-clamp-2 leading-relaxed">
-										{formatModelDescription(model)}
-									</p>
-								</div>
-								<span className="px-2 py-1 rounded-md bg-black/5 dark:bg-white/5 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant shrink-0">
-									{model.provider}
-								</span>
-							</div>
+  async function transfer(model: CatalogModel, command: 'download_local_model' | 'pause_model_download') {
+    await invoke(command, { id: model.id })
+    await refresh()
+  }
 
-							<div className="flex flex-wrap gap-2 mt-auto pt-4 mb-5">
-								<span className="px-2 py-1 rounded-md bg-black/5 dark:bg-white/5 text-[11px] font-medium flex items-center gap-1 text-on-surface-variant">
-									<Cpu className="w-3 h-3" />
-									{(model.contextWindow / 1000)}k ctx
-								</span>
-								<span className="px-2 py-1 rounded-md bg-black/5 dark:bg-white/5 text-[11px] font-medium flex items-center gap-1 text-on-surface-variant">
-									<Zap className="w-3 h-3" />
-									{model.speedTokPerSec} t/s
-								</span>
-								<span className={`px-2 py-1 rounded-md text-[11px] font-medium flex items-center gap-1 ${model.costTier === 'free' ? 'bg-primary/10 text-primary' : 'bg-black/5 dark:bg-white/5 text-on-surface-variant'}`}>
-									<DollarSign className="w-3 h-3" />
-									{model.costTier === 'free' ? 'Free' : model.costTier === 'local' ? 'Local' : 'Paid'}
-								</span>
-								
-								{hwRec && model.costTier === 'local' && (
-									<span className={`px-2 py-1 rounded-md text-[11px] font-medium flex items-center justify-center gap-1 w-full mt-1 ${
-										hwRec.badgeVariant === 'destructive' ? 'bg-error/10 text-error' : 
-										hwRec.badgeVariant === 'secondary' ? 'bg-amber-500/10 text-amber-500' : 
-										'bg-primary/10 text-primary'
-									}`}>
-										{hwRec.badgeText}
-									</span>
-								)}
-							</div>
+  function formatSize(bytes: number) {
+    const unit = bytes >= 1024 ** 3 ? 'GiB' : 'MiB'
+    const size = bytes / (unit === 'GiB' ? 1024 ** 3 : 1024 ** 2)
+    return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(size) + ' ' + unit
+  }
 
-							<Button 
-								variant={isActive ? 'secondary' : 'default'}
-								className="w-full text-sm font-bold"
-								onClick={() => onSelectModel(model.id, model.provider)}
-								disabled={isActive}
-							>
-								{isActive ? 'Active Model' : 'Select as Active'}
-							</Button>
-						</div>
-					)
-				})}
-				
-				{filteredModels.length === 0 && (
-					<div className="col-span-full py-12 text-center border border-dashed border-black/10 dark:border-white/10 rounded-2xl">
-						<p className="text-on-surface-variant text-sm">No models found matching your filters.</p>
-					</div>
-				)}
-			</div>
-		</div>
-	)
+  function renderRemoval(model: LocalModel, partial: boolean) {
+    if (removing?.model.id !== model.id || removing.partial !== partial) return null
+
+    return <div className="local-model-remove">
+      <p>{t(partial ? 'confirmDiscardModel' : 'confirmRemoveModel', { model: model.label })}</p>
+      <div className="dialog-actions">
+        <button className="secondary-button" type="button" disabled={busy} onClick={() => setRemoving(undefined)}>{t('cancelModelAction')}</button>
+        <button className="danger-button" type="button" disabled={busy} onClick={() => void run(() => removeModel(model, partial))}>{t(partial ? 'discardPartialModel' : 'removeLocalModel')}</button>
+      </div>
+    </div>
+  }
+
+  function renderCatalog(model: CatalogModel) {
+    const installed = library?.models.some(item => item.id === model.id)
+    const capacity = library?.capacity
+    const needsMemory = capacity?.totalMemory != null && model.memory > capacity.totalMemory
+    const needsDisk = capacity?.freeDisk != null && model.bytes - model.downloaded > capacity.freeDisk
+    const hasRoom = !!library?.runtimeAvailable && capacity?.totalMemory != null && capacity.freeDisk != null && !needsMemory && !needsDisk
+    const active = ['downloading', 'verifying', 'pausing'].includes(model.phase)
+    const progressing = active || model.downloaded > 0
+    const progress = t('modelProgress', { downloaded: formatSize(model.downloaded), total: formatSize(model.bytes) })
+
+    return <li className="model-catalog-row" key={model.id}>
+      <div className="model-catalog-heading">
+        <h3>{model.label}</h3>
+        <a className="icon-button" href={'https://huggingface.co/' + model.repository} target="_blank" rel="noopener noreferrer"
+          aria-label={t('openModelSource', { model: model.label })}><ArrowUpRight size={16} /></a>
+      </div>
+      <p className="model-catalog-description">{t('modelStrength_' + model.strength)}</p>
+      <p className="model-catalog-meta">{formatSize(model.bytes)} · Q4_K_M · {t('modelMemoryEstimate', { memory: formatSize(model.memory) })}</p>
+      {!installed && !active && hasRoom && <p className="model-catalog-fit"><Check size={14} aria-hidden="true" /> {t('fitsDevice')}</p>}
+      {!installed && progressing && <div className="model-download-progress">
+        <progress max={model.bytes} value={model.downloaded} aria-label={t('modelDownloadProgress', { model: model.label })} />
+        <small>{model.phase === 'verifying' ? t('verifyingModel') : model.phase === 'pausing' ? t('pausingModel') : progress}</small>
+      </div>}
+      {!installed && model.error && <p className="account-error" role="status">{t('modelTransferError_' + model.error)}</p>}
+      {!installed && !active && (needsMemory || needsDisk) && <p className="model-catalog-meta">{t(needsMemory ? 'lowModelMemory' : 'lowModelDisk')}</p>}
+      <div className="model-row-actions">
+        {installed ? <button className="secondary-button" type="button" onClick={() => setTab('installed')}>
+          <Check size={15} /> {t('modelInstalledBadge')}
+        </button> : active ? <button className="secondary-button" type="button" disabled={busy || model.phase === 'pausing'}
+          onClick={() => void run(() => transfer(model, 'pause_model_download'))}>{t('pauseModelDownload')}</button>
+          : <button className="secondary-button" type="button" disabled={busy || !library?.runtimeAvailable || needsMemory || needsDisk}
+            onClick={() => void run(() => transfer(model, 'download_local_model'))}>
+            <ArrowDownToLine size={16} /> {t(model.downloaded ? 'resumeModelDownload' : 'downloadModel')}
+          </button>}
+        {!installed && !active && model.downloaded > 0 && <button className="secondary-button" type="button" disabled={busy}
+          onClick={() => setRemoving({ model, partial: true })}>{t('discardPartialModel')}</button>}
+      </div>
+      {!installed && !active && model.downloaded > 0 && renderRemoval(model, true)}
+    </li>
+  }
+
+  const matching = library?.catalog.filter(model => model.label.toLocaleLowerCase(locale).includes(query.trim().toLocaleLowerCase(locale))) ?? []
+  const used = library?.models.reduce((total, model) => total + model.bytes, 0) ?? 0
+
+  const content = <div className={onClose ? 'form-dialog' : 'form-dialog embedded-model-library'}>
+      <h2>{t('modelLibrary')}</h2>
+      <p>{t('localModelDescription')}</p>
+      {!library ? <button className="secondary-button" type="button" disabled={busy} onClick={() => void run(async () => {
+        if (!await refresh()) throw new Error(t('modelLibraryError'))
+      })}>{t('modelLibraryRetry')}</button> : !library.runtimeAvailable && <p role="status">{t('localRuntimeUnavailable')}</p>}
+      <div className="assistant-navigation" role="group" aria-label={t('modelLibrary')}>
+        <button className="secondary-button" type="button" aria-pressed={tab === 'discover'} onClick={() => setTab('discover')}>{t('discoverModels')}</button>
+        <button className="secondary-button" type="button" aria-pressed={tab === 'installed'} onClick={() => setTab('installed')}>{t('installedModels')}</button>
+      </div>
+      {tab === 'discover' ? <>
+        <label className="model-catalog-search"><Search size={16} aria-hidden="true" />
+          <input value={query} type="search" onChange={event => setQuery(event.target.value)}
+            placeholder={t('searchModels')} aria-label={t('searchModels')} />
+        </label>
+        {!!matching.length && <ul className="model-catalog">{matching.map(renderCatalog)}</ul>}
+        {library && !matching.length && <p>{t('noMatchingModels')}</p>}
+      </> : <>
+        <p className="model-catalog-meta">{t('modelStorageUsed', { used: formatSize(used) })}
+          {library?.capacity.freeDisk != null && ' · ' + t('modelStorageFree', { free: formatSize(library.capacity.freeDisk) })}
+        </p>
+        {!!library?.models.length && <ul className="assistant-connections">
+          {library.models.map(model => <li key={model.id}>
+            <button className="connection-name" type="button" aria-pressed={selected === model.id}
+              disabled={busy || !library.runtimeAvailable} onClick={() => onSelect(model.id)}>
+              {selected === model.id && <Check size={14} aria-hidden="true" />} {model.label} <small>{formatSize(model.bytes)}</small>
+            </button>
+            <button className="secondary-button" type="button" disabled={busy} onClick={() => setRemoving({ model, partial: false })}>{t('removeLocalModel')}</button>
+          </li>)}
+        </ul>}
+        {removing && library?.models.some(model => model.id === removing.model.id) && renderRemoval(removing.model, false)}
+      </>}
+      {error && <p className="account-error" role="alert">{error}</p>}
+      <div className="dialog-actions">
+        {onClose && <button className="secondary-button" type="button" onClick={onClose}>{t('closeModels')}</button>}
+        <button className="primary-button" type="button" disabled={busy || !library?.runtimeAvailable} onClick={() => void run(importModel)}>
+          <Plus size={16} aria-hidden="true" /> {busy ? t('workingWithModels') : t('importLocalModel')}
+        </button>
+      </div>
+    </div>
+  return onClose ? <Dialog title={t('modelLibrary')} className="assistant-dialog model-library-dialog" onClose={onClose}>{content}</Dialog> : content
 }

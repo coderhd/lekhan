@@ -1,103 +1,35 @@
-/**
- * T13 — ownership transfer route (TL A6, US-8/PDEC-11).
- *
- * Two explicit actions so there is no silent takeover:
- *  - `{ action: "initiate", successorUserId }` — owner-only; verifies and stops
- *    the outgoing auto-billing, returns a signed successor token.
- *  - `{ action: "accept", token }` — the signed-in successor completes the swap.
- *
- * The requester's workspace is resolved from their own session (`owner_id =
- * requester`), never from a client-supplied workspace id.
- */
+import { acceptWorkspaceOwner, inviteWorkspaceOwner } from '@/lib/billing/ownership-transfer'
+import { workspaceTransferPath } from '@/lib/auth/input'
+import { BillingError, billingAccount } from '@/lib/billing/workspace'
+import { readBoundedBody } from '@/lib/server/read-body'
 
-import { NextRequest, NextResponse } from "next/server"
-import {
-	acceptOwnershipTransfer,
-	initiateOwnershipTransfer,
-	OwnershipTransferError,
-} from "@/services/billing/ownership-transfer"
-import {
-	billingContextErrorResponse,
-	createBillingAdminClient,
-	getRequestUserId,
-	resolveOwnerBilling,
-} from "@/lib/billing/workspace-billing"
-
-function transferErrorResponse(err: unknown): NextResponse {
-	if (err instanceof OwnershipTransferError) {
-		return NextResponse.json({ error: err.message, code: err.code }, { status: err.status })
-	}
-	console.error("[billing/transfer] unexpected failure:", err)
-	return NextResponse.json({ error: "Ownership transfer failed.", code: "transfer_failed" }, { status: 500 })
+function respond(value: object, status = 200) {
+  return Response.json(value, { status, headers: { 'Cache-Control': 'private, no-store' } })
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
-	const userId = await getRequestUserId(request)
-	if (!userId) {
-		return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-	}
-
-	let body: unknown
-	try {
-		body = await request.json()
-	} catch {
-		return NextResponse.json({ error: "Invalid request body", code: "invalid_body" }, { status: 400 })
-	}
-	const input = (body ?? {}) as Record<string, unknown>
-	const admin = createBillingAdminClient()
-
-	if (input.action === "initiate") {
-		const successorUserId = typeof input.successorUserId === "string" ? input.successorUserId.trim() : ""
-		if (!successorUserId) {
-			return NextResponse.json(
-				{ error: "successorUserId is required.", code: "invalid_transfer_request" },
-				{ status: 400 },
-			)
-		}
-
-		let context
-		try {
-			context = await resolveOwnerBilling(admin, userId)
-		} catch (err) {
-			return billingContextErrorResponse(err)
-		}
-
-		try {
-			const result = await initiateOwnershipTransfer(admin, {
-				workspaceId: context.workspaceId,
-				actingUserId: userId,
-				successorUserId,
-			})
-			return NextResponse.json({
-				token: result.token,
-				expiresAt: result.expiresAt,
-				outgoingSubscription: result.outgoingSubscription,
-				acceptPath: `/settings?transfer=${encodeURIComponent(result.token)}`,
-			})
-		} catch (err) {
-			return transferErrorResponse(err)
-		}
-	}
-
-	if (input.action === "accept") {
-		const token = typeof input.token === "string" ? input.token.trim() : ""
-		if (!token) {
-			return NextResponse.json(
-				{ error: "token is required.", code: "invalid_transfer_request" },
-				{ status: 400 },
-			)
-		}
-
-		try {
-			const result = await acceptOwnershipTransfer(admin, { token, actingUserId: userId })
-			return NextResponse.json(result)
-		} catch (err) {
-			return transferErrorResponse(err)
-		}
-	}
-
-	return NextResponse.json(
-		{ error: 'action must be "initiate" or "accept".', code: "invalid_transfer_request" },
-		{ status: 400 },
-	)
+export async function POST(request: Request) {
+  try {
+    const context = await billingAccount()
+    if (request.headers.get('origin') !== context.origin) return respond({ error: 'invalid_origin' }, 403)
+    if (request.headers.get('content-type')?.split(';', 1)[0] !== 'application/json') {
+      return respond({ error: 'invalid_request' }, 415)
+    }
+    const body = await readBoundedBody(request, 1024).catch(() => null)
+    const input = body && JSON.parse(body.toString('utf8'))
+    if (input?.action === 'invite' && typeof input.email === 'string') {
+      const email = input.email.trim()
+      if (email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return respond(await inviteWorkspaceOwner(context, email))
+      }
+    }
+    if (input?.action === 'accept' && typeof input.token === 'string' && workspaceTransferPath(input.token)) {
+      await acceptWorkspaceOwner(context, input.token)
+      return respond({ accepted: true })
+    }
+    return respond({ error: 'invalid_request' }, 400)
+  } catch (error) {
+    if (error instanceof SyntaxError) return respond({ error: 'invalid_request' }, 400)
+    if (error instanceof BillingError) return respond({ error: error.code }, error.status)
+    return respond({ error: 'billing_unavailable' }, 503)
+  }
 }

@@ -1,0 +1,88 @@
+name: Desktop packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      signed_updates:
+        description: Generate update artifacts with the release signing key
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-arm64
+            runner: macos-15
+            bundles: 'app dmg'
+          - platform: macos-x64
+            runner: macos-15-intel
+            bundles: 'app dmg'
+          - platform: windows-x64
+            runner: windows-2025
+            bundles: nsis
+          - platform: linux-x64
+            runner: ubuntu-24.04
+            bundles: appimage
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install Rust
+        run: rustup default stable
+
+      - name: Install Linux bundle dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential file libayatana-appindicator3-dev libfuse2t64 libgtk-3-dev libssl-dev libwebkit2gtk-4.1-dev libxdo-dev librsvg2-dev patchelf
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Build desktop package
+        shell: bash
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+          LEKHAN_UPDATE_PUBLIC_KEY: ${{ inputs.signed_updates && vars.LEKHAN_UPDATE_PUBLIC_KEY || '' }}
+          LEKHAN_UPDATE_MANIFEST_URL: ${{ inputs.signed_updates && vars.LEKHAN_UPDATE_MANIFEST_URL || '' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ inputs.signed_updates && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ inputs.signed_updates && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+        run: |
+          if [[ '${{ inputs.signed_updates }}' == 'true' && ( -z "$LEKHAN_UPDATE_PUBLIC_KEY" || -z "$LEKHAN_UPDATE_MANIFEST_URL" || -z "$TAURI_SIGNING_PRIVATE_KEY" ) ]]; then
+            echo "Set the updater public key, HTTPS manifest URL, and signing secret for a signed build."
+            exit 1
+          fi
+          npm run desktop:package -- --ci --bundles ${{ matrix.bundles }}
+
+      - name: Test desktop core
+        env:
+          CARGO_PROFILE_DEV_DEBUG: 0
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml --features tauri/custom-protocol
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: lekhan-${{ matrix.platform }}
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/**/*.AppImage
+            src-tauri/target/release/bundle/**/*.app.tar.gz
+            src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.sig
