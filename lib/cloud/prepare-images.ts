@@ -1,5 +1,5 @@
 import { VaultImportError } from '../vault-import-error'
-import { cloudImageAllowed, FREE_IMAGE_BYTES, FREE_IMAGE_EDGE, inlineCloudImages, PAID_IMAGE_BYTES, type CloudImagePolicy } from './image-policy'
+import { CloudImageError, cloudImageAllowed, FREE_IMAGE_BYTES, FREE_IMAGE_EDGE, inlineCloudImages, PAID_IMAGE_BYTES, type CloudImagePolicy } from './image-policy'
 import { isEmbeddedRaster } from '../markdown'
 import type { CloudImportBatch } from './import-plan'
 
@@ -26,7 +26,7 @@ async function resizeForCloud(source: string) {
   let scale = Math.min(1, FREE_IMAGE_EDGE / Math.max(image.naturalHeight, image.naturalWidth))
   const canvas = document.createElement('canvas')
   const context = canvas.getContext('2d')
-  if (!context) throw new Error('This browser could not prepare images for cloud storage.')
+  if (!context) throw new CloudImageError('imageBrowserUnsupported')
 
   try {
     // Prefer pixel detail before shrinking again. Keep alpha for screenshots.
@@ -36,13 +36,13 @@ async function resizeForCloud(source: string) {
       context.drawImage(image, 0, 0, canvas.width, canvas.height)
       for (const quality of [0.88, 0.75, 0.62]) {
         const encoded = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/webp', quality))
-        if (encoded?.type !== 'image/webp') throw new Error('This browser could not encode a WebP image.')
+        if (encoded?.type !== 'image/webp') throw new CloudImageError('imageBrowserUnsupported')
         if (encoded.size > FREE_IMAGE_BYTES) continue
         return dataUrl(encoded)
       }
       scale *= 0.72
     }
-    throw new Error('An image could not fit the Free cloud limit.')
+    throw new CloudImageError('imageFreeLimit')
   } finally {
     canvas.width = 0
     canvas.height = 0
@@ -51,11 +51,11 @@ async function resizeForCloud(source: string) {
 }
 
 export async function prepareCloudImageFile(file: File, policy: CloudImagePolicy) {
-  if (policy === 'paid' && file.size > PAID_IMAGE_BYTES) throw new Error('Cloud images can be up to 20 MB.')
+  if (policy === 'paid' && file.size > PAID_IMAGE_BYTES) throw new CloudImageError('imageTooLarge')
   const source = await dataUrl(file)
-  if (!isEmbeddedRaster(source)) throw new Error('Choose a supported raster image.')
+  if (!isEmbeddedRaster(source)) throw new CloudImageError('imageUnsupported')
   if (cloudImageAllowed(source, policy)) return source
-  if (policy === 'paid') throw new Error('This image could not be read.')
+  if (policy === 'paid') throw new CloudImageError('imageUnreadable')
   return resizeForCloud(source)
 }
 

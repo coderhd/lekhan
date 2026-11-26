@@ -19,7 +19,7 @@ export async function PublicPage({ title, content }: {
       <h1>{title}</h1>
       <p className="public-reader-notice">{t('linkNotice')}</p>
       {content ? <>
-        <PublicPageBody source={content.source} targets={content.targets} />
+        <PublicPageBody source={content.source} targets={content.targets} taskStatus={t('taskStatus')} />
         {content.children.length > 0 && <nav aria-label={t('subpages')} className="public-reader-children">
           <h2>{t('subpages')}</h2>
           <ul>{content.children.map(child => <li key={child.id}><Link href={'/page/' + child.id}>{child.title}</Link></li>)}</ul>

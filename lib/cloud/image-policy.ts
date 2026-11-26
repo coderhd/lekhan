@@ -5,6 +5,12 @@ export const FREE_IMAGE_BYTES = 500_000
 export const PAID_IMAGE_BYTES = 20_000_000
 export const FREE_IMAGE_EDGE = 1_600
 
+export class CloudImageError extends Error {
+  constructor(readonly code: 'imageTooLarge' | 'imageUnsupported' | 'imageUnreadable' | 'imageBrowserUnsupported' | 'imageFreeLimit') {
+    super(code)
+  }
+}
+
 export function* inlineCloudImages(markdown: string) {
   if (!/data:image\//i.test(markdown)) return
   const token = /(`+)|data:image\/(?:png|jpeg|gif|webp|bmp|avif|x-icon);base64,[a-z0-9+/]+={0,2}/gi

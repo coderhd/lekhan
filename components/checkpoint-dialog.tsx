@@ -77,6 +77,7 @@ export default function CheckpointDialog({ pageId, session, live, writable, onCl
   const locale = useLocale()
   const cloud = useTranslations('cloud-workspace')
   const t = useTranslations('cloud-dialogs')
+  const reader = useTranslations('public-page')
   const [history, setHistory] = useState<History | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [previewFault, setPreviewFault] = useState<string | null>(null)
@@ -224,7 +225,7 @@ export default function CheckpointDialog({ pageId, session, live, writable, onCl
     {preview && <section aria-label={t('checkpointPreview')} className="checkpoint-preview">
       <h3>{preview.record.version_name}</h3>
       {previewFault === preview.record.id && <p role="alert">{t('checkpointUnsupported')}</p>}
-      {preview.source !== null ? <PublicPageBody source={preview.source} targets={new Map()} /> : <PageEditor
+      {preview.source !== null ? <PublicPageBody source={preview.source} targets={new Map()} taskStatus={reader('taskStatus')} /> : <PageEditor
         key={preview.record.id} pageId={preview.record.id} collaboration={preview.replica}
         editable={false} showModePicker={false} choices={[]} markdown="" onChange={() => {}} onOpenLink={() => {}}
         onSchemaError={() => setPreviewFault(preview.record.id)}

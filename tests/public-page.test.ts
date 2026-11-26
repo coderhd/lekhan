@@ -6,11 +6,18 @@ import PublicPageBody from '../components/public-page-body'
 import { writingExtensions } from '../components/editor/writing-extensions'
 
 const linked = 'e6a3a67a-bf74-4f17-b013-95eb59b2e937'
-const render = (source: string) => renderToStaticMarkup(createElement(PublicPageBody, {
-  source, targets: new Map([['follow-up', linked]]),
+const render = (source: string, taskStatus = 'Task status') => renderToStaticMarkup(createElement(PublicPageBody, {
+  source, targets: new Map([['follow-up', linked]]), taskStatus,
 }))
 
 describe('public page body', () => {
+  it('renders task state with the supplied accessible label', () => {
+    const html = render('- [x] First task\n- [ ] Second task', 'Estado de la tarea')
+    expect(html.match(/aria-label="Estado de la tarea"/g)).toHaveLength(2)
+    expect(html.match(/\bchecked=""/g)).toHaveLength(1)
+    expect(html).toContain('Second task')
+  })
+
   it('renders an article, callouts and public wikilinks without exposing frontmatter', () => {
     new MarkdownManager({ extensions: writingExtensions })
     const html = render('---\ntags: [internal]\n---\n# Meeting notes\n\nA **draft** with [[Follow-up|more]] and [[Private notes|an aside]].\n\n> [!note] Follow up\n> Schedule a discussion.')

@@ -10,7 +10,7 @@ export function validWikiLink(value: string) {
 }
 
 export function findCommand(textBeforeCaret: string, blockStart: number): CommandMatch | null {
-  const slash = /^\/([\p{L}\p{N} -]*)$/u.exec(textBeforeCaret)
+  const slash = /^\/([\p{L}\p{M}\p{N} -]*)$/u.exec(textBeforeCaret)
   if (slash) {
     return { type: 'block', query: slash[1], from: blockStart, to: blockStart + slash[0].length }
   }

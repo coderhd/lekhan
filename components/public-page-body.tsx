@@ -38,7 +38,7 @@ function safeHref(value: string) {
   }
 }
 
-export default function PublicPageBody({ source, targets }: { source: string; targets: Map<string, string> }) {
+export default function PublicPageBody({ source, targets, taskStatus }: { source: string; targets: Map<string, string>; taskStatus: string }) {
   const headings = new Set<string>()
   const markdown = tokenizeSource(splitYamlFrontmatter(source)?.body ?? source)
 
@@ -118,12 +118,12 @@ export default function PublicPageBody({ source, targets }: { source: string; ta
       case 'list': {
         const list = token as Tokens.List
         const items = list.items.map((item, index) => <li key={index}>
-          {item.task && !item.tokens.some(child => child.type === 'checkbox') && <input type="checkbox" checked={item.checked} disabled aria-label="Task status" />}
+          {item.task && !item.tokens.some(child => child.type === 'checkbox') && <input type="checkbox" checked={item.checked} disabled aria-label={taskStatus} />}
           {render(item.tokens)}
         </li>)
         return list.ordered ? <ol start={typeof list.start === 'number' ? list.start : undefined}>{items}</ol> : <ul>{items}</ul>
       }
-      case 'checkbox': return <input type="checkbox" checked={Boolean(token.checked)} disabled aria-label="Task status" />
+      case 'checkbox': return <input type="checkbox" checked={Boolean(token.checked)} disabled aria-label={taskStatus} />
       case 'table': {
         const table = token as Tokens.Table
         return <div className="public-table"><table>

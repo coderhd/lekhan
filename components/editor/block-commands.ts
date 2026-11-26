@@ -14,21 +14,21 @@ import {
 } from 'lucide-react'
 
 export interface BlockCommand {
-  label: string
+  id: string
   aliases: string
   icon: LucideIcon
   apply: (chain: ChainedCommands) => ChainedCommands
 }
 
-export const blockCommands: BlockCommand[] = [
-  { label: 'Text', aliases: 'paragraph normal', icon: Pilcrow, apply: (chain) => chain.setParagraph() },
-  { label: 'Heading 1', aliases: 'h1 title', icon: Heading1, apply: (chain) => chain.setHeading({ level: 1 }) },
-  { label: 'Heading 2', aliases: 'h2 subtitle', icon: Heading2, apply: (chain) => chain.setHeading({ level: 2 }) },
-  { label: 'Heading 3', aliases: 'h3', icon: Heading3, apply: (chain) => chain.setHeading({ level: 3 }) },
-  { label: 'Bulleted list', aliases: 'bullet unordered ul', icon: List, apply: (chain) => chain.toggleBulletList() },
-  { label: 'Numbered list', aliases: 'ordered ol', icon: ListOrdered, apply: (chain) => chain.toggleOrderedList() },
-  { label: 'Task list', aliases: 'todo checklist checkbox', icon: ListTodo, apply: (chain) => chain.toggleTaskList() },
-  { label: 'Quote', aliases: 'blockquote', icon: Quote, apply: (chain) => chain.setBlockquote() },
-  { label: 'Code block', aliases: 'pre fenced', icon: Code2, apply: (chain) => chain.setCodeBlock() },
-  { label: 'Divider', aliases: 'horizontal rule line hr', icon: Minus, apply: (chain) => chain.setHorizontalRule() },
-]
+export const blockCommands = [
+  { id: 'blockText', aliases: 'text paragraph normal', icon: Pilcrow, apply: (chain) => chain.setParagraph() },
+  { id: 'blockHeading1', aliases: 'heading 1 h1 title', icon: Heading1, apply: (chain) => chain.setHeading({ level: 1 }) },
+  { id: 'blockHeading2', aliases: 'heading 2 h2 subtitle', icon: Heading2, apply: (chain) => chain.setHeading({ level: 2 }) },
+  { id: 'blockHeading3', aliases: 'heading 3 h3', icon: Heading3, apply: (chain) => chain.setHeading({ level: 3 }) },
+  { id: 'blockBulletList', aliases: 'bulleted list bullet unordered ul', icon: List, apply: (chain) => chain.toggleBulletList() },
+  { id: 'blockNumberedList', aliases: 'numbered list ordered ol', icon: ListOrdered, apply: (chain) => chain.toggleOrderedList() },
+  { id: 'blockTaskList', aliases: 'task list todo checklist checkbox', icon: ListTodo, apply: (chain) => chain.toggleTaskList() },
+  { id: 'blockQuote', aliases: 'quote blockquote', icon: Quote, apply: (chain) => chain.setBlockquote() },
+  { id: 'blockCode', aliases: 'code block pre fenced', icon: Code2, apply: (chain) => chain.setCodeBlock() },
+  { id: 'blockDivider', aliases: 'divider horizontal rule line hr', icon: Minus, apply: (chain) => chain.setHorizontalRule() },
+] as const satisfies readonly BlockCommand[]

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { LucideIcon } from 'lucide-react'
+import { useTranslations } from '@/lib/i18n/client'
 
 export interface CommandItem {
   id: string
@@ -21,6 +22,7 @@ interface CommandMenuProps {
 }
 
 export function CommandMenu({ id, title, items, active, left, top, above, select }: CommandMenuProps) {
+  const t = useTranslations('editor-chrome')
   const selected = useRef<HTMLButtonElement>(null)
   const list = useRef<HTMLDivElement>(null)
   const activeId = items[active]?.id
@@ -70,7 +72,7 @@ export function CommandMenu({ id, title, items, active, left, top, above, select
           )
         })}
       </div>
-      {items.length === 0 && <div className="writer-command-empty" role="status">No matching commands</div>}
+      {items.length === 0 && <div className="writer-command-empty" role="status">{t('noMatchingCommands')}</div>}
     </div>,
     document.body,
   )

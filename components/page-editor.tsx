@@ -74,16 +74,13 @@ function currentMatch(editor: Editor) {
   return match
 }
 
-function getItems(choices: PageChoice[], pageId: string, match: CommandMatch): CommandItem[] {
+function getItems(choices: PageChoice[], pageId: string, match: CommandMatch, t: ReturnType<typeof useTranslations<'editor-chrome'>>): CommandItem[] {
   const query = match.query.trim().toLowerCase()
   if (match.type === 'block') {
+    const normalized = query.normalize('NFC')
     return blockCommands
-      .filter((command) => `${command.label} ${command.aliases}`.toLowerCase().includes(query))
-      .map((command) => ({
-        id: command.label,
-        title: command.label,
-        icon: command.icon,
-      }))
+      .map(({ id, aliases, icon }) => ({ id, aliases, title: t(id), icon }))
+      .filter(({ title, aliases }) => `${title} ${aliases}`.toLowerCase().normalize('NFC').includes(normalized))
   }
 
   const items: CommandItem[] = []
@@ -104,7 +101,7 @@ function getItems(choices: PageChoice[], pageId: string, match: CommandMatch): C
     items.push({
       id: 'unresolved',
       title: unresolved,
-      description: 'Link to an unwritten page',
+      description: t('linkUnwrittenPage'),
       icon: Link2,
     })
   }
@@ -265,7 +262,7 @@ function PageEditorSession({
 
   function selectItem(editor: Editor, state: MenuState, item: CommandItem) {
     if (state.match.type === 'block') {
-      const command = blockCommands.find((candidate) => candidate.label === item.id)
+      const command = blockCommands.find((candidate) => candidate.id === item.id)
       if (command) chooseBlock(editor, state, command)
       return
     }
@@ -288,7 +285,7 @@ function PageEditorSession({
       return false
     }
 
-    const items = getItems(choices, pageId, active.match)
+    const items = getItems(choices, pageId, active.match, editorText)
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       const direction = event.key === 'ArrowDown' ? 1 : -1
       const index = (active.active + direction + items.length) % Math.max(items.length, 1)
@@ -312,7 +309,7 @@ function PageEditorSession({
   }
 
   const menuOpen = menu !== null
-  const items = menu ? getItems(choices, pageId, menu.match) : []
+  const items = menu ? getItems(choices, pageId, menu.match, editorText) : []
   const activeItem = Math.max(0, Math.min(menu?.active ?? 0, items.length - 1))
 
   function activatePageLink(event: MouseEvent | KeyboardEvent) {
@@ -468,7 +465,7 @@ function PageEditorSession({
       {editor && menu && (
         <CommandMenu
           id={menuId}
-          title={menu.match.type === 'block' ? 'Blocks' : 'Link a page'}
+          title={editorText(menu.match.type === 'block' ? 'blocks' : 'linkPage')}
           items={items}
           active={activeItem}
           left={menu.left}

@@ -51,8 +51,8 @@ export async function prepareLocalMirror(page: Page, signal: AbortSignal, localM
   const response = await fetch('/api/import?' + params, { cache: 'no-store', signal })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    if (body?.error === 'import_paid_sync_ended') throw automaticMirrorUnavailable()
-    throw new Error('Could not check your workspace’s sync settings.')
+    if (body?.error === 'import_paid_sync_ended') throw new MirrorFailure('mirrorAutomaticPaused')
+    throw new MirrorFailure('mirrorSettingsUnavailable')
   }
   const { prepareCloudImportImages } = await import('./prepare-images')
   const input: CloudImportBatch = { importId, index: 0, localMirror, pages: [{ ordinal: 0, parent: null,
@@ -70,11 +70,16 @@ export async function prepareLocalMirror(page: Page, signal: AbortSignal, localM
   }
 }
 
-export class MirrorRejected extends Error {}
-export class AutomaticMirrorUnavailable extends Error {}
+type MirrorRejection = 'mirrorPlanChanged' | 'mirrorStorageLimit' | 'mirrorPageTooLarge' | 'mirrorPageRejected'
 
-function automaticMirrorUnavailable() {
-  return new AutomaticMirrorUnavailable('Automatic sync is paused. You can still choose pages to sync.')
+export class MirrorFailure extends Error {
+  constructor(readonly code: MirrorRejection | 'mirrorSettingsUnavailable' | 'mirrorAutomaticPaused' | 'mirrorFileUnreadable' | 'mirrorUnconfirmed' | 'mirrorAccountChanged') {
+    super(code)
+  }
+}
+
+export class MirrorRejected extends MirrorFailure {
+  constructor(code: MirrorRejection) { super(code) }
 }
 
 export async function uploadLocalMirror(pending: PendingLocalMirror, localFiles: LocalAttachment[], signal: AbortSignal, automatic = false) {
@@ -82,7 +87,7 @@ export async function uploadLocalMirror(pending: PendingLocalMirror, localFiles:
   const sources = new Map(localFiles.map(file => [file.id, file.data]))
   const files = (pending.files ?? []).map(file => {
     const data = sources.get(file.sourceId)
-    if (!account || data?.byteLength !== file.bytes) throw new Error('A file in the saved sync draft could not be read from this notebook.')
+    if (!account || data?.byteLength !== file.bytes) throw new MirrorFailure('mirrorFileUnreadable')
     return { ...file, data }
   })
   const response = await fetch(automatic ? '/api/import?sync=automatic' : '/api/import', {
@@ -90,21 +95,21 @@ export async function uploadLocalMirror(pending: PendingLocalMirror, localFiles:
     body: JSON.stringify(batch), signal: AbortSignal.any([signal, AbortSignal.timeout(120_000)]),
   }).catch(() => {
     signal.throwIfAborted()
-    throw new Error('Could not confirm the cloud copy. Retry sync to recover it.')
+    throw new MirrorFailure('mirrorUnconfirmed')
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    if (body?.error === 'import_paid_sync_ended') throw automaticMirrorUnavailable()
-    if (body?.error === 'account_changed') throw new Error('Sign back into the account that started this sync.')
-    if (body?.error === 'import_image_policy_changed') throw new MirrorRejected('The workspace plan changed. Choose Sync this page again.')
-    if (body?.error === 'import_workspace_media_limit') throw new MirrorRejected('This page exceeds the remaining workspace storage. Free up space and retry.')
-    if (response.status === 413) throw new MirrorRejected('This page is too large for the cloud upload. Try fewer or smaller images.')
-    if (response.status === 400) throw new MirrorRejected('The cloud workspace could not accept this page. Check its title and properties.')
-    throw new Error('Could not confirm the cloud copy. Retry sync to recover it.')
+    if (body?.error === 'import_paid_sync_ended') throw new MirrorFailure('mirrorAutomaticPaused')
+    if (body?.error === 'account_changed') throw new MirrorFailure('mirrorAccountChanged')
+    if (body?.error === 'import_image_policy_changed') throw new MirrorRejected('mirrorPlanChanged')
+    if (body?.error === 'import_workspace_media_limit') throw new MirrorRejected('mirrorStorageLimit')
+    if (response.status === 413) throw new MirrorRejected('mirrorPageTooLarge')
+    if (response.status === 400) throw new MirrorRejected('mirrorPageRejected')
+    throw new MirrorFailure('mirrorUnconfirmed')
   }
   const receipt: CloudImportReceipt | null = await response.json().catch(() => null)
   const id = receipt?.pages?.[0]?.id
-  if (typeof id !== 'string' || !uuidPattern.test(id)) throw new Error('Could not confirm the cloud copy. Retry sync to recover it.')
+  if (typeof id !== 'string' || !uuidPattern.test(id)) throw new MirrorFailure('mirrorUnconfirmed')
   for (const file of files) await uploadImportedAttachment(id, file, account, signal)
   return id
 }

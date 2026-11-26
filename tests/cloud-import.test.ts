@@ -44,7 +44,7 @@ describe('cloud vault import', () => {
         markdown: note.markdown, frontmatter: note.frontmatter, properties: note.properties }])
       expect(validateCloudImport(batch)).toEqual(batch)
       expect(validateCloudImport({ ...batch, localMirror: { ...batch.localMirror, parent: note.id } })).toBeNull()
-      await expect(uploadLocalMirror(pending, [], signal)).rejects.toThrow('Retry sync')
+      await expect(uploadLocalMirror(pending, [], signal)).rejects.toMatchObject({ code: 'mirrorUnconfirmed' })
       // Simulate IndexedDB returning the previously selected payload.
       lost = false
       await expect(uploadLocalMirror({ state: 'pending', batch: JSON.parse(JSON.stringify(batch)) }, [], signal)).resolves.toBe(pageId)
@@ -93,7 +93,7 @@ describe('cloud vault import', () => {
       expect(transfer).not.toHaveProperty('data')
       expect(transfer.sourceId).toBe(file.id)
       expect(pending.batch.pages[0].markdown).toBe(`[Read](#lekhan-file-${transfer.id}-%23page%3D2)`)
-      await expect(uploadLocalMirror(pending, [], signal, true)).rejects.toThrow('could not be read')
+      await expect(uploadLocalMirror(pending, [], signal, true)).rejects.toMatchObject({ code: 'mirrorFileUnreadable' })
       expect(posts).toHaveLength(0)
       await expect(uploadLocalMirror(pending, note.files, signal, true)).rejects.toThrow('The file transfer could not finish')
       const reopened = { ...note, cloudMirror: JSON.parse(JSON.stringify(pending)) }
