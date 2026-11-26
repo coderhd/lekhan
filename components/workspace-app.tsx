@@ -5,12 +5,12 @@ import {
   ChevronRight, CircleAlert, FileText, FolderClosed, Keyboard, List, LoaderCircle, Menu, MoreHorizontal,
   Cloud, PanelRight, Plus, Search, Star, X, Link2, MoveRight, Trash2, Pencil, CornerDownRight, NotebookPen, Sparkles, Paperclip,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
 import type { Page } from '@/lib/types'
 import {
-  applyVaultImport, createPage, deletePage, getBacklinks, pageChoices, pageHeadings,
-  pagePath, resolvePage, updatePage,
+  applyVaultImport, createPage, deletePage, getBacklinks, notebookNavigation, pageChoices, pageHeadings,
+  pagePath, resolvePage, updatePage, type PageLocation,
 } from '@/lib/workspace'
 import { pageTags, workspaceSearch } from '@/lib/workspace-search'
 import { attachmentReference } from '@/lib/local-attachments'
@@ -126,23 +126,17 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
   const page = pages.find(item => item.id === workspace?.activePageId) ?? pages[0]
   const mirror = page?.cloudMirror
   const localReadOnly = !!mirror || syncingPage === page?.id
-  const trail = useMemo(() => page ? pagePath(pages, page.id) : [], [pages, page])
+  const pageId = page?.id
+  const { childPages, favorites, path } = useMemo(() => notebookNavigation(pages), [pages])
+  const trail = useMemo(() => pageId ? path(pageId) : emptyTrail, [path, pageId])
   const links = useMemo(() => page ? getBacklinks(pages, page.id) : [], [pages, page])
   const headings = useMemo(() => page ? pageHeadings(page.markdown) : [], [page])
   const choices = useMemo(() => pageChoices(pages), [pages])
   const tags = useMemo(() => page ? pageTags(page) : [], [page])
-  const { childPages, favorites } = useMemo(() => {
-    const childPages = new Map<string | null, Page[]>()
-    const favorites: Page[] = []
-    for (const note of pages) {
-      const siblings = childPages.get(note.parentId) ?? []
-      siblings.push(note)
-      childPages.set(note.parentId, siblings)
-      if (note.favorite) favorites.push(note)
-    }
-    return { childPages, favorites }
-  }, [pages])
   const activePath = useMemo(() => new Map(trail.map(note => [note.parentId, note.id])), [trail])
+  const toggleBranch = useCallback((id: string) => {
+    setCollapsed(previous => previous.includes(id) ? previous.filter(item => item !== id) : [...previous, id])
+  }, [])
 
   useEffect(() => () => mirrorRequest.current?.abort(), [])
 
@@ -586,7 +580,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
               currentId={page?.id}
               collapsed={collapsed}
               onOpen={open}
-              onToggle={id => setCollapsed(previous => previous.includes(id) ? previous.filter(item => item !== id) : [...previous, id])}
+              onToggle={toggleBranch}
             />
             {workspace && pages.length === 0 && <p className="nav-empty">{t('pagesEmpty')}</p>}
           </section>
@@ -921,10 +915,11 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
 }
 
 const emptyPages: Page[] = []
+const emptyTrail: readonly PageLocation[] = []
 
 interface PageTreeProps {
   parentId: string | null
-  childPages: ReadonlyMap<string | null, Page[]>
+  childPages: ReadonlyMap<string | null, readonly PageLocation[]>
   activePath: ReadonlyMap<string | null, string>
   currentId: string | undefined
   collapsed: string[]
@@ -932,7 +927,7 @@ interface PageTreeProps {
   onToggle: (id: string) => void
 }
 
-function PageTree({ parentId, childPages, activePath, currentId, collapsed, onOpen, onToggle }: PageTreeProps) {
+const PageTree = memo(function PageTree({ parentId, childPages, activePath, currentId, collapsed, onOpen, onToggle }: PageTreeProps) {
   const t = useTranslations('app-shell')
   const [limit, setLimit] = useState(navigationBatch)
   const children = childPages.get(parentId)
@@ -969,9 +964,9 @@ function PageTree({ parentId, childPages, activePath, currentId, collapsed, onOp
         }}>{t('showMorePages')}</button></li>}
     </ul>
   )
-}
+})
 
-function BacklinksSection({ links, onOpen }: { links: ReturnType<typeof getBacklinks>; onOpen: (id: string) => void }) {
+const BacklinksSection = memo(function BacklinksSection({ links, onOpen }: { links: ReturnType<typeof getBacklinks>; onOpen: (id: string) => void }) {
   const t = useTranslations('app-shell')
   const locale = useLocale()
   const [limit, setLimit] = useState(backlinkBatch)
@@ -989,4 +984,4 @@ function BacklinksSection({ links, onOpen }: { links: ReturnType<typeof getBackl
         restoreListFocus(currentTarget, currentTarget.parentElement, '.backlink', limit)
       }}>{t('showMoreBacklinks')}</button>}
   </section>
-}
+})

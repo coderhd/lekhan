@@ -32,7 +32,7 @@ function uniqueTitle(pages: Page[], parentId: string | null, title: string, excl
   return candidate
 }
 
-type PageLocation = Pick<Page, 'id' | 'title' | 'parentId'>
+export type PageLocation = Pick<Page, 'id' | 'title' | 'parentId'>
 
 function pathFromMap<T extends PageLocation>(pages: Map<string, T>, id: string) {
   const path: T[] = []
@@ -52,10 +52,18 @@ interface PageResolver {
   resolveTarget: (target: string, sourceId?: string) => PageLocation | undefined
   choices: () => PageChoice[]
   backlink: (page: Page, targetId: string) => string | undefined
+  path: (id: string) => readonly PageLocation[]
 }
 const resolversBySnapshot = new WeakMap<Page[], PageResolver>()
 const linksByPage = new WeakMap<Page, ReturnType<typeof wikiLinks>>()
 type Backlink = { start: number; end: number; excerpt?: string }
+type BacklinkMatch = { page: Page; excerpt: string }
+const backlinksBySnapshot = new WeakMap<Page[], { id: string; matches: BacklinkMatch[] }>()
+const navigationBySnapshot = new WeakMap<Page[], {
+  childPages: ReadonlyMap<string | null, readonly PageLocation[]>
+  favorites: readonly PageLocation[]
+  path: PageResolver['path']
+}>()
 
 function pageIndex(pages: Page[]) {
   let index = pagesBySnapshot.get(pages)
@@ -161,6 +169,7 @@ function buildResolver(pages: Page[]): PageResolver {
   const resolver = {
     canonicalPath, resolveTarget, backlink,
     choices: () => choices ??= locations.map(page => ({ id: page.id, title: page.title, path: canonicalPath(page) })),
+    path: (id: string) => pathsById.get(id) ?? [],
   }
   resolversBySnapshot.set(pages, resolver)
   return resolver
@@ -173,6 +182,23 @@ export function resolvePage(pages: Page[], target: string, sourceId?: string) {
 
 export function pageChoices(pages: Page[]): PageChoice[] {
   return buildResolver(pages).choices()
+}
+
+export function notebookNavigation(pages: Page[]) {
+  const cached = navigationBySnapshot.get(pages)
+  if (cached) return cached
+  const childPages = new Map<string | null, PageLocation[]>()
+  const favorites: PageLocation[] = []
+  for (const { id, title, parentId, favorite } of pages) {
+    const location = { id, title, parentId }
+    const siblings = childPages.get(parentId)
+    if (siblings) siblings.push(location)
+    else childPages.set(parentId, [location])
+    if (favorite) favorites.push(location)
+  }
+  const navigation = { childPages, favorites, path: buildResolver(pages).path }
+  navigationBySnapshot.set(pages, navigation)
+  return navigation
 }
 
 function keepResolvedLinks(previous: Page[], next: Page[], now: string) {
@@ -386,7 +412,7 @@ export function updatePage(workspace: Workspace, id: string, patch: PagePatch): 
   if (!page) return workspace
   const parentId = patch.parentId === undefined ? page.parentId : patch.parentId
   if (parentId) {
-    const targetPath = pagePath(workspace.pages, parentId)
+    const targetPath = resolversBySnapshot.get(workspace.pages)?.path(parentId) ?? pagePath(workspace.pages, parentId)
     if (!targetPath.length || targetPath.some((ancestor) => ancestor.id === id)) return workspace
   }
   const title = patch.title !== undefined || parentId !== page.parentId
@@ -405,6 +431,11 @@ export function updatePage(workspace: Workspace, id: string, patch: PagePatch): 
   // edited page are recalculated from its new object when requested.
   const resolver = resolversBySnapshot.get(workspace.pages)
   if (resolver) resolversBySnapshot.set(pages, resolver)
+  const navigation = navigationBySnapshot.get(workspace.pages)
+  if (navigation && favorite === page.favorite) navigationBySnapshot.set(pages, navigation)
+  // The edited note cannot affect its own inbound links, which exclude itself.
+  const backlinks = backlinksBySnapshot.get(workspace.pages)
+  if (backlinks?.id === id) backlinksBySnapshot.set(pages, backlinks)
   return { ...workspace, pages }
 }
 
@@ -435,13 +466,16 @@ export function deletePage(workspace: Workspace, id: string): Workspace {
 }
 
 export function getBacklinks(pages: Page[], id: string) {
+  const cached = backlinksBySnapshot.get(pages)
+  if (cached?.id === id) return cached.matches
   const { backlink } = buildResolver(pages)
-  const matches: { page: Page; excerpt: string }[] = []
+  const matches: BacklinkMatch[] = []
   for (const page of pages) {
     if (page.id === id) continue
     const excerpt = backlink(page, id)
     if (excerpt !== undefined) matches.push({ page, excerpt })
   }
+  backlinksBySnapshot.set(pages, { id, matches })
   return matches
 }
 

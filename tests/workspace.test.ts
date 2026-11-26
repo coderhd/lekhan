@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Page, Workspace } from '../lib/types'
 import {
-  createPage, deletePage, exportPage, fromMarkdownFile, getBacklinks, pageChoices,
+  createPage, deletePage, exportPage, fromMarkdownFile, getBacklinks, notebookNavigation, pageChoices,
   pageHeadings, pagePath, resolvePage, searchPages, updatePage,
 } from '../lib/workspace'
 
@@ -17,6 +17,25 @@ function workspace(...pages: Page[]): Workspace {
 }
 
 describe('page hierarchy', () => {
+  it('reuses navigation and inbound links while writing, and updates them after structural edits', () => {
+    const existing = workspace(page('a', 'Projects'), page('b', 'Draft', 'a'), page('c', 'Reference', null, 'See [[Draft]].'))
+    const navigation = notebookNavigation(existing.pages)
+    const inbound = getBacklinks(existing.pages, 'b')
+    const edited = updatePage(existing, 'b', { markdown: 'Body with an outgoing [[Reference]] link.' })
+    expect(notebookNavigation(edited.pages)).toBe(navigation)
+    expect(getBacklinks(edited.pages, 'b')).toBe(inbound)
+    expect(getBacklinks(edited.pages, 'c').map(link => link.page.id)).toEqual(['b'])
+
+    const starred = updatePage(edited, 'b', { favorite: true })
+    expect(notebookNavigation(starred.pages).favorites.map(item => item.id)).toEqual(['b'])
+    const moved = updatePage(starred, 'b', { parentId: 'c', title: 'Outline' })
+    const movedNavigation = notebookNavigation(moved.pages)
+    expect(movedNavigation.path('b').map(item => item.title)).toEqual(['Reference', 'Outline'])
+    expect(movedNavigation.childPages.get('a')).toBeUndefined()
+    expect(getBacklinks(moved.pages, 'b').map(link => link.page.id)).toEqual(['c'])
+    expect(notebookNavigation(deletePage(moved, 'c').pages).favorites).toEqual([])
+  })
+
   it('creates and selects a child with a unique title', () => {
     const existing = workspace(page('a', 'Projects'), page('b', 'Untitled', 'a'))
     const result = createPage(existing, { parentId: 'a' })
