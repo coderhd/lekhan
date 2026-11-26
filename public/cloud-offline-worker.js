@@ -1,6 +1,6 @@
 const cloudShell = '/cloud-offline'
 const notebookShell = '/workspace-offline'
-const cacheName = 'lekhan-offline-shell-v2'
+const cacheName = 'lekhan-offline-shell-v3'
 const cacheKey = path => path + '?cached-shell'
 let warmup = null
 let refreshed = 0
@@ -62,7 +62,10 @@ self.addEventListener('install', event => {
 })
 
 self.addEventListener('activate', event => {
-  event.waitUntil(caches.delete('lekhan-cloud-shell-v1').then(() => self.clients.claim()))
+  event.waitUntil(Promise.all([
+    caches.delete('lekhan-cloud-shell-v1'),
+    caches.delete('lekhan-offline-shell-v2'),
+  ]).then(() => self.clients.claim()))
 })
 
 self.addEventListener('message', event => {

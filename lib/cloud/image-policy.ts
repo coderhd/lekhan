@@ -5,9 +5,14 @@ export const FREE_IMAGE_BYTES = 500_000
 export const PAID_IMAGE_BYTES = 20_000_000
 export const FREE_IMAGE_EDGE = 1_600
 
+type CloudImageErrorCode = 'imageTooLarge' | 'imageUnsupported' | 'imageUnreadable' | 'imageBrowserUnsupported' | 'imageFreeLimit'
+
 export class CloudImageError extends Error {
-  constructor(readonly code: 'imageTooLarge' | 'imageUnsupported' | 'imageUnreadable' | 'imageBrowserUnsupported' | 'imageFreeLimit') {
+  readonly code: CloudImageErrorCode
+
+  constructor(code: CloudImageErrorCode) {
     super(code)
+    this.code = code
   }
 }
 

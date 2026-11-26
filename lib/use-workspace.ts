@@ -29,7 +29,9 @@ export function useWorkspace(scope = 'personal', storage?: WorkspaceStorage) {
         const pendingCallbacks = saveCallbacks.current.length
         const pendingReceipts = durableChanges.current.length
         setStatus('saving')
-        const saved = await (storage ? storage.save(snapshot, revision.current, persisted.current) : saveWorkspace(snapshot, revision.current, scope))
+        const saved = await (storage
+          ? storage.save(snapshot, revision.current, persisted.current)
+          : saveWorkspace(snapshot, revision.current, scope, persisted.current?.pages))
         revision.current = saved.revision
         persisted.current = snapshot
         for (const receipt of durableChanges.current.splice(0, pendingReceipts)) receipt.resolve()

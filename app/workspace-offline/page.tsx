@@ -14,9 +14,11 @@ export default async function WorkspaceOfflinePage() {
     const catalog = await getCatalog(locale)
     return [locale, {
       'cloud-offline': catalog['cloud-offline'],
+      'cloud-dialogs': catalog['cloud-dialogs'],
       'app-shell': catalog['app-shell'],
       'editor-chrome': catalog['editor-chrome'],
       'editor-ai': catalog['editor-ai'],
+      'vault-import': catalog['vault-import'],
       auth: catalog.auth,
       desktop: catalog.desktop,
       settings: catalog.settings,
