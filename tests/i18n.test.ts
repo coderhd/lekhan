@@ -53,6 +53,15 @@ describe('workspace catalogs', () => {
     expect(translate('accessFor', { person: 'ada@example.test' })).toContain('ada@example.test')
     expect(translate('pageLinks', { count: 1250 })).toContain(new Intl.NumberFormat(locale).format(1250))
   })
+
+  it.each(locales)('formats file names and checkpoint retention in %s', async locale => {
+    const translate = createTranslator({ locale, messages: await getCatalog(locale), namespace: 'cloud-dialogs' })
+    expect(translate('downloadFile', { name: 'Field notes {2026}.pdf' })).toContain('Field notes {2026}.pdf')
+    expect(translate('backupName', { name: 'First draft' })).toContain('First draft')
+    const retention = translate('checkpointRetention', { days: 1250 })
+    expect(retention).toContain(new Intl.NumberFormat(locale).format(1250))
+    expect(translate('checkpointRetention', { days: 1 })).not.toEqual(retention)
+  })
 })
 
 describe('public language routes', () => {

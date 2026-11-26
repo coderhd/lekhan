@@ -1,5 +1,20 @@
 import type { CloudAttachment } from './attachments'
 
+const transferErrors = {
+  accessUnverified: 'Could not verify access to this page.',
+  transferUnavailable: 'The file transfer is unavailable.',
+  storagePending: 'Cloud storage is still checking the previous transfer. Wait up to 10 minutes, then resume the import.',
+  workspaceLimit: 'This workspace has reached its file storage limit.',
+  fileLimit: 'This file exceeds the workspace’s current per-file limit.',
+  accessChanged: 'Access to this file or page changed.',
+  transferFailed: 'The file transfer could not finish. Try again.',
+  attachmentsUnavailable: 'Could not load attachments.',
+} as const
+
+export class AttachmentTransferError extends Error {
+  constructor(readonly code: keyof typeof transferErrors) { super(transferErrors[code]) }
+}
+
 export interface CloudAttachmentList {
   files: CloudAttachment[]
   after: string | null
@@ -13,11 +28,11 @@ export async function transferCloudAttachment(pageId: string, id: string, option
   if (account) params.set('account', account)
   if (options.method === 'GET') params.set('transfer', 'attachment')
   const session = await fetch('/api/sync/session?' + params, { cache: 'no-store', signal: options.signal })
-  if (!session.ok) throw new Error('Could not verify access to this page.')
+  if (!session.ok) throw new AttachmentTransferError('accessUnverified')
   const { endpoint, ticket } = await session.json()
-  if (typeof ticket !== 'string' || typeof endpoint !== 'string') throw new Error('The file transfer is unavailable.')
+  if (typeof ticket !== 'string' || typeof endpoint !== 'string') throw new AttachmentTransferError('transferUnavailable')
   const url = new URL(endpoint)
-  if (url.protocol !== 'wss:' && url.protocol !== 'ws:') throw new Error('The file transfer is unavailable.')
+  if (url.protocol !== 'wss:' && url.protocol !== 'ws:') throw new AttachmentTransferError('transferUnavailable')
   url.protocol = url.protocol === 'wss:' ? 'https:' : 'http:'
   url.search = ''
   url.hash = ''
@@ -28,18 +43,18 @@ export async function transferCloudAttachment(pageId: string, id: string, option
   })
   if (reply.ok) return reply
   const body = await reply.json().catch(() => null)
-  if (body?.error === 'import_attachment_pending') throw new Error('Cloud storage is still checking the previous transfer. Wait up to 10 minutes, then resume the import.')
-  if (body?.error === 'workspace_limit') throw new Error('This workspace has reached its file storage limit.')
-  if (body?.error === 'file_limit') throw new Error('This file exceeds the workspace’s current per-file limit.')
-  if (reply.status === 403 || reply.status === 404) throw new Error('Access to this file or page changed.')
-  throw new Error('The file transfer could not finish. Try again.')
+  if (body?.error === 'import_attachment_pending') throw new AttachmentTransferError('storagePending')
+  if (body?.error === 'workspace_limit') throw new AttachmentTransferError('workspaceLimit')
+  if (body?.error === 'file_limit') throw new AttachmentTransferError('fileLimit')
+  if (reply.status === 403 || reply.status === 404) throw new AttachmentTransferError('accessChanged')
+  throw new AttachmentTransferError('transferFailed')
 }
 
 export async function listCloudAttachments(pageId: string, signal: AbortSignal, after?: string | null): Promise<CloudAttachmentList> {
   const params = new URLSearchParams({ pageId })
   if (after) params.set('after', after)
   const reply = await fetch('/api/attachments?' + params, { signal, cache: 'no-store' })
-  if (!reply.ok) throw new Error('Could not load attachments.')
+  if (!reply.ok) throw new AttachmentTransferError('attachmentsUnavailable')
   return reply.json()
 }
 

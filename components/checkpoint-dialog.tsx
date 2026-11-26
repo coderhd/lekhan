@@ -8,7 +8,7 @@ import * as Y from 'yjs'
 import { Awareness } from 'y-protocols/awareness'
 import { checkpointInlineBytes, checkpointTransferBytes, replaceCheckpointContent, type Checkpoint } from '@/lib/cloud/checkpoints'
 import { track } from '@/lib/analytics'
-import { useLocale } from '@/lib/i18n/client'
+import { useLocale, useTranslations } from '@/lib/i18n/client'
 import type { CloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
 import { Dialog } from './workspace-dialogs'
 import PageEditor from './page-editor'
@@ -28,8 +28,15 @@ interface Preview {
   source: string | null
 }
 
+type CheckpointIssue = 'checkpointSizeLimit' | 'checkpointImageLimit' | 'checkpointPlanChanged'
+  | 'checkpointSaveFailed' | 'checkpointOpenFailed' | 'checkpointContentFailed' | 'checkpointChangedDuringBackup'
+
+class CheckpointError extends Error {
+  constructor(readonly code: CheckpointIssue) { super(code) }
+}
+
 async function createCheckpoint(pageId: string, name: string, snapshot: Uint8Array, signal: AbortSignal) {
-  if (snapshot.byteLength > checkpointTransferBytes) throw new Error('This page exceeds the checkpoint size limit.')
+  if (snapshot.byteLength > checkpointTransferBytes) throw new CheckpointError('checkpointSizeLimit')
   const endpoint = '/api/checkpoints?' + new URLSearchParams({ pageId, name })
   const body = new Uint8Array(snapshot)
   const headers = { 'Content-Type': 'application/octet-stream' }
@@ -38,10 +45,10 @@ async function createCheckpoint(pageId: string, name: string, snapshot: Uint8Arr
     : await viaRelay(endpoint, { method: 'POST', headers, body, signal })
   const failure = reply && !reply.ok && (await reply.json().catch(() => null))?.error
   if (failure === 'checkpoint_image_limit') {
-    throw new Error('A new image exceeds the workspace’s cloud limits. Replace it before saving a checkpoint.')
+    throw new CheckpointError('checkpointImageLimit')
   }
-  if (failure === 'checkpoint_plan_changed') throw new Error('The workspace plan changed. Try saving the checkpoint again.')
-  if (!reply?.ok) throw new Error('Could not save the checkpoint.')
+  if (failure === 'checkpoint_plan_changed') throw new CheckpointError('checkpointPlanChanged')
+  if (!reply?.ok) throw new CheckpointError('checkpointSaveFailed')
   const { checkpoint }: { checkpoint: Checkpoint } = await reply.json()
   return checkpoint
 }
@@ -68,11 +75,13 @@ export default function CheckpointDialog({ pageId, session, live, writable, onCl
   onClose: () => void
 }) {
   const locale = useLocale()
+  const cloud = useTranslations('cloud-workspace')
+  const t = useTranslations('cloud-dialogs')
   const [history, setHistory] = useState<History | null>(null)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [previewFault, setPreviewFault] = useState<string | null>(null)
-  const [message, setMessage] = useState('')
-  const [failure, setFailure] = useState('')
+  const [message, setMessage] = useState<'checkpointSaved' | 'checkpointRestored' | null>(null)
+  const [failure, setFailure] = useState<CheckpointIssue | 'checkpointsUnavailable' | 'checkpointTryAgain' | null>(null)
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [reload, setReload] = useState(0)
@@ -95,7 +104,7 @@ export default function CheckpointDialog({ pageId, session, live, writable, onCl
           if (result.olderHistoryLimited && !reportedLimit.current) reportedLimit.current = track('paywall_hit', 'history')
         }
       }).catch(() => {
-        if (!abort.signal.aborted) setFailure('Could not load checkpoints.')
+        if (!abort.signal.aborted) setFailure('checkpointsUnavailable')
       })
     return () => { abort.abort() }
   }, [pageId, reload])
@@ -109,12 +118,12 @@ export default function CheckpointDialog({ pageId, session, live, writable, onCl
     const signal = controller.current?.signal
     if (busy || !signal || signal.aborted) return
     setBusy(true)
-    setFailure('')
-    setMessage('')
+    setFailure(null)
+    setMessage(null)
     try {
       await task(signal)
     } catch (problem) {
-      if (!signal.aborted) setFailure(problem instanceof Error ? problem.message : 'Checkpoints are temporarily unavailable.')
+      if (!signal.aborted) setFailure(problem instanceof CheckpointError ? problem.code : 'checkpointTryAgain')
     } finally {
       if (!signal.aborted) setBusy(false)
     }
@@ -132,7 +141,7 @@ export default function CheckpointDialog({ pageId, session, live, writable, onCl
       if (signal.aborted) return
       addRecord(record)
       setName('')
-      setMessage('Checkpoint saved.')
+      setMessage('checkpointSaved')
     })
   }
 
@@ -144,7 +153,7 @@ export default function CheckpointDialog({ pageId, session, live, writable, onCl
         return null
       })
       const reply = relay ?? await fetch(endpoint, { signal, cache: 'no-store' })
-      if (!reply.ok) throw new Error('Could not open this checkpoint.')
+      if (!reply.ok) throw new CheckpointError('checkpointOpenFailed')
       const data = await reply.arrayBuffer()
       if (signal.aborted) return
       const document = new Y.Doc()
@@ -156,7 +165,7 @@ export default function CheckpointDialog({ pageId, session, live, writable, onCl
         })
       } catch {
         document.destroy()
-        throw new Error('Could not load this checkpoint’s content.')
+        throw new CheckpointError('checkpointContentFailed')
       }
     })
   }
@@ -170,57 +179,59 @@ export default function CheckpointDialog({ pageId, session, live, writable, onCl
       const current = Y.encodeStateAsUpdate(document)
       document.on('update', track)
       try {
-        const backup = await createCheckpoint(pageId, 'Before restoring ' + preview.record.version_name.slice(0, 180), current, signal)
+        const backupPrefixLength = t('backupName', { name: '' }).length
+        const backupSource = preview.record.version_name.slice(0, Math.min(180, 200 - backupPrefixLength)).replace(/[\uD800-\uDBFF]$/u, '')
+        const backup = await createCheckpoint(pageId, t('backupName', { name: backupSource }), current, signal)
         if (signal.aborted) return
         addRecord(backup)
         if (changed || active.current.session !== session || !active.current.live || !active.current.writable) {
-          throw new Error('The page or your access changed while making the backup. Review the current page before retrying.')
+          throw new CheckpointError('checkpointChangedDuringBackup')
         }
         replaceCheckpointContent(document, preview.replica.document, 'checkpoint-restore')
         setPreview(null)
-        setMessage('Checkpoint restored. The previous content is available in history.')
+        setMessage('checkpointRestored')
       } finally {
         document.off('update', track)
       }
     })
   }
 
-  return <Dialog title="Version history" className="form-dialog checkpoint-dialog" onClose={onClose}>
+  return <Dialog title={cloud('history')} className="form-dialog checkpoint-dialog" onClose={onClose}>
     <div className="checkpoint-header">
-      <h2>Version history</h2>
-      <button className="icon-button" type="button" aria-label="Close version history" onClick={onClose}><X size={18} /></button>
+      <h2>{cloud('history')}</h2>
+      <button className="icon-button" type="button" aria-label={t('closeHistory')} onClick={onClose}><X size={18} /></button>
     </div>
-    {failure && <p className="account-error" role="alert">{failure}</p>}
-    {message && <p role="status">{message}</p>}
+    {failure && <p className="account-error" role="alert">{t(failure)}</p>}
+    {message && <p role="status">{t(message)}</p>}
     {!!history?.retentionDays && !preview && <p>
-      Cloud checkpoints are kept for {history.retentionDays === 1 ? '1 day' : `${history.retentionDays} days`}.{history.olderHistoryLimited && history.canManageHistory &&
-        <> <Link className="account-link" href="/billing">Compare history plans</Link></>}
+      {t('checkpointRetention', { days: history.retentionDays })}{history.olderHistoryLimited && history.canManageHistory &&
+        <> <Link className="account-link" href="/billing">{t('compareHistory')}</Link></>}
     </p>}
     {mayChange && !preview && <form onSubmit={save} className="cloud-create">
-      <label>Checkpoint name <input value={name} onChange={event => setName(event.target.value)} maxLength={200} required /></label>
-      <button className="primary-button" disabled={busy}>Save checkpoint</button>
+      <label>{t('checkpointName')} <input value={name} onChange={event => setName(event.target.value)} maxLength={200} required /></label>
+      <button className="primary-button" disabled={busy}>{t('saveCheckpoint')}</button>
     </form>}
     {!history ? failure
-      ? <button className="secondary-button" onClick={() => { setFailure(''); setReload(value => value + 1) }}>Retry</button>
-      : <p role="status">Loading checkpoints…</p>
+      ? <button className="secondary-button" onClick={() => { setFailure(null); setReload(value => value + 1) }}>{t('retry')}</button>
+      : <p role="status">{t('loadingCheckpoints')}</p>
       : !preview && (history.checkpoints.length ? <ul className="checkpoint-list">
         {history.checkpoints.map(record => <li key={record.id}>
           <button className="search-result" type="button" disabled={busy} onClick={() => open(record)}>
             <span><strong>{record.version_name}</strong><small>{date.format(new Date(record.created_at))}</small></span>
           </button>
         </li>)}
-      </ul> : <p>{history.olderHistoryLimited ? 'No checkpoints in the current history window.' : 'No checkpoints yet.'}</p>)}
-    {preview && <section aria-label="Checkpoint preview" className="checkpoint-preview">
+      </ul> : <p>{history.olderHistoryLimited ? t('checkpointsOutsideWindow') : t('noCheckpoints')}</p>)}
+    {preview && <section aria-label={t('checkpointPreview')} className="checkpoint-preview">
       <h3>{preview.record.version_name}</h3>
-      {previewFault === preview.record.id && <p role="alert">This checkpoint contains unsupported blocks. Restore is unavailable.</p>}
+      {previewFault === preview.record.id && <p role="alert">{t('checkpointUnsupported')}</p>}
       {preview.source !== null ? <PublicPageBody source={preview.source} targets={new Map()} /> : <PageEditor
         key={preview.record.id} pageId={preview.record.id} collaboration={preview.replica}
         editable={false} showModePicker={false} choices={[]} markdown="" onChange={() => {}} onOpenLink={() => {}}
         onSchemaError={() => setPreviewFault(preview.record.id)}
       />}
       <div className="dialog-actions">
-        <button type="button" className="secondary-button" disabled={busy} onClick={() => setPreview(null)}>Back to history</button>
-        {mayChange && <button type="button" className="primary-button" disabled={busy || previewFault === preview.record.id} onClick={restore}>Restore and keep a backup</button>}
+        <button type="button" className="secondary-button" disabled={busy} onClick={() => setPreview(null)}>{t('backToHistory')}</button>
+        {mayChange && <button type="button" className="primary-button" disabled={busy || previewFault === preview.record.id} onClick={restore}>{t('restoreWithBackup')}</button>}
       </div>
     </section>}
   </Dialog>
