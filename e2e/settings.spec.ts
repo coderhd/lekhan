@@ -26,9 +26,16 @@ test('shares five settings tabs between the workspace drawer and direct settings
   await expect(page.getByRole('combobox', { name: 'Theme', exact: true })).toHaveValue('dark')
   await expect(page.getByRole('combobox', { name: 'Editor font' })).toHaveValue('mono')
   await expect(page.getByRole('combobox', { name: 'Line spacing' })).toHaveValue('relaxed')
-  await page.getByRole('tab', { name: 'Plan & Usage' }).click()
+  const tabs = page.getByRole('tablist', { name: 'Settings' }).getByRole('tab')
+  for (const tab of await tabs.all()) {
+    const bounds = await tab.boundingBox()
+    expect(bounds?.height).toBeGreaterThanOrEqual(44)
+    expect(bounds?.width).toBeGreaterThanOrEqual(44)
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390)
+  }
+  await page.getByRole('tab', { name: 'Billing & Usage' }).click()
   await expect(page).toHaveURL(/tab=plan/)
-  await expect(page.getByText('Cloud plans apply to signed-in workspaces.', { exact: false })).toBeVisible()
+  await expect(page.getByText('Cloud tiers apply to signed-in workspaces.', { exact: false })).toBeVisible()
   await page.getByRole('tab', { name: 'Privacy & Encryption' }).click()
   await expect(page.getByRole('heading', { name: 'Provider vault' })).toBeVisible()
 })
