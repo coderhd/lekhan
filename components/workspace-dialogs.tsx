@@ -50,6 +50,7 @@ export function Dialog({
 export function SearchDialog({
   pages,
   cloudSubject,
+  offlineOnly = false,
   initialQuery = '',
   onOpen,
   onOpenCloud,
@@ -58,6 +59,7 @@ export function SearchDialog({
 }: {
   pages?: Page[]
   cloudSubject?: string
+  offlineOnly?: boolean
   initialQuery?: string
   onOpen?: (id: string) => void
   onOpenCloud?: (id: string) => void
@@ -77,9 +79,10 @@ export function SearchDialog({
   const term = query.trim()
   const input = useRef<HTMLInputElement>(null)
   const row = useRef<HTMLButtonElement>(null)
+  const browserOffline = offlineOnly || (typeof navigator !== 'undefined' && navigator.onLine === false)
   const currentRemote = remote?.subject === cloudSubject ? remote : undefined
-  const loading = cloud && currentRemote?.query !== term
-  const failed = cloud && !loading && currentRemote?.pages === null
+  const loading = cloud && !browserOffline && currentRemote?.query !== term
+  const failed = cloud && (browserOffline || (!loading && currentRemote?.pages === null))
   const indexedPages = cloud
     ? !currentRemote?.denied && cachedCloud?.subject === cloudSubject ? cachedCloud?.pages : undefined
     : pages
@@ -110,7 +113,7 @@ export function SearchDialog({
   }, [cloud, cloudSubject])
 
   useEffect(() => {
-    if (!cloud) return
+    if (!cloud || browserOffline) return
     const request = new AbortController()
     const timer = setTimeout(async () => {
       try {
@@ -142,7 +145,7 @@ export function SearchDialog({
       clearTimeout(timer)
       request.abort()
     }
-  }, [term, cloud, cloudSubject, copyIds])
+  }, [term, cloud, browserOffline, cloudSubject, copyIds])
 
   useEffect(() => {
     row.current?.scrollIntoView({ block: 'nearest' })

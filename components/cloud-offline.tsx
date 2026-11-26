@@ -1,22 +1,52 @@
 'use client'
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { type MouseEvent, useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { CloudOff, FileText } from 'lucide-react'
 import { offlineAccount } from '@/lib/cloud/offline-account'
 import { readOfflineCloudPage, readOfflineCloudPages } from '@/lib/cloud/local-search'
 import { uuidPattern } from '@/lib/cloud/graph'
 import { useTranslations } from '@/lib/i18n/client'
 import CloudPageEditor from './cloud-page-editor'
+import CloudSearch from './cloud-search'
 import OfflineShell, { watchOfflineCookies, type OfflineCatalogs } from './offline-shell'
 
 function browserAccount() {
   return offlineAccount(document.cookie)
 }
 
-const nothing = () => () => {}
+const navEvent = 'lekhan:cloud-offline-nav'
 const loading = () => undefined
 const pageParam = () => new URLSearchParams(location.search).get('page')
-const hrefFor = (id: string) => '/cloud-offline?' + new URLSearchParams({ page: id })
+const hrefFor = (id: string | null) => id ? '/cloud-offline?' + new URLSearchParams({ page: id }) : '/cloud-offline'
+
+function watchNavigation(check: () => void) {
+  window.addEventListener('popstate', check)
+  window.addEventListener(navEvent, check)
+  return () => {
+    window.removeEventListener('popstate', check)
+    window.removeEventListener(navEvent, check)
+  }
+}
+
+function openOfflinePage(id: string | null, fragment = '') {
+  const next = new URL(hrefFor(id), window.location.origin)
+  if (fragment) next.hash = fragment.startsWith('#') ? fragment : '#' + fragment
+  const current = window.location.pathname + window.location.search + window.location.hash
+  const target = next.pathname + next.search + next.hash
+  if (current !== target) {
+    window.history.pushState(null, '', target)
+    window.dispatchEvent(new Event(navEvent))
+  }
+  if (next.hash) window.dispatchEvent(new Event('hashchange'))
+}
+
+function handleOfflineNav(id: string | null) {
+  return (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    openOfflinePage(id)
+  }
+}
 
 export default function CloudOffline({ catalogs }: { catalogs: OfflineCatalogs }) {
   return <OfflineShell catalogs={catalogs}><CloudOfflineScreen /></OfflineShell>
@@ -25,13 +55,19 @@ export default function CloudOffline({ catalogs }: { catalogs: OfflineCatalogs }
 function CloudOfflineScreen() {
   const t = useTranslations('cloud-offline')
   const subject = useSyncExternalStore(watchOfflineCookies, browserAccount, loading)
-  const id = useSyncExternalStore(nothing, pageParam, loading)
+  const id = useSyncExternalStore(watchNavigation, pageParam, loading)
   return <main className="cloud-screen">
     <header className="account-header">
-      <a href="/cloud-offline" className="account-brand"><span className="brand-mark" aria-hidden="true">L</span> {t('title')}</a>
-      {id && uuidPattern.test(id)
-        ? <a href={'/page/' + id} className="account-link">{t('openPage')}</a>
-        : <a href="/cloud" className="account-link">{t('cloud')}</a>}
+      <a href="/cloud-offline" className="account-brand" onClick={handleOfflineNav(null)}>
+        <span className="brand-mark" aria-hidden="true">L</span> {t('title')}
+      </a>
+      <div className="cloud-header-actions">
+        <a href="/workspace-offline" className="account-link">{t('notebook')}</a>
+        {subject && <CloudSearch subject={subject} offline onOpen={target => openOfflinePage(target)} />}
+        {id && uuidPattern.test(id)
+          ? <a href={'/page/' + id} className="account-link">{t('openPage')}</a>
+          : <a href="/cloud" className="account-link">{t('cloud')}</a>}
+      </div>
     </header>
     {subject && id !== undefined ? <OfflineCopies key={subject + ':' + id} subject={subject} id={id} />
       : <section className="cloud-library">
@@ -73,6 +109,7 @@ function OfflineCopies({ subject, id }: { subject: string; id: string | null }) 
       id: copy.id, workspace_id: '', owner_id: '', parent_id: null, title: copy.title,
       is_public: false, properties: copy.properties ?? null, updated_at: copy.updatedAt,
     }} subject={subject} role={copy.role ?? 'editor'} enabled onAccessLost={dropCopy}
+      onOpenOfflinePage={(target, fragment) => openOfflinePage(target, fragment)}
       offlineChoices={(pages ?? []).map(page => ({ id: page.id, title: page.title, path: page.title }))} />
   </article>
 
@@ -82,9 +119,9 @@ function OfflineCopies({ subject, id }: { subject: string; id: string | null }) 
     {failed ? <p role="alert">{t('readFailure')}</p>
       : id ? <p role="status">{expired ? t('accessExpired') : copy === null ? t('missingCopy') : t('loading')}</p>
       : pages?.length ? <ul className="cloud-pages">{pages.slice(0, visible).map(page => <li key={page.id}>
-        <a href={hrefFor(page.id)}><FileText size={17} aria-hidden="true" /> {page.title}</a>
+        <a href={hrefFor(page.id)} onClick={handleOfflineNav(page.id)}><FileText size={17} aria-hidden="true" /> {page.title}</a>
       </li>)}</ul> : <p role="status">{pages ? t('empty') : t('loading')}</p>}
     {!id && pages && pages.length > visible && <button type="button" className="secondary-button" onClick={() => setVisible(count => count + 60)}>{t('more')}</button>}
-    {id && <a className="account-link" href="/cloud-offline">{t('browse')}</a>}
+    {id && <a className="account-link" href="/cloud-offline" onClick={handleOfflineNav(null)}>{t('browse')}</a>}
   </section>
 }

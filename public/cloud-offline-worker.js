@@ -81,12 +81,13 @@ self.addEventListener('fetch', event => {
     return
   }
   if (request.mode !== 'navigate') return
-  if (target.pathname === cloudShell || target.pathname === notebookShell) {
-    event.respondWith(caches.open(cacheName).then(cache => cache.match(cacheKey(target.pathname))).then(saved => saved ?? fetch(request)))
+  const path = target.pathname.replace(/\/+$/, '') || '/'
+  if (path === cloudShell || path === notebookShell) {
+    event.respondWith(caches.open(cacheName).then(cache => cache.match(cacheKey(path))).then(saved => saved ?? fetch(request)))
     return
   }
-  const id = /^\/page\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\/?$/i.exec(target.pathname)?.[1]
-  const shell = target.pathname === '/workspace' ? notebookShell : id || target.pathname === '/cloud' ? cloudShell : null
+  const id = /^\/(?:page|doc)\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i.exec(path)?.[1]
+  const shell = path === '/workspace' ? notebookShell : id || path === '/cloud' ? cloudShell : null
   if (!shell) return
   event.respondWith((async () => {
     let result
@@ -99,6 +100,7 @@ self.addEventListener('fetch', event => {
     if (!await (await caches.open(cacheName)).match(cacheKey(shell))) return result ?? Response.error()
     const fallback = new URL(shell, target.origin)
     if (id) fallback.searchParams.set('page', id)
+    if (target.hash) fallback.hash = target.hash
     return Response.redirect(fallback.href)
   })())
 })

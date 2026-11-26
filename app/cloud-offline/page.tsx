@@ -9,7 +9,9 @@ export default async function CloudOfflinePage() {
   const rows = await Promise.all(locales.map(async locale => {
     const catalog = await getCatalog(locale)
     return [locale, {
+      'app-shell': catalog['app-shell'],
       'cloud-offline': catalog['cloud-offline'],
+      'cloud-workspace': catalog['cloud-workspace'],
       'cloud-export': catalog['cloud-export'],
       'editor-chrome': catalog['editor-chrome'],
       'editor-ai': catalog['editor-ai'],

@@ -30,14 +30,23 @@ function OfflineNotebook({ scope }: { scope: string }) {
   const t = useTranslations('cloud-offline')
   const settings = useTranslations('settings')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const cloudSubject = scope.startsWith('account:') ? scope.slice('account:'.length) : undefined
   return <>
-    <WorkspaceApp storageScope={scope} workspaceName={t('notebook')} sidebarControls={<>
-      <a className="nav-action account-link" href="/workspace">{t('openNotebookOnline')}</a>
-      <LocaleSelect onSelect={setOfflineLocale} />
-      <button type="button" className="nav-action" onClick={() => setSettingsOpen(true)}>
-        <Settings2 size={16} aria-hidden="true" /> {settings('title')}
-      </button>
-    </>} />
+    <WorkspaceApp storageScope={scope} workspaceName={t('notebook')}
+      cloudSearchSubject={cloudSubject}
+      openCloudPage={cloudSubject ? id => {
+        const target = new URL('/cloud-offline', window.location.origin)
+        target.searchParams.set('page', id)
+        window.location.assign(target.href)
+      } : undefined}
+      sidebarControls={<>
+        <a className="nav-action account-link" href="/workspace">{t('openNotebookOnline')}</a>
+        {cloudSubject && <a className="nav-action account-link" href="/cloud-offline">{t('title')}</a>}
+        <LocaleSelect onSelect={setOfflineLocale} />
+        <button type="button" className="nav-action" onClick={() => setSettingsOpen(true)}>
+          <Settings2 size={16} aria-hidden="true" /> {settings('title')}
+        </button>
+      </>} />
     {settingsOpen && <SettingsDialog scope={scope} initialTab="editor" workspace={t('notebook')}
       general={<LocaleSelect onSelect={setOfflineLocale} />} onClose={() => setSettingsOpen(false)} />}
   </>

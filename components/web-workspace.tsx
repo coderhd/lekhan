@@ -25,7 +25,15 @@ export default function WebWorkspace({ storageScope, cloudEnabled, signedIn, mir
   const [open, setOpen] = useState(false)
   return <><WorkspaceApp storageScope={storageScope} mirrorEnabled={mirrorEnabled} automaticMirror={automaticMirror}
     cloudSearchSubject={profile?.subject}
-    openCloudPage={signedIn ? id => router.push('/page/' + id) : undefined}
+    openCloudPage={signedIn ? id => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const target = new URL('/cloud-offline', window.location.origin)
+        target.searchParams.set('page', id)
+        window.location.assign(target.href)
+        return
+      }
+      router.push('/page/' + id)
+    } : undefined}
     sidebarControls={<>
       <LocaleSwitcher />
       <UsageAnalyticsControl />

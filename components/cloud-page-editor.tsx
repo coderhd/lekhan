@@ -50,12 +50,13 @@ function scrollToHeading(root: HTMLElement, anchor: string) {
   return !!heading
 }
 
-export default function CloudPageEditor({ page, subject, linkChoices, role, enabled, offlineChoices, onAccessLost }: {
+export default function CloudPageEditor({ page, subject, linkChoices, role, enabled, offlineChoices, onAccessLost, onOpenOfflinePage }: {
   page: CloudPage
   subject: string
   linkChoices?: Promise<PageChoice[]>
   offlineChoices?: PageChoice[]
   onAccessLost?: () => void
+  onOpenOfflinePage?: (id: string, fragment: string) => void
   role: PageRole
   enabled: boolean
 }) {
@@ -159,13 +160,17 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
     const matches = choices.filter(choice => importPathKey(choice.path) === key)
     if (offlineShell) {
       if (matches.length === 1) {
-        const target = new URL('/cloud-offline', window.location.origin)
-        target.searchParams.set('page', matches[0].id)
-        target.hash = fragment
-        window.location.assign(target.href)
+        if (onOpenOfflinePage) onOpenOfflinePage(matches[0].id, fragment)
+        else {
+          const target = new URL('/cloud-offline', window.location.origin)
+          target.searchParams.set('page', matches[0].id)
+          target.hash = fragment
+          window.location.assign(target.href)
+        }
       } else setLinkMissing(true)
       return
     }
+    let serverUnreachable = false
     try {
       const response = await fetch('/api/page-link?' + new URLSearchParams({ pageId: page.id, target: title.trim() }), {
         cache: 'no-store', signal: AbortSignal.timeout(5000),
@@ -177,11 +182,17 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
         return
       }
       if (response.status < 500) { setLinkMissing(true); return }
+      serverUnreachable = true
     } catch {
-      // The open document still knows about recently listed pages when offline.
+      serverUnreachable = true
     }
-    if (matches.length === 1) router.push('/page/' + matches[0].id + fragment)
-    else setLinkMissing(true)
+    if (matches.length === 1) {
+      if (serverUnreachable) {
+        const target = new URL('/page/' + matches[0].id, window.location.origin)
+        target.hash = fragment
+        window.location.assign(target.href)
+      } else router.push('/page/' + matches[0].id + fragment)
+    } else setLinkMissing(true)
   }
 
   function writeSource(next: string, expected?: string) {
