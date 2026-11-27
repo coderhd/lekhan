@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { DocumentVersion } from '@/types'
 import { fetchVersionsForEntity } from '@/services/graph'
+import { track } from '@/lib/analytics'
 
 import GlobalLoader from '@/components/global-loader'
 
@@ -97,6 +98,7 @@ export default function VersionHistory({
 				throw new Error(errData.error || 'Failed to save version checkpoint')
 			}
 
+			track('version_checkpoint_saved')
 			toast.success('Version checkpoint saved!')
 			setNewVersionName('')
 			loadVersions()
@@ -194,6 +196,7 @@ export default function VersionHistory({
 			Y.applyUpdate(targetDoc, uint8Array)
 
 			onRestoreVersion(targetDoc)
+			track('version_restored')
 
 			setActivePreviewId(null)
 			onPreviewVersion(null)

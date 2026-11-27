@@ -17,6 +17,7 @@ import { ensureWorkspace, fetchPageDetails, fetchPageMemberRole } from '@/servic
 import { fetchRecentPages, searchPages } from '@/services/search'
 import { ensureDailyPage } from '@/lib/daily-notes'
 import { appendCaptureBlock, CaptureError } from '@/lib/quick-capture'
+import { track } from '@/lib/analytics'
 import { useSessionReauth } from '@/components/session-reauth-provider'
 import { toast } from 'sonner'
 
@@ -199,6 +200,7 @@ export default function QuickCapturePalette ({ children }: { children: ReactNode
 				token,
 				text: body,
 			})
+			track('quick_capture_completed', { destination: target ? 'page' : 'daily' })
 
 			setOpen(false)
 			reset()

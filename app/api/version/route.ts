@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { after, NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { readJsonWithLimit, PayloadTooLargeError } from '@/lib/request-limits'
 import { encryptSnapshot, decryptSnapshot } from '@/lib/server-crypto'
+import { flushPostHogLogs, logPostHogError, logPostHogInfo } from '@/instrumentation'
 
 // A Yjs snapshot for even a very large document is realistically a few MB.
 // 20MB of decoded binary (~27MB base64) gives generous headroom without
@@ -194,10 +195,14 @@ export async function POST(request: NextRequest) {
 			throw uploadError
 		}
 
+		logPostHogInfo('document_version_created', { operation: 'version_create' })
+		after(flushPostHogLogs)
 		return NextResponse.json({ success: true, version })
 	} catch (err: unknown) {
 		const message = err instanceof Error ? err.message : String(err)
 		console.error('[API Version Error]', err)
+		logPostHogError('document_version_creation_failed', { operation: 'version_create' })
+		after(flushPostHogLogs)
 		return NextResponse.json({ error: message || 'Internal server error' }, { status: 500 })
 	}
 }
@@ -282,6 +287,8 @@ export async function GET(request: NextRequest) {
 		const arrayBuffer = await data.arrayBuffer()
 		const decrypted = decryptSnapshot(Buffer.from(arrayBuffer))
 
+		logPostHogInfo('document_version_retrieved', { operation: 'version_retrieve' })
+		after(flushPostHogLogs)
 		return new Response(new Uint8Array(decrypted), {
 			status: 200,
 			headers: {

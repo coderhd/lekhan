@@ -18,6 +18,10 @@
 		"check:billing-env": "node scripts/check-billing-env.mjs"
 	},
 	"dependencies": {
+		"@opentelemetry/api-logs": "^0.223.0",
+		"@opentelemetry/exporter-logs-otlp-http": "^0.301.2",
+		"@opentelemetry/resources": "^3.1.1",
+		"@opentelemetry/sdk-logs": "^3.1.1",
 		"@radix-ui/react-alert-dialog": "^1.1.18",
 		"@radix-ui/react-avatar": "^1.1.0",
 		"@radix-ui/react-dialog": "^1.1.1",
@@ -71,6 +75,7 @@
 		"next": "^16.2.10",
 		"next-themes": "^0.4.6",
 		"posthog-js": "^1.421.0",
+		"posthog-node": "^6.2.0",
 		"react": "^19.2.7",
 		"react-dom": "^19.2.7",
 		"sonner": "^2.0.7",

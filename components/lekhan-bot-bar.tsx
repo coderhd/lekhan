@@ -19,6 +19,7 @@ import { AIProviderConfig, AIProviderType } from '@/lib/ai/types'
 
 interface LekhanBotBarProps {
 	editor: any
+	pageId: string
 	token: string
 	isVisible: boolean
 	onClose: () => void
@@ -46,6 +47,7 @@ function resolveProviderType(name: string): AIProviderType {
 
 export default function LekhanBotBar({
 	editor,
+	pageId,
 	token,
 	isVisible,
 	onClose,
@@ -121,6 +123,7 @@ export default function LekhanBotBar({
 		
 		try {
 			const providerType = resolveProviderType(activeProvider)
+			const aiTraceId = crypto.randomUUID()
 			const providerConfig: AIProviderConfig = {
 				id: providerType,
 				provider: providerType,
@@ -137,6 +140,8 @@ export default function LekhanBotBar({
 			await aiClient.current.streamChat({
 				prompt: fullPrompt,
 				providerConfig,
+				aiSessionId: `page-${pageId}`,
+				aiTraceId,
 				onChunk: (text) => {
 					accumulatedText += text
 				},

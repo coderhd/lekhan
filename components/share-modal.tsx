@@ -109,6 +109,7 @@ export default function ShareModal({
 
 			// Generate the direct link
 			const generatedLink = `${window.location.origin}/invite/${token}`
+			track('collaborator_invited', { role })
 			setInviteLink(generatedLink)
 			setEmail('')
 			toast.success(`Invite link generated for ${email}!`)
@@ -133,6 +134,7 @@ export default function ShareModal({
 
 		try {
 			await updatePagePublicStatus(documentId, nextState)
+			track('page_public_access_updated', { public_access: nextState })
 		} catch (err: unknown) {
 			const message = err instanceof Error ? err.message : String(err)
 			setIsPublic(!nextState)

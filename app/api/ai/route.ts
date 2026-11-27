@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { readJsonWithLimit, PayloadTooLargeError } from '@/lib/request-limits'
 import { LEKHAN_BOT_SYSTEM_PROMPT, LANGUAGES } from '@/lib/ai-constants'
+import { captureAiGeneration } from '@/lib/ai-observability'
 
 const SARVAM_API_KEY = process.env.SARVAM_API_KEY || ''
 const SARVAM_API_URL = 'https://api.sarvam.ai'
@@ -175,6 +176,7 @@ export async function POST(request: NextRequest) {
 				return NextResponse.json({ error: 'Missing prompt for AI assistant' }, { status: 400 })
 			}
 
+			const startedAt = Date.now()
 			const response = await fetch(`${SARVAM_API_URL}/v1/chat/completions`, {
 				method: 'POST',
 				headers: {
@@ -200,6 +202,21 @@ export async function POST(request: NextRequest) {
 
 			const data = await response.json()
 			const reply = data.choices?.[0]?.message?.content || ''
+			await captureAiGeneration({
+				distinctId: user.id,
+				traceId: crypto.randomUUID(),
+				sessionId: null,
+				provider: 'sarvam',
+				model: 'sarvam-105b',
+				input: [
+					{ role: 'system', content: LEKHAN_BOT_SYSTEM_PROMPT },
+					{ role: 'user', content: prompt },
+				],
+				output: reply,
+				latencyMs: Date.now() - startedAt,
+				stream: false,
+				status: response.status,
+			})
 			return NextResponse.json({ text: reply })
 		}
 

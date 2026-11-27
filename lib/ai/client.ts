@@ -1,3 +1,4 @@
+import posthog from 'posthog-js'
 import { AIProviderConfig } from './types'
 import { resolveChatRequest } from './provider-registry'
 
@@ -5,6 +6,8 @@ export interface StreamChatArgs {
 	prompt: string
 	systemPrompt?: string
 	providerConfig: AIProviderConfig
+	aiSessionId?: string
+	aiTraceId?: string
 	fallbackConfigs?: AIProviderConfig[]
 	onChunk: (text: string) => void
 	onDone: (stats: any) => void
@@ -14,20 +17,18 @@ export interface StreamChatArgs {
 
 export class AIClient {
 	async streamChat(args: StreamChatArgs): Promise<{ unsubscribe: () => void }> {
-		const { prompt, systemPrompt, providerConfig, fallbackConfigs, onChunk, onDone, onError, onFallback } = args
+		const { prompt, systemPrompt, providerConfig, aiSessionId, aiTraceId, fallbackConfigs, onChunk, onDone, onError, onFallback } = args
 		const abortController = new AbortController()
+		const aiMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = []
+		if (systemPrompt) aiMessages.push({ role: 'system', content: systemPrompt })
+		aiMessages.push({ role: 'user', content: prompt })
 
 		const attempt = async (config: AIProviderConfig, fallbacks: AIProviderConfig[]) => {
 			try {
 				const resolved = resolveChatRequest({
 					provider: config.provider as any,
 					model: config.defaultModel,
-					messages: (() => {
-						const msgs: Array<{ role: string; content: string }> = []
-						if (systemPrompt) msgs.push({ role: 'system', content: systemPrompt })
-						msgs.push({ role: 'user', content: prompt })
-						return msgs
-					})(),
+					messages: aiMessages,
 					apiKey: config.apiKey,
 					baseUrl: config.baseUrl,
 				})
@@ -35,6 +36,14 @@ export class AIClient {
 				const url = resolved.url
 				const headers = resolved.headers as Record<string, string>
 				const body = resolved.body as Record<string, unknown>
+				const startedAt = Date.now()
+				let output = ''
+
+				if (!resolved.isLocalDirect && aiSessionId && aiTraceId) {
+					headers['x-posthog-session-id'] = aiSessionId
+					headers['x-posthog-trace-id'] = aiTraceId
+					headers['x-posthog-distinct-id'] = posthog.get_distinct_id()
+				}
 
 				const fetchOpts: RequestInit = {
 					method: 'POST',
@@ -69,6 +78,10 @@ export class AIClient {
 				if (reader) {
 					const decoder = new TextDecoder()
 					let buffer = ''
+					const emitChunk = (chunk: string) => {
+						output += chunk
+						onChunk(chunk)
+					}
 					while (true) {
 						const { done, value } = await reader.read()
 						if (done) break
@@ -83,46 +96,51 @@ export class AIClient {
 								if (dataStr === '[DONE]') continue
 								try {
 									const parsed = JSON.parse(dataStr)
-									if (parsed.text) onChunk(parsed.text)
-									if (parsed.message?.content) onChunk(parsed.message.content)
-									if (parsed.choices?.[0]?.delta?.content) onChunk(parsed.choices[0].delta.content)
-									if (parsed.choices?.[0]?.message?.content) onChunk(parsed.choices[0].message.content)
+									if (parsed.text) emitChunk(parsed.text)
+									if (parsed.message?.content) emitChunk(parsed.message.content)
+									if (parsed.choices?.[0]?.delta?.content) emitChunk(parsed.choices[0].delta.content)
+									if (parsed.choices?.[0]?.message?.content) emitChunk(parsed.choices[0].message.content)
 									if (parsed.candidates?.[0]?.content?.parts) {
 										for (const part of parsed.candidates[0].content.parts) {
-											if (part?.text) onChunk(part.text)
+											if (part?.text) emitChunk(part.text)
 										}
 									} else if (parsed.candidates?.[0]?.content?.parts === undefined && parsed.candidates?.[0]?.content) {
-										// fallback: some Gemini payloads use candidates[0].content.parts or candidates[0].content.text
 										const c = parsed.candidates[0].content as unknown as { text?: string }
-										if (typeof c.text === 'string') onChunk(c.text)
+										if (typeof c.text === 'string') emitChunk(c.text)
 									}
-									if (parsed.totalTokens !== undefined) {
-										lastStats = parsed
-									}
+									if (parsed.totalTokens !== undefined) lastStats = parsed
 								} catch {
-									onChunk(dataStr)
+									emitChunk(dataStr)
 								}
 							} else if (trimmed && !trimmed.startsWith('event:')) {
-								// Ollama NDJSON: {"message":{"content":" hi"},"done":false} or {"response":"..."}
 								try {
 									const parsed = JSON.parse(trimmed)
-									if (parsed.message?.content) {
-										onChunk(parsed.message.content)
-									} else if (typeof parsed.response === 'string') {
-										onChunk(parsed.response)
-									} else if (parsed.choices?.[0]?.delta?.content) {
-										onChunk(parsed.choices[0].delta.content)
-									} else {
-										onChunk(trimmed)
-									}
+									if (parsed.message?.content) emitChunk(parsed.message.content)
+									else if (typeof parsed.response === 'string') emitChunk(parsed.response)
+									else if (parsed.choices?.[0]?.delta?.content) emitChunk(parsed.choices[0].delta.content)
+									else emitChunk(trimmed)
 								} catch {
-									onChunk(trimmed)
+									emitChunk(trimmed)
 								}
 							}
 						}
 					}
-					if (buffer.trim()) {
-						onChunk(buffer.trim())
+					if (buffer.trim()) emitChunk(buffer.trim())
+				}
+				if (resolved.isLocalDirect && aiSessionId && aiTraceId) {
+					try {
+						posthog.capture('$ai_generation', {
+							$ai_trace_id: aiTraceId,
+							$ai_session_id: aiSessionId,
+							$ai_model: config.defaultModel,
+							$ai_provider: config.provider,
+							$ai_input: aiMessages,
+							$ai_output_choices: [{ role: 'assistant', content: output }],
+							$ai_latency: (Date.now() - startedAt) / 1000,
+							$ai_stream: true,
+						})
+					} catch {
+						// Analytics must not affect an already-completed local model response.
 					}
 				}
 				onDone(lastStats || { totalTokens: 0, latencyMs: 0, model: config.defaultModel })

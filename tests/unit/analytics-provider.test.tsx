@@ -6,7 +6,6 @@ import * as analytics from '@/lib/analytics'
 import { supabase } from '@/lib/supabase'
 
 vi.mock('@/lib/analytics', () => ({
-	initAnalytics: vi.fn(),
 	identifyUser: vi.fn(),
 	resetAnalytics: vi.fn(),
 }))
@@ -27,7 +26,7 @@ describe('AnalyticsProvider', () => {
 		vi.clearAllMocks()
 	})
 
-	it('initializes analytics on mount and renders children', () => {
+	it('renders children while client initialization remains in instrumentation-client', () => {
 		const { getByText } = render(
 			<AnalyticsProvider>
 				<div>Child Content</div>
@@ -35,7 +34,6 @@ describe('AnalyticsProvider', () => {
 		)
 
 		expect(getByText('Child Content')).toBeInTheDocument()
-		expect(analytics.initAnalytics).toHaveBeenCalled()
 	})
 
 	it('identifies user if session already exists on mount', async () => {

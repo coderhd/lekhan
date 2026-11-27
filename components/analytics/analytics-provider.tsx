@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect } from 'react'
-import { initAnalytics, identifyUser, resetAnalytics } from '@/lib/analytics'
+import { useEffect, useRef } from 'react'
+import { identifyUser, resetAnalytics } from '@/lib/analytics'
 import { supabase } from '@/lib/supabase'
 
 interface AnalyticsProviderProps {
@@ -9,29 +9,34 @@ interface AnalyticsProviderProps {
 }
 
 export function AnalyticsProvider({ children }: AnalyticsProviderProps) {
-	useEffect(() => {
-		// 1. Initialize analytics destinations
-		initAnalytics()
+	const identifiedUserId = useRef<string | null>(null)
 
-		// 2. Initial session check
+	useEffect(() => {
+		const identifySessionUser = (user: { id: string; email?: string }) => {
+			if (identifiedUserId.current === user.id) return
+
+			// Supabase can switch directly from one account to another without a
+			// SIGNED_OUT event. Reset first so the next identify starts cleanly.
+			if (identifiedUserId.current) resetAnalytics()
+
+			identifyUser(user.id, user.email ? { email: user.email } : undefined)
+			identifiedUserId.current = user.id
+		}
+
+		// Identify a persisted session once on refresh, then retain that identity
+		// in posthog-js until Supabase reports a logout or account switch.
 		supabase.auth.getSession().then(({ data: { session } }) => {
-			if (session?.user) {
-				identifyUser(session.user.id, {
-					email: session.user.email || '',
-				})
-			}
+			if (session?.user) identifySessionUser(session.user)
 		})
 
-		// 3. Listen to auth changes
 		const {
 			data: { subscription },
 		} = supabase.auth.onAuthStateChange((event, session) => {
-			if (session?.user && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
-				identifyUser(session.user.id, {
-					email: session.user.email || '',
-				})
+			if (event === 'SIGNED_IN' && session?.user) {
+				identifySessionUser(session.user)
 			} else if (event === 'SIGNED_OUT') {
 				resetAnalytics()
+				identifiedUserId.current = null
 			}
 		})
 

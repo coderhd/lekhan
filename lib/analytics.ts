@@ -83,6 +83,11 @@ export interface EventPayloadMap {
 	}
 	ai_provider_connected: { kind: 'byok' | 'byol' | 'preset' | string }
 	ai_message_sent: { action?: string }
+	quick_capture_completed: { destination: 'daily' | 'page' }
+	version_checkpoint_saved: Record<string, never> | void
+	version_restored: Record<string, never> | void
+	collaborator_invited: { role: 'editor' | 'viewer' }
+	page_public_access_updated: { public_access: boolean }
 	daily_active_edit: Record<string, never> | void
 }
 
@@ -130,6 +135,11 @@ const EVENT_ALLOWED_KEYS: Record<EventName, Set<string>> = {
 	billing_referral_credit_applied: new Set(['months']),
 	ai_provider_connected: new Set(['kind']),
 	ai_message_sent: new Set(['action']),
+	quick_capture_completed: new Set(['destination']),
+	version_checkpoint_saved: new Set([]),
+	version_restored: new Set([]),
+	collaborator_invited: new Set(['role']),
+	page_public_access_updated: new Set(['public_access']),
 	daily_active_edit: new Set([]),
 }
 

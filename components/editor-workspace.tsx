@@ -1578,6 +1578,7 @@ export default function EditorWorkspace({	pageId,
 				{!isViewer && (
 					<LekhanBotBar
 						editor={editor}
+						pageId={pageId}
 						token={token}
 						isVisible={isLekhanBotOpen}
 						onClose={() => setIsLekhanBotOpen(false)}

@@ -11,7 +11,9 @@ const { decryptSnapshot } = require('./crypto')
 const { createPagePersister } = require('./persister')
 const { createCollabPersistence, markWritable, openHydratedDoc } = require('./collab-persistence')
 const { isBlockedWriteFrame } = require('./connection-guard')
+const { createPostHogLogger } = require('./posthog-logs')
 
+const posthogLogs = createPostHogLogger()
 const port = process.env.PORT || 8080
 const MAX_CONNECTIONS = 1500
 const MAX_PAYLOAD_BYTES = 10 * 1024 * 1024 // 10 MB payload guard
@@ -303,6 +305,9 @@ server.on('upgrade', async (request, socket, head) => {
 	const totalLoad = wss.clients.size + pendingUpgrades
 
 	if (totalLoad > MAX_CONNECTIONS || isMemoryExhausted) {
+		posthogLogs.warn('collaboration_connection_shed', {
+			reason: isMemoryExhausted ? 'memory_pressure' : 'connection_limit',
+		})
 		console.warn(`[LoadShedding] Connection rejected: totalLoad=${totalLoad}/${MAX_CONNECTIONS} (active=${wss.clients.size}, pending=${pendingUpgrades}), memExhausted=${isMemoryExhausted}`)
 		releaseUpgradeReservation()
 		socket.write('HTTP/1.1 503 Service Unavailable\r\nRetry-After: 5\r\n\r\n')
@@ -545,6 +550,7 @@ async function gracefulShutdown () {
 		console.error(`[Shutdown] Warning: ${failed.length} document saves failed during shutdown flush.`)
 	}
 	console.log('[Shutdown] All states flushed. Exiting.')
+	await posthogLogs.shutdown()
 	process.exit(0)
 }
 
@@ -553,6 +559,7 @@ process.on('SIGTERM', gracefulShutdown)
 
 if (require.main === module || (!process.env.VITEST && process.env.NODE_ENV !== 'test')) {
 	server.listen(port, () => {
+		posthogLogs.info('collaboration_server_started', { service: 'collaboration' })
 		console.log(`Sync Server listening on port ${port}`)
 	})
 }
