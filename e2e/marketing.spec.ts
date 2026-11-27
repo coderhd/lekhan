@@ -1,10 +1,16 @@
 import { expect, test } from '@playwright/test'
+import { signInContext } from './auth'
 
-test('the landing page leads to the same local workspace across visits', async ({ page }) => {
+test('the landing page gates signed-out visitors at sign-in and leads authenticated writers to their workspace', async ({ page, context }) => {
   await page.setViewportSize({ width: 375, height: 812 })
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Your notes, yours to keep.' })).toBeVisible()
   await expect(page.getByRole('main').getByRole('img').first()).toBeVisible()
+  await page.getByRole('link', { name: 'Start writing' }).click()
+  await expect(page).toHaveURL(/\/login$/)
+
+  await signInContext(context)
+  await page.goto('/')
   await page.getByRole('link', { name: 'Start writing' }).click()
   await expect(page).toHaveURL('/workspace')
   const title = page.getByRole('textbox', { name: 'Page title' })
@@ -36,6 +42,7 @@ test('marketing navigation exposes import details, contact, and the original leg
 })
 
 test('shared marketing URLs open in their own language and carry it into the notebook', async ({ page, context }) => {
+  await signInContext(context)
   await context.addCookies([{ name: 'lek-locale', value: 'hi', url: 'http://localhost:3182' }])
   await page.goto('/es')
   await expect(page.locator('html')).toHaveAttribute('lang', 'es')

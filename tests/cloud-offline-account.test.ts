@@ -22,9 +22,10 @@ describe('offline account continuity', () => {
     expect(offlineAccount(mark + '; ' + name + '.0=' + session.slice(0, 40) + '; ' + name + '.2=' + session.slice(40))).toBeNull()
   })
 
-  it('keeps guest and signed-in notebooks distinct during an outage', () => {
-    expect(offlineNotebookScope('', name)).toBe('personal')
-    expect(offlineNotebookScope(mark, name)).toBe('personal')
+  it('requires a verified matching account cookie and fails closed when signed out', () => {
+    expect(offlineNotebookScope('', name)).toBeNull()
+    expect(offlineNotebookScope(mark, name)).toBeNull()
+    expect(offlineNotebookScope(mark + '; ' + name + '=' + cookieSession(first))).toBeNull()
     expect(offlineNotebookScope(mark + '; ' + name + '=' + cookieSession(first), name)).toBe('account:' + first)
     expect(offlineNotebookScope(mark + '; ' + name + '=' + cookieSession(second), name)).toBeNull()
     expect(offlineNotebookScope(name + '.0=broken', name)).toBeNull()

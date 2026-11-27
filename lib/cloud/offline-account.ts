@@ -41,9 +41,7 @@ export function offlineAccount(header: string, expectedCookie?: string) {
 }
 
 export function offlineNotebookScope(header: string, sessionCookie?: string) {
-  if (!sessionCookie) return 'personal'
-  const cookies = cookieValues(header)
-  if (!cookies.get(sessionCookie) && !cookies.get(sessionCookie + '.0')) return 'personal'
+  if (!sessionCookie) return null
   const subject = offlineAccount(header, sessionCookie)
   return subject ? 'account:' + subject : null
 }

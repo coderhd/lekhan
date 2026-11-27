@@ -1,29 +1,17 @@
 import { expect, test, type Page } from '@playwright/test'
 import * as Y from 'yjs'
+import { authCookieName, defaultSubject, mintAuthCookies, signInContext } from './auth'
 
-const subject = '4dbc5892-753d-4be6-9d78-faaeb9bbd2d7'
+const subject = defaultSubject
 const alphaId = '11111111-1111-4111-8111-111111111111'
 const betaId = '22222222-2222-4222-8222-222222222222'
-const authCookieName = 'sb-project-auth-token'
 
-function encodeBase64Url(value: unknown) {
-  return Buffer.from(JSON.stringify(value)).toString('base64url')
-}
-
-function authCookies(baseURL: string, cookieName = authCookieName) {
-  const token = 'test.' + encodeBase64Url({ sub: subject, exp: 1999999999 }) + '.sig'
-  const session = 'base64-' + encodeBase64Url({ access_token: token })
-  const marker = encodeURIComponent(subject + ':' + cookieName)
-  return [
-    { name: 'lekhan-offline-account', value: marker, url: baseURL },
-    { name: cookieName, value: encodeURIComponent(session), url: baseURL },
-  ]
+async function authCookies(baseURL: string) {
+  return mintAuthCookies(baseURL, { subject })
 }
 
 function configuredCookieName() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!url) return null
-  return 'sb-' + new URL(url).hostname.split('.')[0] + '-auth-token'
+  return authCookieName()
 }
 
 function encodedDocUpdate(markdown: string) {
@@ -102,7 +90,7 @@ async function seedOfflineCloudCopies(page: Page) {
 test('navigates saved cloud copies offline with SPA links, Cmd+K search, wikilinks, and browser history', async ({ page, context }, testInfo) => {
   const baseURL = testInfo.project.use.baseURL ?? 'http://localhost:3182'
   await page.route('**/api/**', route => route.abort('internetdisconnected'))
-  await context.addCookies(authCookies(baseURL, configuredCookieName() ?? authCookieName))
+  await context.addCookies(await authCookies(baseURL))
   await page.goto('/cloud-offline')
   await seedOfflineCloudCopies(page)
 
@@ -152,7 +140,7 @@ test('links offline workspace to saved cloud copies and searches cached cloud pa
     if (url.pathname.startsWith('/api/')) return route.abort('internetdisconnected')
     return route.continue()
   })
-  await context.addCookies(authCookies(baseURL, cookieName ?? authCookieName))
+  await context.addCookies(await authCookies(baseURL))
   await page.goto('/cloud-offline')
   await seedOfflineCloudCopies(page)
 
@@ -175,7 +163,7 @@ test('links offline workspace to saved cloud copies and searches cached cloud pa
 
 test('routes offline browser navigations through the service worker in production builds', async ({ page, context }, testInfo) => {
   const baseURL = testInfo.project.use.baseURL ?? 'http://localhost:3182'
-  const cookieName = configuredCookieName()
+  await signInContext(context, baseURL, { subject })
   await page.goto('/workspace')
 
   const registered = await page.evaluate(async () => {
@@ -192,7 +180,7 @@ test('routes offline browser navigations through the service worker in productio
     return Boolean(await cache.match('/cloud-offline?cached-shell') && await cache.match('/workspace-offline?cached-shell'))
   })
 
-  await context.addCookies(authCookies(baseURL, cookieName ?? authCookieName))
+  await context.addCookies(await authCookies(baseURL))
   await seedOfflineCloudCopies(page)
 
   await context.setOffline(true)

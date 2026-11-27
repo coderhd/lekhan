@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import { gunzipSync } from 'node:zlib'
+import { defaultScope, signInContext } from './auth'
 
 test.use({
   userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
@@ -13,9 +14,10 @@ function queuedEvents(page: Page) {
   })
 }
 
-test('only shares coarse product events after opt-in and stops after revocation', async ({ page }) => {
+test('only shares coarse product events after opt-in and stops after revocation', async ({ page, context }) => {
   const id = process.env.NEXT_PUBLIC_GA4_ID
   test.skip(!id || !/^G-[A-Z0-9]+$/.test(id), 'Set NEXT_PUBLIC_GA4_ID to enable the analytics fixture.')
+  await signInContext(context)
   await page.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => false })
     Object.defineProperty(navigator, 'userAgentData', { get: () => undefined })
@@ -53,7 +55,7 @@ test('only shares coarse product events after opt-in and stops after revocation'
   expect(loads).toBe(0)
   expect(await queuedEvents(page)).toEqual([])
   expect(productEvents).toEqual([])
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('lekhan:tier-gates:personal')))
+  await expect.poll(() => page.evaluate(scope => localStorage.getItem('lekhan:tier-gates:' + scope), defaultScope))
     .toContain('"tier-gate-tier":"free"')
 
   await consent.check()
@@ -121,5 +123,5 @@ test('only shares coarse product events after opt-in and stops after revocation'
     { name: 'page_view', payload: { page_location: new URL('/about', page.url()).href, page_title: 'Lekhan', page_referrer: '' } },
   ])
   await page.context().setOffline(true)
-  expect(await page.evaluate(() => localStorage.getItem('lekhan:tier-gates:personal'))).toContain('"tier-gate-tier":"free"')
+  expect(await page.evaluate(scope => localStorage.getItem('lekhan:tier-gates:' + scope), defaultScope)).toContain('"tier-gate-tier":"free"')
 })

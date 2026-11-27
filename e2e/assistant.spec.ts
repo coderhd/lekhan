@@ -1,4 +1,9 @@
 import { expect, test } from '@playwright/test'
+import { defaultVaultKey, signInContext } from './auth'
+
+test.beforeEach(async ({ context }) => {
+  await signInContext(context)
+})
 
 test('saves an encrypted provider connection and shares page content only by choice', async ({ page }) => {
   const sent: unknown[] = []
@@ -29,7 +34,7 @@ test('saves an encrypted provider connection and shares page content only by cho
   await dialog.getByLabel('Model ID').fill('fixture-model')
   await dialog.getByRole('button', { name: 'Save connection' }).click()
   await expect(dialog.getByRole('status')).toHaveText('Connection saved.')
-  const stored = await page.evaluate(() => localStorage.getItem('lekhan:provider-vault:v1'))
+  const stored = await page.evaluate(key => localStorage.getItem(key), defaultVaultKey)
   expect(stored).toMatch(/^v1\./)
   expect(stored).not.toContain('fixture-key-never-store-in-clear')
 
@@ -60,7 +65,7 @@ test('generates selected-text suggestions with the chosen model and applies only
     { id: 'first', provider: 'openai', model: 'fixture-first', apiKey: 'fixture-key' },
     { id: 'second', provider: 'openai', model: 'fixture-second', apiKey: 'fixture-key' },
   ])
-  await page.addInitScript(envelope => localStorage.setItem('lekhan:provider-vault:v1', envelope), await vault.seal())
+  await page.addInitScript(({ key, envelope }) => localStorage.setItem(key, envelope), { key: defaultVaultKey, envelope: await vault.seal() })
   const sends: { model: string; messages: { role: string; content: string }[] }[] = []
   await page.route('https://api.openai.com/v1/chat/completions', async route => {
     const headers = {
@@ -140,10 +145,9 @@ test('persists the writer’s fallback order and discloses retries before sendin
     { id: 'second', provider: 'groq', model: 'fixture-second', apiKey: 'fixture-second-key' },
     { id: 'third', provider: 'openrouter', model: 'fixture-third', apiKey: 'fixture-third-key' },
   ])
-  await page.addInitScript(payload => {
-    const key = 'lekhan:provider-vault:v1'
+  await page.addInitScript(({ key, payload }) => {
     if (!localStorage.getItem(key)) localStorage.setItem(key, payload)
-  }, await vault.seal())
+  }, { key: defaultVaultKey, payload: await vault.seal() })
   const requests: { hostname: string; authorization?: string; messages: unknown }[] = []
   const hosts = ['api.openai.com', 'api.groq.com', 'openrouter.ai']
   await page.route(url => hosts.includes(url.hostname) && url.pathname.endsWith('/chat/completions'), async route => {
@@ -181,7 +185,7 @@ test('persists the writer’s fallback order and discloses retries before sendin
   await dialog.getByRole('button', { name: 'Move OpenRouter · fixture-third up' }).click()
   await dialog.getByRole('button', { name: 'Save connection' }).click()
   await expect(dialog.getByText('Connection saved.')).toBeVisible()
-  const payload = await page.evaluate(() => localStorage.getItem('lekhan:provider-vault:v1'))
+  const payload = await page.evaluate(key => localStorage.getItem(key), defaultVaultKey)
   expect(payload).toMatch(/^v1\./)
   expect(payload).not.toContain('provider:third')
 
