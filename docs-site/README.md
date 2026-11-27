@@ -33,4 +33,4 @@ The existing `lekhan-docs` Vercel project serves [docs.lekhan.online](https://do
 - `NEXT_PUBLIC_LEKHAN_APP_URL` overrides the app origin used by **Open workspace**.
 - Set `NEXT_PUBLIC_DOCS_URL` in the main app to show a **Docs** link in its public footer.
 
-The August strategy names `docs.lekhan.app`. Verify domain access and DNS before switching the public hostname or changing canonical URLs.
+The launch documentation uses `docs.lekhan.online` as its public and canonical hostname.
