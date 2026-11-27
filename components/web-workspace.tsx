@@ -3,8 +3,9 @@
 import { Cloud, LogIn, LogOut, Settings2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { signOut } from '@/app/auth/actions'
+import { bootstrapTierGates } from '@/lib/analytics'
 import { useTranslations } from '@/lib/i18n/client'
 import LocaleSwitcher from './locale-switcher'
 import { UsageAnalyticsControl } from './usage-analytics'
@@ -16,13 +17,24 @@ import type { PlanLimits, PlanTier } from '@/lib/tier-limits'
 export default function WebWorkspace({ storageScope, cloudEnabled, signedIn, mirrorEnabled, automaticMirror, profile, plan }: {
   storageScope: string; cloudEnabled: boolean; signedIn: boolean; mirrorEnabled: boolean; automaticMirror: boolean
   profile?: SettingsProfile
-  plan?: PlanLimits & { tier: PlanTier }
+  plan?: PlanLimits & { tier: PlanTier; relayReadOnly: boolean }
 }) {
   const router = useRouter()
   const t = useTranslations('auth')
   const settings = useTranslations('settings')
   const cloud = useTranslations('cloud-workspace')
   const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!signedIn) {
+      bootstrapTierGates(storageScope, null)
+      return
+    }
+    bootstrapTierGates(storageScope, plan && {
+      tier: plan.tier,
+      seats: plan.tier === 'team' ? plan.maxDistinctCollaborators : undefined,
+      relayReadOnly: plan.relayReadOnly,
+    })
+  }, [plan, signedIn, storageScope])
   return <><WorkspaceApp storageScope={storageScope} mirrorEnabled={mirrorEnabled} automaticMirror={automaticMirror}
     cloudSearchSubject={profile?.subject}
     openCloudPage={signedIn ? id => {

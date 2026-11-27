@@ -45,7 +45,7 @@ export default async function BillingPanel({ account, query = {} }: {
 
   return <div className="settings-billing">
       {query.transfer === 'accepted' && <p role="status" className="billing-notice">{t('ownershipAccepted')}</p>}
-      {summary ? <BillingSettings summary={summary} defaultCurrency={currency} available={available}
+      {summary ? <BillingSettings summary={summary} scope={'account:' + account.subject} defaultCurrency={currency} available={available}
         returned={query.checkout === 'returned'} paused={query.checkout === 'paused'} />
         : <p role="status">{t('panelUnavailable')}</p>}
       {summary && billing?.storage && <WorkspaceStorage images={billing.storage.image_bytes} files={billing.storage.file_bytes} free={(summary.entitlement?.tier ?? 'free') === 'free'} />}

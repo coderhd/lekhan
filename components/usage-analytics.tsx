@@ -3,7 +3,10 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from '@/lib/i18n/client'
-import { analyticsAllowed, consumeAnalyticsReceipts, disableUsageAnalytics, syncAnalyticsConsent, trackMarketingPage } from '@/lib/analytics'
+import {
+  analyticsAllowed, consumeAnalyticsReceipts, disableUsageAnalytics,
+  refreshOnlineTierGates, syncAnalyticsConsent, trackMarketingPage,
+} from '@/lib/analytics'
 import { analyticsConfigured, analyticsPreference } from '@/lib/analytics-settings'
 
 function subscribe(check: () => void) {
@@ -30,7 +33,11 @@ export function UsageAnalyticsObserver() {
     trackMarketingPage(path)
   }, [consent, path])
   useEffect(() => {
-    const sync = () => syncAnalyticsConsent(analyticsAllowed())
+    const sync = () => {
+      const allowed = analyticsAllowed()
+      syncAnalyticsConsent(allowed)
+      if (allowed) refreshOnlineTierGates()
+    }
     window.addEventListener('online', sync)
     return () => window.removeEventListener('online', sync)
   }, [])

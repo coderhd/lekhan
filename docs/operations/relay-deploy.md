@@ -33,6 +33,10 @@ Set these variables through the relay host’s secret store or an untracked `rel
 
 Set `LEKHAN_SYNC_URL` on the app to the relay’s `wss://` origin. Proxy `/checkpoint-transfer/`, `/attachments/`, and `/page-sync/` on the same hostname over HTTPS. Keep the app and relay on the same storage ceiling if `LEKHAN_DOCUMENTS_STORAGE_LIMIT_BYTES` is set. Configure [relay observability](observability.md) for the deployed environment.
 
+## Render staging
+
+For a disposable relay test, create a Render Blueprint from the integration branch and set its Blueprint path to `server/sync/render-staging.yaml`. Supply only staging variables, then set `LEKHAN_SYNC_URL` to the service's `wss://` origin on a dedicated app preview. The free service loses its WAL at restart, redeploy, or idle shutdown. Use throwaway staging pages for HTTP and WebSocket tests. For the production durability drill, attach a persistent disk at `/var/lib/lekhan/wal` on a plan that supports it. [Render free service limits](https://render.com/docs/free) · [Render persistent disks](https://render.com/docs/disks)
+
 ## Verify and replace the relay
 
 1. Apply the migrations for the target environment. Verify TLS and `/health` from outside the host.

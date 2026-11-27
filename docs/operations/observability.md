@@ -19,9 +19,9 @@ The `lekhan-retention-prune` monitor is configured in the app project for `30 5 
 
 ## External availability and logs
 
-Create a Better Stack Logs source for the relay and set `BETTER_STACK_INGEST_URL` to its HTTPS ingest origin and `BETTER_STACK_SOURCE_TOKEN` to its token. The relay also writes the same JSON records to stdout.
+Create a Better Stack Logs source for the relay and set `BETTER_STACK_INGEST_URL` to its HTTPS ingest origin (`in.logs.betterstack.com` or `*.betterstackdata.com`) and `BETTER_STACK_SOURCE_TOKEN` to its token. The relay validates both at startup (`betterStackDestination`), ships fixed JSON operation counts asynchronously, flushes pending batches on `SIGTERM`/`SIGINT`, and writes the same JSON records to stdout when Better Stack credentials are absent. Server-only telemetry variables stay restricted to Node/server modules.
 
-Create external monitors for the hosted app and the sync relay's HTTPS `/health` route. The relay route reports overload or shutdown as HTTP 503. Monitor the public relay port as well if the deployment terminates WebSocket traffic on a separate host or port. Keep a separate authenticated staging check that opens two WebSocket clients in one fixture page and verifies that an edit traverses the relay.
+Create external monitors for the hosted app’s `GET /api/health` route (returning HTTP 200 `{ ok: true, service: 'app' }` with `Cache-Control: private, no-store`) and the sync relay’s HTTPS `/health` route. The relay route reports overload or shutdown as HTTP 503. Monitor the public relay port as well if the deployment terminates WebSocket traffic on a separate host or port. Keep a separate authenticated staging check that opens two WebSocket clients in one fixture page and verifies that an edit traverses the relay.
 
 Create the public status page in Better Stack and attach the app and relay monitors. Confirm that the status page and its incident history can be opened without signing in.
 
