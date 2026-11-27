@@ -17,6 +17,8 @@ Sentry error events carry a service, an error class, and allowlisted application
 
 The `lekhan-retention-prune` monitor is configured in the app project for `30 5 * * *` UTC, matching the retention route in `vercel.json`. It allows 15 minutes for a late check-in and 10 minutes for execution. Set its slug in `SENTRY_RETENTION_MONITOR_SLUG`. Enable the monitor when the hosted cron has deployed and can deliver check-ins. Cron authentication still uses the existing `CRON_SECRET`. A retention response that needs retry is recorded as an error check-in.
 
+The protected staging preview has its own cron secret. Manual retention and billing reconciliation requests rejected an invalid token with HTTP 401. Both returned HTTP 200 with no failures for the configured token against the empty staging queues. The production schedule and provider-event reconciliation still need live verification.
+
 ## External availability and logs
 
 Create a Better Stack Logs source for the relay and set `BETTER_STACK_INGEST_URL` to its HTTPS ingest origin (`in.logs.betterstack.com` or `*.betterstackdata.com`) and `BETTER_STACK_SOURCE_TOKEN` to its token. The relay validates both at startup (`betterStackDestination`), ships fixed JSON operation counts asynchronously, flushes pending batches on `SIGTERM`/`SIGINT`, and writes the same JSON records to stdout when Better Stack credentials are absent. Server-only telemetry variables stay restricted to Node/server modules.

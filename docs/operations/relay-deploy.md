@@ -44,4 +44,6 @@ For a disposable relay test, create a Render Blueprint from the integration bran
 3. Exercise restart and storage recovery in staging with the same volume. Confirm an accepted edit survives a relay restart while snapshot storage is unavailable and reaches Storage once it is available again.
 4. Stop the old relay with `SIGTERM` and allow time for outstanding snapshots before replacing it. Attach the same WAL volume to the replacement. A failed flush leaves pending edits on the volume for replay. Bring up only one writer per volume.
 
+The read-only production census opened 67 main snapshots and both stored checkpoints. The previous relay's documented Supabase service-key fallback opened all 36 encrypted main snapshots. The other 31 main snapshots and both checkpoints were raw Yjs updates. Preserve that exact historical key in the decrypt-only rotation list when configuring the new primary key. A Node 24 rehearsal recovered prior-key WAL records after SIGKILL, flushed a snapshot encrypted with the new key, and reopened it with the new key alone. Repeat the drill on the hosted volume before cutover.
+
 The relay can run retention and import receipt cleanup with `LEKHAN_PRUNE_CHECKPOINTS=1` and `LEKHAN_PRUNE_IMPORT_RECEIPTS=1` after the corresponding migrations. Enable `LEKHAN_DRAIN_WAITLIST=1` after configuring Brevo for that environment.
