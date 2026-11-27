@@ -1,6 +1,9 @@
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { GET as healthGet, HEAD as healthHead } from '../../app/api/health/route'
 import { monitoredPath, scrubError, sentryDsn } from '../../lib/observability/events'
-import { createRelayFaultReporter, createRelayLogs } from '../../lib/observability/relay-logs'
+import { betterStackDestination, createRelayFaultReporter, createRelayLogs } from '../../lib/observability/relay-logs'
 import { observeRetention } from '../../lib/observability/sentry-node'
 
 const sentry = vi.hoisted(() => ({
@@ -82,8 +85,51 @@ describe('sync relay logs', () => {
     report('persist', new Error('private'))
     await logs.flush()
     expect(send).not.toHaveBeenCalled()
+    expect(logs.configured).toBe(false)
     expect(write).toHaveBeenCalledTimes(3)
     expect(JSON.stringify(write.mock.calls)).not.toContain('private')
+  })
+
+  it('validates Better Stack ingest origins and keeps server telemetry tokens out of client files', () => {
+    expect(betterStackDestination('https://in.logs.betterstack.com', 'tok_123')).toEqual({
+      url: 'https://in.logs.betterstack.com/',
+      token: 'tok_123',
+    })
+    expect(betterStackDestination('https://s12345.eu-nbg-2.betterstackdata.com/', 'tok.abc_9')).toEqual({
+      url: 'https://s12345.eu-nbg-2.betterstackdata.com/',
+      token: 'tok.abc_9',
+    })
+    expect(betterStackDestination('http://in.logs.betterstack.com', 'tok_123')).toBeUndefined()
+    expect(betterStackDestination('https://in.logs.betterstack.com/custom', 'tok_123')).toBeUndefined()
+    expect(betterStackDestination('https://in.logs.betterstack.com?q=1', 'tok_123')).toBeUndefined()
+    expect(betterStackDestination('https://in.logs.betterstack.com', 'bad token\n')).toBeUndefined()
+
+    const root = process.cwd()
+    const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+      const target = join(dir, entry.name)
+      return entry.isDirectory() ? walk(target) : /\.(?:ts|tsx|js|mjs)$/.test(entry.name) ? [target] : []
+    })
+    const serverSecrets = ['BETTER_STACK_SOURCE_TOKEN', 'BETTER_STACK_INGEST_URL', 'SENTRY_APP_DSN', 'SENTRY_RELAY_DSN', 'GA4_MEASUREMENT_API_SECRET']
+    const clientCandidates = [...walk(join(root, 'components')), ...walk(join(root, 'public')), ...walk(join(root, 'lib'))]
+      .filter(file => {
+        const text = readFileSync(file, 'utf8')
+        return file.startsWith(join(root, 'components')) || file.startsWith(join(root, 'public')) || /^['"]use client['"]/.test(text.trimStart())
+      })
+    for (const file of clientCandidates) {
+      const content = readFileSync(file, 'utf8')
+      for (const secret of serverSecrets) expect(content).not.toContain(secret)
+    }
+  })
+
+  it('serves a lightweight non-cached health endpoint for Better Stack app monitors', async () => {
+    const getResponse = await healthGet()
+    expect(getResponse.status).toBe(200)
+    expect(getResponse.headers.get('cache-control')).toBe('private, no-store')
+    expect(await getResponse.json()).toEqual({ ok: true, service: 'app' })
+
+    const headResponse = await healthHead()
+    expect(headResponse.status).toBe(200)
+    expect(headResponse.headers.get('cache-control')).toBe('private, no-store')
   })
 })
 
