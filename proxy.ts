@@ -44,7 +44,7 @@ export async function proxy(request: NextRequest) {
   if (!error && typeof data?.claims.sub === 'string') {
     const marker = data.claims.sub + ':' + name
     const pathname = request.nextUrl.pathname
-    if (existing !== marker || pathname === '/workspace' || pathname === '/cloud' || pathname.startsWith('/page/')) response.cookies.set(offlineAccountCookie, marker, { ...options, maxAge: 30 * 24 * 60 * 60 })
+    if (existing !== marker || pathname === '/workspace' || pathname === '/settings' || pathname === '/cloud' || pathname.startsWith('/page/')) response.cookies.set(offlineAccountCookie, marker, { ...options, maxAge: 30 * 24 * 60 * 60 })
   } else if (existing && (!request.cookies.has(name) && !request.cookies.has(name + '.0') || error?.status === 401 || error?.status === 403)) {
     response.cookies.set(offlineAccountCookie, '', { ...options, maxAge: 0 })
   }
@@ -52,4 +52,4 @@ export async function proxy(request: NextRequest) {
   return response
 }
 
-export const config = { matcher: ['/:locale(en|hi|zh|es|de)', '/:locale(en|hi|zh|es|de)/:section(about|faq|contact)', '/workspace', '/login', '/signup', '/forgot-password', '/reset-password', '/cloud/:path*', '/billing', '/page/:path*', '/invite/:path*', '/api/billing', '/api/billing/plan-change', '/api/sync/:path*', '/api/search', '/api/checkpoints', '/api/import', '/api/page-link'] }
+export const config = { matcher: ['/:locale(en|hi|zh|es|de)', '/:locale(en|hi|zh|es|de)/:section(about|faq|contact)', '/workspace', '/settings', '/login', '/signup', '/forgot-password', '/reset-password', '/cloud/:path*', '/billing', '/page/:path*', '/invite/:path*', '/api/billing', '/api/billing/plan-change', '/api/sync/:path*', '/api/search', '/api/checkpoints', '/api/import', '/api/page-link'] }

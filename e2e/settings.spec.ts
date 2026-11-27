@@ -1,4 +1,9 @@
 import { expect, test } from '@playwright/test'
+import { defaultVaultKey, signInContext } from './auth'
+
+test.beforeEach(async ({ context }) => {
+  await signInContext(context)
+})
 
 test('shares five settings tabs between the workspace drawer and direct settings route', async ({ page }) => {
   await page.goto('/workspace')
@@ -35,7 +40,7 @@ test('shares five settings tabs between the workspace drawer and direct settings
   }
   await page.getByRole('tab', { name: 'Billing & Usage' }).click()
   await expect(page).toHaveURL(/tab=plan/)
-  await expect(page.getByText('Cloud tiers apply to signed-in workspaces.', { exact: false })).toBeVisible()
+  await expect(page.getByText('Billing is temporarily unavailable.', { exact: false })).toBeVisible()
   await page.getByRole('tab', { name: 'Privacy & Encryption' }).click()
   await expect(page.getByRole('heading', { name: 'Provider vault' })).toBeVisible()
 })
@@ -48,10 +53,9 @@ test('provider settings select the model used by the assistant and can update th
     { id: 'local', provider: 'ollama', model: 'fixture-local' },
     { id: 'remote', provider: 'openai', model: 'fixture-remote', apiKey: 'fixture-key' },
   ])
-  await page.addInitScript(payload => {
-    const key = 'lekhan:provider-vault:v1'
+  await page.addInitScript(({ key, payload }) => {
     if (!localStorage.getItem(key)) localStorage.setItem(key, payload)
-  }, await vault.seal())
+  }, { key: defaultVaultKey, payload: await vault.seal() })
   await page.goto('/settings')
   await page.getByLabel('Passphrase', { exact: true }).fill(oldPassphrase)
   await page.getByRole('button', { name: 'Unlock', exact: true }).click()
@@ -83,9 +87,9 @@ test('filters provider presets and uses a preset without replacing a saved conne
   const { createProviderVault } = await import('../lib/ai/vault')
   const passphrase = 'catalog settings passphrase'
   const vault = await createProviderVault(passphrase, [{ id: 'saved', provider: 'ollama', model: 'fixture-local' }])
-  await page.addInitScript(payload => {
-    localStorage.setItem('lekhan:provider-vault:v1', payload)
-  }, await vault.seal())
+  await page.addInitScript(({ key, payload }) => {
+    localStorage.setItem(key, payload)
+  }, { key: defaultVaultKey, payload: await vault.seal() })
 
   await page.setViewportSize({ width: 390, height: 820 })
   await page.goto('/settings')

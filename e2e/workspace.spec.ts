@@ -1,6 +1,11 @@
 import { expect, test } from '@playwright/test'
 import { unzipSync, strFromU8, zipSync, strToU8 } from 'fflate'
 import { readFile } from 'node:fs/promises'
+import { defaultScope, signInContext } from './auth'
+
+test.beforeEach(async ({ context }) => {
+  await signInContext(context)
+})
 
 test('writes, links, finds, renames, reloads, and exports a nested page', async ({ page }) => {
   await page.goto('/workspace')
@@ -199,6 +204,7 @@ test('round-trips a vault with nested pages, properties, callouts and local imag
 
   const restored = await browser.newPage()
   try {
+    await signInContext(restored.context())
     await restored.goto(new URL('/workspace', page.url()).href)
     await restored.getByRole('button', { name: 'Import vault' }).click()
     const importDialog = restored.getByRole('dialog', { name: 'Import an Obsidian vault' })
@@ -320,7 +326,7 @@ test('uses the workspace shortcuts while preserving modal and editor behavior', 
 
 test('reveals more notebook pages and backlinks without hiding the active branch', async ({ page }) => {
   await page.goto('/about')
-  await page.evaluate(async () => {
+  await page.evaluate(async scope => {
     const now = new Date().toISOString()
     const pages = Array.from({ length: 61 }, (_, index) => ({
       id: 'fixture-' + index,
@@ -336,12 +342,12 @@ test('reveals more notebook pages and backlinks without hiding the active branch
       request.onsuccess = () => {
         const database = request.result
         const transaction = database.transaction('workspace', 'readwrite')
-        transaction.objectStore('workspace').put({ pages, revision: 1, activePageId: 'fixture-60' }, 'personal')
+        transaction.objectStore('workspace').put({ pages, revision: 1, activePageId: 'fixture-60' }, scope)
         transaction.oncomplete = () => { database.close(); resolve() }
         transaction.onabort = () => { database.close(); reject(transaction.error) }
       }
     })
-  })
+  }, defaultScope)
   await page.goto('/workspace')
   const tree = page.getByRole('region', { name: 'All pages' })
   const title = page.getByRole('textbox', { name: 'Page title' })
@@ -399,6 +405,7 @@ test('downloads a vault attachment after saving the notebook and reopening its e
   expect(Buffer.from(unzipSync(exported)['Attachments/Files/1/Report.pdf'])).toEqual(bytes)
   const restored = await browser.newPage()
   try {
+    await signInContext(restored.context())
     await restored.goto(new URL('/workspace', page.url()).href)
     await importArchive(restored, 'Lekhan workspace.zip', exported)
     await verifyDownload(restored, true)

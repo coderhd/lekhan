@@ -5,7 +5,7 @@ import { cookies } from 'next/headers'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   analyticsConsentCookie, analyticsId, billingMeasurementToken, ga4Configured, googleClientId,
-  posthogClientId, posthogConfigured, posthogToken,
+  posthogClientId, posthogConfigured, posthogHost, posthogToken,
 } from '@/lib/analytics-settings'
 import { siteOrigin } from '@/lib/auth/config'
 import type { Currency, Cycle, PaidTier } from './catalog'
@@ -63,7 +63,7 @@ async function deliverEvent(destination: Destination, event: MeasurementEvent, c
   const endpoint = destination === 'ga4'
     ? 'https://region1.google-analytics.com/mp/collect?' +
       new URLSearchParams({ measurement_id: analyticsId, api_secret: gaSecret ?? '' })
-    : 'https://eu.i.posthog.com/i/v0/e/'
+    : posthogHost + '/i/v0/e/'
   const payload = destination === 'ga4' ? {
     client_id: client,
     timestamp_micros: Date.parse(event.occurred_at) * 1000,

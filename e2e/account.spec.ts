@@ -1,28 +1,40 @@
 import { expect, test } from '@playwright/test'
+import { signInContext } from './auth'
 
-test('sign-in is reachable from the public site and the guest notebook', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 820 })
-  await page.goto('/')
-  await page.getByRole('link', { name: 'Sign in', exact: true }).click()
-  await expect(page).toHaveURL('/login')
+test('workspace, settings, and offline shells require an authenticated session', async ({ page, context }) => {
+  await page.goto('/workspace')
+  await expect(page).toHaveURL(/\/login$/)
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
-  await page.getByRole('link', { name: 'Open the local workspace' }).click()
+  await expect(page.getByRole('link', { name: 'Open the local workspace' })).toHaveCount(0)
+
+  await page.goto('/settings')
+  await expect(page).toHaveURL(/\/login$/)
+
+  await page.goto('/workspace-offline')
+  await expect(page.getByRole('status').filter({ hasText: 'Sign in online to open the copies saved for your account.' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/login')
+  await expect(page.getByRole('textbox', { name: 'Page title' })).toHaveCount(0)
+
+  await page.setViewportSize({ width: 390, height: 820 })
+  await signInContext(context)
+  await page.goto('/workspace')
+  await expect(page.getByRole('textbox', { name: 'Page title' })).toHaveValue('Field guide')
   await page.getByRole('button', { name: 'Open navigation' }).click()
-  await page.getByRole('link', { name: 'Sign in', exact: true }).click()
-  await expect(page).toHaveURL('/login')
+  await page.getByRole('button', { name: 'Sign out' }).click()
+  await expect(page).toHaveURL(/\/login$/)
+  await page.goto('/workspace')
+  await expect(page).toHaveURL(/\/login$/)
 })
 
-test('account links fail closed when the backend has not been configured', async ({ page }) => {
+test('account links preserve confirmation notices and stay closed when unauthenticated', async ({ page }) => {
   await page.goto('/login?error=confirm')
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
   await expect(page.getByRole('alert').filter({ hasText: 'couldn’t be verified' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Open the local workspace' })).toHaveCount(0)
   const configured = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)
-  if (!configured) {
-    await expect(page.getByRole('status').filter({ hasText: 'Account access is unavailable here.' })).toBeVisible()
+  if (!configured && (await page.getByRole('status').filter({ hasText: 'Account access is unavailable here.' }).count()) > 0) {
     await expect(page.getByRole('button', { name: 'Sign in' })).toHaveCount(0)
   }
-  await page.getByRole('link', { name: 'Open the local workspace' }).click()
-  await expect(page.getByRole('textbox', { name: 'Page title' })).toHaveValue('Field guide')
 })
 
 test('a password reset requires an authenticated session', async ({ page }) => {

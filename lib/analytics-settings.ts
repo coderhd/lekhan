@@ -11,8 +11,16 @@ export const analyticsReceipts = {
   collaborators: 'lekhan_analytics_collaborators',
 } as const
 
+const posthogHosts = new Set(['https://eu.i.posthog.com', 'https://us.i.posthog.com'])
+
+export function resolvePostHogHost(value?: string) {
+  const normalized = value?.trim().replace(/\/+$/, '')
+  return normalized && posthogHosts.has(normalized) ? normalized : 'https://eu.i.posthog.com'
+}
+
 export const analyticsId = process.env.NEXT_PUBLIC_GA4_ID?.trim() ?? ''
 export const posthogToken = process.env.NEXT_PUBLIC_POSTHOG_KEY?.trim() ?? ''
+export const posthogHost = resolvePostHogHost(process.env.NEXT_PUBLIC_POSTHOG_HOST)
 export const ga4Configured = /^G-[A-Z0-9]+$/.test(analyticsId)
 export const posthogConfigured = /^phc_[a-z0-9]+$/i.test(posthogToken)
 export const analyticsConfigured = ga4Configured || posthogConfigured
