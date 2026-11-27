@@ -58,4 +58,6 @@ The read-only production census opened 67 main snapshots and both stored checkpo
 
 The legacy cutover command was rehearsed on the production migration history with six synthetic documents, five existing mappings, and two checkpoints. The dry run left the records untouched. Applying the three batches preserved the legacy document ID, checkpoint IDs and timestamps, and Storage paths. A second apply made no changes. Run the real dry run again after the old relay stops because the rehearsal used disposable data.
 
+A read-only production census found six legacy documents. Five have same-ID page mappings with the same owner, and one needs a page. Two checkpoints still point to legacy documents. The one pending legacy invitation already has a page invitation with the same token, recipient, role, and status. The census found no mapping conflicts or unsupported member roles. The staging dry run reported zero legacy documents, so it confirmed that the function is deployed and cannot stand in for the production dry run.
+
 The relay can run retention and import receipt cleanup with `LEKHAN_PRUNE_CHECKPOINTS=1` and `LEKHAN_PRUNE_IMPORT_RECEIPTS=1` after the corresponding migrations. Enable `LEKHAN_DRAIN_WAITLIST=1` after configuring Brevo for that environment.
