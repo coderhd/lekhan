@@ -3,37 +3,265 @@
 @import 'fumadocs-ui/css/preset.css';
 
 :root {
+  color-scheme: light;
   --docs-text: 'Manrope Variable', system-ui, sans-serif;
   --docs-display: 'Newsreader Variable', Georgia, serif;
   --color-fd-background: #faf9f4;
   --color-fd-foreground: #222b24;
   --color-fd-muted: #edf0e8;
-  --color-fd-muted-foreground: #586459;
+  --color-fd-muted-foreground: #546156;
   --color-fd-popover: #fffef9;
+  --color-fd-popover-foreground: #222b24;
   --color-fd-card: #f5f6ef;
+  --color-fd-card-foreground: #222b24;
   --color-fd-border: #dadecf;
   --color-fd-primary: #294634;
   --color-fd-primary-foreground: #fffef9;
+  --color-fd-secondary: #e7ece0;
+  --color-fd-secondary-foreground: #1e3728;
   --color-fd-accent: #dce7d8;
   --color-fd-accent-foreground: #1e3728;
+  --color-fd-ring: #41764e;
+  --color-fd-info: #294634;
+}
+
+#nd-sidebar {
+  --color-fd-muted: #e6ebe0;
+  --color-fd-secondary: #e7ece0;
+  --color-fd-muted-foreground: #546156;
+  background-color: #edf0e8;
 }
 
 .dark {
-  --color-fd-background: #171f19;
-  --color-fd-foreground: #e8eee4;
-  --color-fd-muted: #222f25;
-  --color-fd-muted-foreground: #b1bfb1;
-  --color-fd-popover: #1d2820;
-  --color-fd-card: #1d2820;
-  --color-fd-border: #3b4e40;
-  --color-fd-primary: #b5d5ba;
-  --color-fd-primary-foreground: #19251d;
-  --color-fd-accent: #324438;
-  --color-fd-accent-foreground: #e8eee4;
+  color-scheme: dark;
+  --color-fd-background: #131a15;
+  --color-fd-foreground: #e7ede3;
+  --color-fd-muted: #1b241d;
+  --color-fd-muted-foreground: #a4b5a5;
+  --color-fd-popover: #1a231c;
+  --color-fd-popover-foreground: #e7ede3;
+  --color-fd-card: #19221b;
+  --color-fd-card-foreground: #e7ede3;
+  --color-fd-border: #2c3b30;
+  --color-fd-primary: #a8d1b0;
+  --color-fd-primary-foreground: #131a15;
+  --color-fd-secondary: #202c23;
+  --color-fd-secondary-foreground: #dce8dc;
+  --color-fd-accent: #27372b;
+  --color-fd-accent-foreground: #e7ede3;
+  --color-fd-ring: #88ba93;
+  --color-fd-info: #a8d1b0;
 }
 
-body { font-family: var(--docs-text); }
-h1, h2 { font-family: var(--docs-display); letter-spacing: -.03em; }
-h1, h2, h3, td { overflow-wrap: anywhere; }
-:focus-visible { outline: 2px solid var(--color-fd-primary); outline-offset: 3px; }
-code, pre, kbd { font-family: ui-monospace, SFMono-Regular, monospace; }
+.dark #nd-sidebar {
+  --color-fd-muted: #1b241d;
+  --color-fd-secondary: #202c23;
+  --color-fd-muted-foreground: #a4b5a5;
+  background-color: #161e18;
+}
+
+body {
+  font-family: var(--docs-text);
+  background-color: var(--color-fd-background);
+  color: var(--color-fd-foreground);
+}
+
+::selection {
+  background: var(--color-fd-accent);
+  color: var(--color-fd-accent-foreground);
+}
+
+.lekhan-docs-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--color-fd-foreground);
+}
+
+.lekhan-docs-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 7px;
+  background: #294634;
+  color: #f9f7e7;
+  font-family: var(--docs-display);
+  font-style: italic;
+  font-size: 23px;
+  line-height: 1;
+  padding: 2px 2px 0 0;
+}
+
+.dark .lekhan-docs-mark {
+  background: #2d4c38;
+  color: #f4f7ee;
+  border: 1px solid #3f634c;
+}
+
+#nd-page h1 {
+  font-family: var(--docs-display);
+  font-weight: 560;
+  font-size: clamp(2rem, 3.6vw, 2.75rem);
+  line-height: 1.08;
+  letter-spacing: -0.036em;
+  text-wrap: balance;
+}
+
+#nd-page .prose {
+  font-size: 15.5px;
+  line-height: 1.72;
+  max-width: 72ch;
+}
+
+#nd-page .prose h2 {
+  font-family: var(--docs-display);
+  font-weight: 580;
+  font-size: clamp(1.45rem, 2.4vw, 1.8rem);
+  letter-spacing: -0.028em;
+  margin-top: 2.25rem;
+  padding-top: 1.35rem;
+  border-top: 1px solid var(--color-fd-border);
+}
+
+#nd-page .prose h3 {
+  font-weight: 750;
+  letter-spacing: -0.015em;
+}
+
+#nd-page h1,
+#nd-page h2,
+#nd-page h3,
+#nd-page td {
+  overflow-wrap: anywhere;
+}
+
+#nd-page .prose a:not([data-card]):not(.fd-card) {
+  color: var(--color-fd-primary);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+  transition: color 150ms ease, opacity 150ms ease;
+}
+
+#nd-page .prose a:not([data-card]):not(.fd-card):hover {
+  opacity: 0.82;
+}
+
+#nd-page .prose a[data-card],
+#nd-page .prose a[data-card] :is(h3, p),
+#nd-page .prose :is(h1, h2, h3, h4) a {
+  text-decoration: none;
+}
+
+.lekhan-docs-workspace-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0.5rem 0.78rem;
+  border-radius: 8px;
+  background: var(--color-fd-primary);
+  color: var(--color-fd-primary-foreground);
+  font-size: 13.5px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: opacity 140ms ease, transform 140ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .lekhan-docs-workspace-btn:hover {
+    opacity: 0.92;
+    transform: translateY(-1px);
+  }
+}
+
+#nd-page .prose blockquote {
+  border-inline-start: 2px solid var(--color-fd-primary);
+  background: var(--color-fd-card);
+  padding: 0.75rem 1rem;
+  border-radius: 0 8px 8px 0;
+  font-style: normal;
+}
+
+#nd-page .prose pre {
+  border: 1px solid var(--color-fd-border);
+  border-radius: 10px;
+}
+
+#nd-page .prose :not(pre) > code {
+  border: 1px solid var(--color-fd-border);
+  background: var(--color-fd-card);
+  border-radius: 5px;
+  padding: 0.12em 0.38em;
+  font-size: 0.86em;
+}
+
+#nd-page .prose table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14px;
+}
+
+#nd-page .prose th {
+  text-align: start;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-fd-muted-foreground);
+  border-bottom: 1px solid var(--color-fd-border);
+}
+
+#nd-page .prose td {
+  border-bottom: 1px solid var(--color-fd-border);
+}
+
+#nd-page a[data-card],
+#nd-page .fd-card {
+  border-radius: 10px;
+  border-color: var(--color-fd-border);
+  background: var(--color-fd-card);
+  transition: transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1), border-color 160ms ease, background-color 160ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #nd-page a[data-card]:hover,
+  #nd-page .fd-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--color-fd-primary);
+    background: var(--color-fd-popover);
+  }
+}
+
+#nd-sidebar a,
+#nd-toc a {
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-fd-ring);
+  outline-offset: 3px;
+}
+
+code,
+pre,
+kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #nd-page a[data-card],
+  #nd-page .fd-card,
+  #nd-page .prose a,
+  #nd-sidebar a,
+  .lekhan-docs-workspace-btn,
+  #nd-toc a {
+    transition: none;
+    transform: none;
+  }
+}
