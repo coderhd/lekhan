@@ -2,7 +2,7 @@
 
 Run the **Desktop packages** workflow to build and test macOS on Apple Silicon and Intel, Windows x64 with NSIS, and Linux x64 with AppImage. Each job builds the pinned llama.cpp sidecar on its own runner. macOS defaults to Metal. Windows and Linux default to CPU for portable packages.
 
-The workflow uploads artifacts for review. Publish the reviewed installer and the matching update signature together.
+Pull requests that change the desktop shell, bundler, or package dependencies run the same matrix without release signing or update artifacts. The workflow uploads the packages so they can be tested before merging. Use a manual dispatch for a signed release candidate. Publish the reviewed installer and the matching update signature together.
 
 ## Authorize the desktop update channel
 

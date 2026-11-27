@@ -1,6 +1,15 @@
 name: Desktop packages
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/desktop-packages.yml'
+      - 'desktop/**'
+      - 'src-tauri/**'
+      - 'scripts/package-desktop.mjs'
+      - 'package.json'
+      - 'package-lock.json'
   workflow_dispatch:
     inputs:
       signed_updates:
@@ -14,6 +23,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: desktop-packages-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   package:
@@ -40,6 +53,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
