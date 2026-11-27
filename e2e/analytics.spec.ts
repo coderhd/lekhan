@@ -1,6 +1,10 @@
 import { test, expect, type Page } from '@playwright/test'
 import { gunzipSync } from 'node:zlib'
 
+test.use({
+  userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+})
+
 function queuedEvents(page: Page) {
   return page.evaluate(() => {
     const queue = (window as Window & { dataLayer?: unknown[][] }).dataLayer ?? []
@@ -12,17 +16,31 @@ function queuedEvents(page: Page) {
 test('only shares coarse product events after opt-in and stops after revocation', async ({ page }) => {
   const id = process.env.NEXT_PUBLIC_GA4_ID
   test.skip(!id || !/^G-[A-Z0-9]+$/.test(id), 'Set NEXT_PUBLIC_GA4_ID to enable the analytics fixture.')
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => false })
+    Object.defineProperty(navigator, 'userAgentData', { get: () => undefined })
+  })
   let loads = 0
   const productEvents: { event: string; properties: Record<string, unknown> }[] = []
   await page.route('https://www.googletagmanager.com/**', async route => {
     loads++
     await route.fulfill({ contentType: 'application/javascript', body: '' })
   })
+  await page.route('https://eu-assets.i.posthog.com/**', async route => {
+    await route.fulfill({ json: { hasFeatureFlags: true } })
+  })
   await page.route('https://eu.i.posthog.com/**', async route => {
     const body = route.request().postDataBuffer()
-    if (body && /\/e\/?$/.test(new URL(route.request().url()).pathname)) {
+    const path = new URL(route.request().url()).pathname
+    if (body && /\/e\/?$/.test(path)) {
       const text = (body[0] === 31 && body[1] === 139 ? gunzipSync(body) : body).toString()
       productEvents.push(...JSON.parse(text).batch)
+      await route.fulfill({ json: { status: 1 } })
+      return
+    }
+    if (/\/flags\/?$/.test(path)) {
+      await route.fulfill({ json: { flags: { 'tier-gate-tier': { enabled: true, variant: 'free' } } } })
+      return
     }
     await route.fulfill({ json: { status: 1 } })
   })
@@ -35,6 +53,8 @@ test('only shares coarse product events after opt-in and stops after revocation'
   expect(loads).toBe(0)
   expect(await queuedEvents(page)).toEqual([])
   expect(productEvents).toEqual([])
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('lekhan:tier-gates:personal')))
+    .toContain('"tier-gate-tier":"free"')
 
   await consent.check()
   await newPage.click()
@@ -100,4 +120,6 @@ test('only shares coarse product events after opt-in and stops after revocation'
   await expect.poll(() => queuedEvents(page)).toEqual([
     { name: 'page_view', payload: { page_location: new URL('/about', page.url()).href, page_title: 'Lekhan', page_referrer: '' } },
   ])
+  await page.context().setOffline(true)
+  expect(await page.evaluate(() => localStorage.getItem('lekhan:tier-gates:personal'))).toContain('"tier-gate-tier":"free"')
 })

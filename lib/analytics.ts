@@ -7,6 +7,10 @@ import {
   analyticsConfigured, analyticsConsentCookie, analyticsId as id, analyticsPreference, analyticsReceipts,
   billingMeasurementToken, ga4Configured, googleClientId, posthogClientId, posthogConfigured,
 } from './analytics-settings'
+import {
+  deriveTierGateFlags, readTierGateBootstrap, writeTierGateBootstrap,
+  type TierGateFlagMap, type TierGatePlanInput,
+} from './tier-gate-flags'
 
 type ImportSource = 'obsidian' | 'markdown'
 type ProviderKind = 'byok' | 'byol' | 'free_preset'
@@ -14,6 +18,7 @@ type GoogleTag = (...args: unknown[]) => void
 const disableKey = 'ga-disable-' + id
 let productAnalytics: ReturnType<typeof loadProductAnalytics> | undefined
 let lastMarketingPath: string | null = null
+let latestTierFlags: TierGateFlagMap | undefined
 const measurementKey = analyticsPreference + ':billing-consent'
 const revokeKey = analyticsPreference + ':billing-revocation'
 let revoking: Promise<void> | undefined
@@ -210,7 +215,8 @@ export function track(...event: Event) {
   const payload = { ...context(path), ...properties }
   if (posthogConfigured) {
     productAnalytics ??= loadProductAnalytics()
-    void productAnalytics.then(sdk => sdk.captureProductEvent(name, payload, analyticsAllowed)).catch(() => undefined)
+    void productAnalytics.then(sdk => sdk.captureProductEvent(name, payload, analyticsAllowed, latestTierFlags))
+      .catch(() => undefined)
   }
   if (!ga4Configured) return posthogConfigured
   try {
@@ -260,4 +266,28 @@ export function trackWritingEdit(previous: string, next: string) {
   if (next.includes('[[') && wikiLinks(next).length > wikiLinks(previous).length) {
     trackMilestone('link_created')
   }
+}
+
+export function readTierGates(scope = 'personal'): TierGateFlagMap {
+  return readTierGateBootstrap(scope)
+}
+
+export function bootstrapTierGates(scope = 'personal', plan?: TierGatePlanInput | null): TierGateFlagMap {
+  const flags = writeTierGateBootstrap(scope, deriveTierGateFlags(plan))
+  latestTierFlags = flags
+  if (posthogConfigured && analyticsAllowed()) {
+    productAnalytics ??= loadProductAnalytics()
+    void productAnalytics.then(sdk => sdk.syncTierGateBootstrap(flags, analyticsAllowed)).catch(() => undefined)
+  }
+  return flags
+}
+
+export function refreshOnlineTierGates() {
+  if (!posthogConfigured || !analyticsAllowed()) return
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return
+  productAnalytics ??= loadProductAnalytics()
+  void productAnalytics.then(sdk => {
+    if (latestTierFlags) sdk.syncTierGateBootstrap(latestTierFlags, analyticsAllowed)
+    sdk.refreshTierGateFlags(analyticsAllowed)
+  }).catch(() => undefined)
 }

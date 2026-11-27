@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowUpRight, Check } from 'lucide-react'
 import { useLocale, useTranslations } from '@/lib/i18n/client'
-import { billingMeasurement, track } from '@/lib/analytics'
+import { billingMeasurement, bootstrapTierGates, track } from '@/lib/analytics'
 import { priceLabel, readOffer, unitAmount, type Currency, type Cycle, type PaidTier } from '@/lib/billing/catalog'
 import type { readBillingSummary } from '@/lib/billing/workspace'
 import RazorpayPlanChanges from './razorpay-plan-changes'
@@ -30,8 +30,9 @@ const paymentMessages = {
 type BillingFailure = (typeof errors)[keyof typeof errors] | 'actionUnavailable' | 'openFailed'
 type BillingNotice = (typeof paymentMessages)[keyof typeof paymentMessages] | 'checkAgain' | 'cancellationScheduled'
 
-export default function BillingSettings({ summary, defaultCurrency, available, returned, paused }: {
+export default function BillingSettings({ summary, scope = 'personal', defaultCurrency, available, returned, paused }: {
   summary: Awaited<ReturnType<typeof readBillingSummary>>
+  scope?: string
   defaultCurrency: Currency
   available: string[]
   returned: boolean
@@ -51,6 +52,14 @@ export default function BillingSettings({ summary, defaultCurrency, available, r
   const [notice, setNotice] = useState<BillingNotice | null>(null)
   const founding = summary.checkoutFounding
   const waiting = !!pending || (returned && entitlement?.status !== 'active')
+
+  useEffect(() => {
+    bootstrapTierGates(scope, entitlement ? {
+      tier: entitlement.tier,
+      seats: entitlement.seats,
+      relayReadOnly: entitlement.relayReadOnly,
+    } : null)
+  }, [entitlement, scope])
 
   useEffect(() => {
     if (!waiting) return
