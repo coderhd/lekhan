@@ -29,6 +29,8 @@ An unlocated checkout stays reserved until the provider can confirm what happene
 
 ## INR plan changes
 
+Razorpay Test Mode has all eight Lekhan Plus and Pro plans. The test dashboard showed the expected monthly and annual amounts for both cohorts. Their plan IDs are configured only for the `integration/h0-rebuild` Preview branch of `lekhan-staging`. Test API credentials and a signed webhook are still needed. Vercel Authentication currently rejects external POSTs to the branch preview's Razorpay webhook before the request reaches the app.
+
 Owners can schedule or withdraw a plan change in workspace billing. The page uses Razorpay’s live schedule and keeps the current entitlement through the billing cycle. A verified event or reconciliation updates the entitlement after Razorpay switches the plan. Razorpay restricts in-place changes for subscriptions authorized by UPI or e-mandate. For those payment methods, owners can end the existing subscription at renewal and begin a new checkout after it ends. Verify the card and UPI paths in the provider test environment. [Razorpay subscription changes](https://razorpay.com/docs/api/payments/subscriptions/update-subscription) · [Razorpay scheduled update details](https://razorpay.com/docs/api/payments/subscriptions/fetch-pending-update-details)
 
 ## Referral credits and founding pricing
