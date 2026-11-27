@@ -48,6 +48,8 @@ The free service loses its WAL at restart, redeploy, or idle shutdown. Use throw
 3. Exercise restart and storage recovery in staging with the same volume. Confirm an accepted edit survives a relay restart while snapshot storage is unavailable and reaches Storage once it is available again.
 4. Stop the old relay with `SIGTERM` and allow time for outstanding snapshots before replacing it. Attach the same WAL volume to the replacement. A failed flush leaves pending edits on the volume for replay. Bring up only one writer per volume.
 
+Find applied repository migrations in `supabase_migrations.schema_migrations` by their `repo_<version>_<name>` entry. The Supabase MCP recorded a separate apply timestamp in the ledger's `version` column. Staging has all 24 rebuild entries. Production has the legacy admission prerequisite, page invitations, and cloud import entries. The remaining 21 are part of the coordinated cutover.
+
 The staging database passed the page access check for owners, editors, viewers, unrelated signed-in users, and guests. The owner's title update succeeded and the viewer's update was denied. The shared page became unreadable to the viewer as soon as the owner revoked access. All fixtures were rolled back. Step 2 verifies live edits and transfers through the hosted relay.
 
 Staging grants block direct membership and invitation inserts by clients. Signed-in clients have column-level update access to the membership role, subject to the owner policy. The checked outbox, import, attachment, and cutover tables expose no read or write columns to clients. The service role can write the outbox and import records and read attachment metadata. Attachment and cutover writes use their database functions.
