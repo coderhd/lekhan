@@ -1,112 +1,36 @@
-# Lekhan docs site
+# Lekhan Docs
 
-The public documentation site for [Lekhan](https://lekhan.online), served at
-`https://docs.lekhan.online`. Self-contained Next.js + [Fumadocs](https://fumadocs.dev) app so docs
-ship from this repo as markdown/MDX, versioned with the product.
+Fumadocs and Next.js serve the MDX guides in `content/docs`. Keep instructions in step with the workspace UI and link readers to the relevant guide rather than repeating setup steps.
 
-## Requirements
+## Run locally
 
-- Node.js **22.x**
-- npm 10+
+Use Node 24, the same major used by the documentation build check.
 
-The `engines.node` constraint pins the Node 22 major for Vercel builds and functions.
-Vercel gives this field precedence over the project setting; keep it at `22.x` to
-receive Node 22 patches without automatically upgrading to a newer major.
-
-## Develop
-
-```bash
+```sh
 cd docs-site
 npm ci
-npm run dev
+npm run dev -- --port 3190
 ```
 
-Open <http://localhost:3000>. The root route redirects to `/docs/getting-started`.
+Open [local docs](http://localhost:3190). The root redirects to `/docs/getting-started`. Folder `meta.json` files set the sidebar order. Use absolute `/docs/…` links between guides.
 
-## Build
+## Verify
 
-```bash
-cd docs-site
-npm ci
-npm run build
-npm run start
-```
-
-The build writes to `.next/` (standard Next.js output; the site uses server rendering for search, so
-it is **not** a static export).
-
-- Build command: `npm ci && npm run build`
-- Start command: `npm run start`
-- Output directory: `.next`
-- Env vars: none required. Optional `NEXT_PUBLIC_DOCS_URL` sets the canonical metadata base
-  (defaults to `https://docs.lekhan.online`).
-
-## CI build check
-
-`.github/workflows/docs-site.yml` defines the `docs-site-build` check. It runs
-`npm ci` and `npm run build` from this directory on Node 22 for every pull request
-targeting `main` and every push to `main`. The npm cache uses this app's lockfile.
-There are no path filters, so unrelated PRs also report a result for the required
-check.
-
-Repository administrator request: after the first successful Actions run, add
-`docs-site-build` (GitHub Actions) to the required status checks in the existing
-`main` branch protection rule or ruleset. Preserve the other required checks and
-protection settings. The workflow alone does not enable branch protection.
-
-## Content
-
-All docs live in `content/docs/` as `.mdx`:
-
-```text
-content/docs/
-├── meta.json                 # top-level navigation order
-├── index.mdx                 # /docs
-├── getting-started/
-│   ├── index.mdx             # quickstart
-│   ├── markdown-import-export.mdx
-│   └── obsidian-import.mdx
-├── concepts/                 # pages, workspaces, links, graph, tags
-├── ai/                       # free-key providers, BYOK, BYOL
-├── troubleshooting.mdx
-└── faq.mdx
-```
-
-Frontmatter supports `title` and `description`. Folder `meta.json` files control sidebar titles and
-page order (`"pages": ["index", "..."]`).
-
-Editorial rules:
-
-- Use the product vocabulary in `CONTEXT.md` (page, workspace, page link, backlink, tag, on-ramp).
-  "Vault" only refers to an imported Obsidian folder.
-- Never promise bundled AI credits. AI always runs on the user's key or machine.
-- Free models are labelled "free models may change or be slower".
-- Pricing copy follows `docs/prd/h0-real-billing-prd.md` §5.1 (founding vs GA, INR regional, Team
-  USD-only at launch). Update the FAQ table when pricing lands.
-- Internal links use absolute docs paths (`/docs/...`). Do not link to unpublished H1 pages.
-
-## Isolation from the main app
-
-This app has its own `package.json`, lockfile, and Next config. The repo root `tsconfig.json` and
-`eslint.config.mjs` exclude `docs-site/` so the root `typecheck`/`lint`/`build` behavior is unchanged.
-Do not add this app to the root workspace or root scripts.
-
-## Deploy hand-off
-
-DevOps deploys this directory as its own Vercel project (root directory `docs-site`) and points
-`docs.lekhan.online` at it. Search is served by `/api/search` inside this app.
-
-## Verification
-
-Run from `docs-site/`:
-
-```bash
-npm ci
-npm run build        # 21 routes, exit 0
-npm run check:links  # 0 broken internal links
+```sh
+npm run check:links
 npm run lint
-npm run start        # smoke: / -> 307 /docs/getting-started; every page 200
+npm run build
+npm run start -- --port 3190
 ```
 
-Root isolation was verified with `docs-site/` present: root `npm run typecheck`, `npm run lint`,
-`npm test` and `npm run build` all pass unchanged.
+Check the quickstart, a guide from each section, and the search dialog on desktop and mobile. The production build needs a Next.js runtime to serve the search API. Fonts are installed with the app and do not require a build-time font service.
+
+## Deployment
+
+The existing `lekhan-docs` Vercel project serves [docs.lekhan.online](https://docs.lekhan.online). Set its root directory to `docs-site`. The docs use that domain for canonical URLs and link to [the workspace](https://lekhan.online/workspace).
+
+- `NEXT_PUBLIC_DOCS_URL` overrides the canonical docs origin.
+- `NEXT_PUBLIC_LEKHAN_APP_URL` overrides the app origin used by **Open workspace**.
+- Set `NEXT_PUBLIC_DOCS_URL` in the main app to show a **Docs** link in its public footer.
+
+The launch documentation uses `docs.lekhan.online` as its public and canonical hostname.

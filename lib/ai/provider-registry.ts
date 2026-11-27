@@ -1,409 +1,99 @@
-import { DEFAULT_MODEL_CATALOG as RAW_CATALOG, filterModels as rawFilterModels, getModelById as rawGetModelById, getDefaultAIRegistryState as rawGetDefaultAIRegistryState } from './catalog'
-import { AIProviderType, ModelCard, CostTier, ModelCategory, AIRegistryState } from './types'
-import { HardwareProfile, HardwareTier, getHardwareRecommendation } from './hardware'
-
-// ---------------------------------------------------------------------------
-// Central provider contract — single source of truth for every seam
-// ---------------------------------------------------------------------------
-
-export const TRUSTED_PROVIDER_BASE_URLS: Record<string, string> = {
-	openai: 'https://api.openai.com/v1',
-	openrouter: 'https://openrouter.ai/api/v1',
-	groq: 'https://api.groq.com/openai/v1',
-	deepseek: 'https://api.deepseek.com/v1',
-	qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-	zai: 'https://api.z.ai/v1',
-	sarvam: 'https://api.sarvam.ai/v1',
-	anthropic: 'https://api.anthropic.com',
-	gemini: 'https://generativelanguage.googleapis.com',
+type Protocol = 'openai' | 'anthropic' | 'gemini' | 'ollama'
+interface ProviderDefinition {
+  label: string
+  protocol: Protocol
+  requiresKey: boolean
+  baseUrl?: string
+  docsUrl: string
+  signupUrl?: string
+  local?: boolean
 }
 
-export const LOCAL_PROVIDERS: ReadonlySet<AIProviderType> = new Set(['ollama', 'lmstudio'] as AIProviderType[])
+export const PROVIDERS = {
+  openai: { label: 'OpenAI', protocol: 'openai', requiresKey: true, baseUrl: 'https://api.openai.com/v1', docsUrl: 'https://platform.openai.com/docs', signupUrl: 'https://platform.openai.com/api-keys' },
+  openrouter: { label: 'OpenRouter', protocol: 'openai', requiresKey: true, baseUrl: 'https://openrouter.ai/api/v1', docsUrl: 'https://openrouter.ai/docs', signupUrl: 'https://openrouter.ai/settings/keys' },
+  anthropic: { label: 'Anthropic', protocol: 'anthropic', requiresKey: true, baseUrl: 'https://api.anthropic.com/v1', docsUrl: 'https://platform.claude.com/docs', signupUrl: 'https://platform.claude.com/settings/keys' },
+  gemini: { label: 'Google Gemini', protocol: 'gemini', requiresKey: true, baseUrl: 'https://generativelanguage.googleapis.com/v1beta', docsUrl: 'https://ai.google.dev/gemini-api/docs', signupUrl: 'https://aistudio.google.com/app/apikey' },
+  groq: { label: 'Groq', protocol: 'openai', requiresKey: true, baseUrl: 'https://api.groq.com/openai/v1', docsUrl: 'https://console.groq.com/docs', signupUrl: 'https://console.groq.com/keys' },
+  zai: { label: 'Z.AI', protocol: 'openai', requiresKey: true, baseUrl: 'https://api.z.ai/api/paas/v4', docsUrl: 'https://docs.z.ai', signupUrl: 'https://z.ai/manage-apikey/apikey-list' },
+  mistral: { label: 'Mistral', protocol: 'openai', requiresKey: true, baseUrl: 'https://api.mistral.ai/v1', docsUrl: 'https://docs.mistral.ai/getting-started/quickstarts/studio/activate-and-generate-api-key', signupUrl: 'https://console.mistral.ai/api-keys' },
+  deepseek: { label: 'DeepSeek', protocol: 'openai', requiresKey: true, baseUrl: 'https://api.deepseek.com', docsUrl: 'https://api-docs.deepseek.com', signupUrl: 'https://platform.deepseek.com/api_keys' },
+  qwen: { label: 'Qwen', protocol: 'openai', requiresKey: true, baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', docsUrl: 'https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope', signupUrl: 'https://www.alibabacloud.com/help/en/model-studio/get-api-key' },
+  sarvam: { label: 'Sarvam', protocol: 'openai', requiresKey: true, baseUrl: 'https://api.sarvam.ai/v2', docsUrl: 'https://docs.sarvam.ai/api-reference/chat/chat-completions-v2', signupUrl: 'https://dashboard.sarvam.ai' },
+  ollama: { label: 'Ollama', protocol: 'ollama', requiresKey: false, local: true, baseUrl: 'http://localhost:11434', docsUrl: 'https://docs.ollama.com/faq' },
+  lmstudio: { label: 'LM Studio', protocol: 'openai', requiresKey: false, local: true, baseUrl: 'http://localhost:1234/v1', docsUrl: 'https://lmstudio.ai/docs/developer/core/server/settings' },
+  llamacpp: { label: 'llama.cpp', protocol: 'openai', requiresKey: false, local: true, baseUrl: 'http://localhost:8080/v1', docsUrl: 'https://github.com/ggml-org/llama.cpp/tree/master/tools/server' },
+  custom: { label: 'OpenAI-compatible endpoint', protocol: 'openai', requiresKey: false, docsUrl: 'https://platform.openai.com/docs/api-reference/chat' },
+} satisfies Record<string, ProviderDefinition>
 
-export function isLocalProvider(provider: AIProviderType): boolean {
-	return provider === 'ollama' || provider === 'lmstudio'
+export type ProviderId = keyof typeof PROVIDERS
+export interface ProviderConfig {
+  id: string
+  provider: ProviderId
+  model: string
+  label?: string
+  baseUrl?: string
+  apiKey?: string
+  fallback?: string[]
 }
 
-// ---------------------------------------------------------------------------
-// URL validation — shared across vault probing and /api/ai/stream custom URLs
-// ---------------------------------------------------------------------------
+export const MAX_FALLBACK_MODELS = 5
 
-export function isValidCustomUrl(rawUrl: string, opts?: { allowLocalHttp?: boolean }): boolean {
-	const allowLocalHttp = opts?.allowLocalHttp ?? true
-	try {
-		const parsed = new URL(rawUrl)
-		if (parsed.protocol === 'https:') {
-			const hostname = parsed.hostname.toLowerCase()
-			if (
-				hostname === 'localhost' ||
-				hostname === '127.0.0.1' ||
-				hostname === '169.254.169.254' ||
-				hostname.startsWith('10.') ||
-				hostname.startsWith('192.168.') ||
-				hostname.startsWith('172.16.') ||
-				hostname.endsWith('.internal')
-			) {
-				return false
-			}
-			return true
-		}
-		if (allowLocalHttp && parsed.protocol === 'http:' && (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')) {
-			return true
-		}
-		return false
-	} catch {
-		return false
-	}
-}
-
-export function isValidLocalBaseUrl(rawUrl: string): boolean {
-	try {
-		const parsed = new URL(rawUrl)
-		const isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1'
-		if (parsed.protocol !== 'https:' && !isLocal) return false
-		return true
-	} catch {
-		return false
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Header mapping — one place, all providers
-// ---------------------------------------------------------------------------
-
-export function headersForProvider(provider: AIProviderType, apiKey: string): Record<string, string> {
-	if (!apiKey) return {}
-	if (provider === 'anthropic') return { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' }
-	if (provider === 'gemini') return { 'x-goog-api-key': apiKey }
-	if (provider === 'sarvam') return { 'api-subscription-key': apiKey }
-	return { Authorization: `Bearer ${apiKey}` }
-}
-
-export function probeHeadersFor(provider: AIProviderType, apiKey: string): Record<string, string> {
-	return { 'Content-Type': 'application/json', ...headersForProvider(provider, apiKey) }
-}
-
-// ---------------------------------------------------------------------------
-// Endpoint resolution — the deep behaviour
-// ---------------------------------------------------------------------------
-
-export function resolveBaseUrl(provider: AIProviderType, customBaseUrl?: string): string {
-	if (customBaseUrl) {
-		let base = customBaseUrl
-		if (base.endsWith('/')) base = base.slice(0, -1)
-		return base
-	}
-	if (isLocalProvider(provider)) {
-		if (provider === 'ollama') return 'http://localhost:11434'
-		if (provider === 'lmstudio') return 'http://localhost:1234'
-	}
-	if (provider === 'custom') return '' // missing custom URL — caller must handle missing-base error (testConnection/buildUpstream)
-	return TRUSTED_PROVIDER_BASE_URLS[provider] || TRUSTED_PROVIDER_BASE_URLS.openai
-}
-
-export function resolveTestEndpoint(provider: AIProviderType, baseUrl?: string): string {
-	if (provider === 'custom' && (!baseUrl || !baseUrl.trim())) return ''
-	const resolvedBase = resolveBaseUrl(provider, baseUrl)
-	if (provider === 'ollama') {
-		let u = resolvedBase
-		if (u.endsWith('/')) u = u.slice(0, -1)
-		return `${u}/api/version`
-	}
-	if (provider === 'anthropic') return baseUrl || 'https://api.anthropic.com/v1/models'
-	if (provider === 'gemini') return baseUrl || 'https://generativelanguage.googleapis.com/v1beta/models'
-	if (provider === 'sarvam') return baseUrl || 'https://api.sarvam.ai/v1/models'
-	let base = resolvedBase
-	if (base.endsWith('/')) base = base.slice(0, -1)
-	if (base.endsWith('/v1')) return `${base}/models`
-	return `${base}/v1/models`
-}
-
-export interface ResolvedChatRequest {
-	url: string
-	headers: Record<string, string>
-	body: unknown
-	isLocalDirect: boolean
-}
-
-export function resolveChatRequest(args: {
-	provider: AIProviderType
-	model: string
-	messages: Array<{ role: string; content: string }>
-	apiKey?: string
-	baseUrl?: string
-	temperature?: number
-	maxTokens?: number
-	systemPrompt?: string
-}): ResolvedChatRequest {
-	const { provider, model, messages, apiKey, baseUrl, temperature, maxTokens, systemPrompt } = args
-	const fullMessages = systemPrompt ? [{ role: 'system', content: systemPrompt }, ...messages] : messages
-
-	if (provider === 'ollama') {
-		const url = `${resolveBaseUrl(provider, baseUrl)}/api/chat`
-		const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-		const body = { model, messages: fullMessages, stream: true }
-		return { url, headers, body, isLocalDirect: true }
-	}
-	if (provider === 'lmstudio') {
-		const base = resolveBaseUrl(provider, baseUrl)
-		const url = `${base.endsWith('/') ? base.slice(0, -1) : base}/v1/chat/completions`
-		const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-		const body = { model, messages: fullMessages, stream: true }
-		return { url, headers, body, isLocalDirect: true }
-	}
-
-	const url = '/api/ai/stream'
-	const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-	if (apiKey) headers['x-ai-api-key'] = apiKey
-	const body: Record<string, unknown> = { provider, model, apiKey, baseUrl, messages: fullMessages }
-	if (temperature !== undefined) body.temperature = temperature
-	if (maxTokens !== undefined) body.maxTokens = maxTokens
-	return { url, headers, body, isLocalDirect: false }
-}
-
-export interface UpstreamRequest {
-	upstreamUrl: string
-	upstreamHeaders: Record<string, string>
-	upstreamBody: unknown
-}
-
-export function buildUpstreamRequest(args: {
-	provider: AIProviderType
-	model: string
-	messages: Array<{ role: string; content: string }>
-	apiKey?: string
-	baseUrl?: string
-	temperature?: number
-	maxTokens?: number
-}): UpstreamRequest {
-	const { provider, model, messages, apiKey = '', baseUrl, temperature, maxTokens } = args
-	let upstreamUrl = ''
-	const upstreamHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
-	let upstreamBody: Record<string, unknown> = { model, messages, stream: true }
-
-	if (temperature !== undefined) upstreamBody.temperature = temperature
-	if (maxTokens !== undefined) upstreamBody.max_tokens = maxTokens
-
-	if (provider === 'anthropic') {
-		upstreamUrl = 'https://api.anthropic.com/v1/messages'
-		upstreamHeaders['x-api-key'] = apiKey
-		upstreamHeaders['anthropic-version'] = '2023-06-01'
-		upstreamBody.max_tokens = maxTokens || 4096
-	} else if (provider === 'gemini') {
-		upstreamUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`
-		upstreamHeaders['x-goog-api-key'] = apiKey
-		const genConfig: Record<string, unknown> = {}
-		if (temperature !== undefined) genConfig.temperature = temperature
-		if (maxTokens !== undefined) genConfig.maxOutputTokens = maxTokens
-		// Extract system messages into systemInstruction per Gemini docs
-		const systemParts = messages.filter(m => m.role === 'system').map(m => ({ text: m.content }))
-		const nonSystem = messages.filter(m => m.role !== 'system')
-		upstreamBody = {
-			contents: nonSystem.map((m: { role: string; content: string }) => ({
-				role: m.role === 'assistant' ? 'model' : 'user',
-				parts: [{ text: m.content }],
-			})),
-			...(systemParts.length > 0 ? { systemInstruction: { parts: systemParts } } : {}),
-			...(Object.keys(genConfig).length > 0 ? { generationConfig: genConfig } : {}),
-		}
-	} else if (provider === 'sarvam') {
-		upstreamUrl = 'https://api.sarvam.ai/v1/chat/completions'
-		upstreamHeaders['api-subscription-key'] = apiKey
-	} else if (provider === 'custom') {
-		let base = baseUrl || ''
-		if (base.endsWith('/')) base = base.slice(0, -1)
-		upstreamUrl = `${base}/chat/completions`
-		if (apiKey) upstreamHeaders.Authorization = `Bearer ${apiKey}`
-	} else {
-		const base = TRUSTED_PROVIDER_BASE_URLS[provider] || TRUSTED_PROVIDER_BASE_URLS.openai
-		upstreamUrl = `${base}/chat/completions`
-		if (apiKey) upstreamHeaders.Authorization = `Bearer ${apiKey}`
-	}
-
-	return { upstreamUrl, upstreamHeaders, upstreamBody }
-}
-
-// ---------------------------------------------------------------------------
-// Test connection — unified probe
-// ---------------------------------------------------------------------------
-
-export async function testProviderConnection(
-	provider: AIProviderType,
-	apiKey: string,
-	baseUrl?: string
-): Promise<{ success: boolean; latencyMs: number; error?: string }> {
-	const start = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now()
-
-	try {
-		if (provider === 'custom' && (!baseUrl || !baseUrl.trim())) {
-			return { success: false, latencyMs: 0, error: 'Missing custom base URL' }
-		}
-		if (baseUrl) {
-			try {
-				const parsed = new URL(baseUrl)
-				const isLocal = parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1'
-				if (parsed.protocol !== 'https:' && !isLocal) {
-					return { success: false, latencyMs: 0, error: 'Insecure remote HTTP URL rejected' }
-				}
-			} catch {
-				return { success: false, latencyMs: 0, error: 'Invalid baseUrl format' }
-			}
-		}
-
-		const url = resolveTestEndpoint(provider, baseUrl)
-		const headers = probeHeadersFor(provider, apiKey)
-
-		const res = await fetch(url, { headers })
-		const latencyMs = Math.round((typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now()) - start)
-		if (res.ok) return { success: true, latencyMs }
-		return { success: false, latencyMs, error: `${res.status} ${res.statusText}` }
-	} catch (err: unknown) {
-		const latencyMs = Math.round((typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now()) - start)
-		const msg = err instanceof Error ? err.message : String(err)
-		return { success: false, latencyMs, error: msg }
-	}
-}
-
-// ---------------------------------------------------------------------------
-// Catalog — derived descriptions, unified filtering, hardware compatibility
-// ---------------------------------------------------------------------------
-
-function providerLabel(provider: AIProviderType): string {
-	const map: Record<string, string> = {
-		gemini: 'Google',
-		groq: 'Groq',
-		openrouter: 'OpenRouter',
-		zai: 'Z.AI',
-		ollama: 'Ollama',
-		openai: 'OpenAI',
-		anthropic: 'Anthropic',
-		deepseek: 'DeepSeek',
-		qwen: 'Qwen',
-		sarvam: 'Sarvam',
-		lmstudio: 'LM Studio',
-		custom: 'Custom',
-	}
-	return map[provider] || provider
-}
-
-export function formatModelDescription(model: ModelCard): string {
-	const ctx = model.contextWindow >= 1_000_000 ? `${model.contextWindow / 1_000_000}M` : `${Math.round(model.contextWindow / 1000)}k`
-	return `${providerLabel(model.provider)}, ${ctx} context, ${model.costTier}, ${model.hardwareTier}, ${model.speedTokPerSec} tok/s, ${model.category}`
-}
-
-export const DEFAULT_MODEL_CATALOG: ModelCard[] = RAW_CATALOG.map(m => ({
-	...m,
-	description: formatModelDescription(m),
+export const LOCAL_PROVIDERS = ['ollama', 'lmstudio', 'llamacpp'] as const
+export type LocalProviderId = typeof LOCAL_PROVIDERS[number]
+export const FREE_PRESETS = [
+  { provider: 'openrouter', model: 'openrouter/free', label: 'OpenRouter Free Models Router', contextTokens: null, sourceUrl: 'https://openrouter.ai/openrouter/free' },
+  { provider: 'gemini', model: 'gemini-3.1-flash-lite', label: 'Gemini Flash-Lite', contextTokens: 1_048_576, sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing' },
+  { provider: 'groq', model: 'openai/gpt-oss-20b', label: 'GPT OSS 20B', contextTokens: 131_072, sourceUrl: 'https://console.groq.com/docs/rate-limits' },
+  { provider: 'zai', model: 'glm-4.7-flash', label: 'GLM 4.7 Flash', contextTokens: null, sourceUrl: 'https://docs.z.ai/guides/overview/pricing' },
+].map(preset => ({
+  ...preset, provider: preset.provider as ProviderId, verifiedDate: '2026-11-24',
+  description: 'Availability and quota depend on your provider account.', tosFlag: true,
 }))
 
-export function filterModels(
-	catalog: ModelCard[],
-	filters: { costTier?: CostTier; hardwareTier?: HardwareTier; category?: ModelCategory; provider?: AIProviderType; searchQuery?: string }
-): ModelCard[] {
-	return rawFilterModels(catalog, filters)
+export function providerDefinition(provider: ProviderId): ProviderDefinition {
+  if (!Object.hasOwn(PROVIDERS, provider)) throw new Error('Unknown AI provider.')
+  return PROVIDERS[provider]
 }
 
-export function getModelById(modelId: string, customCatalog?: ModelCard[]): ModelCard | undefined {
-	const all = customCatalog ? [...DEFAULT_MODEL_CATALOG, ...customCatalog] : DEFAULT_MODEL_CATALOG
-	return all.find(m => m.id === modelId) || rawGetModelById(modelId, customCatalog)
+export function providerConnectionKind(config: Pick<ProviderConfig, 'provider' | 'model'>) {
+  if (providerDefinition(config.provider).local) return 'local'
+  return FREE_PRESETS.some(preset => preset.provider === config.provider && preset.model === config.model) ? 'free' : 'cloud'
 }
 
-export function getDefaultAIRegistryState(): AIRegistryState {
-	return rawGetDefaultAIRegistryState()
+export function allowsProviderEndpoint(provider: ProviderId) {
+  return Boolean(providerDefinition(provider).local) || provider === 'custom' || provider === 'qwen'
 }
 
-export function listModels(filters: {
-	costTier?: CostTier
-	hardwareTier?: HardwareTier
-	category?: ModelCategory
-	provider?: AIProviderType
-	searchQuery?: string
-}): ModelCard[] {
-	return filterModels(DEFAULT_MODEL_CATALOG, filters)
+const qwenLegacyHosts = new Set(['dashscope.aliyuncs.com', 'dashscope-intl.aliyuncs.com', 'dashscope-us.aliyuncs.com'])
+const qwenWorkspaceHost = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.maas\.aliyuncs\.com$/
+
+export function endpointFor(config: ProviderConfig) {
+  const definition = providerDefinition(config.provider)
+  if (config.baseUrl?.trim() && !allowsProviderEndpoint(config.provider)) {
+    throw new Error('Use the provider’s default endpoint or add a custom connection.')
+  }
+  let url: URL
+  try {
+    url = new URL(config.baseUrl?.trim() || definition.baseUrl || '')
+  } catch {
+    throw new Error('Enter a valid provider endpoint URL.')
+  }
+  const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+  if (url.username || url.password || url.hash || url.search || (url.protocol !== 'https:' && !(url.protocol === 'http:' && local))) {
+    throw new Error('Set a clean HTTPS endpoint or a localhost HTTP endpoint.')
+  }
+  if (definition.local && !local) throw new Error('Local model connections must use a localhost endpoint.')
+  if (config.provider === 'qwen' && (url.protocol !== 'https:' || url.port ||
+    url.pathname.replace(/\/+$/, '') !== '/compatible-mode/v1' ||
+    !(qwenLegacyHosts.has(url.hostname) || qwenWorkspaceHost.test(url.hostname)))) {
+    throw new Error('Use the HTTPS Chat Completions base URL from Alibaba Cloud Model Studio.')
+  }
+  return url.toString().replace(/\/+$/, '')
 }
 
-export function isModelCompatible(model: ModelCard, hardware: HardwareProfile | null | undefined): boolean {
-	if (!hardware) return true
-	if (model.costTier !== 'local') return true
-	if (model.hardwareTier === 'light') return true
-	if (model.hardwareTier === 'medium') return hardware.tier === 'medium' || hardware.tier === 'heavy'
-	if (model.hardwareTier === 'heavy') return hardware.tier === 'heavy'
-	return true
+export function localConnectionHelp(provider: ProviderId, origin = typeof location === 'undefined' ? 'http://localhost:3000' : location.origin) {
+  if (provider === 'ollama') return 'Start Ollama and allow this app origin in OLLAMA_ORIGINS (' + origin + ').'
+  if (provider === 'lmstudio') return 'Start the LM Studio local server and enable CORS for this app.'
+  return 'Start the llama.cpp server and allow this app in your browser’s local network settings.'
 }
-
-export function badgeForModel(
-	model: ModelCard,
-	hardware: HardwareProfile | null | undefined
-): { badgeText: string; badgeVariant: 'default' | 'secondary' | 'destructive' | 'outline' } | null {
-	if (!hardware || model.costTier !== 'local') return null
-	const rec = getHardwareRecommendation(hardware)
-	return { badgeText: rec.badgeText, badgeVariant: rec.badgeVariant }
-}
-
-// ---------------------------------------------------------------------------
-// Vault Storage seam — injected adapter (InMemory only; Supabase vault lives in lib/ai/vault.ts)
-// ---------------------------------------------------------------------------
-
-export interface VaultStorage {
-	load(userId: string): Promise<AIRegistryState | null>
-	save(userId: string, state: AIRegistryState): Promise<void>
-}
-
-export class InMemoryVaultStorage implements VaultStorage {
-	private store = new Map<string, AIRegistryState>()
-	async load(userId: string): Promise<AIRegistryState | null> {
-		return this.store.get(userId) ?? null
-	}
-	async save(userId: string, state: AIRegistryState): Promise<void> {
-		this.store.set(userId, structuredClone(state))
-	}
-	clear() { this.store.clear() }
-}
-
-// ---------------------------------------------------------------------------
-// Deep factory — the module's small interface
-// ---------------------------------------------------------------------------
-
-export interface ProviderRegistry {
-	readonly catalog: ModelCard[]
-	listModels(filters: Parameters<typeof filterModels>[1]): ModelCard[]
-	getModelById(id: string, custom?: ModelCard[]): ModelCard | undefined
-	getDefaultState(): AIRegistryState
-	formatDescription(model: ModelCard): string
-	isCompatible(model: ModelCard, hardware: HardwareProfile | null | undefined): boolean
-	isLocal(provider: AIProviderType): boolean
-	resolveBaseUrl(provider: AIProviderType, customBaseUrl?: string): string
-	headersFor(provider: AIProviderType, apiKey: string): Record<string, string>
-	resolveTestEndpoint(provider: AIProviderType, baseUrl?: string): string
-	resolveChatRequest(args: Parameters<typeof resolveChatRequest>[0]): ResolvedChatRequest
-	buildUpstreamRequest(args: Parameters<typeof buildUpstreamRequest>[0]): UpstreamRequest
-	testConnection(provider: AIProviderType, apiKey: string, baseUrl?: string): Promise<{ success: boolean; latencyMs: number; error?: string }>
-	isValidCustomUrl(url: string): boolean
-	vault?: VaultStorage
-}
-
-export function createProviderRegistry(opts?: { vaultStorage?: VaultStorage; catalog?: ModelCard[] }): ProviderRegistry {
-	const catalog = opts?.catalog ?? DEFAULT_MODEL_CATALOG
-	return {
-		catalog,
-		listModels: (filters) => filterModels(catalog, filters),
-		getModelById: (id, custom) => {
-			const all = custom ? [...catalog, ...custom] : catalog
-			return all.find(m => m.id === id) || rawGetModelById(id, custom)
-		},
-		getDefaultState: () => getDefaultAIRegistryState(),
-		formatDescription: formatModelDescription,
-		isCompatible: isModelCompatible,
-		isLocal: isLocalProvider,
-		resolveBaseUrl,
-		headersFor: headersForProvider,
-		resolveTestEndpoint,
-		resolveChatRequest,
-		buildUpstreamRequest,
-		testConnection: testProviderConnection,
-		isValidCustomUrl: (url: string) => isValidCustomUrl(url),
-		vault: opts?.vaultStorage,
-	}
-}
-
-export const providerRegistry = createProviderRegistry()

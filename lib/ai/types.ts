@@ -1,42 +1,34 @@
-import { HardwareTier } from './hardware'
+import type { ProviderId } from './provider-registry'
 
-export type AIProviderType = 'ollama' | 'lmstudio' | 'openrouter' | 'gemini' | 'groq' | 'anthropic' | 'openai' | 'deepseek' | 'qwen' | 'zai' | 'sarvam' | 'custom'
+export type AIProviderType = ProviderId
+export type ModelAccess = 'free' | 'byok' | 'local'
+export type ModelHardware = 'compact' | 'standard'
+export type ModelCapability = 'writing' | 'multilingual' | 'indic'
 
-export type CostTier = 'free' | 'paid' | 'local'
-
-export type ModelCategory = 'general' | 'reasoning' | 'coding' | 'indic'
-
-export interface ModelCard {
-	id: string
-	name: string
-	provider: AIProviderType
-	contextWindow: number
-	costTier: CostTier
-	hardwareTier: HardwareTier
-	speedTokPerSec: number
-	category: ModelCategory
-	description: string
-	pricing?: { inputPer1M: number; outputPer1M: number }
-	deepLinkUrl?: string
-	isPreset?: boolean
+interface ModelDetails {
+  provider: AIProviderType
+  model: string
+  label: string
+  contextTokens: number | null
+  capabilities: readonly ModelCapability[]
+  sourceUrl: string
+  verifiedDate: string
 }
 
-export interface AIProviderConfig {
-	id: string
-	provider: AIProviderType
-	name: string
-	enabled: boolean
-	baseUrl?: string
-	apiKey?: string
-	defaultModel: string
-	availableModels: string[]
-	createdAt: string
-	updatedAt: string
-}
+export type ModelCard = ModelDetails & (
+  | { access: 'local'; hardware: ModelHardware }
+  | { access: 'free' | 'byok'; hardware?: never }
+)
 
 export interface AIRegistryState {
-	activeProviderId: string
-	activeModelId: string
-	fallbackModelIds: string[]
-	providers: Record<string, AIProviderConfig>
+  models: readonly ModelCard[]
+}
+
+export interface ModelFilters {
+  query?: string
+  access?: ModelAccess
+  locality?: 'device' | 'cloud'
+  hardware?: ModelHardware
+  minContextTokens?: number
+  capability?: ModelCapability
 }

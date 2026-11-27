@@ -1,103 +1,55 @@
-/**
- * T12 — scheduled plan change (PDEC-12, US-5).
- *
- * Mutates the EXISTING subscription rather than creating a second one. Stripe's
- * mechanism is the Billing Portal (subscription-update enabled), so on the Stripe
- * rail this route deliberately refuses with `portal_required` and the UI opens
- * `/api/billing/portal` instead. Razorpay has no portal, so its scheduled-change
- * API is the mechanism: PATCH the subscription and report the provider's
- * effective date.
- *
- * The request carries only an opaque `{ tier, cycle }`; seats/cohort/price are
- * resolved server-side from the stored workspace row.
- */
+import { readOffer } from '@/lib/billing/catalog'
+import { changeRazorpayPlan, readPlanChanges } from '@/lib/billing/plan-changes'
+import { BillingError, billingAccount } from '@/lib/billing/workspace'
+import { readBoundedBody } from '@/lib/server/read-body'
 
-import { NextRequest, NextResponse } from "next/server"
-import { isBillingCycle, isBillingTier, TierUnavailableError, type Rail } from "@/lib/billing/gateway"
-import { gatewayForRail } from "@/lib/billing/gateway-factory"
-import {
-	billingContextErrorResponse,
-	createBillingAdminClient,
-	getRequestUserId,
-	resolveOwnerBilling,
-} from "@/lib/billing/workspace-billing"
+const headers = { 'Cache-Control': 'private, no-store' }
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
-	const userId = await getRequestUserId(request)
-	if (!userId) {
-		return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-	}
+function response(data: object, status = 200) {
+  return Response.json(data, { status, headers })
+}
 
-	let body: unknown
-	try {
-		body = await request.json()
-	} catch {
-		return NextResponse.json({ error: "Invalid request body", code: "invalid_body" }, { status: 400 })
-	}
-	const input = (body ?? {}) as Record<string, unknown>
-	const { tier, cycle } = input
-	if (!isBillingTier(tier) || !isBillingCycle(cycle)) {
-		return NextResponse.json(
-			{ error: "tier and cycle are required and must be valid.", code: "invalid_plan_change" },
-			{ status: 400 },
-		)
-	}
-	const seats = typeof input.seats === "number" && Number.isFinite(input.seats) ? input.seats : undefined
+function failure(error: unknown) {
+  if (error instanceof BillingError) return response({ error: error.code }, error.status)
+  return response({ error: 'billing_unavailable' }, 503)
+}
 
-	const admin = createBillingAdminClient()
-	let context
-	try {
-		context = await resolveOwnerBilling(admin, userId)
-	} catch (err) {
-		return billingContextErrorResponse(err)
-	}
+export async function GET() {
+  try {
+    return response(await readPlanChanges(await billingAccount()))
+  } catch (error) {
+    return failure(error)
+  }
+}
 
-	const plan = context.plan
-	if (!plan || plan.gateway === "none" || !plan.gateway_subscription_id) {
-		return NextResponse.json(
-			{ error: "No active subscription to change.", code: "no_subscription" },
-			{ status: 400 },
-		)
-	}
+export async function POST(request: Request) {
+  try {
+    const owner = await billingAccount()
+    if (request.headers.get('origin') !== owner.origin) return response({ error: 'invalid_origin' }, 403)
+    if (request.headers.get('content-type')?.split(';', 1)[0] !== 'application/json') {
+      return response({ error: 'invalid_request' }, 415)
+    }
+    let data: Record<string, unknown>
+    try {
+      const raw = await readBoundedBody(request, 2048)
+      data = raw && JSON.parse(raw.toString())
+      if (!data || typeof data !== 'object' || Array.isArray(data)) return response({ error: 'invalid_request' }, 400)
+    } catch {
+      return response({ error: 'invalid_request' }, 400)
+    }
 
-	if (plan.gateway === "stripe") {
-		return NextResponse.json(
-			{
-				error: "Stripe plan changes are completed in the Billing Portal.",
-				code: "portal_required",
-			},
-			{ status: 409 },
-		)
-	}
+    if (data.action === 'remove' && typeof data.key === 'string' && /^[a-f\d]{64}$/.test(data.key)) {
+      await changeRazorpayPlan(owner, { action: 'remove', key: data.key })
+    } else if (data.action === 'schedule') {
+      const offer = readOffer(data)
+      if (!offer || offer.currency !== 'INR') return response({ error: 'invalid_offer' }, 400)
+      await changeRazorpayPlan(owner, { action: 'schedule', offer })
+    } else {
+      return response({ error: 'invalid_request' }, 400)
+    }
 
-	if (tier === "team" && plan.currency !== "USD") {
-		return NextResponse.json(
-			{ error: "Team is USD-only at launch.", code: "tier_unavailable" },
-			{ status: 400 },
-		)
-	}
-
-	try {
-		const result = await gatewayForRail(plan.gateway as Rail).schedulePlanChange({
-			subscriptionRef: plan.gateway_subscription_id,
-			tier,
-			cycle,
-			seats,
-		})
-		return NextResponse.json({
-			tier: result.tier,
-			cycle: result.cycle,
-			effectiveAt: result.effectiveAt,
-			scheduledChangeRef: result.scheduledChangeRef,
-		})
-	} catch (err) {
-		if (err instanceof TierUnavailableError) {
-			return NextResponse.json({ error: err.message, code: "tier_unavailable" }, { status: 400 })
-		}
-		console.error("[billing/plan-change] schedulePlanChange failed:", err)
-		return NextResponse.json(
-			{ error: "Could not schedule the plan change. Please try again.", code: "plan_change_failed" },
-			{ status: 502 },
-		)
-	}
+    return response(await readPlanChanges(owner))
+  } catch (error) {
+    return failure(error)
+  }
 }

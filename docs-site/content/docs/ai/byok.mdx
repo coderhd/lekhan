@@ -1,61 +1,20 @@
 ---
-title: BYOK Setup
-description: Bring your own cloud provider key and keep it encrypted on your device.
+title: Use your own API key
+description: Add a hosted AI provider and choose which information goes with each request.
 ---
 
-**BYOK** (bring your own key) connects a cloud AI provider with a key you control. Cloud requests are
-relayed through Lekhan's API using *your* key: the key is stored encrypted, usage is never metered, and
-prompts are not kept as AI logs. Local providers (Ollama, LM Studio) are the exception — those requests
-go straight from your browser to `localhost`.
+1. In the local workspace, open **Writing assistant** and unlock or set up its passphrase.
+2. Open **Providers** and choose a provider. Use the provider’s key link to open its account page.
+3. Enter the key and your model ID. Choose **Test connection** to check the endpoint and discover models when the provider supports discovery.
+4. Choose **Save connection**. Switch to **Ask**, choose the connection, and send a short prompt.
+5. Use **Include this page with my request** only if the provider needs the page’s content.
 
-## Supported providers
+Lekhan’s browser stores encrypted connection settings. The passphrase is needed to unlock them. Provider availability, retention, rates, and limits depend on the selected service and account.
 
-- Anthropic
-- OpenAI
-- Google Gemini
-- DeepSeek
-- Qwen
-- Z.AI
-- Groq
-- OpenRouter
-- Sarvam
-- Any OpenAI-compatible endpoint (**Custom** base URL)
+For OpenAI-compatible services outside the supplied list, choose **OpenAI-compatible endpoint** and enter the API base URL. Include a version path such as `/v1` if the provider specifies it.
 
-You can configure more than one provider and switch between them per request.
+For Qwen, use the API key and HTTPS base URL for your Alibaba Cloud Model Studio workspace and region. Enter the OpenAI-compatible base ending in `/compatible-mode/v1` in **API endpoint**. [Model Studio endpoint guide](https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope)
 
-## Steps
+For Mistral, create a Studio API key under a plan with API access. Usage follows the terms and limits of your Mistral account. [Mistral API key guide](https://docs.mistral.ai/getting-started/quickstarts/studio/activate-and-generate-api-key)
 
-1. Create an API key in your provider's dashboard. Give it the narrowest scope that works for you.
-2. Open **Settings → AI** and choose the provider.
-3. Paste the key. Lekhan encrypts it with AES-256-GCM in your browser before it is stored; the
-   ciphertext is kept with your profile, and only the decryption key stays on your machine.
-4. Pick a model and send a test prompt.
-
-## What Lekhan stores
-
-- The **encrypted** key (AES-256-GCM ciphertext) with your profile.
-- Your provider and model selection.
-- Nothing else: prompts and responses are not persisted as AI logs, and usage is never metered.
-
-<Callout type="info" title="Encrypted before storage">
-The decryption material stays on the device where you added the key. If you clear site data or use
-another browser, you will need to paste the key again. Lekhan cannot recover a key for you.
-</Callout>
-
-## Security checklist
-
-- Use a dedicated key for Lekhan rather than a personal master key.
-- Set a spend limit at the provider if it offers one.
-- Rotate the key in the provider dashboard, then replace it in **Settings → AI**.
-- Remove a key in Lekhan when you stop using a provider; removal does not affect your pages.
-
-## Custom endpoints
-
-For a provider that speaks the OpenAI API, choose **Custom** and enter the base URL (for example an
-internal gateway, including its `/v1` prefix). The same encryption and relay rules apply.
-
-## Related
-
-- [Free-key providers](/docs/ai/free-key-on-ramp) if you do not have a key yet
-- [BYOL](/docs/ai/byol) for fully local inference
-- [AI troubleshooting](/docs/troubleshooting)
+See [Free-key presets](/docs/ai/free-key-on-ramp) and [Troubleshooting](/docs/troubleshooting).

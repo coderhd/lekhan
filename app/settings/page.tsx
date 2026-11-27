@@ -1,45 +1,30 @@
-'use client'
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import { ArrowLeft } from 'lucide-react'
+import { getTranslations } from 'next-intl/server'
+import BillingPanel from '@/components/settings/billing-panel'
+import WebSettings from '@/components/settings/web-settings'
+import { accountContext } from '@/lib/auth/server'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import GlobalLoader from '@/components/global-loader'
-import SettingsClient from '@/components/settings-client'
-import { fetchOwnedPagesWithMembers } from '@/services/graph'
+export async function generateMetadata() {
+  const t = await getTranslations('settings')
+  return { title: t('title') + ' · Lekhan' }
+}
 
-export default function SettingsPage() {
-	const router = useRouter()
-	const [user, setUser] = useState<any | null>(null)
-	const [pages, setPages] = useState<any[]>([])
-	const [loading, setLoading] = useState(true)
-
-	useEffect(() => {
-		const init = async () => {
-			try {
-				const { data: { user: sessionUser } } = await supabase.auth.getUser()
-				if (!sessionUser) {
-					router.push('/login')
-					return
-				}
-				setUser({
-					id: sessionUser.id,
-					email: sessionUser.email,
-					full_name: sessionUser.user_metadata?.full_name
-				})
-				const pages = await fetchOwnedPagesWithMembers(sessionUser.id)
-				setPages(pages)
-			} catch (err) {
-				console.error(err)
-				router.push('/login')
-			} finally {
-				setLoading(false)
-			}
-		}
-		init()
-	}, [router])
-
-	if (loading) return <GlobalLoader text="Loading Settings..." />
-	if (!user) return null
-
-	return <SettingsClient user={user} pages={pages} setPages={setPages} />
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string; checkout?: string; transfer?: string }> }) {
+  const account = await accountContext()
+  if (!account) redirect('/login')
+  const [query, t] = await Promise.all([searchParams, getTranslations('settings')])
+  const user = (await account.client.auth.getUser()).data.user
+  const savedName = user?.user_metadata.full_name
+  return <main className="settings-page">
+    <header className="account-header">
+      <Link className="account-brand" href="/"><span className="brand-mark" aria-hidden="true">L</span> Lekhan</Link>
+      <Link className="account-link" href="/workspace"><ArrowLeft aria-hidden="true" size={16} /> {t('backToWorkspace')}</Link>
+    </header>
+    <WebSettings scope={'account:' + account.subject} available={true} openTab={query.tab}
+      profile={{ subject: account.subject, email: account.email,
+        displayName: typeof savedName === 'string' ? savedName.slice(0, 100) : account.displayName }}
+      plan={<BillingPanel account={account} query={query} />} />
+  </main>
 }

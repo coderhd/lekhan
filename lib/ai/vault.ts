@@ -1,73 +1,76 @@
-import { encryptDocumentState, decryptDocumentState } from '../crypto'
-import { AIRegistryState, AIProviderType } from './types'
-import { testProviderConnection as registryTestConnection } from './provider-registry'
+import { strFromU8 } from 'fflate'
+import { MAX_FALLBACK_MODELS, providerDefinition, type ProviderConfig } from './provider-registry'
+import { providerVaultLimit } from './vault-sync'
 
-export async function encryptAIRegistry(state: AIRegistryState, key: CryptoKey): Promise<Uint8Array> {
-	const json = JSON.stringify(state)
-	const bytes = new TextEncoder().encode(json)
-	return encryptDocumentState(bytes, key)
+const encoder = new TextEncoder()
+const decoder = new TextDecoder('utf-8', { fatal: true })
+const context = encoder.encode('Lekhan provider vault v1')
+const iterations = 600_000
+
+const encode = (bytes: Uint8Array) => btoa(strFromU8(bytes, true))
+const decode = (value: string) => Uint8Array.from(atob(value), char => char.charCodeAt(0))
+
+async function derive(passphrase: string, salt: Uint8Array<ArrayBuffer>) {
+  const base = await crypto.subtle.importKey('raw', encoder.encode(passphrase), 'PBKDF2', false, ['deriveKey'])
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations },
+    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'],
+  )
 }
 
-export async function decryptAIRegistry(payload: Uint8Array, key: CryptoKey): Promise<AIRegistryState> {
-	const decryptedBytes = await decryptDocumentState(payload, key)
-	const json = new TextDecoder().decode(decryptedBytes)
-	return JSON.parse(json) as AIRegistryState
+function validateConfigs(value: unknown): ProviderConfig[] {
+  if (!Array.isArray(value) || value.length > 100) throw new Error('Invalid provider configurations.')
+  const ids = new Set<string>()
+  return value.map(config => {
+    if (!config || typeof config !== 'object' ||
+      typeof config.id !== 'string' || typeof config.model !== 'string' || typeof config.provider !== 'string' ||
+      ids.has(config.id) ||
+      ['label', 'baseUrl', 'apiKey'].some(key => config[key] !== undefined && typeof config[key] !== 'string')) {
+      throw new Error('Invalid provider configuration.')
+    }
+    providerDefinition(config.provider)
+    const fallback: unknown = config.fallback
+    if (fallback !== undefined && (!Array.isArray(fallback) || fallback.length > MAX_FALLBACK_MODELS ||
+      fallback.some(id => typeof id !== 'string' || id.length > 270 || !/^(provider|device):.+$/.test(id)) ||
+      new Set(fallback).size !== fallback.length)) throw new Error('Invalid model fallback chain.')
+    ids.add(config.id)
+    const { id, provider, model, label, baseUrl, apiKey } = config
+    return { id, provider, model, label, baseUrl, apiKey, ...(fallback === undefined ? {} : { fallback: fallback as string[] }) }
+  })
 }
 
-function uint8ArrayToBase64(bytes: Uint8Array): string {
-	if (typeof Buffer !== 'undefined') {
-		return Buffer.from(bytes).toString('base64')
-	}
-	let binary = ''
-	const chunkSize = 8192
-	for (let i = 0; i < bytes.length; i += chunkSize) {
-		const chunk = bytes.subarray(i, i + chunkSize)
-		binary += String.fromCharCode.apply(null, Array.from(chunk))
-	}
-	return btoa(binary)
+function session(key: CryptoKey, salt: Uint8Array<ArrayBuffer>, configs: ProviderConfig[]) {
+  return {
+    configs,
+    async seal(next: ProviderConfig[] = configs) {
+      const iv = crypto.getRandomValues(new Uint8Array(12))
+      const clear = encoder.encode(JSON.stringify(validateConfigs(next)))
+      const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: context }, key, clear)
+      const envelope = ['v1', encode(salt), encode(iv), encode(new Uint8Array(data))].join('.')
+      if (envelope.length > providerVaultLimit) throw new Error('The provider vault exceeded the size limit.')
+      return envelope
+    },
+  }
 }
 
-function base64ToUint8Array(base64: string): Uint8Array {
-	if (typeof Buffer !== 'undefined') {
-		return new Uint8Array(Buffer.from(base64, 'base64'))
-	}
-	const binary = atob(base64)
-	const bytes = new Uint8Array(binary.length)
-	for (let i = 0; i < binary.length; i++) {
-		bytes[i] = binary.charCodeAt(i)
-	}
-	return bytes
+export async function createProviderVault(passphrase: string, configs: ProviderConfig[] = []) {
+  if (passphrase.length < 12) throw new Error('Use a passphrase with at least 12 characters.')
+  const salt = crypto.getRandomValues(new Uint8Array(16))
+  return session(await derive(passphrase, salt), salt, validateConfigs(configs))
 }
 
-export async function syncVaultToSupabase(supabaseClient: any, userId: string, encryptedPayload: Uint8Array): Promise<void> {
-	const base64Str = uint8ArrayToBase64(encryptedPayload)
-
-	const { error } = await supabaseClient
-		.from('profiles')
-		.update({ encrypted_ai_keys: base64Str, updated_at: new Date().toISOString() })
-		.eq('id', userId)
-		
-	if (error) {
-		throw new Error(error.message || 'Failed to sync vault to Supabase')
-	}
-}
-
-export async function loadVaultFromSupabase(supabaseClient: any, userId: string, key: CryptoKey): Promise<AIRegistryState | null> {
-	const { data, error } = await supabaseClient
-		.from('profiles')
-		.select('encrypted_ai_keys')
-		.eq('id', userId)
-		.maybeSingle()
-
-	if (error || !data || !data.encrypted_ai_keys) {
-		return null
-	}
-
-	const payload = base64ToUint8Array(data.encrypted_ai_keys)
-	return decryptAIRegistry(payload, key)
-}
-
-// Thin adapter — delegates to ProviderRegistry deep module (single source of truth)
-export async function testProviderKey(provider: AIProviderType, apiKey: string, baseUrl?: string): Promise<{ success: boolean; latencyMs: number; error?: string }> {
-	return registryTestConnection(provider, apiKey, baseUrl)
+export async function unlockProviderVault(passphrase: string, envelope: string) {
+  try {
+    if (envelope.length > providerVaultLimit) throw new Error('Vault exceeds limit')
+    const [version, encodedSalt, encodedIv, encodedData, extra] = envelope.split('.')
+    if (version !== 'v1' || extra !== undefined) throw new Error('Invalid envelope')
+    const salt = decode(encodedSalt)
+    const iv = decode(encodedIv)
+    if (salt.length !== 16 || iv.length !== 12) throw new Error('Invalid envelope')
+    const key = await derive(passphrase, salt)
+    const clear = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData: context }, key, decode(encodedData))
+    return session(key, salt, validateConfigs(JSON.parse(decoder.decode(clear))))
+  } catch {
+    throw new Error('Could not unlock the provider vault. Check your passphrase or vault file.')
+  }
 }

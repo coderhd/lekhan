@@ -25,13 +25,11 @@
  * truth for the eventual terminal downgrade. The grace anchor is read from the
  * row, never derived from `gateway_events.processed_at`.
  *
- * This module is deliberately runtime-import-free: the sync relay requires it
- * from CommonJS (`server/auth.js`), and Node's TypeScript loader needs explicit
- * extensions for relative imports. Type-only imports are erased.
+ * Type-only imports let the Next.js app and Node relay share this module.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js"
-import type { PlanTier } from "../tier-limits"
+import { getPlanLimits, type PlanTier } from "../tier-limits.ts"
 
 export type BillingCycle = "monthly" | "annual" | "none"
 export type EntitlementStatus = "active" | "past_due" | "canceled" | "incomplete" | "none"
@@ -183,22 +181,16 @@ export function entitlementFromRow(
 	}
 }
 
-/** Default browser/server client, resolved lazily so the relay can require this module. */
-async function defaultClient(): Promise<SupabaseClient> {
-	const mod = await import("../supabase")
-	return mod.supabase as SupabaseClient
-}
-
 /**
  * Reads the workspace's entitlement row. The row is owner-readable via RLS;
  * query errors propagate (callers must not silently downgrade on a failed read).
  */
 export async function resolveWorkspaceEntitlement(
 	workspaceId: string,
-	client?: SupabaseClient,
+	client: SupabaseClient,
 	options: EntitlementResolveOptions = {},
 ): Promise<WorkspaceEntitlement> {
-	const db = client ?? (await defaultClient())
+	const db = client
 	const { data, error } = await db
 		.from("workspace_plans")
 		.select(ENTITLEMENT_COLUMNS)
@@ -215,6 +207,23 @@ export async function resolveWorkspaceEntitlement(
 	return entitlementFromRow(data as WorkspacePlanRowLike, options)
 }
 
+export async function workspaceEntitlementOrFree(workspaceId: string, client: SupabaseClient) {
+	try {
+		return await resolveWorkspaceEntitlement(workspaceId, client)
+	} catch (failure) {
+		if (!(failure instanceof EntitlementResolutionError) || failure.stage !== 'plan-missing') throw failure
+		return null
+	}
+}
+
+export function collaboratorCapacity(plan: WorkspaceEntitlement | null) {
+  return {
+    collaborator_limit: getPlanLimits(plan?.tier, plan?.seats).maxDistinctCollaborators,
+    expected_tier: plan?.tier ?? 'free',
+    expected_seats: plan?.seats ?? null,
+  }
+}
+
 /**
  * Owner id → workspace id → `workspace_plans` row. Returns `null` when the
  * owner has no workspace yet (or RLS hides it, e.g. an invitee resolving the
@@ -222,10 +231,10 @@ export async function resolveWorkspaceEntitlement(
  */
 export async function resolveOwnerWorkspaceEntitlement(
 	ownerId: string,
-	client?: SupabaseClient,
+	client: SupabaseClient,
 	options: EntitlementResolveOptions = {},
 ): Promise<WorkspaceEntitlement | null> {
-	const db = client ?? (await defaultClient())
+	const db = client
 	const { data: workspace, error: workspaceError } = await db
 		.from("workspaces")
 		.select("id")
