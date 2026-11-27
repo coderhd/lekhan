@@ -17,7 +17,7 @@ import type { PlanLimits, PlanTier } from '@/lib/tier-limits'
 export default function WebWorkspace({ storageScope, cloudEnabled, signedIn, mirrorEnabled, automaticMirror, profile, plan }: {
   storageScope: string; cloudEnabled: boolean; signedIn: boolean; mirrorEnabled: boolean; automaticMirror: boolean
   profile?: SettingsProfile
-  plan?: PlanLimits & { tier: PlanTier; relayReadOnly: boolean }
+  plan?: (PlanLimits & { tier: PlanTier; relayReadOnly: boolean }) | null
 }) {
   const router = useRouter()
   const t = useTranslations('auth')
@@ -55,6 +55,6 @@ export default function WebWorkspace({ storageScope, cloudEnabled, signedIn, mir
         ? <form action={signOut}><button className="nav-action" type="submit"><LogOut size={15} /> {t('signout')}</button></form>
         : <Link className="nav-action account-link" href="/login"><LogIn size={15} /> {t('login')}</Link>}
     </>} />
-    {open && <WebSettings scope={storageScope} profile={profile} available={cloudEnabled} planSummary={plan} onClose={() => setOpen(false)} />}
+    {open && <WebSettings scope={storageScope} profile={profile} available={cloudEnabled} planSummary={plan ?? undefined} onClose={() => setOpen(false)} />}
   </>
 }

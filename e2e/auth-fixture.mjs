@@ -81,6 +81,10 @@ const server = createServer(async (request, response) => {
     response.writeHead(204).end()
     return
   }
+  if (request.method === 'GET' && url.pathname === '/rest/v1/workspaces') {
+    response.writeHead(200, { 'content-type': 'application/json' }).end('[]')
+    return
+  }
   if (request.method === 'POST' && url.pathname === '/test/token') {
     const body = await readJson(request)
     const now = Math.floor(Date.now() / 1000)
