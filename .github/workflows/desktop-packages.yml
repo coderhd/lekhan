@@ -146,6 +146,10 @@ jobs:
             echo 'Set the Developer ID Application identity, certificate, password, and notarization credentials.'
             exit 1
           fi
+          if [[ '${{ inputs.platform_signing }}' != 'true' ]]; then
+            # Tauri tries to import APPLE_CERTIFICATE whenever it is set, even if it is empty.
+            unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_API_ISSUER APPLE_API_KEY
+          fi
           platform_config=()
           if [[ -n "$LEKHAN_WINDOWS_SIGNING_CONFIG" ]]; then
             platform_config=(--config "$LEKHAN_WINDOWS_SIGNING_CONFIG")
