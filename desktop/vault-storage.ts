@@ -88,8 +88,8 @@ export function readMarkdownVault(snapshot: VaultSnapshot): VaultRead {
     const createdAt = previous?.createdAt ?? updatedAt
     const title = previous?.title ?? filename(path)
     entries.set(id, { path, id, folder: true, favorite: previous?.favorite ?? false, createdAt, title })
-    pages.push({ id, title, parentId: parent ? folderId(parent) : null, markdown: '', favorite: previous?.favorite ?? false,
-      createdAt, updatedAt })
+    pages.push({ id, title, parentId: parent ? folderId(parent) : null, markdown: '', folder: true,
+      favorite: previous?.favorite ?? false, createdAt, updatedAt })
   }
   for (const file of files) {
     const note = markdownNote(file.path, file.text)
@@ -159,7 +159,7 @@ function vaultLayout(workspace: Workspace, baseline: VaultRead) {
     const enclosing = parentEntry ? parentEntry.folder ? parentEntry.path : parentEntry.path.replace(extension, '') : ''
     const oldEntry = baseline.entries.get(page.id)
     const oldPage = previousPages.get(page.id)
-    const folder = !!oldEntry?.folder && !page.markdown && !page.frontmatter
+    const folder = !!(oldEntry?.folder || page.folder) && !page.markdown && !page.frontmatter
     const oldName = oldEntry ? filename(oldEntry.folder ? oldEntry.path : oldEntry.path.replace(extension, '')) : null
     const base = oldName && oldPage?.title === page.title ? oldName : portableName(page.title)
     const suffix = folder ? '' : oldEntry?.path.match(extension)?.[0] ?? '.md'

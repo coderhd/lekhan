@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { applyVaultImport } from '../lib/workspace'
+import { applyVaultImport, getBacklinks, notebookNavigation, searchPages, exportPage } from '../lib/workspace'
 import { planVaultImport } from '../lib/vault-import'
-import { getBacklinks, searchPages, exportPage } from '../lib/workspace'
 import type { Workspace } from '../lib/types'
 
 const data = (text: string) => new TextEncoder().encode(text)
@@ -20,6 +19,16 @@ describe('vault import into the page graph', () => {
     const { workspace, report } = applyVaultImport(empty, planned)
     const first = workspace.pages.find(page => page.title === 'First steps')!
     const start = workspace.pages.find(page => page.title === 'Start')!
+    const library = workspace.pages.find(page => page.title === 'Library')!
+    const guide = workspace.pages.find(page => page.title === 'Guide')!
+    const emptyFolder = workspace.pages.find(page => page.title === 'Empty')!
+    expect(library.folder).toBe(true)
+    expect(guide.folder).toBe(true)
+    expect(emptyFolder.folder).toBe(true)
+    expect(start.folder).toBeUndefined()
+    expect(workspace.activePageId).toBe(first.id)
+    expect(first.folder).toBeUndefined()
+    expect(notebookNavigation(workspace.pages).childPages.get(null)?.find(item => item.id === library.id)?.folder).toBe(true)
     expect(workspace.pages.find(page => page.id === first.parentId)?.title).toBe('Guide')
     expect(workspace.pages.some(page => page.title === 'Empty')).toBe(true)
     expect(first.properties).toMatchObject({ title: 'First steps', tags: ['launch'], rating: 5 })

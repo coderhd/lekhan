@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'rea
 import { type Editor, EditorContent, useEditor } from '@tiptap/react'
 import { isChangeOrigin } from '@tiptap/extension-collaboration'
 import { FileText, Link2 } from 'lucide-react'
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
 import { useTranslations } from '@/lib/i18n/client'
 import { trackWritingEdit } from '@/lib/analytics'
 import type { CloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
@@ -130,19 +131,15 @@ function PageEditorView(props: PageEditorProps) {
   }
 
   const modePicker = showModePicker ? (
-    <div className="writer-mode-picker" role="group" aria-label={editorText('editorMode')}>
-      <button
-        type="button"
-        aria-pressed={!source}
-        disabled={sourceOnly}
-        onClick={() => selectMode(false)}
-      >
-        {editorText('write')}
-      </button>
-      <button type="button" aria-pressed={source} onClick={() => selectMode(true)}>
-        {editorText('markdown')}
-      </button>
-    </div>
+    <SegmentedControl
+      label={editorText('editorMode')}
+      size="sm"
+      value={source ? 'markdown' : 'write'}
+      onChange={value => selectMode(value === 'markdown')}
+    >
+      <SegmentedControlItem value="write" label={editorText('write')} isDisabled={sourceOnly} />
+      <SegmentedControlItem value="markdown" label={editorText('markdown')} />
+    </SegmentedControl>
   ) : null
 
   const focusBody = focusOnMount || focusAfterSwitch

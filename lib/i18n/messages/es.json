@@ -189,7 +189,9 @@
     "noResults": "No se encontraron páginas.",
     "navigate": "Navegar",
     "open": "Abrir",
-    "close": "Cerrar"
+    "close": "Cerrar",
+    "addPageInFolder": "Nueva página en {title}",
+    "workspaceMenu": "Opciones del espacio"
   },
   "editor-ai": {
     "writingAssistant": "Asistente de escritura",
@@ -639,7 +641,7 @@
     "pricePerSeat": "{price} por plaza",
     "teamUsd": "Ver Team en USD",
     "openingCheckout": "Abriendo el proceso de pago…",
-    "chooseTier": "Elegir {nivel}",
+    "chooseTier": "Elegir {plan}",
     "checkoutUnavailable": "Pago no disponible",
     "ownershipAccepted": "Ya eres el propietario de este espacio.",
     "panelUnavailable": "La facturación no está disponible temporalmente. Puedes abrir tu espacio y seguir escribiendo.",
@@ -984,6 +986,19 @@
     "emailTitle": "Enviar un correo",
     "emailBody": "Para acceso a la cuenta, solicitudes de privacidad o preguntas sobre el acceso anticipado.",
     "githubTitle": "Abrir incidencias en GitHub",
-    "githubBody": "Para errores y propuestas. Evita incluir contenido de páginas privadas."
+    "githubBody": "Para errores y propuestas. Evita incluir contenido de páginas privadas.",
+    "pricing": "Precios",
+    "pricingTitle": "Planes sencillos para notas personales y espacios en equipo.",
+    "pricingIntro": "Empieza gratis en tu navegador. Mejora en cualquier momento para sincronización en la nube, historial de versiones y asientos de equipo.",
+    "freeStart": "Empezar gratis",
+    "recommended": "Recomendado",
+    "signInToBuy": "Inicia sesión para comprar {plan}"
+  },
+  "cookie-banner": {
+    "title": "Cookies de análisis",
+    "description": "Las cookies esenciales mantienen tu sesión abierta. El análisis opcional ayuda a mejorar Lekhan sin registrar tus notas.",
+    "accept": "Aceptar análisis",
+    "decline": "Solo esenciales",
+    "privacyPolicy": "Política de privacidad"
   }
 }

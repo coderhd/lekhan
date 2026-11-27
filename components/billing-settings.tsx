@@ -3,6 +3,15 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowUpRight, Check } from 'lucide-react'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
+import { Grid } from '@astryxdesign/core/Grid'
+import { Heading } from '@astryxdesign/core/Heading'
+import { NumberInput } from '@astryxdesign/core/NumberInput'
+import { Selector } from '@astryxdesign/core/Selector'
+import { HStack, VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
 import { useLocale, useTranslations } from '@/lib/i18n/client'
 import { billingMeasurement, bootstrapTierGates, track } from '@/lib/analytics'
 import { priceLabel, readOffer, unitAmount, type Currency, type Cycle, type PaidTier } from '@/lib/billing/catalog'
@@ -30,21 +39,24 @@ const paymentMessages = {
 type BillingFailure = (typeof errors)[keyof typeof errors] | 'actionUnavailable' | 'openFailed'
 type BillingNotice = (typeof paymentMessages)[keyof typeof paymentMessages] | 'checkAgain' | 'cancellationScheduled'
 
-export default function BillingSettings({ summary, scope = 'personal', defaultCurrency, available, returned, paused }: {
+export default function BillingSettings({ summary, scope = 'personal', defaultCurrency, available, returned, paused, initialCycle, initialTier, initialSeats }: {
   summary: Awaited<ReturnType<typeof readBillingSummary>>
   scope?: string
   defaultCurrency: Currency
   available: string[]
   returned: boolean
   paused: boolean
+  initialCycle?: Cycle
+  initialTier?: PaidTier
+  initialSeats?: number
 }) {
   const { pending, entitlement, canManage } = summary
   const locale = useLocale()
   const t = useTranslations('billing')
   const router = useRouter()
   const [currency, setCurrency] = useState<Currency>(defaultCurrency)
-  const [cycle, setCycle] = useState<Cycle>(pending?.cycle ?? 'monthly')
-  const [seats, setSeats] = useState(String(pending?.tier === 'team' ? pending.seats : 2))
+  const [cycle, setCycle] = useState<Cycle>(initialCycle ?? pending?.cycle ?? 'monthly')
+  const [seats, setSeats] = useState<number>(initialSeats ?? (pending?.tier === 'team' ? pending.seats : 2))
   const [busy, setBusy] = useState<string | null>(null)
   const [confirmCancel, setConfirmCancel] = useState(false)
   const [showPlanChanges, setShowPlanChanges] = useState(false)
@@ -69,7 +81,7 @@ export default function BillingSettings({ summary, scope = 'personal', defaultCu
   }, [waiting, router])
 
   async function act(action: 'checkout' | 'portal' | 'cancel' | 'check', tier?: PaidTier, usePending = false) {
-    const selected = usePending && pending ? pending : { tier, cycle, currency, seats: Number(seats) }
+    const selected = usePending && pending ? pending : { tier, cycle, currency, seats }
     const offer = action === 'checkout' ? readOffer(selected) : null
     if (action === 'checkout' && !offer) {
       setFailure('invalidOffer')
@@ -115,85 +127,210 @@ export default function BillingSettings({ summary, scope = 'personal', defaultCu
   const periodEnd = entitlement?.currentPeriodEnd
     ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(entitlement.currentPeriodEnd))
     : null
-  return <>
-    <section className="billing-current" aria-label={t('currentPlan')}>
-      <div>
-        <p>{t('currentPlan')}</p>
-        <h2>{!entitlement || entitlement.tier === 'free' ? t('free') : tierNames[entitlement.tier]}</h2>
-      </div>
-      <div>
-        {entitlement?.cancelAtPeriodEnd ? <p>{periodEnd ? t('endsOn', { date: periodEnd }) : t('endsAtPeriod')}</p>
-          : periodEnd && entitlement?.status === 'active' ? <p>{t('renewsOn', { date: periodEnd })}</p>
-          : <p>{canManage ? t('workspaceSubscription') : t('localUnlimited')}</p>}
-        {entitlement?.isFounding && <p>{t('foundingPricing')}</p>}
-      </div>
-    </section>
-    {entitlement?.status === 'past_due' && <p role="status" className="billing-notice">
-      {entitlement.relayReadOnly ? t('paymentReadOnly') : t('paymentAttention')}
-    </p>}
-    {returned && <p role="status" className="billing-notice">{canManage && !pending ? t('subscriptionReady') : t('awaitingPayment')}</p>}
-    {summary.canReattach && <p className="billing-notice">
-      {t('reattach')}
-    </p>}
-    {paused && !canManage && <p className="billing-notice">{t('pausedCheckout')}</p>}
-    {failure && <p className="account-error" role="alert">{t(failure)}</p>}
-    {notice && <p className="billing-notice" role="status">{t(notice)}</p>}
+  return (
+    <VStack gap={4}>
+      <Card padding={4} elevation="low" className="billing-current" aria-label={t('currentPlan')}>
+        <HStack justify="between" align="center" wrap="wrap" gap={3}>
+          <VStack gap={0.5}>
+            <Text type="supporting" color="secondary">{t('currentPlan')}</Text>
+            <Heading level={2}>{!entitlement || entitlement.tier === 'free' ? t('free') : tierNames[entitlement.tier]}</Heading>
+          </VStack>
+          <VStack gap={0.5}>
+            <Text color="secondary">
+              {entitlement?.cancelAtPeriodEnd ? (periodEnd ? t('endsOn', { date: periodEnd }) : t('endsAtPeriod'))
+                : periodEnd && entitlement?.status === 'active' ? t('renewsOn', { date: periodEnd })
+                  : canManage ? t('workspaceSubscription') : t('localUnlimited')}
+            </Text>
+            {entitlement?.isFounding && <Text type="supporting" weight="semibold">{t('foundingPricing')}</Text>}
+          </VStack>
+        </HStack>
+      </Card>
 
-    {canManage ? <div className="billing-actions">
-      <button className="primary-button" disabled={!!busy} onClick={() => void act('portal')}>{t('managePayment')} <ArrowUpRight size={16} /></button>
-      {summary.gateway === 'razorpay' && <button
-        type="button" className="secondary-button" aria-expanded={showPlanChanges} disabled={!!busy}
-        onClick={() => { setConfirmCancel(false); setShowPlanChanges(value => !value) }}
-      >{t('changePlan')}</button>}
-      {!entitlement?.cancelAtPeriodEnd && <button className="secondary-button" disabled={!!busy} onClick={() => setConfirmCancel(value => !value)}>{t('cancelSubscription')}</button>}
-      {showPlanChanges && summary.gateway === 'razorpay' && <RazorpayPlanChanges />}
-      {confirmCancel && <div className="billing-confirm">
-        <p>{periodEnd ? t('keepsThroughDate', { date: periodEnd }) : t('keepsThroughPeriod')}</p>
-        <button className="secondary-button" disabled={!!busy} onClick={() => void act('cancel')}>{t('confirmCancellation')}</button>
-        <button className="secondary-button" disabled={!!busy} onClick={() => setConfirmCancel(false)}>{t('keepSubscription')}</button>
-      </div>}
-    </div> : <>
-      {pending && <div className="billing-actions">
-        <button className="secondary-button" disabled={!!busy} onClick={() => void act('checkout', pending.tier, true)}>
-          {t('resumeCheckout', { plan: tierNames[pending.tier] })} <ArrowUpRight size={15} />
-        </button>
-        <button className="secondary-button" disabled={!!busy} onClick={() => void act('check')}>
-          {busy === 'check' ? t('checkingPayment') : t('checkPayment')}
-        </button>
-      </div>}
-      <div className="billing-controls">
-        <label>{t('currency')}<select value={currency} onChange={event => setCurrency(event.target.value === 'INR' ? 'INR' : 'USD')}>
-          <option value="USD">{t('usd')}</option>
-          <option value="INR">{t('inr')}</option>
-        </select></label>
-        <label>{t('period')}<select value={cycle} onChange={event => setCycle(event.target.value === 'annual' ? 'annual' : 'monthly')}>
-          <option value="monthly">{t('monthly')}</option><option value="annual">{t('annual')}</option>
-        </select></label>
-      </div>
-      <div className="billing-plans" aria-label={t('paidPlans')}>
-        {plans.map(({ tier, features }) => {
-          const teamInr = tier === 'team' && currency === 'INR'
-          const offer = readOffer({ tier, cycle, currency, seats: Number(seats) })
-          const amount = offer && unitAmount(offer, founding) * offer.seats
-          const enabled = available.includes(`${currency}:${tier}:${cycle}`)
-          return <section className="billing-plan" key={tier} aria-labelledby={`plan-${tier}`}>
-            <h2 id={`plan-${tier}`}>{tierNames[tier]}</h2>
-            <div className="billing-price">
-              <strong>{amount ? priceLabel(amount, currency, locale) : teamInr ? t('usdOnly') : '—'}</strong>
-              {amount && <span>{t(cycle === 'annual' ? 'perYear' : 'perMonth')}</span>}
-            </div>
-            {tier === 'team' && !teamInr && <label className="billing-seats">{t('seats')}
-              <input type="number" min={2} step={1} value={seats} onChange={event => setSeats(event.target.value)} />
-              {offer && <span>{t('pricePerSeat', { price: priceLabel(unitAmount(offer, founding), currency, locale) })}</span>}
-            </label>}
-            <ul>{features.map(feature => <li key={feature}><Check size={15} aria-hidden="true" /> {t(feature)}</li>)}</ul>
-            {teamInr ? <button className="secondary-button" onClick={() => setCurrency('USD')}>{t('teamUsd')}</button>
-              : <button className="primary-button" disabled={!enabled || !offer || !!busy} onClick={() => void act('checkout', tier)}>
-                {busy === tier ? t('openingCheckout') : enabled ? t('chooseTier', { plan: tierNames[tier] }) : t('checkoutUnavailable')} <ArrowUpRight size={15} />
-              </button>}
-          </section>
-        })}
-      </div>
-    </>}
-  </>
+      {entitlement?.status === 'past_due' && (
+        <div role="status">
+          <Banner status="warning" collapsible={false} title={entitlement.relayReadOnly ? t('paymentReadOnly') : t('paymentAttention')} />
+        </div>
+      )}
+      {returned && (
+        <div role="status">
+          <Banner status="info" collapsible={false} title={canManage && !pending ? t('subscriptionReady') : t('awaitingPayment')} />
+        </div>
+      )}
+      {summary.canReattach && (
+        <Banner status="info" collapsible={false} title={t('reattach')} />
+      )}
+      {paused && !canManage && (
+        <Banner status="info" collapsible={false} title={t('pausedCheckout')} />
+      )}
+      {failure && (
+        <div role="alert">
+          <Banner status="error" collapsible={false} title={t(failure)} />
+        </div>
+      )}
+      {notice && (
+        <div role="status">
+          <Banner status="info" collapsible={false} title={t(notice)} />
+        </div>
+      )}
+
+      {canManage ? (
+        <VStack gap={3}>
+          <HStack gap={2} wrap="wrap" className="billing-actions">
+            <Button
+              type="button"
+              variant="primary"
+              isDisabled={!!busy}
+              label={t('managePayment')}
+              endContent={<ArrowUpRight size={16} />}
+              onClick={() => void act('portal')}
+            />
+            {summary.gateway === 'razorpay' && (
+              <Button
+                type="button"
+                variant="secondary"
+                aria-expanded={showPlanChanges}
+                isDisabled={!!busy}
+                label={t('changePlan')}
+                onClick={() => { setConfirmCancel(false); setShowPlanChanges(value => !value) }}
+              />
+            )}
+            {!entitlement?.cancelAtPeriodEnd && (
+              <Button
+                type="button"
+                variant="secondary"
+                isDisabled={!!busy}
+                label={t('cancelSubscription')}
+                onClick={() => setConfirmCancel(value => !value)}
+              />
+            )}
+          </HStack>
+          {showPlanChanges && summary.gateway === 'razorpay' && <RazorpayPlanChanges />}
+          {confirmCancel && (
+            <Card padding={4} className="billing-confirm">
+              <VStack gap={3}>
+                <Text>{periodEnd ? t('keepsThroughDate', { date: periodEnd }) : t('keepsThroughPeriod')}</Text>
+                <HStack gap={2} wrap="wrap">
+                  <Button type="button" variant="destructive" isDisabled={!!busy} label={t('confirmCancellation')} onClick={() => void act('cancel')} />
+                  <Button type="button" variant="secondary" isDisabled={!!busy} label={t('keepSubscription')} onClick={() => setConfirmCancel(false)} />
+                </HStack>
+              </VStack>
+            </Card>
+          )}
+        </VStack>
+      ) : (
+        <VStack gap={4}>
+          {pending && (
+            <HStack gap={2} wrap="wrap" className="billing-actions">
+              <Button
+                type="button"
+                variant="secondary"
+                isDisabled={!!busy}
+                label={t('resumeCheckout', { plan: tierNames[pending.tier] })}
+                endContent={<ArrowUpRight size={15} />}
+                onClick={() => void act('checkout', pending.tier, true)}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                isDisabled={!!busy}
+                label={busy === 'check' ? t('checkingPayment') : t('checkPayment')}
+                onClick={() => void act('check')}
+              />
+            </HStack>
+          )}
+          <HStack gap={3} wrap="wrap" className="billing-controls">
+            <Selector
+              label={t('currency')}
+              size="sm"
+              value={currency}
+              options={[
+                { value: 'USD', label: t('usd') },
+                { value: 'INR', label: t('inr') },
+              ]}
+              onChange={value => setCurrency(value === 'INR' ? 'INR' : 'USD')}
+            />
+            <Selector
+              label={t('period')}
+              size="sm"
+              value={cycle}
+              options={[
+                { value: 'monthly', label: t('monthly') },
+                { value: 'annual', label: t('annual') },
+              ]}
+              onChange={value => setCycle(value === 'annual' ? 'annual' : 'monthly')}
+            />
+          </HStack>
+          <Grid columns={{ minWidth: 220, max: 3 }} gap={4} className="billing-plans" aria-label={t('paidPlans')}>
+            {plans.map(({ tier, features }) => {
+              const teamInr = tier === 'team' && currency === 'INR'
+              const offer = readOffer({ tier, cycle, currency, seats })
+              const amount = offer ? unitAmount(offer, founding) : null
+              const enabled = available.includes(`${currency}:${tier}:${cycle}`)
+              const isSelected = initialTier === tier
+              return (
+                <Card
+                  key={tier}
+                  padding={4}
+                  elevation={isSelected ? 'med' : 'low'}
+                  className={`billing-plan ${isSelected ? 'is-selected' : ''}`}
+                  aria-labelledby={`plan-${tier}`}
+                >
+                  <VStack gap={3} height="100%" justify="between">
+                    <VStack gap={3}>
+                      <Heading level={2} id={`plan-${tier}`}>{tierNames[tier]}</Heading>
+                      <HStack align="end" gap={1.5} wrap="wrap" className="billing-price">
+                        <Text type="display-3" weight="semibold">
+                          {amount ? priceLabel(amount, currency, locale) : teamInr ? t('usdOnly') : '—'}
+                        </Text>
+                        {amount && <Text type="supporting" color="secondary">{t(cycle === 'annual' ? 'perYear' : 'perMonth')}</Text>}
+                      </HStack>
+                      {tier === 'team' && !teamInr && (
+                        <VStack gap={1}>
+                          <NumberInput
+                            label={t('seats')}
+                            size="sm"
+                            width="100%"
+                            min={2}
+                            max={500}
+                            isIntegerOnly
+                            hasNumberSteppers
+                            value={seats}
+                            onChange={value => setSeats(Math.max(2, value))}
+                          />
+                          {offer && (
+                            <Text type="supporting" color="secondary">
+                              {t('pricePerSeat', { price: priceLabel(unitAmount(offer, founding), currency, locale) })}
+                            </Text>
+                          )}
+                        </VStack>
+                      )}
+                      <ul className="marketing-plan-features">
+                        {features.map(feature => (
+                          <li key={feature}><Check size={15} aria-hidden="true" /><span>{t(feature)}</span></li>
+                        ))}
+                      </ul>
+                    </VStack>
+                    {teamInr ? (
+                      <Button type="button" variant="secondary" width="100%" label={t('teamUsd')} onClick={() => setCurrency('USD')} />
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="primary"
+                        width="100%"
+                        isLoading={busy === tier}
+                        isDisabled={!enabled || !offer || !!busy}
+                        label={busy === tier ? t('openingCheckout') : enabled ? t('chooseTier', { plan: tierNames[tier] }) : t('checkoutUnavailable')}
+                        endContent={<ArrowUpRight size={15} />}
+                        onClick={() => void act('checkout', tier)}
+                      />
+                    )}
+                  </VStack>
+                </Card>
+              )
+            })}
+          </Grid>
+        </VStack>
+      )}
+    </VStack>
+  )
 }

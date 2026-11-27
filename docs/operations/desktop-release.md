@@ -4,6 +4,8 @@ Run the **Desktop packages** workflow to build and test macOS on Apple Silicon a
 
 Pull requests that change the desktop shell, bundler, or package dependencies run the same matrix without release signing or update artifacts. The workflow uploads the packages so they can be tested before merging. Use a manual dispatch for a signed release candidate. Publish the reviewed installer and the matching update signature together.
 
+The [H0 packaging run](https://github.com/coderhd/lekhan/actions/runs/46000912906) built all four packages and passed the desktop core tests on every target. Both macOS disk images verified and contained the expected app architecture, bundled llama.cpp sidecar, and `lekhan` URL scheme. The Apple Silicon sidecar reported the pinned llama.cpp revision when run from the mounted image. Platform signing, installed upgrades, and collaboration against a hosted staging relay remain release checks.
+
 ## Authorize the desktop update channel
 
 Generate a Tauri updater key in a protected environment with `npm exec -- tauri signer generate`. Retain the private key in the release secret store. Use the same public key across releases so existing installations can verify them.

@@ -43,8 +43,26 @@ function browser() {
   return window as Window & { dataLayer?: unknown[]; gtag?: GoogleTag }
 }
 
+export function analyticsConsentState(): 'granted' | 'denied' | null {
+  try {
+    const value = localStorage.getItem(analyticsPreference)
+    return value === 'granted' || value === 'denied' ? value : null
+  } catch {
+    return null
+  }
+}
+
 export function analyticsAllowed() {
-  try { return analyticsConfigured && localStorage.getItem(analyticsPreference) === 'granted' } catch { return false }
+  return analyticsConfigured && analyticsConsentState() === 'granted'
+}
+
+export function setAnalyticsConsent(allowed: boolean) {
+  try {
+    localStorage.setItem(analyticsPreference, allowed ? 'granted' : 'denied')
+  } catch { return }
+  syncAnalyticsConsent(allowed)
+  if (!allowed) disableUsageAnalytics()
+  window.dispatchEvent(new Event(analyticsPreference))
 }
 
 export function syncAnalyticsConsent(allowed: boolean) {

@@ -2,7 +2,12 @@ import { invoke } from '@tauri-apps/api/core'
 import { Download, RefreshCw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Dialog } from '@/components/workspace-dialogs'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Dialog as AstryxDialog, DialogHeader } from '@astryxdesign/core/Dialog'
+import { Item } from '@astryxdesign/core/Item'
+import { Layout, LayoutContent } from '@astryxdesign/core/Layout'
+import { VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
 
 type UpdateStatus = { status: 'disabled' | 'current' } | { status: 'available'; version: string }
 
@@ -64,26 +69,43 @@ export function DesktopUpdateControls({ updates, canInstall }: { updates: Return
   const { update, checking, checkedByUser, installing, error, check, install } = updates
 
   if (update.status === 'disabled') return null
-  return <div className="desktop-update-controls">
-    {update.status === 'available'
-      ? <button className="nav-action" type="button" disabled={!canInstall || installing} onClick={() => void install()}>
-        <Download size={15} aria-hidden="true" /> {text('updateInstall', { version: update.version })}
-      </button>
-      : <button className="nav-action" type="button" disabled={checking} onClick={() => void check()}>
-        <RefreshCw size={15} aria-hidden="true" /> {text(checking ? 'updateChecking' : 'updateCheck')}
-      </button>}
-    {error ? <p role="alert">{text('updateError_' + error)}</p>
-      : checkedByUser && update.status === 'current' && <p role="status">{text('updateCurrent')}</p>}
-  </div>
+  return (
+    <VStack gap={1} className="desktop-update-controls">
+      {update.status === 'available' ? (
+        <Item
+          density="compact"
+          startContent={<Download size={15} aria-hidden="true" />}
+          label={text('updateInstall', { version: update.version })}
+          isDisabled={!canInstall || installing}
+          onClick={() => void install()}
+        />
+      ) : (
+        <Item
+          density="compact"
+          startContent={<RefreshCw size={15} aria-hidden="true" />}
+          label={text(checking ? 'updateChecking' : 'updateCheck')}
+          isDisabled={checking}
+          onClick={() => void check()}
+        />
+      )}
+      {error ? (
+        <div role="alert"><Banner status="error" collapsible={false} title={text('updateError_' + error)} /></div>
+      ) : checkedByUser && update.status === 'current' && (
+        <Text type="supporting" role="status" color="secondary">{text('updateCurrent')}</Text>
+      )}
+    </VStack>
+  )
 }
 
 export function DesktopUpdateProgress({ installing }: { installing: boolean }) {
   const text = useTranslations('desktop')
   if (!installing) return null
-  return <Dialog className="assistant-dialog" title={text('updateTitle')} onClose={() => undefined}>
-    <div className="form-dialog">
-      <h2>{text('updateTitle')}</h2>
-      <p role="status">{text('updateInstalling')}</p>
-    </div>
-  </Dialog>
+  return (
+    <AstryxDialog isOpen onOpenChange={() => undefined} purpose="required" width={420} padding={0}>
+      <Layout
+        header={<DialogHeader title={text('updateTitle')} />}
+        content={<LayoutContent><Text role="status">{text('updateInstalling')}</Text></LayoutContent>}
+      />
+    </AstryxDialog>
+  )
 }

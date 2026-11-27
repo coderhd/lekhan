@@ -39,5 +39,6 @@ export async function getCatalog(locale: Locale): Promise<Catalog> {
     'public-page': withEnglishFallback(en['public-page'], translated['public-page']),
     'early-access': withEnglishFallback(en['early-access'], translated['early-access']),
     marketing: withEnglishFallback(en.marketing, translated.marketing),
+    'cookie-banner': withEnglishFallback(en['cookie-banner'], translated['cookie-banner']),
   }
 }

@@ -1,7 +1,12 @@
 'use client'
 
 import { ArrowRight } from 'lucide-react'
-import { useActionState } from 'react'
+import { useActionState, useState } from 'react'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { Divider } from '@astryxdesign/core/Divider'
+import { VStack } from '@astryxdesign/core/Stack'
+import { TextInput } from '@astryxdesign/core/TextInput'
 import { useTranslations } from '@/lib/i18n/client'
 import type { AuthMode } from '@/lib/auth/input'
 import { startGoogleSignIn, submitAuth } from '@/app/auth/actions'
@@ -18,48 +23,112 @@ function GoogleMark() {
   )
 }
 
-export function AccountForm({ mode, invite, referral, transfer, google = false }: {
-  mode: AuthMode; invite?: string; referral?: string; transfer?: string; google?: boolean
+export function AccountForm({ mode, invite, referral, transfer, nextTarget, google = false }: {
+  mode: AuthMode; invite?: string; referral?: string; transfer?: string; nextTarget?: string; google?: boolean
 }) {
   const t = useTranslations('auth')
-  const [state, action, pending] = useActionState(submitAuth.bind(null, mode, invite, referral, transfer), null)
+  const [state, action, pending] = useActionState(submitAuth.bind(null, mode, invite, referral, transfer, nextTarget), null)
   const [socialState, socialAction, socialPending] = useActionState(startGoogleSignIn.bind(null, invite, transfer), null)
-  if (state && 'outcome' in state) return <p className="account-feedback" role="status">{t(state.outcome)}</p>
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
 
-  const password = mode !== 'forgot'
+  if (state && 'outcome' in state) {
+    return (
+      <div role="status">
+        <Banner status="info" collapsible={false} title={t(state.outcome)} />
+      </div>
+    )
+  }
+
+  const hasPassword = mode !== 'forgot'
   const newPassword = mode === 'signup' || mode === 'reset'
   const submit = { login: 'login', signup: 'signup', forgot: 'sendReset', reset: 'savePassword' } as const
-  return <>
-    <form className="account-form" action={action} onSubmit={mode === 'signup' ? () => track('signup_started', 'email') : undefined}>
-      {mode !== 'reset' && <label>{t('email')}
-        <input type="email" name="email" autoComplete="email" maxLength={254} required />
-      </label>}
-      {password && <label>{t(newPassword ? 'newPassword' : 'password')}
-        <input type="password" name="password" autoComplete={newPassword ? 'new-password' : 'current-password'} minLength={newPassword ? 8 : undefined} maxLength={256} required />
-      </label>}
-      {mode === 'reset' && <label>{t('confirmPassword')}
-        <input type="password" name="confirmPassword" autoComplete="new-password" minLength={8} maxLength={256} required />
-      </label>}
-      {state && 'issue' in state && <p className="account-error" role="alert">{t(state.issue)}</p>}
-      <button className="primary-button account-primary-button" disabled={pending || socialPending}>
-        <span>{t(pending ? 'working' : submit[mode])}</span>
-        <ArrowRight size={17} aria-hidden="true" />
-      </button>
-    </form>
-    {google && <>
-      <div className="account-divider" role="separator" aria-hidden="true" />
-      <form className="account-form account-google" action={socialAction} onSubmit={event => {
-        const field = event.currentTarget.elements.namedItem('desktop')
-        if (field instanceof HTMLInputElement) field.value = Reflect.get(window, '__LEKHAN_CLOUD_DESKTOP__') === true ? '1' : '0'
-        if (mode === 'signup') track('signup_started', 'google')
-      }}>
-        <input type="hidden" name="desktop" defaultValue="0" />
-        {socialState && <p className="account-error" role="alert">{t(socialState.issue)}</p>}
-        <button className="secondary-button account-google-button" disabled={pending || socialPending}>
-          <GoogleMark />
-          <span>{t(socialPending ? 'working' : 'googleContinue')}</span>
-        </button>
+
+  return (
+    <VStack gap={3}>
+      <form action={action} onSubmit={mode === 'signup' ? () => track('signup_started', 'email') : undefined}>
+        <VStack gap={3}>
+          {mode !== 'reset' && (
+            <TextInput
+              type="email"
+              label={t('email')}
+              htmlName="email"
+              autoComplete="email"
+              isRequired
+              width="100%"
+              value={email}
+              onChange={value => setEmail(value.slice(0, 254))}
+            />
+          )}
+          {hasPassword && (
+            <TextInput
+              type="password"
+              label={t(newPassword ? 'newPassword' : 'password')}
+              htmlName="password"
+              autoComplete={newPassword ? 'new-password' : 'current-password'}
+              isRequired
+              width="100%"
+              value={password}
+              onChange={value => setPassword(value.slice(0, 256))}
+            />
+          )}
+          {mode === 'reset' && (
+            <TextInput
+              type="password"
+              label={t('confirmPassword')}
+              htmlName="confirmPassword"
+              autoComplete="new-password"
+              isRequired
+              width="100%"
+              value={confirmPassword}
+              onChange={value => setConfirmPassword(value.slice(0, 256))}
+            />
+          )}
+          {state && 'issue' in state && (
+            <div role="alert">
+              <Banner status="error" collapsible={false} title={t(state.issue)} />
+            </div>
+          )}
+          <Button
+            type="submit"
+            variant="primary"
+            width="100%"
+            isLoading={pending}
+            isDisabled={pending || socialPending}
+            label={t(pending ? 'working' : submit[mode])}
+            endContent={<ArrowRight size={17} aria-hidden="true" />}
+          />
+        </VStack>
       </form>
-    </>}
-  </>
+      {google && (
+        <>
+          <Divider />
+          <form action={socialAction} onSubmit={event => {
+            const field = event.currentTarget.elements.namedItem('desktop')
+            if (field instanceof HTMLInputElement) field.value = Reflect.get(window, '__LEKHAN_CLOUD_DESKTOP__') === true ? '1' : '0'
+            if (mode === 'signup') track('signup_started', 'google')
+          }}>
+            <VStack gap={2}>
+              <input type="hidden" name="desktop" defaultValue="0" />
+              {socialState && (
+                <div role="alert">
+                  <Banner status="error" collapsible={false} title={t(socialState.issue)} />
+                </div>
+              )}
+              <Button
+                type="submit"
+                variant="secondary"
+                width="100%"
+                isLoading={socialPending}
+                isDisabled={pending || socialPending}
+                icon={<GoogleMark />}
+                label={t(socialPending ? 'working' : 'googleContinue')}
+              />
+            </VStack>
+          </form>
+        </>
+      )}
+    </VStack>
+  )
 }

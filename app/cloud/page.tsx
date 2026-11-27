@@ -2,10 +2,11 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getFormatter, getTranslations } from 'next-intl/server'
 import { Cloud, FileText, Plus } from 'lucide-react'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
 import CloudSearch from '@/components/cloud-search'
 import { PrepareOfflineWorkspace } from '@/components/prepare-offline-workspace'
 import CloudVaultImport from '@/components/cloud-vault-import'
-import { UsageAnalyticsControl } from '@/components/usage-analytics'
 import { accountContext } from '@/lib/auth/server'
 import { listCloudPages } from '@/lib/cloud/graph'
 import type { SharedRole } from '@/lib/cloud/sharing'
@@ -45,11 +46,11 @@ export default async function CloudWorkspace({ searchParams }: {
           <Link href="/cloud?view=shared" aria-current={tab === 'shared' ? 'page' : undefined}>{t('sharedWithMe')}</Link>
           <Link href="/cloud?view=invitations" aria-current={tab === 'invitations' ? 'page' : undefined}>{t('invitations')}</Link>
         </nav>
-        {error && <p className="account-error" role="alert">{error === 'title' ? t('titleLimit') : t('createFailed')}</p>}
+        {error && <div role="alert"><Banner status="error" collapsible={false} title={error === 'title' ? t('titleLimit') : t('createFailed')} /></div>}
         {tab === 'mine' && <div className="cloud-create-row">
           <form action={addCloudPage} className="cloud-create">
             <label>{t('pageTitle')} <input name="title" required maxLength={160} placeholder={t('namePage')} /></label>
-            <button className="primary-button"><Plus size={16} /> {t('newPage')}</button>
+            <Button type="submit" variant="primary" icon={<Plus size={16} aria-hidden="true" />} label={t('newPage')} />
           </form>
           <CloudVaultImport />
         </div>}
@@ -67,7 +68,6 @@ export default async function CloudWorkspace({ searchParams }: {
             : <p>{tab === 'shared' ? t('sharedEmpty') : t('mineEmpty')}</p>}
         {result?.next && <Link href={'/cloud?' + new URLSearchParams({ ...(tab === 'shared' ? { view: 'shared' } : {}), after: result.next })}>{t('morePages')}</Link>}
       </section>
-      <UsageAnalyticsControl />
     </main>
   )
 }

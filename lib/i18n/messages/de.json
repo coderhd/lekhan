@@ -189,7 +189,9 @@
     "noResults": "Keine Seiten gefunden.",
     "navigate": "Navigieren",
     "open": "Öffnen",
-    "close": "Schließen"
+    "close": "Schließen",
+    "addPageInFolder": "Neue Seite in {title}",
+    "workspaceMenu": "Arbeitsbereichsoptionen"
   },
   "editor-ai": {
     "writingAssistant": "Schreibassistent",
@@ -984,6 +986,19 @@
     "emailTitle": "E-Mail senden",
     "emailBody": "Für Kontozugang, Datenschutzanfragen oder Fragen zum Frühzugang.",
     "githubTitle": "GitHub-Issues öffnen",
-    "githubBody": "Für Fehlerberichte und Wünsche. Lass private Seiteninhalte weg."
+    "githubBody": "Für Fehlerberichte und Wünsche. Lass private Seiteninhalte weg.",
+    "pricing": "Preise",
+    "pricingTitle": "Klare Tarife für persönliche Notizen und Team-Arbeitsbereiche.",
+    "pricingIntro": "Starte kostenlos im Browser. Upgrade jederzeit für Cloud-Sync, Versionsverlauf und Team-Plätze.",
+    "freeStart": "Kostenlos starten",
+    "recommended": "Empfohlen",
+    "signInToBuy": "Zum Kauf von {plan} anmelden"
+  },
+  "cookie-banner": {
+    "title": "Analyse-Cookies",
+    "description": "Notwendige Cookies halten deine Sitzung angemeldet. Optionale Analysen helfen, Lekhan zu verbessern, ohne deine Notizen zu erfassen.",
+    "accept": "Analysen akzeptieren",
+    "decline": "Nur notwendige",
+    "privacyPolicy": "Datenschutzerklärung"
   }
 }

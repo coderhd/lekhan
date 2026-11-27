@@ -13,7 +13,7 @@ import WorkspaceStorage from '@/components/workspace-storage'
 
 export default async function BillingPanel({ account, query = {} }: {
   account: NonNullable<Awaited<ReturnType<typeof accountContext>>>
-  query?: { checkout?: string; transfer?: string }
+  query?: { checkout?: string; transfer?: string; tier?: string; cycle?: string; currency?: string; seats?: string }
 }) {
   const admin = createServerAdmin()
   const [request, t, billing] = await Promise.all([
@@ -33,7 +33,11 @@ export default async function BillingPanel({ account, query = {} }: {
   ])
   const summary = billing?.summary
   const india = request.get('x-vercel-ip-country') === 'IN'
-  const currency = summary?.pending?.currency ?? summary?.currency ?? (india ? 'INR' : 'USD')
+  const queryCurrency = query.currency === 'USD' || query.currency === 'INR' ? query.currency : undefined
+  const queryCycle = query.cycle === 'monthly' || query.cycle === 'annual' ? query.cycle : undefined
+  const queryTier = query.tier === 'plus' || query.tier === 'pro' || query.tier === 'team' ? query.tier : undefined
+  const querySeats = query.seats && /^\d+$/.test(query.seats) ? Math.max(2, Number(query.seats)) : undefined
+  const currency = queryCurrency ?? summary?.pending?.currency ?? summary?.currency ?? (india ? 'INR' : 'USD')
   const founding = summary?.checkoutFounding === true
   const currencies: Currency[] = ['USD', 'INR']
   const cycles: Cycle[] = ['monthly', 'annual']
@@ -46,6 +50,7 @@ export default async function BillingPanel({ account, query = {} }: {
   return <div className="settings-billing">
       {query.transfer === 'accepted' && <p role="status" className="billing-notice">{t('ownershipAccepted')}</p>}
       {summary ? <BillingSettings summary={summary} scope={'account:' + account.subject} defaultCurrency={currency} available={available}
+        initialCycle={queryCycle} initialTier={queryTier} initialSeats={querySeats}
         returned={query.checkout === 'returned'} paused={query.checkout === 'paused'} />
         : <p role="status">{t('panelUnavailable')}</p>}
       {summary && billing?.storage && <WorkspaceStorage images={billing.storage.image_bytes} files={billing.storage.file_bytes} free={(summary.entitlement?.tier ?? 'free') === 'free'} />}

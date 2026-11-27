@@ -1,9 +1,14 @@
 import Image from 'next/image'
 import Link from 'next/link'
+import { headers } from 'next/headers'
 import { ArrowRight, ArrowUpRight } from 'lucide-react'
 import { getLocale, getTranslations } from 'next-intl/server'
+import { accountContext } from '@/lib/auth/server'
+import { type Currency, type Cycle, type PaidTier } from '@/lib/billing/catalog'
+import { checkoutAvailable } from '@/lib/billing/gateways'
 import { resolveLocale } from '@/lib/i18n/locales'
 import MarketingFrame from '@/components/marketing-frame'
+import MarketingPlans from '@/components/marketing-plans'
 import { marketingMetadata } from '@/lib/marketing/metadata'
 import { marketingLink } from '@/lib/marketing/routes'
 
@@ -13,8 +18,21 @@ export async function generateMetadata() {
 }
 
 export default async function HomePage() {
-  const [t, language] = await Promise.all([getTranslations('marketing'), getLocale()])
+  const [t, language, request, account] = await Promise.all([
+    getTranslations('marketing'),
+    getLocale(),
+    headers(),
+    accountContext().catch(() => null),
+  ])
   const locale = resolveLocale(language)
+  const defaultCurrency: Currency = request.get('x-vercel-ip-country') === 'IN' ? 'INR' : 'USD'
+  const currencies: Currency[] = ['USD', 'INR']
+  const cycles: Cycle[] = ['monthly', 'annual']
+  const tiers: PaidTier[] = ['plus', 'pro', 'team']
+  const available = currencies.flatMap(currency => tiers.flatMap(tier => cycles.flatMap(cycle =>
+    checkoutAvailable({ currency, tier, cycle, seats: 2 }, false) && !(currency === 'INR' && tier === 'team')
+      ? [`${currency}:${tier}:${cycle}`] : [],
+  )))
   return <MarketingFrame path="/">
     <section className="marketing-hero marketing-width" aria-labelledby="marketing-title">
       <div className="marketing-hero-copy" data-enter>
@@ -56,5 +74,7 @@ export default async function HomePage() {
         </div>)}
       </dl>
     </section>
+
+    <MarketingPlans signedIn={!!account} defaultCurrency={defaultCurrency} available={available} />
   </MarketingFrame>
 }

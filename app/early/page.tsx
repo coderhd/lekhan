@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { ArrowRight, Check, MoveUpRight } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
 import EarlyAccessAnalytics from '@/components/early-access-analytics'
 import { analyticsConfigured } from '@/lib/analytics-settings'
 import { authConfig } from '@/lib/auth/config'
@@ -48,11 +50,11 @@ export default async function EarlyAccess({ searchParams }: {
           </div> : <>
             <h2>{t('join')}</h2>
             <p>{t('cohort', { cap: FOUNDING_CAP })}</p>
-            {issue && <p role="alert" className="account-error">{t(issue)}</p>}
+            {issue && <div role="alert"><Banner status="error" collapsible={false} title={t(issue)} /></div>}
             {configured ? <form className="account-form" action={action} method="post">
               <label>{t('email')}<input name="email" type="email" autoComplete="email" maxLength={254} required /></label>
               <label>{t('useCase')}<textarea name="use_case" rows={2} maxLength={500} /></label>
-              <button className="primary-button">{t('submit')} <ArrowRight size={17} aria-hidden="true" /></button>
+              <Button type="submit" variant="primary" width="100%" label={t('submit')} endContent={<ArrowRight size={17} aria-hidden="true" />} />
               <p className="early-form-note">{t('confirmationNote')}</p>
             </form> : <p role="status">{t('unavailable')}</p>}
           </>}

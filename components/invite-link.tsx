@@ -1,6 +1,10 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useState } from 'react'
+import { Button } from '@astryxdesign/core/Button'
+import { HStack, VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
+import { TextInput } from '@astryxdesign/core/TextInput'
 import { useTranslations } from '@/lib/i18n/client'
 
 export default function InviteLink({ path, origin, label }: {
@@ -8,23 +12,31 @@ export default function InviteLink({ path, origin, label }: {
 }) {
   const t = useTranslations('cloud-workspace')
   const [result, setResult] = useState<'copied' | 'copyManually' | null>(null)
-  const input = useRef<HTMLInputElement>(null)
+  const initial = origin ? new URL(path, origin).href : path
+
   async function copy() {
     const url = new URL(path, origin ?? window.location.origin).href
     try {
       await navigator.clipboard.writeText(url)
       setResult('copied')
     } catch {
-      if (input.current) input.current.value = url
-      input.current?.focus()
-      input.current?.select()
       setResult('copyManually')
     }
   }
 
-  return <div className="invite-link">
-    <input ref={input} readOnly aria-label={label ?? t('invitationLink')} defaultValue={origin ? new URL(path, origin).href : path} />
-    <button type="button" className="secondary-button" onClick={copy}>{t('copyLink')}</button>
-    <span role="status">{result && t(result)}</span>
-  </div>
+  return (
+    <VStack gap={1.5} className="invite-link">
+      <HStack gap={2} align="end" wrap="wrap">
+        <TextInput
+          label={label ?? t('invitationLink')}
+          isLabelHidden
+          isReadOnly
+          value={initial}
+          width="100%"
+        />
+        <Button type="button" variant="secondary" size="sm" label={t('copyLink')} onClick={copy} />
+      </HStack>
+      {result && <Text type="supporting" role="status">{t(result)}</Text>}
+    </VStack>
+  )
 }

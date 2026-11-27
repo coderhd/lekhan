@@ -3,6 +3,8 @@
 import { Search } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { Button } from '@astryxdesign/core/Button'
+import { Kbd } from '@astryxdesign/core/Kbd'
 import { useTranslations } from '@/lib/i18n/client'
 import { SearchDialog } from './workspace-dialogs'
 
@@ -28,9 +30,15 @@ export default function CloudSearch({ subject, offline = false, onOpen }: {
   }, [])
 
   return <>
-    <button className="secondary-button cloud-search-trigger" type="button" onClick={() => setOpen(true)}>
-      <Search size={15} aria-hidden="true" /> {t('searchPages')} <kbd aria-hidden="true">⌘ K</kbd>
-    </button>
+    <Button
+      type="button"
+      variant="secondary"
+      size="sm"
+      icon={<Search size={15} aria-hidden="true" />}
+      endContent={<Kbd keys="mod+k" />}
+      label={t('searchPages')}
+      onClick={() => setOpen(true)}
+    />
     {open && <SearchDialog cloudSubject={subject} offlineOnly={offline} onClose={() => setOpen(false)} onOpenCloud={id => {
       setOpen(false)
       if (onOpen) onOpen(id)

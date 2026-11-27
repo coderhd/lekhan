@@ -189,7 +189,9 @@
     "noResults": "No pages found.",
     "navigate": "Navigate",
     "open": "Open",
-    "close": "Close"
+    "close": "Close",
+    "addPageInFolder": "New page in {title}",
+    "workspaceMenu": "Workspace options"
   },
   "editor-ai": {
     "writingAssistant": "Writing assistant",
@@ -984,6 +986,19 @@
     "emailTitle": "Send an email",
     "emailBody": "For account access, privacy requests, or questions about early access.",
     "githubTitle": "Open GitHub issues",
-    "githubBody": "For bug reports and feature requests. Leave out private page content."
+    "githubBody": "For bug reports and feature requests. Leave out private page content.",
+    "pricing": "Pricing",
+    "pricingTitle": "Simple plans for solo notes and team rooms.",
+    "pricingIntro": "Start free in your browser. Upgrade any time for cloud sync, version history, and collaborator seats.",
+    "freeStart": "Start writing free",
+    "recommended": "Recommended",
+    "signInToBuy": "Sign in to purchase {plan}"
+  },
+  "cookie-banner": {
+    "title": "Analytics cookies",
+    "description": "Essential cookies keep your session signed in. Optional analytics help improve Lekhan without recording your notes.",
+    "accept": "Accept analytics",
+    "decline": "Essential only",
+    "privacyPolicy": "Privacy policy"
   }
 }

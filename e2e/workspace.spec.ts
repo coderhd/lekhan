@@ -10,9 +10,9 @@ test.beforeEach(async ({ context }) => {
 test('writes, links, finds, renames, reloads, and exports a nested page', async ({ page }) => {
   await page.goto('/workspace')
   await expect(page.getByRole('textbox', { name: 'Page title' })).toHaveValue('Field guide')
-  await page.getByRole('button', { name: 'Projects', exact: true }).click()
-  await page.locator('summary[aria-label="Page actions"]').click()
-  await page.getByRole('button', { name: 'New subpage' }).click()
+  await page.getByRole('treeitem', { name: 'Projects', exact: true }).getByText('Projects', { exact: true }).click()
+  await page.getByRole('button', { name: 'Page actions', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'New subpage' }).click()
 
   const title = page.getByRole('textbox', { name: 'Page title' })
   const content = page.getByRole('textbox', { name: 'Page content' })
@@ -29,7 +29,7 @@ test('writes, links, finds, renames, reloads, and exports a nested page', async 
   await expect(page.getByRole('option', { name: 'Field guide' })).toBeVisible()
   await content.press('Enter')
   await expect(content.getByRole('link', { name: 'Field guide' })).toBeVisible()
-  await expect(page.getByRole('status')).toHaveText('Saved locally')
+  await expect(page.getByRole('status').filter({ hasText: 'Saved locally' })).toBeVisible()
 
   await content.getByRole('link', { name: 'Field guide' }).click()
   await expect(page.getByRole('complementary', { name: 'Page context' }).getByRole('button', { name: /Test notebook/ })).toBeVisible()
@@ -44,16 +44,16 @@ test('writes, links, finds, renames, reloads, and exports a nested page', async 
   await query.press('Enter')
   await expect(title).toHaveValue('Test notebook')
   await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Projects')
-  await expect(page.getByRole('status')).toHaveText('Saved locally')
+  await expect(page.getByRole('status').filter({ hasText: 'Saved locally' })).toBeVisible()
 
   await page.reload()
   await expect(title).toHaveValue('Test notebook')
   await expect(content).toContainText('One useful sentence.')
   await expect(page.getByRole('complementary', { name: 'Page context' }).getByRole('button', { name: 'Observation' })).toBeVisible()
 
-  await page.locator('summary[aria-label="Page actions"]').click()
+  await page.getByRole('button', { name: 'Page actions', exact: true }).click()
   const single = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Export Markdown' }).click()
+  await page.getByRole('menuitem', { name: 'Export Markdown' }).click()
   const file = await single
   expect(file.suggestedFilename()).toBe('Test notebook.md')
   expect(await readFile(await file.path(), 'utf8')).toContain('[[Field guide]]')
@@ -89,18 +89,18 @@ test('imports Markdown and keeps mobile navigation and page context reachable', 
 test('surfaces a stale tab and reloads its latest saved copy only after confirmation', async ({ page, context }) => {
   await page.goto('/workspace')
   const secondTab = await context.newPage()
-  await expect(page.getByRole('status')).toHaveText('Saved locally')
+  await expect(page.getByRole('status').filter({ hasText: 'Saved locally' })).toBeVisible()
   await secondTab.goto('/workspace')
-  await expect(secondTab.getByRole('status')).toHaveText('Saved locally')
+  await expect(secondTab.getByRole('status').filter({ hasText: 'Saved locally' })).toBeVisible()
   await page.getByRole('textbox', { name: 'Page title' }).fill('Newer title')
   await page.getByRole('textbox', { name: 'Page title' }).press('Enter')
-  await expect(page.getByRole('status')).toHaveText('Saved locally')
+  await expect(page.getByRole('status').filter({ hasText: 'Saved locally' })).toBeVisible()
 
   await secondTab.getByRole('textbox', { name: 'Page title' }).fill('Stale title')
   await secondTab.getByRole('textbox', { name: 'Page title' }).press('Enter')
   await expect(secondTab.getByRole('alert').filter({ hasText: 'This workspace' })).toContainText('changed in another tab')
   await secondTab.getByRole('button', { name: 'Open saved copy' }).click()
-  const dialog = secondTab.getByRole('dialog', { name: 'Open saved copy' })
+  const dialog = secondTab.getByRole('dialog', { name: 'Open the saved copy?' })
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   await expect(secondTab.getByRole('textbox', { name: 'Page title' })).toHaveValue('Stale title')
   await secondTab.getByRole('button', { name: 'Open saved copy' }).click()
@@ -113,7 +113,7 @@ test('saves title edits while the title still has focus', async ({ page }) => {
   const title = page.getByRole('textbox', { name: 'Page title' })
   await title.fill('Draft title')
   await expect(title).toBeFocused()
-  await expect(page.getByRole('status')).toHaveText('Saved locally')
+  await expect(page.getByRole('status').filter({ hasText: 'Saved locally' })).toBeVisible()
   await page.reload()
   await expect(title).toHaveValue('Draft title')
   await expect(page.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Draft title')
@@ -130,7 +130,7 @@ test('opens an inline page link with the keyboard', async ({ page }) => {
 
 test('keeps table and image syntax after editing imported Markdown', async ({ page }) => {
   await page.goto('/workspace')
-  await expect(page.getByRole('status')).toHaveText('Saved locally')
+  await expect(page.getByRole('status').filter({ hasText: 'Saved locally' })).toBeVisible()
   const source = '## Notes\n\n| Column | Value |\n| --- | --- |\n| First | 42 |\n\n![Field sketch](https://example.test/sketch.png)'
   await page.locator('input[type=file]').setInputFiles({
     name: 'Field research.md', mimeType: 'text/markdown', buffer: Buffer.from(source),
@@ -141,15 +141,15 @@ test('keeps table and image syntax after editing imported Markdown', async ({ pa
   await expect(page.getByRole('status').filter({ hasText: 'Saved locally' })).toBeVisible()
   await page.reload()
   await expect(markdown).toHaveValue(source.replace('## Notes', '## Field notes'))
-  await page.locator('summary[aria-label="Page actions"]').click()
+  await page.getByRole('button', { name: 'Page actions', exact: true }).click()
   const exported = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Export Markdown' }).click()
+  await page.getByRole('menuitem', { name: 'Export Markdown' }).click()
   expect(await readFile(await (await exported).path(), 'utf8')).toContain(source.replace('## Notes', '## Field notes'))
 })
 
 test('shows formatted headings in the outline and follows their wikilink anchors', async ({ page }) => {
   await page.goto('/workspace')
-  await expect(page.getByRole('status')).toHaveText('Saved locally')
+  await expect(page.getByRole('status').filter({ hasText: 'Saved locally' })).toBeVisible()
   await page.locator('input[type=file]').setInputFiles({
     name: 'With outline.md',
     mimeType: 'text/markdown',
@@ -167,7 +167,7 @@ test('shows formatted headings in the outline and follows their wikilink anchors
 
 test('round-trips a vault with nested pages, properties, callouts and local images', async ({ page, browser }) => {
   await page.goto('/workspace')
-  await expect(page.getByRole('status')).toHaveText('Saved locally')
+  await expect(page.getByRole('status').filter({ hasText: 'Saved locally' })).toBeVisible()
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jQ1sAAAAASUVORK5CYII=', 'base64')
   const archive = zipSync({
     'Vault/Index.md': strToU8('> [!note] Read this first\n> Link to [[Guide/Notes|the field notes]].\n\n![[stamp.png]]'),
@@ -180,9 +180,17 @@ test('round-trips a vault with nested pages, properties, callouts and local imag
   await dialog.locator('input[type=file]').first().setInputFiles({
     name: 'vault.zip', mimeType: 'application/zip', buffer: Buffer.from(archive),
   })
-  await expect(dialog.getByRole('status')).toHaveText('Import saved locally')
+  await expect(dialog.getByRole('status').filter({ hasText: 'Import saved locally' })).toBeVisible()
   await dialog.getByRole('button', { name: 'Open workspace' }).click()
-  await page.getByRole('button', { name: 'Index', exact: true }).click()
+  await expect(page.getByRole('textbox', { name: 'Page title' })).toHaveValue('Field notes')
+  const vaultFolder = page.getByRole('treeitem', { name: 'Vault', exact: true })
+  await expect(vaultFolder).toHaveAttribute('aria-expanded', 'true')
+  await vaultFolder.getByText('Vault', { exact: true }).click()
+  await expect(vaultFolder).toHaveAttribute('aria-expanded', 'false')
+  await expect(page.getByRole('textbox', { name: 'Page title' })).toHaveValue('Field notes')
+  await vaultFolder.getByText('Vault', { exact: true }).click()
+  await expect(vaultFolder).toHaveAttribute('aria-expanded', 'true')
+  await page.getByRole('treeitem', { name: 'Index', exact: true }).click()
   await expect(page.locator('aside[data-vault-callout=note]')).toContainText('Read this first')
   await expect(page.getByRole('img', { name: 'stamp.png' })).toBeVisible()
   await page.getByRole('link', { name: 'the field notes' }).click()
@@ -192,7 +200,7 @@ test('round-trips a vault with nested pages, properties, callouts and local imag
   const palette = page.getByRole('dialog', { name: 'Search pages' })
   await expect(palette.getByRole('combobox')).toHaveValue('#fieldwork')
   await expect(palette.getByRole('option', { name: /Field notes.*#fieldwork/ })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'config', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('treeitem', { name: 'config', exact: true })).toHaveCount(0)
 
   await page.keyboard.press('Escape')
   const exported = page.waitForEvent('download')
@@ -211,16 +219,16 @@ test('round-trips a vault with nested pages, properties, callouts and local imag
     await importDialog.locator('input[type=file]').first().setInputFiles({
       name: 'Lekhan workspace.zip', mimeType: 'application/zip', buffer: bytes,
     })
-    await expect(importDialog.getByRole('status')).toHaveText('Import saved locally')
+    await expect(importDialog.getByRole('status').filter({ hasText: 'Import saved locally' })).toBeVisible()
     await importDialog.getByRole('button', { name: 'Open workspace' }).click()
-    await restored.getByRole('button', { name: 'Index', exact: true }).click()
+    await restored.getByRole('treeitem', { name: 'Index', exact: true }).click()
     await expect(restored.locator('aside[data-vault-callout=note]')).toContainText('Read this first')
     await expect(restored.getByRole('img', { name: 'stamp.png' })).toBeVisible()
     await restored.getByRole('link', { name: 'the field notes' }).click()
     await expect(restored.getByRole('textbox', { name: 'Page title' })).toHaveValue('Field notes')
     await expect(restored.getByRole('navigation', { name: 'Breadcrumb' })).toContainText('Guide')
     await expect(restored.getByRole('complementary', { name: 'Page context' })).toContainText('fieldwork')
-    await expect(restored.getByRole('button', { name: 'Attachments', exact: true })).toHaveCount(0)
+    await expect(restored.getByRole('treeitem', { name: 'Attachments', exact: true })).toHaveCount(0)
   } finally {
     await restored.close()
   }
@@ -228,7 +236,9 @@ test('round-trips a vault with nested pages, properties, callouts and local imag
 
 test('keeps the selected workspace language across reload', async ({ page }) => {
   await page.goto('/workspace')
-  await page.getByRole('combobox', { name: 'Language' }).selectOption('es')
+  await page.getByRole('button', { name: 'Workspace options' }).click()
+  await page.getByRole('combobox', { name: 'Language' }).click()
+  await page.getByRole('option', { name: 'Español' }).click()
   await expect(page.locator('html')).toHaveAttribute('lang', 'es')
   await expect(page.getByRole('textbox', { name: 'Título de la página' })).toHaveValue('Field guide')
   await page.reload()
@@ -245,9 +255,11 @@ test('keeps the selected workspace language across reload', async ({ page }) => 
 test('finds a Hindi slash command with combining marks and keeps the shortcut working', async ({ page }) => {
   await page.goto('/workspace')
   await expect(page.getByRole('textbox', { name: 'Page title' })).toHaveValue('Field guide')
-  await page.locator('summary[aria-label="Page actions"]').click()
-  await page.getByRole('button', { name: 'New subpage' }).click()
-  await page.getByRole('combobox', { name: 'Language' }).selectOption('hi')
+  await page.getByRole('button', { name: 'Page actions', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'New subpage' }).click()
+  await page.getByRole('button', { name: 'Workspace options' }).click()
+  await page.getByRole('combobox', { name: 'Language' }).click()
+  await page.getByRole('option', { name: 'हिन्दी' }).click()
   await expect(page.locator('html')).toHaveAttribute('lang', 'hi')
   const formatting = page.getByRole('group', { name: 'पेज का फ़ॉर्मैट' })
   await expect(formatting.getByRole('button', { name: 'बोल्ड' })).toBeVisible()
@@ -284,7 +296,7 @@ test('uses the workspace shortcuts while preserving modal and editor behavior', 
   await title.fill('Shortcut notebook')
   await title.press('Enter')
   await content.fill('Plum-color orchard')
-  await expect(page.getByRole('status')).toHaveText('Saved locally')
+  await expect(page.getByRole('status').filter({ hasText: 'Saved locally' })).toBeVisible()
 
   await page.keyboard.press('Control+Shift+k')
   const switcher = page.getByRole('combobox', { name: 'Quick switch' })
@@ -302,17 +314,17 @@ test('uses the workspace shortcuts while preserving modal and editor behavior', 
   await page.keyboard.press('Control+Shift+e')
   expect((await download).suggestedFilename()).toBe('Field guide.md')
   await page.keyboard.press('Control+Shift+Backspace')
-  const confirmation = page.getByRole('dialog', { name: 'Delete page' })
+  const confirmation = page.getByRole('alertdialog', { name: 'Delete Field guide?' })
   await expect(confirmation.getByRole('button', { name: 'Cancel' })).toBeFocused()
   await page.keyboard.press('Escape')
   await expect(title).toHaveValue('Field guide')
 
   const navigation = page.getByRole('complementary', { name: 'Workspace navigation' })
-  const pages = navigation.getByRole('region', { name: 'All pages' })
-  await pages.getByRole('button', { name: 'Field guide', exact: true }).press('ArrowDown')
-  await expect(pages.getByRole('button', { name: 'Quick capture', exact: true })).toBeFocused()
+  const pages = navigation.getByRole('tree', { name: 'All pages' })
+  await pages.getByRole('treeitem', { name: 'Field guide', exact: true }).press('ArrowDown')
+  await expect(pages.getByRole('treeitem', { name: 'Quick capture', exact: true })).toBeFocused()
   await page.keyboard.press('End')
-  await expect(pages.getByRole('button', { name: 'Shortcut notebook', exact: true })).toBeFocused()
+  await expect(pages.getByRole('treeitem', { name: 'Shortcut notebook', exact: true })).toBeFocused()
   await page.keyboard.press('Control+Backslash')
   await expect(navigation).toBeHidden()
   await page.getByRole('button', { name: 'Open navigation' }).click()
@@ -349,16 +361,16 @@ test('reveals more notebook pages and backlinks without hiding the active branch
     })
   }, defaultScope)
   await page.goto('/workspace')
-  const tree = page.getByRole('region', { name: 'All pages' })
+  const tree = page.getByRole('tree', { name: 'All pages' })
   const title = page.getByRole('textbox', { name: 'Page title' })
   await expect(title).toHaveValue('Fixture page 60')
-  await expect(tree.getByRole('button', { name: 'Fixture page 59', exact: true })).toBeVisible()
-  await expect(tree.getByRole('button', { name: 'Fixture page 60', exact: true })).toHaveAttribute('aria-current', 'page')
-  await expect(tree.getByRole('button', { name: 'Fixture page 48', exact: true })).toHaveCount(0)
-  await tree.getByRole('button', { name: 'Show more pages' }).press('Enter')
-  await expect(tree.getByRole('button', { name: 'Fixture page 48', exact: true })).toBeFocused()
+  await expect(tree.getByRole('treeitem', { name: 'Fixture page 59', exact: true })).toBeVisible()
+  await expect(tree.getByRole('treeitem', { name: 'Fixture page 60', exact: true })).toHaveAttribute('aria-selected', 'true')
+  await expect(tree.getByRole('treeitem', { name: 'Fixture page 48', exact: true })).toHaveCount(0)
+  await tree.getByRole('treeitem', { name: 'Show more pages' }).press('Enter')
+  await expect(tree.getByRole('treeitem', { name: 'Fixture page 48', exact: true })).toBeVisible()
 
-  await tree.getByRole('button', { name: 'Fixture page 0', exact: true }).click()
+  await tree.getByRole('treeitem', { name: 'Fixture page 0', exact: true }).click()
   const context = page.getByRole('complementary', { name: 'Page context' })
   await expect(context.getByRole('heading', { name: 'Backlinks 60' })).toBeVisible()
   await expect(context.getByRole('button', { name: /Fixture page 25/ })).toHaveCount(0)
@@ -378,10 +390,10 @@ test('downloads a vault attachment after saving the notebook and reopening its e
     await tab.getByRole('button', { name: 'Import vault' }).click()
     const dialog = tab.getByRole('dialog', { name: 'Import an Obsidian vault' })
     await dialog.getByLabel('Vault ZIP').setInputFiles({ name, mimeType: 'application/zip', buffer: archive })
-    await expect(dialog.getByRole('status')).toHaveText('Import saved locally')
+    await expect(dialog.getByRole('status').filter({ hasText: 'Import saved locally' })).toBeVisible()
     await expect(dialog.getByText('Files saved')).toBeVisible()
     await dialog.getByRole('button', { name: 'Open workspace' }).click()
-    await tab.getByRole('button', { name: 'Attachment notebook', exact: true }).click()
+    await tab.getByRole('treeitem', { name: 'Attachment notebook', exact: true }).click()
     await expect(tab.getByRole('textbox', { name: 'Page title' })).toHaveValue('Attachment notebook')
   }
   async function verifyDownload(tab: typeof page, keyboard = false) {

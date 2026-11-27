@@ -1,6 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
+import { Selector } from '@astryxdesign/core/Selector'
+import { VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
 import { useLocale, useTranslations } from '@/lib/i18n/client'
 import { priceLabel } from '@/lib/billing/catalog'
 import type { readPlanChanges } from '@/lib/billing/plan-changes'
@@ -65,28 +71,40 @@ export default function RazorpayPlanChanges() {
     }
   }
 
-  return <section className="billing-confirm billing-plan-changes" aria-label={t('planChanges')}>
-    {error && <p className="account-error" role="alert">{t(error)}</p>}
-    {notice && <p role="status">{t(notice)}</p>}
-    {!changes && !error && <p role="status">{t('checkingSubscription')}</p>}
-    {scheduled && <>
-      <p>
-        <strong>{scheduled.offer ? planLabel(scheduled.offer) : t('scheduledChange')}</strong>
-        {' · '}{scheduled.effectiveAt ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(scheduled.effectiveAt)) : t('atRenewal')}
-      </p>
-      <button className="secondary-button" disabled={busy} type="button" onClick={() => void update('remove')}>{t('cancelPlanChange')}</button>
-    </>}
-    {!scheduled && changes && (changes.options.length ? <>
-      <p>{t('newPlanStarts')}</p>
-      <label className="billing-change-select">{t('newPlan')}
-        <select value={selected} onChange={event => setSelected(event.target.value)} disabled={busy}>
-          <option value="">{t('choosePlan')}</option>
-          {changes.options.map(({ offer, amount }) => <option key={offer.tier + ':' + offer.cycle} value={offer.tier + ':' + offer.cycle}>
-            {planLabel(offer)} · {priceLabel(amount, 'INR', locale)}
-          </option>)}
-        </select>
-      </label>
-      <button className="primary-button" disabled={!choice || busy} type="button" onClick={() => void update('schedule')}>{t('schedulePlanChange')}</button>
-    </> : <p>{t('noPlanChanges')}</p>)}
-  </section>
+  return (
+    <Card padding={4} className="billing-confirm billing-plan-changes" aria-label={t('planChanges')}>
+      <VStack gap={3} align="start">
+        {error && <div role="alert" style={{ width: '100%' }}><Banner status="error" collapsible={false} title={t(error)} /></div>}
+        {notice && <div role="status" style={{ width: '100%' }}><Banner status="success" collapsible={false} title={t(notice)} /></div>}
+        {!changes && !error && <Text type="supporting" role="status">{t('checkingSubscription')}</Text>}
+        {scheduled && (
+          <>
+            <Text>
+              <strong>{scheduled.offer ? planLabel(scheduled.offer) : t('scheduledChange')}</strong>
+              {' · '}{scheduled.effectiveAt ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(scheduled.effectiveAt)) : t('atRenewal')}
+            </Text>
+            <Button type="button" variant="secondary" size="sm" isDisabled={busy} label={t('cancelPlanChange')} onClick={() => void update('remove')} />
+          </>
+        )}
+        {!scheduled && changes && (changes.options.length ? (
+          <>
+            <Text color="secondary">{t('newPlanStarts')}</Text>
+            <Selector
+              label={t('newPlan')}
+              placeholder={t('choosePlan')}
+              isDisabled={busy}
+              width="100%"
+              value={selected}
+              options={changes.options.map(({ offer, amount }) => ({
+                value: offer.tier + ':' + offer.cycle,
+                label: `${planLabel(offer)} · ${priceLabel(amount, 'INR', locale)}`,
+              }))}
+              onChange={setSelected}
+            />
+            <Button type="button" variant="primary" isDisabled={!choice || busy} label={t('schedulePlanChange')} onClick={() => void update('schedule')} />
+          </>
+        ) : <Text color="secondary">{t('noPlanChanges')}</Text>)}
+      </VStack>
+    </Card>
+  )
 }

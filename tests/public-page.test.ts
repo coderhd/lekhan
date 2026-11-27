@@ -13,7 +13,8 @@ const render = (source: string, taskStatus = 'Task status') => renderToStaticMar
 describe('public page body', () => {
   it('renders task state with the supplied accessible label', () => {
     const html = render('- [x] First task\n- [ ] Second task', 'Estado de la tarea')
-    expect(html.match(/aria-label="Estado de la tarea"/g)).toHaveLength(2)
+    expect(html.match(/<label[^>]*>Estado de la tarea<\/label>/g)).toHaveLength(2)
+    expect(html.match(/type="checkbox"/g)).toHaveLength(2)
     expect(html.match(/\bchecked=""/g)).toHaveLength(1)
     expect(html).toContain('Second task')
   })

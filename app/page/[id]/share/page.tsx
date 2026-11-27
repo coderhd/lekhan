@@ -1,11 +1,13 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
+import { Button } from '@astryxdesign/core/Button'
 import { siteOrigin } from '@/lib/auth/config'
 import { accountContext } from '@/lib/auth/server'
 import { pageAccess } from '@/lib/cloud/graph'
 import type { SharedRole } from '@/lib/cloud/sharing'
 import InviteLink from '@/components/invite-link'
+import ShareRoleSelect from '@/components/share-role-select'
 import { UsageAnalyticsReceipts } from '@/components/usage-analytics'
 import { updateSharing } from './actions'
 
@@ -67,9 +69,14 @@ export default async function SharePage({ params, searchParams }: {
         <p>{access.page.is_public ? t('publicAccess') : t('privateAccess')}</p>
         {access.page.is_public && <InviteLink path={'/page/' + id} origin={siteOrigin()} label={t('publicLink')} />}
         <form action={action} className="cloud-create">
-          <button className="secondary-button" name="change" value={access.page.is_public ? 'unpublish' : 'publish'}>
-            {access.page.is_public ? t('unpublish') : t('publish')}
-          </button>
+          <Button
+            type="submit"
+            variant="secondary"
+            size="sm"
+            name="change"
+            value={access.page.is_public ? 'unpublish' : 'publish'}
+            label={access.page.is_public ? t('unpublish') : t('publish')}
+          />
         </form>
       </section>
 
@@ -77,8 +84,8 @@ export default async function SharePage({ params, searchParams }: {
         <h2 id="invite-heading">{t('inviteByEmail')}</h2>
         <form action={action} className="cloud-create">
           <label>{t('email')} <input type="email" name="email" maxLength={254} required /></label>
-          <label>{t('access')} <select name="role" defaultValue="viewer"><option value="viewer">{t('canView')}</option><option value="editor">{t('canEdit')}</option></select></label>
-          <button className="primary-button" name="change" value="invite">{t('createInvitation')}</button>
+          <ShareRoleSelect label={t('access')} defaultValue="viewer" canViewLabel={t('canView')} canEditLabel={t('canEdit')} />
+          <Button type="submit" variant="primary" size="sm" name="change" value="invite" label={t('createInvitation')} />
         </form>
       </section>
 
@@ -93,11 +100,14 @@ export default async function SharePage({ params, searchParams }: {
             </div>
             <form action={action}>
               <input type="hidden" name="target" value={member.user_id} />
-              <select name="role" aria-label={t('accessFor', { person: member.profiles?.email ?? member.user_id })} defaultValue={member.role}>
-                <option value="viewer">{t('canView')}</option><option value="editor">{t('canEdit')}</option>
-              </select>
-              <button className="secondary-button" name="change" value="role">{t('saveRole')}</button>
-              <button className="secondary-button" name="change" value="remove">{t('remove')}</button>
+              <ShareRoleSelect
+                label={t('accessFor', { person: member.profiles?.email ?? member.user_id })}
+                defaultValue={member.role}
+                canViewLabel={t('canView')}
+                canEditLabel={t('canEdit')}
+              />
+              <Button type="submit" variant="secondary" size="sm" name="change" value="role" label={t('saveRole')} />
+              <Button type="submit" variant="secondary" size="sm" name="change" value="remove" label={t('remove')} />
             </form>
           </li>)}
         </ul>
@@ -112,7 +122,7 @@ export default async function SharePage({ params, searchParams }: {
             </div>
             <form action={action}>
               <input type="hidden" name="target" value={invite.id} />
-              <button className="secondary-button" name="change" value="cancel">{t('cancelInvitation')}</button>
+              <Button type="submit" variant="secondary" size="sm" name="change" value="cancel" label={t('cancelInvitation')} />
             </form>
           </li>)}</ul>}
       </section>

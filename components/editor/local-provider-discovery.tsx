@@ -1,5 +1,15 @@
+'use client'
+
 import { Check, Copy, PlugZap } from 'lucide-react'
 import { useState } from 'react'
+import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
+import { Collapsible } from '@astryxdesign/core/Collapsible'
+import { Heading } from '@astryxdesign/core/Heading'
+import { Link } from '@astryxdesign/core/Link'
+import { Selector } from '@astryxdesign/core/Selector'
+import { HStack, VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
 import { useTranslations } from '@/lib/i18n/client'
 import type { LocalProviderProbe } from '@/lib/ai/client'
 import { localCorsCommand, localSetupPlatform, type LocalSetupPlatform } from '@/lib/ai/local-provider-setup'
@@ -27,63 +37,106 @@ export default function LocalProviderDiscovery({ results, disabled, onSelect, na
     }
   }
 
-  return <section className="local-discovery" aria-label={t('localDiscovery')}>
-    <h3>{t('localDiscovery')}</h3>
-    <ul>
-      {results.map(probe => {
-        const provider = PROVIDERS[probe.provider]
-        const command = localCorsCommand(probe.provider, origin, platform)
-        const connected = probe.status === 'connected'
+  return (
+    <section className="local-discovery" aria-label={t('localDiscovery')}>
+      <VStack gap={3}>
+        <Heading level={3}>{t('localDiscovery')}</Heading>
+        <VStack gap={2}>
+          {results.map(probe => {
+            const provider = PROVIDERS[probe.provider]
+            const command = localCorsCommand(probe.provider, origin, platform)
+            const connected = probe.status === 'connected'
 
-        return <li key={probe.provider}>
-          <div className="local-discovery-heading">
-            <strong>{provider.label}</strong>
-            <span data-status={probe.status}>{connected && <Check size={13} aria-hidden="true" />}{t('probe_' + probe.status)}</span>
-          </div>
-          <div className="local-discovery-endpoint">
-            <code>{probe.baseUrl}</code>
-            {connected && <small>{t('latency', { milliseconds: probe.latencyMs })}</small>}
-          </div>
-          {connected && (probe.models.length
-            ? <label>{t('chooseLocalModel', { provider: provider.label })}
-              <select value="" disabled={disabled} onChange={event => {
-                if (event.target.value) onSelect(probe, event.target.value)
-              }}>
-                <option value="">{t('useDiscoveredModel')}</option>
-                {probe.models.map(model => <option key={model} value={model}>{model}</option>)}
-              </select>
-            </label>
-            : <p>{t('probeEmptyModels')}</p>)}
-          {probe.status === 'authorization_needed' && <button className="secondary-button" type="button" disabled={disabled}
-            onClick={() => onSelect(probe, '')}><PlugZap size={15} aria-hidden="true" /> {t('configureLocalAccess')}</button>}
-          {probe.status === 'offline' && <p>{t(native ? 'probeNativeOfflineHelp' : 'probeOfflineHelp')}</p>}
-          {probe.status === 'unexpected_response' && <p>{t('probeUnexpectedHelp')}</p>}
-          {probe.status === 'cors_blocked' && <details className="local-setup">
-            <summary>{t('probeSetup')}</summary>
-            {probe.provider === 'ollama' && command && <>
-              <label>{t('setupPlatform')}
-                <select value={platform} onChange={event => setPlatform(event.target.value as LocalSetupPlatform)}>
-                  <option value="mac">macOS</option>
-                  <option value="windows">Windows</option>
-                  <option value="linux">Linux</option>
-                </select>
-              </label>
-              <p>{t('ollamaSetup_' + platform)}</p>
-            </>}
-            {probe.provider === 'lmstudio' && <p>{t('lmstudioSetup')}</p>}
-            {probe.provider === 'llamacpp' && command && <p>{t('llamacppSetup')}</p>}
-            {probe.provider !== 'lmstudio' && !command && <p>{t('probeUnknownOrigin')}</p>}
-            {command && <div className="local-setup-command">
-              <pre><code>{command}</code></pre>
-              <button className="secondary-button" type="button" onClick={() => void copy(command)}>
-                <Copy size={15} aria-hidden="true" /> {t('copyLocalCommand')}
-              </button>
-              {copyResult?.command === command && <small role="status">{t(copyResult.copied ? 'localCommandCopied' : 'localCommandCopyFailed')}</small>}
-            </div>}
-            <a className="assistant-provider-link" href={provider.docsUrl} target="_blank" rel="noopener noreferrer">{t('providerSetupDocs', { provider: provider.label })}</a>
-          </details>}
-        </li>
-      })}
-    </ul>
-  </section>
+            return (
+              <Card key={probe.provider} padding={3}>
+                <VStack gap={2}>
+                  <HStack justify="between" align="center" gap={2} wrap="wrap" className="local-discovery-heading">
+                    <Text weight="semibold">{provider.label}</Text>
+                    <HStack gap={1} align="center" data-status={probe.status}>
+                      {connected && <Check size={13} aria-hidden="true" />}
+                      <Text type="supporting">{t('probe_' + probe.status)}</Text>
+                    </HStack>
+                  </HStack>
+                  <HStack gap={2} align="center" wrap="wrap" className="local-discovery-endpoint">
+                    <Text type="code">{probe.baseUrl}</Text>
+                    {connected && <Text type="supporting" color="secondary">{t('latency', { milliseconds: probe.latencyMs })}</Text>}
+                  </HStack>
+                  {connected && (probe.models.length ? (
+                    <Selector
+                      label={t('chooseLocalModel', { provider: provider.label })}
+                      placeholder={t('useDiscoveredModel')}
+                      isDisabled={disabled}
+                      size="sm"
+                      width="100%"
+                      value=""
+                      options={probe.models.map(model => ({ value: model, label: model }))}
+                      onChange={value => { if (value) onSelect(probe, value) }}
+                    />
+                  ) : <Text size="sm" color="secondary">{t('probeEmptyModels')}</Text>)}
+                  {probe.status === 'authorization_needed' && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      icon={<PlugZap size={15} aria-hidden="true" />}
+                      isDisabled={disabled}
+                      label={t('configureLocalAccess')}
+                      onClick={() => onSelect(probe, '')}
+                    />
+                  )}
+                  {probe.status === 'offline' && <Text size="sm" color="secondary">{t(native ? 'probeNativeOfflineHelp' : 'probeOfflineHelp')}</Text>}
+                  {probe.status === 'unexpected_response' && <Text size="sm" color="secondary">{t('probeUnexpectedHelp')}</Text>}
+                  {probe.status === 'cors_blocked' && (
+                    <Collapsible defaultIsOpen={false} trigger={<Text size="sm" weight="semibold">{t('probeSetup')}</Text>} className="local-setup">
+                      <VStack gap={2}>
+                        {probe.provider === 'ollama' && command && (
+                          <>
+                            <Selector
+                              label={t('setupPlatform')}
+                              size="sm"
+                              width="100%"
+                              value={platform}
+                              options={[
+                                { value: 'mac', label: 'macOS' },
+                                { value: 'windows', label: 'Windows' },
+                                { value: 'linux', label: 'Linux' },
+                              ]}
+                              onChange={value => setPlatform(value as LocalSetupPlatform)}
+                            />
+                            <Text size="sm" color="secondary">{t('ollamaSetup_' + platform)}</Text>
+                          </>
+                        )}
+                        {probe.provider === 'lmstudio' && <Text size="sm" color="secondary">{t('lmstudioSetup')}</Text>}
+                        {probe.provider === 'llamacpp' && command && <Text size="sm" color="secondary">{t('llamacppSetup')}</Text>}
+                        {probe.provider !== 'lmstudio' && !command && <Text size="sm" color="secondary">{t('probeUnknownOrigin')}</Text>}
+                        {command && (
+                          <VStack gap={1.5} align="start" className="local-setup-command">
+                            <pre><code>{command}</code></pre>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              icon={<Copy size={15} aria-hidden="true" />}
+                              label={t('copyLocalCommand')}
+                              onClick={() => void copy(command)}
+                            />
+                            {copyResult?.command === command && (
+                              <Text type="supporting" role="status">{t(copyResult.copied ? 'localCommandCopied' : 'localCommandCopyFailed')}</Text>
+                            )}
+                          </VStack>
+                        )}
+                        <Link href={provider.docsUrl} isExternalLink>
+                          {t('providerSetupDocs', { provider: provider.label })}
+                        </Link>
+                      </VStack>
+                    </Collapsible>
+                  )}
+                </VStack>
+              </Card>
+            )
+          })}
+        </VStack>
+      </VStack>
+    </section>
+  )
 }

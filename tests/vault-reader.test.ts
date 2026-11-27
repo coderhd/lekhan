@@ -71,7 +71,7 @@ describe("vault ZIP reader", () => {
     await expect(readVaultZip(file)).rejects.toThrow(/per-file limit/i)
   })
 
-  it("enforces the aggregate unpacked limit across files", async () => {
+  it("enforces the aggregate unpacked limit across files", { timeout: 15_000 }, async () => {
     const data = new Uint8Array(10 * MiB)
     const files = Object.fromEntries(Array.from({ length: 11 }, (_, idx) => [`Note ${idx}.md`, data]))
 

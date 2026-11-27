@@ -3,6 +3,12 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { CornerDownLeft, FileText, Search, X } from 'lucide-react'
+import { Dialog as AstryxDialog } from '@astryxdesign/core/Dialog'
+import { IconButton } from '@astryxdesign/core/IconButton'
+import { Kbd } from '@astryxdesign/core/Kbd'
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
+import { HStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
 import { useTranslations } from '@/lib/i18n/client'
 import type { Page } from '@/lib/types'
 import { pagePath } from '@/lib/workspace'
@@ -15,35 +21,25 @@ export function Dialog({
   onClose,
   children,
   className = '',
+  width = 560,
 }: {
   title: string
   onClose: () => void
   children: ReactNode
   className?: string
+  width?: number | string
 }) {
-  const ref = useRef<HTMLDialogElement>(null)
-
-  useEffect(() => {
-    const dialog = ref.current
-    dialog?.showModal()
-    return () => dialog?.close()
-  }, [])
-
   return (
-    <dialog
-      ref={ref}
+    <AstryxDialog
+      isOpen
+      onOpenChange={open => { if (!open) onClose() }}
       aria-label={title}
-      className={`overlay-dialog ${className}`}
-      onCancel={event => {
-        event.preventDefault()
-        onClose()
-      }}
-      onClick={event => {
-        if (event.target === event.currentTarget) onClose()
-      }}
+      className={className}
+      width={width}
+      padding={0}
     >
       <div className="dialog-content">{children}</div>
-    </dialog>
+    </AstryxDialog>
   )
 }
 
@@ -83,9 +79,10 @@ export function SearchDialog({
   const currentRemote = remote?.subject === cloudSubject ? remote : undefined
   const loading = cloud && !browserOffline && currentRemote?.query !== term
   const failed = cloud && (browserOffline || (!loading && currentRemote?.pages === null))
+  const searchablePages = useMemo(() => pages?.filter(page => !page.folder), [pages])
   const indexedPages = cloud
     ? !currentRemote?.denied && cachedCloud?.subject === cloudSubject ? cachedCloud?.pages : undefined
-    : pages
+    : searchablePages
   const immediate = useMemo(() => indexedPages
     ? workspaceSearch(indexedPages).query(query, term ? 15 : 8, titleOnly).map(({ page, context }) => ({
       id: page.id, title: page.title, context: context ?? null,
@@ -152,7 +149,7 @@ export function SearchDialog({
   }, [selected])
 
   return (
-    <Dialog title={label} onClose={onClose} className="search-dialog">
+    <Dialog title={label} onClose={onClose} className="search-dialog" width={580}>
       <div className="search-input-row">
         <Search size={19} aria-hidden="true" />
         <input
@@ -191,60 +188,78 @@ export function SearchDialog({
             }
           }}
         />
-        <button type="button" className="icon-button" aria-label={t('closeSearch')} onClick={onClose}>
-          <X size={17} />
-        </button>
+        <IconButton
+          variant="ghost"
+          size="sm"
+          label={t('closeSearch')}
+          icon={<X size={17} />}
+          onClick={onClose}
+        />
       </div>
-      {pages && onOpenCloud && <div className="search-scope" role="group" aria-label={t('searchPages')}>
-        {[false, true].map(value => <button
-          type="button" key={String(value)} aria-pressed={cloud === value}
-          onClick={() => {
-            setCloud(value)
-            if (value) setQuery(query.slice(0, 160))
-            setHighlight(0)
-            input.current?.focus()
-          }}
-        >{t(value ? 'searchCloud' : 'searchLocal')}</button>)}
-      </div>}
+      {pages && onOpenCloud && (
+        <div className="search-scope">
+          <SegmentedControl
+            label={t('searchPages')}
+            size="sm"
+            value={cloud ? 'cloud' : 'local'}
+            onChange={value => {
+              const nextCloud = value === 'cloud'
+              setCloud(nextCloud)
+              if (nextCloud) setQuery(query.slice(0, 160))
+              setHighlight(0)
+              input.current?.focus()
+            }}
+          >
+            <SegmentedControlItem value="local" label={t('searchLocal')} />
+            <SegmentedControlItem value="cloud" label={t('searchCloud')} />
+          </SegmentedControl>
+        </div>
+      )}
       <div className="search-results">
         <p className="section-label">{query.trim() ? t('results') : t('recentPages')}</p>
         <div id={resultsId} role="listbox" aria-label={t('matchingPages')} aria-busy={loading && results.length === 0}>
-        {results.map(({ id, title, context }, index) => {
-          const ancestors = !cloud && pages ? pagePath(pages, id).slice(0, -1) : []
-          return (
-            <button
-              key={id}
-              ref={index === selected ? row : undefined}
-              id={`${resultsId}-${id}`}
-              className="search-result"
-              role="option"
-              tabIndex={-1}
-              aria-selected={index === selected}
-              data-selected={index === selected}
-              onPointerMove={() => setHighlight(index)}
-              onClick={() => open?.(id)}
-            >
-              <FileText size={17} aria-hidden="true" />
-              <span>
-                <strong>{title}</strong>
-                {context && <small>{context}</small>}
-                {ancestors.length > 0 && <small>{ancestors.map(item => item.title).join(' / ')}</small>}
-              </span>
-              {index === selected && <CornerDownLeft className="search-enter" size={16} aria-hidden="true" />}
-            </button>
-          )
-        })}
+          {results.map(({ id, title, context }, index) => {
+            const ancestors = !cloud && pages ? pagePath(pages, id).slice(0, -1) : []
+            return (
+              <button
+                key={id}
+                ref={index === selected ? row : undefined}
+                id={`${resultsId}-${id}`}
+                className="search-result"
+                role="option"
+                tabIndex={-1}
+                aria-selected={index === selected}
+                data-selected={index === selected}
+                onPointerMove={() => setHighlight(index)}
+                onClick={() => open?.(id)}
+              >
+                <FileText size={17} aria-hidden="true" />
+                <span>
+                  <strong>{title}</strong>
+                  {context && <small>{context}</small>}
+                  {ancestors.length > 0 && <small>{ancestors.map(item => item.title).join(' / ')}</small>}
+                </span>
+                {index === selected && <CornerDownLeft className="search-enter" size={16} aria-hidden="true" />}
+              </button>
+            )
+          })}
         </div>
-        {results.length === 0 && <p className="dialog-empty" role="status">
-          {t(loading ? 'searchLoading' : failed ? 'searchUnavailable' : 'noResults')}
-        </p>}
-        {failed && results.length > 0 && <p className="dialog-empty" role="status">{t('searchLocalCloudCopies')}</p>}
+        {results.length === 0 && (
+          <Text type="supporting" color="secondary" className="dialog-empty" role="status">
+            {t(loading ? 'searchLoading' : failed ? 'searchUnavailable' : 'noResults')}
+          </Text>
+        )}
+        {failed && results.length > 0 && (
+          <Text type="supporting" color="secondary" className="dialog-empty" role="status">
+            {t('searchLocalCloudCopies')}
+          </Text>
+        )}
       </div>
-      <div className="search-help">
-        <span><kbd>↑</kbd><kbd>↓</kbd> {t('navigate')}</span>
-        <span><kbd>↵</kbd> {t('open')}</span>
-        <span><kbd>esc</kbd> {t('close')}</span>
-      </div>
+      <HStack gap={3} className="search-help">
+        <HStack gap={1} align="center"><Kbd keys="up" /><Kbd keys="down" /><Text type="supporting">{t('navigate')}</Text></HStack>
+        <HStack gap={1} align="center"><Kbd keys="enter" /><Text type="supporting">{t('open')}</Text></HStack>
+        <HStack gap={1} align="center"><Kbd keys="esc" /><Text type="supporting">{t('close')}</Text></HStack>
+      </HStack>
     </Dialog>
   )
 }

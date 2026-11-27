@@ -9,8 +9,20 @@ export { searchPages } from './workspace-search'
 import { hasYamlFrontmatter } from './markdown'
 import type { ImportNote, ImportReport, VaultImportPlan } from './vault-import'
 
-type PageInput = Partial<Pick<Page, 'title' | 'parentId' | 'markdown' | 'frontmatter' | 'properties'>>
+type PageInput = Partial<Pick<Page, 'title' | 'parentId' | 'markdown' | 'folder' | 'frontmatter' | 'properties'>>
 type PagePatch = PageInput & Partial<Pick<Page, 'favorite'>>
+
+export function isFolderPage(page: Pick<Page, 'folder'> | undefined): boolean {
+  return Boolean(page?.folder)
+}
+
+function nextActiveNote(pages: Page[], preferredParentId: string | null): string | null {
+  const byId = pageIndex(pages)
+  for (let current = preferredParentId ? byId.get(preferredParentId) : undefined; current; current = current.parentId ? byId.get(current.parentId) : undefined) {
+    if (!isFolderPage(current)) return current.id
+  }
+  return pages.find(page => !isFolderPage(page))?.id ?? null
+}
 
 function normalize(text: string) {
   return text.trim().normalize('NFC').toLowerCase()
@@ -32,7 +44,7 @@ function uniqueTitle(pages: Page[], parentId: string | null, title: string, excl
   return candidate
 }
 
-export type PageLocation = Pick<Page, 'id' | 'title' | 'parentId'>
+export type PageLocation = Pick<Page, 'id' | 'title' | 'parentId' | 'folder'>
 
 function pathFromMap<T extends PageLocation>(pages: Map<string, T>, id: string) {
   const path: T[] = []
@@ -189,12 +201,12 @@ export function notebookNavigation(pages: Page[]) {
   if (cached) return cached
   const childPages = new Map<string | null, PageLocation[]>()
   const favorites: PageLocation[] = []
-  for (const { id, title, parentId, favorite } of pages) {
-    const location = { id, title, parentId }
+  for (const { id, title, parentId, favorite, folder } of pages) {
+    const location: PageLocation = folder ? { id, title, parentId, folder } : { id, title, parentId }
     const siblings = childPages.get(parentId)
     if (siblings) siblings.push(location)
     else childPages.set(parentId, [location])
-    if (favorite) favorites.push(location)
+    if (favorite && !folder) favorites.push(location)
   }
   const navigation = { childPages, favorites, path: buildResolver(pages).path }
   navigationBySnapshot.set(pages, navigation)
@@ -240,6 +252,7 @@ function newPage(pages: Page[], input: PageInput, parentId: string | null, now: 
     parentId,
     title: uniqueTitle(pages, parentId, input.title ?? 'Untitled'),
     markdown: input.markdown ?? '',
+    ...(input.folder ? { folder: true } : {}),
     ...(input.properties ? { properties: input.properties } : {}),
     ...(input.frontmatter ? { frontmatter: input.frontmatter } : {}),
     favorite: false,
@@ -295,7 +308,7 @@ export function applyVaultImport(workspace: Workspace, plan: VaultImportPlan, { 
   for (const folder of plan.directories) {
     const note = folderNotes.get(folder)
     const title = folder.split('/').at(-1) ?? folder
-    const created = newPage(pages, note ?? { title }, folders.get(directoryOf(folder)) ?? null, now)
+    const created = newPage(pages, note ?? { title, folder: true }, folders.get(directoryOf(folder)) ?? null, now)
     if (note) mergedFolders.set(note.sourcePath, created)
     pages.push(created)
     folders.set(folder, created.id)
@@ -462,7 +475,7 @@ export function deletePage(workspace: Workspace, id: string): Workspace {
   const persisted = workspace.pages.filter((page) => !removed.has(page.id))
   const pages = keepResolvedLinks(workspace.pages, persisted, new Date().toISOString())
   const activePageId = workspace.activePageId && removed.has(workspace.activePageId)
-    ? deleted.parentId ?? pages[0]?.id ?? null
+    ? nextActiveNote(pages, deleted.parentId)
     : workspace.activePageId
   return { ...workspace, pages, activePageId }
 }

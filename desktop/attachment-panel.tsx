@@ -2,6 +2,10 @@ import { invoke } from '@tauri-apps/api/core'
 import { ArrowDownToLine, Paperclip } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Button } from '@astryxdesign/core/Button'
+import { Item } from '@astryxdesign/core/Item'
+import { VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
 import type { Page } from '../lib/types'
 import { rasterMime } from '../lib/vault-import'
 import { attachmentMarkdown, maxAttachment, referencedAttachments, type VaultAttachment } from './vault-attachments'
@@ -60,13 +64,19 @@ function Attachment({ token, asset }: { token: string; asset: VaultAttachment })
   }
 
   return <li ref={target} className="vault-attachment">
-    {/* eslint-disable-next-line @next/next/no-img-element -- The desktop preview is a local blob. */}
-    {image && <img src={image} alt={asset.label} loading="lazy" />}
-    <button className="nav-action" type="button" disabled={downloading || asset.bytes > maxAttachment} onClick={() => void download()} title={asset.path}>
-      <ArrowDownToLine size={14} aria-hidden="true" /><span>{asset.label}</span>
-    </button>
-    {asset.bytes > maxAttachment && <p className="vault-attachment-status">{t('attachmentLimit')}</p>}
-    {failed && <p className="vault-attachment-status" role="alert">{t('attachmentReadFailed')}</p>}
+    <VStack gap={1}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- The desktop preview is a local blob. */}
+      {image && <img src={image} alt={asset.label} loading="lazy" />}
+      <Item
+        density="compact"
+        startContent={<ArrowDownToLine size={14} aria-hidden="true" />}
+        label={asset.label}
+        isDisabled={downloading || asset.bytes > maxAttachment}
+        onClick={() => void download()}
+      />
+      {asset.bytes > maxAttachment && <Text type="supporting" color="secondary" className="vault-attachment-status">{t('attachmentLimit')}</Text>}
+      {failed && <Text type="supporting" className="vault-attachment-status" role="alert">{t('attachmentReadFailed')}</Text>}
+    </VStack>
   </li>
 }
 
@@ -101,9 +111,16 @@ export default function AttachmentPanel({ token, page, path, assets, onAttach, o
     {linked.length > 0 && <ul className="vault-attachment-list">
       {linked.map(asset => <Attachment key={asset.path + ':' + asset.modifiedMs + ':' + asset.preview} token={token} asset={asset} />)}
     </ul>}
-    <button className="nav-action" type="button" disabled={!onInsert || !path || adding} onClick={() => void add()}>
-      <Paperclip size={14} aria-hidden="true" /> {t('attachFile')}
-    </button>
-    {failed && <p className="vault-attachment-status" role="alert">{t('attachmentAddFailed')}</p>}
+    <Button
+      type="button"
+      variant="secondary"
+      size="sm"
+      width="100%"
+      icon={<Paperclip size={14} aria-hidden="true" />}
+      isDisabled={!onInsert || !path || adding}
+      label={t('attachFile')}
+      onClick={() => void add()}
+    />
+    {failed && <Text type="supporting" className="vault-attachment-status" role="alert">{t('attachmentAddFailed')}</Text>}
   </section>
 }

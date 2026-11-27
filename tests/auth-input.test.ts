@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { authConfig, confirmationTarget, siteOrigin } from '../lib/auth/config'
-import { readConfirmation, readCredentials, workspaceTransferPath } from '../lib/auth/input'
+import { billingNextPath, readConfirmation, readCredentials, workspaceTransferPath } from '../lib/auth/input'
 
 afterEach(() => vi.unstubAllEnvs())
 
@@ -61,5 +61,14 @@ describe('authentication input', () => {
     expect(workspaceTransferPath(token)).toBe('/billing/transfer/' + token)
     expect(workspaceTransferPath(token + '/')).toBeNull()
     expect(workspaceTransferPath('//elsewhere.example')).toBeNull()
+  })
+
+  it('allows only safe billing next paths for post-auth checkout', () => {
+    expect(billingNextPath('/billing')).toBe('/billing')
+    expect(billingNextPath('/billing?tier=pro&cycle=annual&currency=inr')).toBe('/billing?tier=pro&cycle=annual&currency=inr')
+    expect(billingNextPath('/billing?tier=team&seats=4')).toBe('/billing?tier=team&seats=4')
+    expect(billingNextPath('//elsewhere.example')).toBeNull()
+    expect(billingNextPath('/workspace')).toBeNull()
+    expect(billingNextPath('/billing?tier=pro&url=https://evil.example')).toBeNull()
   })
 })

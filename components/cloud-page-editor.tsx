@@ -3,6 +3,13 @@
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Cloud, CloudOff, Download, History, LoaderCircle, LockKeyhole, Paperclip } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { Collapsible } from '@astryxdesign/core/Collapsible'
+import { Item } from '@astryxdesign/core/Item'
+import { HStack, VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
+import { ToggleButton } from '@astryxdesign/core/ToggleButton'
 import type { PageChoice } from '@/lib/types'
 import type { CloudPage, PageRole } from '@/lib/cloud/graph'
 import { forgetCloudSearchPage, rememberCloudSearchPage } from '@/lib/cloud/local-search'
@@ -237,17 +244,22 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
   return (
     <div className="cloud-editor" ref={editorRoot}>
       {linkChoices && <Suspense><CloudLinkChoices source={linkChoices} onLoad={setChoices} /></Suspense>}
-      <div className="cloud-editor-status">
+      <HStack gap={2} align="center" wrap="wrap" className="cloud-editor-status">
         <span role="status">
           {replica.status === 'live' ? <Cloud size={16} /> : replica.status === 'opening' && enabled && !checkingSync
             ? <LoaderCircle size={16} className="spin" /> : <CloudOff size={16} />}
           {networkLabel}
         </span>
         {replica.session && !editable && <span><LockKeyhole size={15} /> {checkingSync && role !== 'viewer' ? t('checkingCloudAccess') : offlineText('viewing')}</span>}
-        {source !== null && <button type="button" className="secondary-button" aria-pressed={preview} onClick={() => setPreview(value => !value)}>
-          {offlineText('preview')}
-        </button>}
-        {source !== null && !preview && editable && replica.imagePolicy &&
+        {source !== null && (
+          <ToggleButton
+            size="sm"
+            label={offlineText('preview')}
+            isPressed={preview}
+            onPressedChange={setPreview}
+          />
+        )}
+        {source !== null && !preview && editable && replica.imagePolicy && (
           <CloudImageControl policy={replica.imagePolicy} onInsert={(src, label) => {
             const input = sourceInput.current
             if (!input || input.readOnly) return
@@ -255,37 +267,52 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
             const from = input.selectionStart
             const to = input.selectionEnd
             writeSource(input.value.slice(0, from) + `\n\n![${alt}](${src})\n\n` + input.value.slice(to))
-          }} />}
-        {replica.session && !offlineShell && <button type="button" className="secondary-button" onClick={() => setHistoryOpen(true)}>
-          <History size={15} /> {cloudText('history')}
-        </button>}
-        {replica.session && !offlineShell && !localOnly && <button type="button" className="secondary-button" onClick={() => setAttachmentsOpen(true)}>
-          <Paperclip size={15} /> {cloudText('attachments')}
-        </button>}
-        {exportable && <button type="button" className="secondary-button" onClick={() => setExportOpen(true)}>
-          <Download size={15} /> {exportText('title')}
-        </button>}
-        {!offlineShell && (replica.preference === 'personal' || replica.preference === 'paused') && <button type="button" className="secondary-button"
-          disabled={changingSync || (!localOnly && replica.status !== 'live')} onClick={() => void toggleCloudSync()}>
-          {replica.preference === 'paused' ? cloudText('resumeSync') : cloudText('pauseSync')}
-        </button>}
-      </div>
-      {attachmentDownload === 'running' && <p role="status">{exportText('downloadingAttachment')}</p>}
-      {attachmentDownload === 'failed' && <p role="alert" className="account-error">{exportText('attachmentUnavailable')}</p>}
-      {preferenceError && <p className="account-error" role="alert">{cloudText(preferenceError)}</p>}
-      {localOnly && <p className="billing-notice">{replica.session
-        ? cloudText('localOnlyCopy')
-        : cloudText('localCopyMissing')}</p>}
-      {linkMissing && <p className="account-error" role="status">{offlineShell ? offlineText('linkMissing') : cloudText('linkUnavailable')}</p>}
-      {replica.status === 'limit' && <p>{cloudText('reviewSharing')}</p>}
-      {syncPaused && <div className="billing-notice" role="status">
-        <p>{cloudText(replica.status === 'payload-limit' ? 'draftTooLarge'
-          : replica.status === 'workspace-media-limit' ? 'workspaceFull'
-          : replica.imagePolicy === 'paid' ? 'paidImageTooLarge' : 'freeImageTooLarge')}</p>
-        <button type="button" className="secondary-button" onClick={replica.retrySync}>{cloudText('retrySync')}</button>
-      </div>}
-      {offlineShell && !replica.session && replica.status === 'offline' && <p role="alert">{offlineText('missingCopy')}</p>}
-      {schemaError && <p className="account-error" role="alert">{cloudText('unsupportedBlocks')}</p>}
+          }} />
+        )}
+        {replica.session && !offlineShell && (
+          <Button type="button" variant="secondary" size="sm" icon={<History size={15} />} label={cloudText('history')} onClick={() => setHistoryOpen(true)} />
+        )}
+        {replica.session && !offlineShell && !localOnly && (
+          <Button type="button" variant="secondary" size="sm" icon={<Paperclip size={15} />} label={cloudText('attachments')} onClick={() => setAttachmentsOpen(true)} />
+        )}
+        {exportable && (
+          <Button type="button" variant="secondary" size="sm" icon={<Download size={15} />} label={exportText('title')} onClick={() => setExportOpen(true)} />
+        )}
+        {!offlineShell && (replica.preference === 'personal' || replica.preference === 'paused') && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            isDisabled={changingSync || (!localOnly && replica.status !== 'live')}
+            label={replica.preference === 'paused' ? cloudText('resumeSync') : cloudText('pauseSync')}
+            onClick={() => void toggleCloudSync()}
+          />
+        )}
+      </HStack>
+      {attachmentDownload === 'running' && <Text type="supporting" role="status">{exportText('downloadingAttachment')}</Text>}
+      {attachmentDownload === 'failed' && <div role="alert"><Banner status="error" collapsible={false} title={exportText('attachmentUnavailable')} /></div>}
+      {preferenceError && <div role="alert"><Banner status="error" collapsible={false} title={cloudText(preferenceError)} /></div>}
+      {localOnly && (
+        <Banner status="info" collapsible={false} title={replica.session ? cloudText('localOnlyCopy') : cloudText('localCopyMissing')} />
+      )}
+      {linkMissing && (
+        <div role="status"><Banner status="warning" collapsible={false} title={offlineShell ? offlineText('linkMissing') : cloudText('linkUnavailable')} /></div>
+      )}
+      {replica.status === 'limit' && <Text color="secondary">{cloudText('reviewSharing')}</Text>}
+      {syncPaused && (
+        <div role="status">
+          <Banner
+            status="warning"
+            collapsible={false}
+            title={cloudText(replica.status === 'payload-limit' ? 'draftTooLarge'
+              : replica.status === 'workspace-media-limit' ? 'workspaceFull'
+                : replica.imagePolicy === 'paid' ? 'paidImageTooLarge' : 'freeImageTooLarge')}
+            endContent={<Button type="button" variant="secondary" size="sm" label={cloudText('retrySync')} onClick={replica.retrySync} />}
+          />
+        </div>
+      )}
+      {offlineShell && !replica.session && replica.status === 'offline' && <div role="alert"><Banner status="warning" collapsible={false} title={offlineText('missingCopy')} /></div>}
+      {schemaError && <div role="alert"><Banner status="error" collapsible={false} title={cloudText('unsupportedBlocks')} /></div>}
       {replica.session && (source === null ? <PageEditor
         pageId={page.id}
         markdown=""
@@ -303,12 +330,15 @@ export default function CloudPageEditor({ page, subject, linkChoices, role, enab
       /> : <AssistedMarkdownSource key={page.id} ref={sourceInput} className={largeSource ? 'writer-source writer-source-bounded' : 'writer-source'}
         wrap={largeSource ? 'off' : 'soft'} aria-label={t('markdownSource')} markdown={source} readOnly={!editable} spellCheck={spellcheck}
         assistant={offlineShell && replica.status !== 'live' ? undefined : { storageScope: 'account:' + subject }} onChange={writeSource} onApply={writeSource} />)}
-      {references.length > 0 && <details className="cloud-page-actions cloud-references">
-        <summary>{cloudText('pageLinks', { count: references.length })}</summary>
-        <ul>{references.map(link => <li key={link.target}>
-          <button className="account-link" type="button" onClick={() => void openLink(link.target)}>{link.alias || link.target}</button>
-        </li>)}</ul>
-      </details>}
+      {references.length > 0 && (
+        <Collapsible defaultIsOpen={false} trigger={<Text weight="semibold">{cloudText('pageLinks', { count: references.length })}</Text>} className="cloud-page-actions cloud-references">
+          <VStack gap={1}>
+            {references.map(link => (
+              <Item key={link.target} density="compact" label={link.alias || link.target} onClick={() => void openLink(link.target)} />
+            ))}
+          </VStack>
+        </Collapsible>
+      )}
       {replica.session && historyOpen && <CheckpointDialog pageId={page.id} session={replica.session}
         live={replica.status === 'live'} writable={editable} onClose={() => setHistoryOpen(false)} />}
       {exportable && exportOpen && <CloudExportDialog markdownOnly={offlineShell} page={{

@@ -1,6 +1,10 @@
+'use client'
+
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { LucideIcon } from 'lucide-react'
+import { Kbd } from '@astryxdesign/core/Kbd'
+import { Text } from '@astryxdesign/core/Text'
 import { useTranslations } from '@/lib/i18n/client'
 
 export interface CommandItem {
@@ -43,8 +47,8 @@ export function CommandMenu({ id, title, items, active, left, top, above, select
       style={{ left, top }}
     >
       <div className="writer-command-header">
-        <span>{title}</span>
-        <kbd>Esc</kbd>
+        <Text type="supporting" weight="semibold">{title}</Text>
+        <Kbd keys="esc" />
       </div>
       <div className="writer-command-items" id={id} ref={list} role="listbox" aria-label={title}>
         {items.map((item, index) => {
@@ -59,7 +63,7 @@ export function CommandMenu({ id, title, items, active, left, top, above, select
               tabIndex={-1}
               type="button"
               className="writer-command-option"
-              onMouseDown={(event) => event.preventDefault()}
+              onMouseDown={event => event.preventDefault()}
               onClick={() => select(item)}
             >
               <Icon size={16} aria-hidden="true" />
@@ -67,12 +71,12 @@ export function CommandMenu({ id, title, items, active, left, top, above, select
                 <strong>{label}</strong>
                 {description && <small>{description}</small>}
               </span>
-              {index === active && <kbd aria-hidden="true">↵</kbd>}
+              {index === active && <Kbd keys="enter" aria-hidden="true" />}
             </button>
           )
         })}
       </div>
-      {items.length === 0 && <div className="writer-command-empty" role="status">{t('noMatchingCommands')}</div>}
+      {items.length === 0 && <Text type="supporting" color="secondary" className="writer-command-empty" role="status">{t('noMatchingCommands')}</Text>}
     </div>,
     document.body,
   )

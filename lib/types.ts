@@ -12,6 +12,7 @@ export interface Page {
   parentId: string | null
   title: string
   markdown: string
+  folder?: boolean
   frontmatter?: string
   properties?: Record<string, unknown>
   files?: LocalAttachment[]

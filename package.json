@@ -17,10 +17,13 @@
     "desktop:package": "node scripts/package-desktop.mjs"
   },
   "dependencies": {
+    "@astryxdesign/core": "^0.7.16",
+    "@astryxdesign/theme-neutral": "^0.7.16",
     "@fontsource-variable/manrope": "5.2.8",
     "@fontsource-variable/newsreader": "5.2.10",
     "@sentry/browser": "11.17.0",
     "@sentry/node": "11.17.0",
+    "@stylexjs/stylex": "^0.19.2",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.119.2",
     "@tauri-apps/api": "2.12.5",
@@ -56,6 +59,7 @@
     "yjs": "13.6.33"
   },
   "devDependencies": {
+    "@astryxdesign/cli": "^0.7.16",
     "@playwright/test": "^1.65.1",
     "@tauri-apps/cli": "2.12.6",
     "@types/node": "^24",
