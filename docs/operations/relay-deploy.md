@@ -35,7 +35,11 @@ Set `LEKHAN_SYNC_URL` on the app to the relay’s `wss://` origin. Proxy `/check
 
 ## Render staging
 
-For a disposable relay test, create a Render Blueprint from the integration branch and set its Blueprint path to `server/sync/render-staging.yaml`. Supply only staging variables, then set `LEKHAN_SYNC_URL` to the service's `wss://` origin on a dedicated app preview. The free service loses its WAL at restart, redeploy, or idle shutdown. Use throwaway staging pages for HTTP and WebSocket tests. For the production durability drill, attach a persistent disk at `/var/lib/lekhan/wal` on a plan that supports it. [Render free service limits](https://render.com/docs/free) · [Render persistent disks](https://render.com/docs/disks)
+Create the `lekhan-sync-staging` Blueprint from `coderhd/lekhan` on `integration/h0-rebuild` using the path `server/sync/render-staging.yaml`. The Blueprint creates a separate free service. The existing Lekhan service in Render's Production environment serves the earlier deployment.
+
+Use the same approved HTTPS preview origin for `LEKHAN_PUBLIC_URL` on the relay and in the integration branch's Vercel Preview settings. The branch alias [responds to the app health check](https://lekhan-staging-git-integra-e71f33-harshdave1995-admins-projects.vercel.app/api/health) and stays stable across builds. Add that exact host's Auth callback paths to the staging Supabase redirect allowlist before using it for signup and recovery. Set the same staging ticket secret and encryption key on both services. Once the relay reports healthy, set `LEKHAN_SYNC_URL` to its `wss://` origin in the same branch-specific Preview settings and redeploy the app.
+
+The free service loses its WAL at restart, redeploy, or idle shutdown. Use throwaway staging pages for HTTP and WebSocket tests. For the production durability drill, attach a persistent disk at `/var/lib/lekhan/wal` on a plan that supports it. [Render free service limits](https://render.com/docs/free) · [Render persistent disks](https://render.com/docs/disks)
 
 ## Verify and replace the relay
 
