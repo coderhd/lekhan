@@ -85,4 +85,13 @@ describe('tier-gate PostHog bootstrap', () => {
     expect(bootstrapTierGates('account:offline-user')).toEqual(written)
     expect(fetchSpy).not.toHaveBeenCalled()
   })
+
+  it('accepts only official PostHog US or EU ingest hosts', async () => {
+    const { resolvePostHogHost } = await import('../../lib/analytics-settings')
+    expect(resolvePostHogHost(undefined)).toBe('https://eu.i.posthog.com')
+    expect(resolvePostHogHost('https://us.i.posthog.com/')).toBe('https://us.i.posthog.com')
+    expect(resolvePostHogHost('https://eu.i.posthog.com')).toBe('https://eu.i.posthog.com')
+    expect(resolvePostHogHost('https://evil.example.com')).toBe('https://eu.i.posthog.com')
+    expect(resolvePostHogHost('http://us.i.posthog.com')).toBe('https://eu.i.posthog.com')
+  })
 })

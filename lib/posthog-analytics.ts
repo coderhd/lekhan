@@ -1,7 +1,7 @@
 'use client'
 
 import posthog from 'posthog-js/dist/module.slim'
-import { posthogToken } from './analytics-settings'
+import { posthogHost, posthogToken } from './analytics-settings'
 import { readTierGateBootstrap, type TierGateFlagMap } from './tier-gate-flags'
 
 let initialized = false
@@ -23,7 +23,7 @@ function ensureClient(allowed: () => boolean) {
   if (!allowed()) return false
   if (!initialized) {
     posthog.init(posthogToken, {
-      api_host: 'https://eu.i.posthog.com',
+      api_host: posthogHost,
       defaults: '2026-08-30',
       persistence: 'localStorage',
       person_profiles: 'never',

@@ -26,10 +26,10 @@ test('only shares coarse product events after opt-in and stops after revocation'
     loads++
     await route.fulfill({ contentType: 'application/javascript', body: '' })
   })
-  await page.route('https://eu-assets.i.posthog.com/**', async route => {
+  await page.route(/^https:\/\/(?:eu|us)-assets\.i\.posthog\.com\//, async route => {
     await route.fulfill({ json: { hasFeatureFlags: true } })
   })
-  await page.route('https://eu.i.posthog.com/**', async route => {
+  await page.route(/^https:\/\/(?:eu|us)\.i\.posthog\.com\//, async route => {
     const body = route.request().postDataBuffer()
     const path = new URL(route.request().url()).pathname
     if (body && /\/e\/?$/.test(path)) {
