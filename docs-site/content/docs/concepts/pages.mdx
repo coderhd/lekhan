@@ -1,43 +1,12 @@
 ---
 title: Pages
-description: The universal node of your knowledge graph.
+description: Create and organize writing as pages with titles, links, and subpages.
 ---
 
-A **page** is the universal node in Lekhan. It holds content and properties, can nest under another
-page, and can be linked from anywhere in the workspace.
+A page is the unit you write, link, search, and export. A page can contain Markdown, rich text blocks, or links to other pages.
 
-<Callout type="info" title="Page, not document">
-Older versions of Lekhan used a flat "document" model. Current pages are graph nodes — nested,
-linkable, taggable, and searchable.
-</Callout>
+In the local workspace, choose **New page** to create a top-level page. Open **Page actions → New subpage** to add a page under the current one, or **Move page** to choose a different parent.
 
-## What a page can hold
+In the cloud workspace, create a page under **My pages**. Owners can add a subpage or change its title under **Page settings**. Membership and public visibility are set from the page’s **Share** screen.
 
-- **Rich content**: headings, lists, tables, code blocks, images, callouts, and embeds.
-- **Page properties**: structured metadata attached to the page. Imported frontmatter becomes page
-  properties on the way in.
-- **Links**: `[[wikilinks]]` to other pages, which create the graph edges.
-- **Tags**: inline `#tags` indexed for filtering.
-- **Versions**: point-in-time snapshots retained according to your plan's history window.
-
-## Nesting and structure
-
-Pages can nest to mirror how you think — projects inside areas, meeting notes inside a client page,
-and so on. Nesting is organizational; **links** are what connect ideas across folders.
-
-## Markdown round-trip
-
-Lekhan's editor converts content to markdown and back. The **round-trip** guarantee is the guardrail:
-a page should survive editor → markdown → editor without losing structure. This is also why imports
-and exports are trustworthy: your content is never trapped in a proprietary format.
-
-## Properties on import
-
-Frontmatter in a markdown file is extracted into page properties. Import and paste both use the same
-path, so metadata comes along even when the body is empty (for example, a frontmatter-only note).
-
-## Related
-
-- [Page links and backlinks](/docs/concepts/links-and-backlinks)
-- [Markdown import and export](/docs/getting-started/markdown-import-export)
-- [Graph](/docs/concepts/graph)
+See [Page links and backlinks](/docs/concepts/links-and-backlinks) and [Collaboration](/docs/guides/collaboration).

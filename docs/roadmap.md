@@ -6,8 +6,6 @@
 > and keeps the full product picture survivable across sessions. If tracker state
 > and this file disagree, the tracker wins — update this file to match.
 >
-> **Scheduling policy (2026-08-24, owner call):** the public beta is **quality-gated, not date-gated** — it opens when the first-ten-minutes path (signup → import → collaborate → export) passes the #79 UX-parity bar, and invites roll gradually from the /early waitlist. All dates below are directional planning aids, not commitments. "Free" is a permanent positioning pillar: the free tier survives billing (#29).
->
 > **Strategy:** `docs/superpowers/specs/2026-08-12-global-pkm-suite-strategy-design.md`
 > (approved, §4 horizons; §11 future specs). Labels: `epic` + horizon (`h0`/`h1`/`h2`/`h3`);
 > `needs-spec` marks epics without a written spec yet; `done` marks delivered epics.
@@ -24,9 +22,7 @@
 
 - **A ← B** means **A is blocked by B** (B must complete first). Rendered on GitHub as
   native issue dependencies (`blocked_by`). A ticket is unblocked when all its blockers
-  are closed. Completed items must not retain blocker edges — when a ticket/epic closes,
-  its `blocked_by` edges and the children's `Blocked by` lines are removed (see
-  "Dependency hygiene" in `docs/agents/issue-tracker.md`).
+  are closed.
 
 ---
 
@@ -45,11 +41,6 @@ This suite substrate is the H0 data-model decision (approach B, architect now).
 Launch requirement: **nothing ships in H0 unless it is global-ready** (i18n, billing,
 provider registry).
 
-> **Delivery estimates:** dates assume **6–8 focused hours/day** (one `M` ticket ≈ 1 day,
-> one `L` ≈ 2). Each ticket's `Start date`, `Target date`, and `Estimate` (hours) live on
-> the Lekhan project board — the tracker is the source of truth; this file mirrors it.
-> Dates on `needs-spec` epics are **provisional** (spec first, then tickets).
-
 ### Delivered `done`
 
 | Epic | Issue | Notes |
@@ -57,105 +48,44 @@ provider registry).
 | P1 — Pages Graph Foundation (schema + graph index + sync cutover) | #8 | `workspaces`, `pages`, `page_links`, `page_tags`, `page_versions`; graph index service |
 | P2 — Client Cutover onto the Pages Graph | #9 | Progressive migration; app fully on the graph |
 | H0 — Global Search (index-native, keyboard-first) | #25 | Tickets #33–#36 done; shipped in PR #37 |
-| H0 — Product analytics: event instrumentation for PMF funnel | #83 | Dual-destination PostHog EU + GA4, privacy sanitization, PMF funnel events |
-| H0 — Encrypt page snapshots at rest (ADR 0001) | #81 | AES-256-GCM envelope encryption with magic header LK_ENC_V1, key rotation, backfill script |
-| H0 — Tier limits & local-first version history | #82 | Git-style milestones, non-destructive restore, visual word-diff viewer, quota pruning |
-| H0 — AI Provider Registry & Unified Settings Suite | #28 | 3-tier access ladder (local BYOL, free presets, cloud BYOK), zero-knowledge encrypted vault, 5-tab settings |
-| H0 — Sync Server Hardening (durability, capped debounce, ledger, scale) | #77 | 2s/10s capped debounce snapshot engine, durable Postgres collaborator ledger, automated retention cron, load-shedding |
-| H0 — Trust-building redesign of public marketing pages | #93 | Asymmetric landing remix with real screenshots, voice-clean rewritten copy, claims-traced honesty audit across `/`, `/about`, `/faq`, `/contact` + legal consistency; shipped PR #135 after pullfrog approval + CodeRabbit waiver (docs/reviews/pr-93-review.md) |
-| H0 — Vault-export cold-room hotfix (SIL-214) | SIL-214 | Hydrate collab rooms before sync, gate snapshot writes on hydration + writable ownership, read-only gap-sync for export, honest empty/unknown bodies in the FidelityReport, persister indexes XmlFragment text so `searchable_text` is real evidence; regression tests cover a cold server |
 
-| Epic | Issue | Blocker edges | Notes |
+### Remaining `needs-spec`
+
+| Epic | Issue | Blocker edges | Spec ref |
 |---|---|---|---|
-| H0 — Tauri Desktop Shell (vault-on-disk, llama.cpp sidecar, Model Library) | #88 | parallel with #28 | promoted from #43 (2026-08-24): delivers ADR 0003 files-on-disk promise; Model Library built once against sidecar; founding-cohort headline moment; not a beta gate |
-
-### In progress — specced `ready-for-agent`
-
-| Epic | Issue | Tickets | Blocker edges | Delivery | Spec ref |
-|---|---|---|---|---|---|
-| H0 — Markdown Import/Export (full round-trip) | #26 | MI-T1 #56 → MI-T2 #57 → MI-T3 #58 → MI-T4 #59 — **all done** | — | delivered Aug 20 · epic closed | §13 · `docs/superpowers/specs/2026-08-14-h0-markdown-import-export-design.md` |
-| H0 — Obsidian Importer | #27 | OI-T1–T4 all done (#60, #61, #62/#80, #63/PR #86) | — | delivered Aug 24 · epic closed · pipeline feeds #78 | §13 · `docs/superpowers/specs/2026-08-14-h0-obsidian-importer-design.md` |
-
-### Delivery plan (recalibrated Aug 24 · velocity-based)
-
-> **Estimation policy:** estimates are recalibrated against actual delivery at every
-> epic close. Measured basis: Aug 13–24 window = 14 merged PRs in 11 days; all six
-> hour-estimated tickets landed on time or 1–3 days early. Calibration rules:
-> familiar-pattern work ×0.9 (mirrors in-repo prior art) · novel-integration work
-> ×1.5 + named external buffers (no precedent yet: billing, Tauri, Rust sidecar,
-> encryption key mgmt). Review-round tax is included, not added on top.
-> **Recalibration checkpoints: after #81 ships (first novel item), after #29.**
-
-### Lane A — Beta & Public Launch `p0`
-
-| # | Work | Priority | Est | Start → Target | Status |
-|---|---|---|---|---|---|
-| #85 | Early-access page + Brevo waitlist | P0 | 12h | Aug 24 | **Shipped** (#91, a day early) |
-| #83 | Analytics events | P0 | 8h | Aug 27 | **Shipped** (PR #95) |
-| #81 | Encrypt-at-rest (spec + impl) | P0 | 16h | Aug 28 → Aug 29 | **Shipped** (PR #96) |
-| #82 | Tier plumbing + local-first version history | P0 | 16h | Aug 31 → Sep 1 | **Shipped** (PR #99) |
-| — | 🔒 **Private beta opens** (gate #84 clears) | — | — | **Sep 2** | — |
-| #28 | AI Provider Registry (final spec 4h incl.) | P0 | 64h | Sep 2 → Sep 10 | **Shipped** (PR #107) |
-| #29 | Billing: Stripe/Razorpay + founding prices + referral credits | P0 | 60h | Sep 11 → Sep 22 | In progress — T1–T14 landed on `plan/29-real-billing`; env apply + founding backfill pending |
-| #87 | Idempotent imports | P1 | 12h | Sep 23 → Sep 24 | **Shipped** (PR #132 → `3b0a5d8`; #130 merged the base, #132 the retry-identity fixes) |
-| #31 | i18n framework | P0 | 24h | Sep 25 → Sep 29 | Backlog |
-| #32 | Docs site (agent 32h; prose content owner-driven in parallel) | P0 | 32h | Sep 30 → Oct 7 | Backlog |
-| #30 | Publish polish | P0 | 12h | Oct 8 → Oct 9 | **Delivered** (PR #147, merged Oct 25) |
-| — | 🚀 **Public launch** | — | — | **Oct 12** (aggressive Oct 8) | — |
-
-*#85 inserted ahead of beta: content funnel has no conversion target without it. Shipped Aug 24 (#91): /early live, self-hosted double opt-in over Brevo transactional, race-safe spot numbering, outbox retry drain.*
-
-### Lane B — Founding Desktop `p1`
-
-| # | Work | Priority | Est | Start → Target | Status |
-|---|---|---|---|---|---|
-| #88 | Spec pass | P1 | 4h | Sep 2 (parallel, light) | Backlog |
-| #88-M1 | Shell + vault-on-disk + sync (ADR 0003 live) | P1 | 48h | Oct 13 → Oct 20 | Backlog |
-| #88-M2 | llama.cpp sidecar + Model Library | P1 | 64h | Oct 21 → Nov 3 | Backlog |
-| — | 💻 **Founding-cohort desktop delivery** | — | — | **~Nov 3** | — |
-
-Mobile (#43) follows desktop; PWA covers interim. #78 slices + Notion import
-begin H1-proper in November, unblocked once #87 lands.
-
-**Also shipped:** #70 — mentions in `.md`/`.mdx` export (bug, PR #71), Aug 19.
+| H0 — Markdown Import/Export (full round-trip) | #26 | → H0 Obsidian Importer #27 (blocker) | §13 |
+| H0 — Obsidian Importer | #27 | ← #26; → H1 Notion importer #45 (blocker) | §13 |
+| H0 — AI Provider Registry | #28 | → H2 AI agents #50 (blocker) | §6 |
+| H0 — Real Billing (Stripe + Razorpay) | #29 | → H2 Team workspaces #49 (blocker); H3 suite pricing rides on it | §7 |
+| H0 — Public Pages / Publish polish | #30 | → H1 Public pages + publish #40 (blocker) | §4 (H1 scope note in epic) |
+| H0 — i18n Framework | #31 | → H1 localized docs (edge on #46) | §4 |
+| H0 — Docs Site (docs.lekhan.app) | #32 | → H1 Full docs #46 (blocker) | §12 |
 
 **Sequencing narrative:** the import pipeline is the shared foundation — Markdown
 Import/Export (#26) establishes the `importer → IR → graph` pipeline, and Obsidian
-Importer (#27) delivered it end-to-end (closed Aug 24); #78 consumes the same
-pipeline for Notion once #87 (idempotent imports) lands. Docs Site (#32) remains a
-launch requirement. AI Provider Registry (#28) is the cost-safety keystone: every
-tier runs on the user's own keys or machine, so it must be live before launch and
-unblocks H2 agents. The Tauri desktop shell (#88) delivers the files-on-disk promise
-(ADR 0003) and the Model Library as the founding-cohort moment.
+Importer (#27) is the first real importer on it. Both must land before the H1 Notion
+importer (#45). Docs Site (#32) is a launch requirement and unblocks the H1 docs
+depth. AI Provider Registry (#28) is the cost-safety keystone: every tier runs on the
+user's own keys or machine, so it must be live before launch and unblocks H2 agents.
 
 ---
 
 ## H1 — PKM Depth ("The Second Brain") `h1`
 
-> **Target:** opens once the H0 import pipeline lands (epics #26/#27 done ≈ **Aug 26**). Desktop shell pulled forward into H0 as #88.
-> First H1 epic is #39 (no blockers) — ~**early Oct** for the earliest H1 items once
-> H0's `needs-spec` epics and H1 speccing happen. Dates are provisional; re-baseline at
-> the H0→H1 handoff.
-
 | Epic | Issue | Blocker edges | Spec ref |
 |---|---|---|---|
-| H1 — Graph view + backlink pane | #38 | → H2 Databases #47 (blocker) | §4 · **GV-T1 shipped** (graph route + d3-force canvas, PR #184, `docs/reviews/pr-206-review.md`) · **GV-T2 shipped** (title/facet filters, hover highlight, sampled-edge badge, PR #186, `docs/reviews/pr-207-review.md`) · **GV-T3 shipped** (lazy backlink drawer, focus-trapped, click-through, PR #191, `docs/reviews/pr-208-review.md`; real-DB fixture evidence follow-up #192) |
-| H1 — Dual-Dialect Interop Bridge (Obsidian-native files + Notion-compatible content) | #78 | ← #27; subsumes the import half of #45 | `docs/superpowers/specs/…` (spec in issue body) · **S1 clipboard paste-in shipped Oct 8** (Obsidian-markdown + Notion-HTML paste, gap-2 retroactive link resolution; PR #134, `docs/reviews/pr-57-review.md`) · **S3 clipboard copy-out shipped** (Obsidian markdown + Notion HTML payloads, target-aware; PR #154, `docs/reviews/pr-59-review.md`) |
-| H1 — Daily notes / quick capture / inbox | #39 | — | §4 · **DN-T1 shipped** (daily pages + DailyStrip, PR #182, `docs/reviews/pr-182-review.md`) · **DN-T2 shipped** (quick-capture palette + CRDT capture, PR #185, `docs/reviews/pr-204-review.md`) · **DN-T3 shipped** (InboxCard + focused-row triage, PR #190, `docs/reviews/pr-205-review.md`) |
+| H1 — Graph view + backlink pane | #38 | → H2 Databases #47 (blocker) | §4 |
+| H1 — Daily notes / quick capture / inbox | #39 | — | §4 |
 | H1 — Public pages + publish | #40 | ← #30 | §4 |
 | H1 — Comments + page mentions | #41 | — | §4 |
 | H1 — Templates | #42 | — | §4 |
-| H1 — Mobile apps (Tauri iOS/Android) + PWA interim | #43 | — | desktop split into #88 (H0) |
+| H1 — Desktop app (Tauri) + mobile PWA | #43 | — | §4 |
 | H1 — Plugins API v1 + open-core release | #44 | → H2 Plugin marketplace #51 (blocker) | §8 |
-| H1 — Notion importer | #45 | ← #87 (idempotent imports); import half absorbed into #78 | §13 + #78 constraints |
+| H1 — Notion importer | #45 | ← #27 | §13 |
 | H1 — Full docs (tutorials, plugin/API ref, migration guides) | #46 | ← #32, ← #31 | §12 |
 
 **Sequencing narrative:** H1 is where the PKM story deepens. Graph view (#38) is the
-headline feature and becomes the substrate H2 databases render over. The Interop
-Bridge (#78) is the underdog wedge — Lekhan as the compatibility layer between the
-Obsidian and Notion dialects (import, one-click export both ways, clipboard fluency);
-it rides the #26/#27 import pipeline and absorbs the import half of the Notion
-importer (#45). Plugins API v1
+headline feature and becomes the substrate H2 databases render over. Plugins API v1
 (#44) is the open-core unlock and unblocks the H2 marketplace. The Notion importer
 (#45) rides the H0 import pipeline. Full docs (#46) cannot be written until both the
 docs site (#32) and i18n (#31) exist.
@@ -180,21 +110,21 @@ is distribution for the H1 plugin API.
 
 ---
 
-## H3 — Studio (deep RAG + agentic track) `h3`
+## H3 — The Suite ("AI-Native Office") `h3`
 
-> **Respec 2026-11-02:** H3 is a **NotebookLM / Open Notebook-style Studio** over the live knowledge graph — not an office suite (discarded 2026-08-30, `docs/decisions/h3-studio/02-positioning-individual-pkm-first`) and no longer "thin v1 first". Per `docs/decisions/h3-studio/08-deep-rag-first-embedder-and-eval-stack`, the **deep retrieval layer is the primary path**: server-side `pgvector`, pluggable `Embedder`, hybrid retrieval with citations, a bounded agent layer, and a Python eval harness. Full design: `docs/superpowers/specs/2026-11-02-h3-studio-rag-agentic-design.md`.
+| Epic | Issue | Blocker edges | Spec ref |
+|---|---|---|---|
+| H3 — Sheets (grids over properties) | #52 | ← #47 | §4 |
+| H3 — Slides (ordered page decks) | #53 | ← #47 | §4 |
+| H3 — Mail (threads as linked pages) | #54 | ← #50 | §4 |
+| H3 — Chat (agent workspace with graph context) | #55 | ← #50 | §4 |
 
-| Phase | Work | Gate |
-|---|---|---|
-| **A — Ingestion** | `page_chunks` + `page_summaries` schema, `Embedder` seam + embed route, block-aware chunker, idempotent indexer + backfill cron, eval skeleton + 40-question golden set | re-index of an unchanged workspace embeds zero chunks; local (Ollama) embed path works |
-| **B — Retrieval** | `hybrid_search_chunks` (vector + `tsvector` RRF), retrieval service with link-graph expansion + two-tier narrowing, citations to `page_id`+`block_id`, optional rerank, first committed eval report | recall@10 ≥ 0.85 · citation precision ≥ 0.90 · p95 ≤ 400 ms |
-| **C — Studio** | corpus picker on real retrieval → generate → `studio_create_pages` write-back with `[[cite]]` | every claim citable and clickable |
-| **D — Agents** | typed graph tools, planner→executor runtime with budgets, traces, agent UI, agent eval suite | 20-task success ≥ 80% within budget |
-| **E — Interop & proof** | MCP server (Claude Desktop / Cursor / VS Code), demo artifacts, portfolio write-up with numbers | unauthorised page returns a permission error, never content |
+**Sequencing narrative:** H3 modules are *views over the same graph*, so each rides
+its H2 predecessor — sheets/slides on databases, mail/chat on AI agents. Suite
+pricing (bundled in Pro/Team; enterprise per-module) rides the billing foundation
+from #29 and is deliberately not a separate epic until H3 work begins.
 
-**Office artifacts** (PPTX/XLSX/DOCX) stay as **generated views** over `Page`s, not editors (`03`).
-
-**Sequencing narrative:** A and B are the core — a measured retrieval system is the part that cannot be faked. C makes it usable, D makes it agentic, E makes it legible to an outside client (MCP) and to a reviewer (committed eval reports). Temporal retrieval over `page_versions` (`04`) stays parked until A–C are green; it remains the harder-to-copy wedge.
+---
 
 ## Open questions / unrecorded
 

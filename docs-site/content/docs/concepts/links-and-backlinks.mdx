@@ -1,39 +1,12 @@
 ---
-title: Links and Backlinks
-description: How [[wikilinks]] connect pages, and how to read the reverse view.
+title: Page links and backlinks
+description: Connect notes with wikilinks and use backlinks to find the pages that mention yours.
 ---
 
-Lekhan's graph is built from **page links**. Type `[[` in the editor to link another page by title.
-Each link is a directed edge from the page you are editing to the page you name.
+Type `[[` and start writing a title. Choose a result to insert the link. For exported Markdown, the link uses wikilink syntax such as `[[Research/Field notes|the field notes]]`.
 
-## Page links
+In the local workspace, open **Page context → Backlinks** to see which pages link to the current one. On a cloud page, open **Backlinks** below the editor to see links from pages you have access to in your notebook. A heading anchor such as `[[Research/Field notes#Evidence]]` opens the named section when it resolves.
 
-- A link uses the target page's **title**.
-- If no page with that title exists yet, the link stays **unresolved**. It still belongs to the graph
-  and will connect once you create the page.
-- Renaming a page updates how links resolve; the graph index keeps the edges consistent.
+If two pages have the same title, include their parent path to choose a branch. Use a leading slash for a page at the top level, as in `[[/Field notes]]`. For an imported cloud note in source mode, open **Page links** below the source or choose **Preview Markdown** to follow links in the note.
 
-```md
-Read [[Project plan]] before the kickoff, then add notes to [[Weekly review]].
-```
-
-## Backlinks
-
-A **backlink** is the reverse view: the pages that link *to* the page you are reading. Backlinks are
-how you discover context you did not know was connected.
-
-- Open a page to see its backlinks alongside the content.
-- Backlinks are computed from the graph index, not stored in the page body.
-- An unresolved link becomes a real backlink as soon as the target page exists.
-
-<Callout type="info" title="Links vs. folders">
-Folders (nesting) keep things tidy. Links are what make the graph useful across folders — a page can
-live in one place and be referenced from many.
-</Callout>
-
-## Related
-
-- [Graph](/docs/concepts/graph)
-- [Tags](/docs/concepts/tags)
-- [Obsidian import](/docs/getting-started/obsidian-import) — `[[wikilinks]]` from your vault are
-  preserved.
+See [The page graph](/docs/concepts/graph) or [Tags](/docs/concepts/tags).

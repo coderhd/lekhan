@@ -1,0 +1,82 @@
+import { expect, test } from '@playwright/test'
+import { signInContext } from './auth'
+
+test('the landing page gates signed-out visitors at sign-in and leads authenticated writers to their workspace', async ({ page, context }) => {
+  await page.setViewportSize({ width: 375, height: 812 })
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Your notes, yours to keep.' })).toBeVisible()
+  await expect(page.getByRole('main').getByRole('img').first()).toBeVisible()
+  await page.getByRole('link', { name: 'Start writing', exact: true }).click()
+  await expect(page).toHaveURL(/\/login$/)
+
+  await signInContext(context)
+  await page.goto('/')
+  await page.getByRole('link', { name: 'Start writing', exact: true }).click()
+  await expect(page).toHaveURL('/workspace')
+  const title = page.getByRole('textbox', { name: 'Page title' })
+  await expect(title).toHaveValue('Field guide')
+  await title.fill('My local notes')
+  await title.press('Enter')
+  await expect(page.getByRole('status').filter({ hasText: 'Saved locally' })).toBeVisible()
+  await page.goto('/')
+  await page.getByRole('link', { name: 'Open workspace' }).click()
+  await expect(title).toHaveValue('My local notes')
+})
+
+test('marketing navigation exposes import details, contact, and the original legal links', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('link', { name: 'How imports work' }).click()
+  await expect(page).toHaveURL('/faq#transfer', { timeout: 15_000 })
+  await expect(page.getByText(/Lekhan imports Markdown notes and folders/)).toBeVisible()
+  const share = page.locator('#sharing').getByRole('button', { name: /Can I share a page/ })
+  await share.focus()
+  await share.press('Enter')
+  await expect(page.getByText(/Invite someone as a viewer/)).toBeVisible()
+  await page.getByRole('navigation', { name: 'Site navigation' }).getByRole('link', { name: 'Contact' }).click()
+  await expect(page.getByRole('link', { name: /Send an email/ })).toHaveAttribute('href', /^mailto:/)
+  await page.getByRole('navigation', { name: 'More about Lekhan' }).getByRole('link', { name: 'Privacy policy' }).click()
+  await expect(page.getByRole('heading', { name: 'Privacy Policy' })).toBeVisible({ timeout: 15_000 })
+  await page.getByRole('navigation', { name: 'More about Lekhan' }).getByRole('link', { name: 'Terms of service' }).click()
+  await expect(page).toHaveURL('/terms-of-service', { timeout: 12_000 })
+  await expect(page.getByRole('heading', { name: 'Terms of Service' })).toBeVisible()
+})
+
+test('shared marketing URLs open in their own language and carry it into the notebook', async ({ page, context }) => {
+  test.slow()
+  await signInContext(context)
+  await context.addCookies([{ name: 'lek-locale', value: 'hi', url: 'http://localhost:3182' }])
+  await page.goto('/es')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+  await page.getByRole('main').locator('a[href="/es/faq#transfer"]').click()
+  await expect(page).toHaveURL('/es/faq#transfer', { timeout: 15_000 })
+  await expect(page.locator('html')).toHaveAttribute('lang', 'es')
+
+  await page.getByRole('combobox', { name: /Language|Idioma/ }).click()
+  await page.getByRole('option', { name: 'Deutsch' }).click()
+  await expect(page).toHaveURL('/de/faq#transfer', { timeout: 15_000 })
+  await expect(page.locator('html')).toHaveAttribute('lang', 'de')
+  await page.locator('header a[href="/workspace"]').click()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'de')
+
+  await page.goto('/en/contact')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  await expect(page.getByRole('link', { name: /Send an email/ })).toBeVisible()
+})
+
+test('landing pricing section displays purchasable plans and routes guests through sign-in to billing', async ({ page }) => {
+  await page.goto('/#pricing')
+  const pricing = page.locator('#pricing')
+  await expect(pricing.getByRole('heading', { name: 'Free', exact: true })).toBeVisible()
+  await expect(pricing.getByRole('heading', { name: 'Plus', exact: true })).toBeVisible()
+  await expect(pricing.getByRole('heading', { name: 'Pro', exact: true })).toBeVisible()
+  await expect(pricing.getByRole('heading', { name: 'Team', exact: true })).toBeVisible()
+
+  await pricing.getByRole('radio', { name: 'Annual', exact: true }).click()
+  await pricing.getByRole('radio', { name: 'INR', exact: true }).click()
+  await expect(pricing.getByRole('button', { name: 'See Team in USD' })).toBeVisible()
+  await pricing.getByRole('radio', { name: 'USD', exact: true }).click()
+  await expect(pricing.getByRole('spinbutton', { name: 'Seats' })).toHaveValue('2')
+
+  await pricing.getByRole('button', { name: 'Choose Pro' }).click()
+  await expect(page).toHaveURL(/\/login\?next=%2Fbilling%3Ftier%3Dpro%26cycle%3Dannual%26currency%3DUSD/, { timeout: 15_000 })
+})

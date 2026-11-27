@@ -1,55 +1,26 @@
 ---
-title: Markdown Import and Export
-description: Paste, import, and export markdown without losing structure.
+title: Markdown import and export
+description: Bring existing Markdown into Lekhan and keep a portable copy of your pages.
 ---
 
-Lekhan treats markdown as a first-class format, not an afterthought. Pages convert between the editor
-and markdown with a **round-trip** guarantee: structure survives the trip out and back in.
+## Import into the local workspace
 
-## Import
+Choose **Import** in the sidebar, select your Markdown or text files, and wait for **Saved locally**. Each file becomes a page. The first heading can supply its title.
 
-### Paste markdown
+Use **Import vault** for a folder or ZIP whose structure you want to keep.
 
-Copy markdown from anywhere and paste it into a page. The paste path understands:
+## Import into a cloud workspace
 
-- headings, lists, tables, and fenced code blocks,
-- `[[wikilinks]]` and `#tags`,
-- frontmatter at the top of the pasted text (converted into page properties),
-- Notion-style clipboard HTML when it is available.
+Sign in, open **Cloud workspace**, and choose **Import files**. Select Markdown files, a folder, or a ZIP. Lekhan saves pages in batches and uploads their linked files separately. The report tracks saved pages and files. If a transfer stops, choose **Resume import** or select the same unchanged archive again to recover saved work and finish the transfer. After an unconfirmed Storage write, the import may ask you to wait up to 10 minutes before retrying.
 
-If a paste contains frontmatter and an empty body, the properties are still applied — a note that is
-only metadata does not become a metadata-free page.
-
-### Import files
-
-Use **Import** in the workspace to bring in `.md` files. Each file becomes a page; its file name is
-the title and its frontmatter becomes page properties.
-
-<Callout type="info" title="What lossless means here">
-The round trip preserves page structure: headings, block types, links, tags, and properties. It does
-not promise pixel-identical formatting for exotic HTML from another editor — those pieces are
-reported as degraded, never silently dropped.
-</Callout>
+Cloud file limits are 2 MB per file on Free and 50 MB per file on paid plans. If a file exceeds your cloud plan’s limit, you can restore the archive in the browser’s local notebook, which accepts general files up to 50 MB each.
 
 ## Export
 
-You can always get your content out:
+- From a local page, choose **Export Markdown**. On a cloud page, open **Export page** and choose **Download Markdown** to save the text available in the editor, including local edits.
+- On a cloud page, choose **Save ZIP with attachments** to download that Markdown, any embedded raster images, and the files attached to the page. The attachment download needs a connection and current page access. If the browser offers a save picker, Lekhan writes directly to the chosen file. In other browsers, the ZIP downloads when all files are ready.
+- In the local sidebar, choose **Export** to download a ZIP of Markdown files arranged by page hierarchy. The ZIP includes embedded raster images and restored files. Wikilinks and file links point to the filenames in the ZIP.
 
-- **Markdown** for the page you are viewing — the canonical, portable form. Whole-workspace and
-  multi-page export is on the roadmap, not in the app yet.
-- **PDF**, **DOCX**, and **HTML** for sharing a polished copy of a page.
+Extract a workspace ZIP to open it as a vault in Obsidian. To restore a Lekhan workspace or a newly exported cloud page and its files, choose **Import vault** in the browser’s local notebook and select the ZIP. Keep its hidden `.lekhan-workspace.json` file if you unpack and repackage it. Lekhan uses that file to recover page titles, associate each parent note with its child folder, and restore files to their pages. Browser vault imports accept up to 2,000 pages and folders and 100 MB unpacked. The per-file limits are 10 MB for notes and inline images and up to 50 MB for general attachments.
 
-Exports never modify the page they came from, and they do not delete anything from the workspace.
-
-## Tips
-
-- Keep frontmatter at the very top of a file, before the first heading.
-- Use `[[Page title]]` (the title as it appears in Lekhan) when you want the link to resolve.
-- Imported images and embeds may degrade to links when the source asset cannot be read; the import
-  report tells you what happened.
-
-## Related
-
-- [Obsidian import](/docs/getting-started/obsidian-import)
-- [Pages](/docs/concepts/pages)
-- [Troubleshooting imports](/docs/troubleshooting)
+Markdown source keeps syntax the visual editor cannot represent. When source mode is available, work there to preserve that syntax, and check the exported copy in the destination app. [Import an Obsidian vault](/docs/getting-started/obsidian-import) · [Local and cloud workspaces](/docs/concepts/workspaces)

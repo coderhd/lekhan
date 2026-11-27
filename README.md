@@ -1,244 +1,74 @@
-# Lekhan 🪶
+# Lekhan
 
-<div align="center">
+A browser workspace for writing and linking pages. This branch rebuilds the personal writing workflow from the original [product roadmap](docs/roadmap.md).
 
-**The AI-native, collaborative knowledge workspace.**  
-*Local-first like Obsidian. Collaborative like Notion. AI on your terms.*
+## Run locally
 
-[![CI / Verification](https://img.shields.io/badge/Verification-Passing-brightgreen.svg)](#-testing)
-[![Next.js](https://img.shields.io/badge/Next.js-16.3-black.svg?logo=next.js)](https://nextjs.org/)
-[![React](https://img.shields.io/badge/React-19-blue.svg?logo=react)](https://react.dev/)
-[![Yjs CRDT](https://img.shields.io/badge/Yjs-CRDT%20Sync-orange.svg)](https://yjs.dev/)
-[![Security](https://img.shields.io/badge/Encryption-AES--256--GCM-blueviolet.svg)](#-security--encryption)
-[![License](https://img.shields.io/badge/License-AGPL%20v3%20%2F%20MIT-blue.svg)](LICENSE)
-
-[Early Access Waitlist](https://lekhan.online/early) · [Report Bug](https://github.com/coderhd/lekhan/issues) · [Roadmap](#-product-roadmap)
-
-</div>
-
----
-
-## 🌟 What is Lekhan?
-
-**Lekhan** is an open-source knowledge workspace designed for thinkers, builders, and teams. It bridges the gap between **local-first privacy** and **seamless cloud collaboration**, ensuring you never have to choose between owning your data and collaborating in real-time.
-
-* **One Knowledge Graph, Many Views**: Every page is a node in your personal knowledge graph. Backlinks, tags, databases, and visual graphs all operate on the same unified substrate.
-* **Local-First & Offline-Ready**: Sub-millisecond typing latency. Edit completely offline; changes automatically sync and merge conflict-free via CRDTs when you reconnect.
-* **Encrypted at Rest**: Document snapshots and version checkpoints are secured with envelope **AES-256-GCM** encryption (ADR 0001).
-* **AI on Your Terms**: Native support for Anthropic Claude, OpenAI, and Sarvam AI (Indic language models), with Bring-Your-Own-Key (BYOK) privacy and upcoming local LLM sidecars.
-
----
-
-## ✨ Key Features
-
-### 📝 Collaborative Editor & Knowledge Graph
-* **Conflict-Free Real-Time Collaboration**: Powered by **Yjs CRDTs** and WebSockets with live multi-user cursor presence.
-* **Interactive Wikilinks**: Type `[[Page Title]]` or `[[Target|Alias]]` to dynamically link notes. Click to navigate or instantly create missing pages.
-* **Rich Markdown Support**: Seamless block editor with Callouts, Code Blocks (syntax-highlighted with Lowlight), Tables, Task Lists, and Slash Commands (`/`).
-* **Universal Import & Export**: Full round-trip Markdown fidelity, native **Obsidian Vault Importer**, and one-click export to Markdown (`.md`), HTML, DOCX, and PDF.
-
-### 🧠 Built-in AI Companion
-* **In-Context AI Writing Assistant**: Ask Lekhan Bot (`Cmd/Ctrl + L`), trigger inline bubble menus, and generate diff previews before applying changes.
-* **Multi-Provider & Indic Language Support**: Built-in support for Claude 3.5, OpenAI GPT-4o, and Sarvam AI models for multilingual synthesis.
-* **Privacy-First**: No note titles, content, or sensitive payloads are tracked in analytics or sent to third parties without your permission.
-
-### 🔒 Security & Versioning
-* **Snapshot Encryption at Rest**: Encrypted using AES-256-GCM with authenticated headers (`LK_ENC_V1`) and multi-key rotation runbooks.
-* **Role-Based Access Control**: Granular permissions (Owner, Editor, Viewer) enforced at the database (RLS) and sync layers.
-* **Interactive Version History**: View timeline snapshots, preview previous states, and restore checkpoints non-destructively.
-
-### ⚡ Search & Navigation
-* **Keyboard-First Global Search**: Instant `Cmd + K` search across page titles, tags, and document contents with fuzzy matching.
-
----
-
-## 🗺️ Product Roadmap
-
-Lekhan's development is structured across distinct horizons. Public beta release is quality-gated by the [#79 UX-parity bar](https://github.com/coderhd/lekhan/issues/79).
-
-### 🚀 Horizon 0 — Foundation & Public Beta (Current)
-
-- [x] **Pages Graph Foundation**: Postgres schema, page links, page tags, and graph indexer.
-- [x] **Real-Time Sync Engine**: Node.js WebSocket hub with Yjs CRDT state persistence.
-- [x] **Markdown Round-Trip Engine**: Zero-loss import/export across Tiptap and standard Markdown.
-- [x] **Obsidian Importer**: One-click ingestion of folders, attachments, and wikilinks.
-- [x] **Snapshot Encryption at Rest (ADR 0001)**: AES-256-GCM envelope encryption for all stored snapshots.
-- [x] **Interactive Wikilinks**: Resolved link chips and on-the-fly page creation (`[[Target]]`).
-- [x] **Global Search**: Instant keyboard-first palette (`Cmd+K`).
-- [x] **Early Access Waitlist**: Live at `/early` with double opt-in.
-- [ ] **Tier Plumbing & Storage Caps** (`#82`): Granular quota enforcement.
-- [ ] **AI Provider Registry & BYOK** (`#28`): User-managed API keys and multi-model router.
-- [ ] **Private Beta Launch**: Invites roll to waitlist users.
-- [ ] **Billing & Regional Pricing** (`#29`): Stripe + Razorpay with perpetual free tier.
-- [ ] **Tauri Desktop Shell** (`#88`): Vault-on-disk (ADR 0003) with local `llama.cpp` sidecar.
-- [ ] **Internationalization (i18n)** (`#31`) & Public Documentation (`#32`).
-
-### 🌲 Horizon 1 — PKM Depth ("The Second Brain")
-
-- [ ] **Interactive Visual Graph**: 2D/3D force-directed knowledge graph with filterable tags and clusters.
-- [ ] **Dual-Dialect Interop Bridge (`#78`)**: Seamless bidirectional compatibility between Obsidian and Notion formats.
-- [ ] **Daily Notes & Quick Capture**: Calendar-linked journaling and instant inbox.
-- [ ] **Notion Importer (`#45`)**: Structured block-level Notion workspace migration.
-- [ ] **Public Publishing (`#40`)**: Fast, SEO-optimized public note sharing.
-- [ ] **Mobile Companion (`#43`)**: Native iOS & Android apps via Tauri mobile.
-- [ ] **Plugin System & Open-Core SDK (`#44`)**: Community extensions and themes.
-
-### 🏢 Horizon 2 & 3 — Notion-Grade Structure & The Suite
-
-- [ ] **Databases as Typed Views**: Tables, Kanban Boards, Calendars, and Galleries over the knowledge graph.
-- [ ] **Autonomous In-Workspace AI Agents**: Background synthesis, link suggestions, and auto-tagging.
-- [ ] **Team Workspaces**: SSO, audit logs, and organization management.
-- [ ] **AI-Native Office Suite**: Connected Sheets, Slides, Mail, and Chat.
-
----
-
-## 🏗️ Architecture
-
-```mermaid
-flowchart TD
-    Client["Browser / Desktop Client (Next.js 16 + React 19 + Tiptap)"]
-    Sync["Node.js Sync Server (WebSocket + Yjs CRDT Hub)"]
-    SupabaseDB["Supabase Postgres (Graph Schema, RLS, Auth)"]
-    Storage["Supabase Storage (AES-256-GCM Encrypted Snapshots)"]
-    AI["AI Engine (Claude, OpenAI, Sarvam, Local llama.cpp)"]
-
-    Client <-->|WebSocket Yjs Sync| Sync
-    Client <-->|REST / Server Actions| SupabaseDB
-    Sync -->|Encrypted State Persistence| Storage
-    Client <-->|AI Prompts & Diff Engine| AI
+```sh
+npm ci
+npm run dev
 ```
 
-### Technology Stack
-* **Framework**: [Next.js 16](https://nextjs.org/) (App Router, Turbopack) & [React 19](https://react.dev/)
-* **Editor Substrate**: [Tiptap 2](https://tiptap.dev/) / [ProseMirror](https://prosemirror.net/) with custom decoration & node extensions
-* **Collaboration & CRDTs**: [Yjs](https://yjs.dev/) + `y-prosemirror` + `y-websocket`
-* **Styling & UI**: [Tailwind CSS](https://tailwindcss.com/), [Radix UI](https://www.radix-ui.com/), [Lucide Icons](https://lucide.dev/)
-* **Backend & Database**: [Supabase](https://supabase.com/) (PostgreSQL with RLS, Auth, Storage)
-* **Encryption**: Node.js `crypto` with `aes-256-gcm` envelope encryption
-* **Testing**: [Vitest](https://vitest.dev/) (Unit & Integration) & [Playwright](https://playwright.dev/) (End-to-End)
+Open [the local workspace](http://localhost:3000/workspace). Pages are saved in IndexedDB for that browser and origin. Use the workspace export to make a portable Markdown copy.
 
----
-
-## 📂 Project Structure
-
-```text
-├── app/                  # Next.js App Router (pages, layouts, API endpoints)
-│   ├── api/              # API routes (/api/ai, /api/version, /api/import, /api/waitlist)
-│   ├── doc/[id]/         # Legacy document route
-│   ├── page/[id]/        # Pages knowledge graph workspace
-│   └── early/            # Waitlist & early access landing
-├── components/           # React UI components
-│   ├── ui/               # Radix / Shadcn accessible UI primitives
-│   ├── editor-workspace.tsx # Core collaborative Tiptap editor
-│   ├── lekhan-bot-bar.tsx# In-editor AI assistant
-│   └── global-search-palette.tsx # Cmd+K Search modal
-├── docs/                 # Product specs, ADRs, runbooks, and roadmaps
-│   ├── adr/              # Architecture Decision Records (ADR 0001 - 0004)
-│   ├── reviews/          # Clean-room code review audit reports
-│   └── roadmap.md        # Detailed internal product roadmap & issue tracking
-├── lib/                  # Utilities, crypto engine, wikilink extension, analytics
-│   ├── server-crypto.ts  # AES-256-GCM encryption & key rotation
-│   ├── wikilink.ts       # Wikilink ProseMirror decoration extension
-│   └── markdown-export.ts# Markdown & HTML serialization
-├── scripts/              # Migration, backfill, and autonomous code review scripts
-│   ├── review-pr.ts      # Clean-room multi-model AI code reviewer
-│   └── encrypt-at-rest-backfill.ts # Encryption backfill utility
-├── server/               # Collaborative Yjs WebSocket sync server
-│   └── index.js          # Sync server with snapshot encryption
-└── tests/                # Comprehensive test suite (Vitest + Playwright)
-    └── unit/             # 54 test files (408+ automated tests)
+```sh
+npm run typecheck && npm run lint && npm test && npm run build
+npx playwright install chromium
+npm run test:e2e
 ```
 
----
+The [writing workflow specification](docs/superpowers/specs/writing-workflow-rebuild-spec.md) describes the milestone and its verification.
 
-## 💻 Getting Started
+## Desktop development
 
-### Prerequisites
-* **Node.js**: v20.0.0 or higher (v24 recommended)
-* **npm** or **pnpm**
-* A [Supabase](https://supabase.com) project
+Install the [Tauri desktop prerequisites](https://v2.tauri.app/start/prerequisites/) for the operating system and use Rust 1.90 or later.
 
-### Installation
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/coderhd/lekhan.git
-   cd lekhan
-   ```
-
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
-
-3. **Configure Environment Variables**:
-   Copy `.env.example` to `.env.local` and populate the required keys:
-   ```bash
-   cp .env.example .env.local
-   ```
-   ```env
-   NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-   SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-
-   # Encryption at Rest (ADR 0001)
-   LEKHAN_ENCRYPTION_KEY=your_32_byte_base64_or_hex_key
-
-   # AI Integrations (Optional / BYOK)
-   ANTHROPIC_API_KEY=your_claude_api_key
-   OPENAI_API_KEY=your_openai_key
-   SARVAM_API_KEY=your_sarvam_key
-   ```
-
-4. **Run the Development Server**:
-   ```bash
-   # Starts Next.js app and local sync server
-   npm run dev
-   ```
-   Open [http://localhost:3000](http://localhost:3000) in your browser.
-
----
-
-## 🧪 Testing & Verification
-
-Lekhan maintains a strict verification bar. No code lands without passing the full suite:
-
-```bash
-# Run type check
-npm run typecheck
-
-# Run linter
-npm run lint
-
-# Run all 400+ Vitest unit and integration tests
-npm test
-
-# Build for production (Turbopack)
-npm run build
+```sh
+npm ci
+npm run desktop -- dev
+npm run desktop -- build
 ```
 
----
+The desktop shell bundles the shared writer. **Cloud workspace** opens the Next.js app in a separate window. Build with `LEKHAN_DESKTOP_CLOUD_ORIGIN` to test against a deployed preview or a local Next.js server. The app defaults to `https://www.lekhan.online`, where the rebuilt workspace requires deployment. The host must be an HTTPS origin or loopback HTTP.
 
-## 🤝 Contributing
+Choose **Open folder** to write directly into an existing or empty vault. The writer opens Markdown files in nested folders and picks up edits made in another app. On a conflict, export the draft before opening the newer disk copy. Lekhan keeps deleted Markdown in the vault’s `.lekhan/trash` directory. The app remembers the last opened vault. Notes from the earlier desktop preview can be exported from the desktop sidebar.
 
-We welcome contributions from the community!
+In **Page context → Attachments**, preview linked images or download a linked file. **Attach file** copies a file up to 50 MiB into the vault’s `Attachments` folder and inserts a relative Markdown link. When you move a note or parent folder in Lekhan, the app updates the affected attachment links and leaves the attachment files in their original locations.
 
-1. Fork the repository and create your feature branch: `git checkout -b feat/my-feature`.
-2. Follow our commit convention: `feat(...)`, `fix(...)`, `docs(...)`, `refactor(...)`.
-3. Ensure all tests pass (`npm test && npm run typecheck`).
-4. Submit a Pull Request. Every PR is automatically audited by our clean-room peer review workflow.
+The vault keeps Yjs updates and compacted snapshots under `.lekhan/yjs`. Lekhan replays an interrupted save on open. If a file changed outside Lekhan during the interruption, it keeps the external version and saves the interrupted draft as Markdown under `.lekhan/recovery`. Keep the hidden `.lekhan` folder with the vault when you back it up.
 
----
+The current desktop vault reads up to 128 MiB of Markdown with a 16 MiB limit per file. [The Markdown vault and Yjs storage decision](docs/adr/0003-desktop-markdown-plus-yjs-sidecar.md) and [desktop release scope](https://github.com/coderhd/lekhan/issues/88) describe the storage format and remaining release work.
 
-## 📄 License
+### Local models
 
-Lekhan is licensed under the **[GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE)** with an **MIT Open-Core Exception** for client libraries, UI themes, and community plugins:
+Build the desktop bundle with the pinned llama.cpp sidecar using CMake and Git.
 
-* **Core Repository & Sync Hub**: Licensed under AGPL-3.0 to protect against proprietary SaaS cloning and ensure network-hosted modifications remain open.
-* **Community Plugins & Client SDKs**: Permissively licensed under MIT to empower community developers to build and distribute extensions without friction.
+```sh
+npm run desktop:package
+```
 
----
+The package script defaults to Metal on macOS and CPU on Windows and Linux. Set `LEKHAN_LLAMA_BACKEND` to `cuda` or `vulkan` on a machine with the corresponding build SDK and driver. Build on the target platform. A debug build can also use an installed server via the absolute `LEKHAN_LLAMA_SERVER` path. [Pinned llama.cpp source](https://github.com/ggml-org/llama.cpp/tree/61881b1f7f0b13d9e46d561fc25afcd6bbaec479)
 
-<div align="center">
-Built with passion by <b><a href="https://github.com/coderhd">Harsh Dave</a></b> and contributors.
-</div>
+Open **Model Library → Discover** to find a curated model. Each listing shows its download size, estimated memory and intended use. Lekhan keeps paused transfers on disk across app restarts and checks each model against its pinned SHA-256 digest before installation.
+
+Open **Installed** to select a model for the writing assistant, see storage usage, or remove the library copy. **Add GGUF model** copies a model you already have. Discard a partial download from its listing to reclaim the space. Prompts sent through **On this device** go to the local runtime. Windows and Linux runtime verification remains open.
+
+In desktop **Settings → AI Providers & Models**, **Find local models** checks Ollama, LM Studio, and llama.cpp over loopback. The bundled writer connects directly to the chosen model server or HTTPS provider through its native transport. Local catalog checks work without a browser CORS setting. Provider credentials go to the chosen endpoint, and HTTP redirects end the request.
+
+The [desktop release guide](docs/operations/desktop-release.md) covers the packaging matrix, release signing, and how the updater verifies an artifact before installation.
+
+## Account access
+
+A protected Vercel Preview can use its generated origin for account links and callbacks. Set `LEKHAN_USE_VERCEL_PREVIEW_ORIGIN=1` on that deployment and leave `LEKHAN_PUBLIC_URL` unset. For a stable staging or production hostname, set `LEKHAN_PUBLIC_URL` to that origin and configure its callback URLs in Supabase Auth.
+
+Choose **Sign in** from the public header or the guest notebook. For a local checkout, use `.env.local` to set the staging project URL and publishable key plus `LEKHAN_PUBLIC_URL=http://localhost:3000`. The sign-in screen shows its unavailable state until the app has a valid Supabase configuration.
+
+Enable email/password authentication and allow the configured application's `/auth/confirm` redirect in Supabase. This route accepts verified token-hash confirmation and the PKCE exchange code. Configure the recovery template with `type=recovery` for token-hash links. Use the default Supabase recovery redirect flow for PKCE. [Supabase redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls)
+
+To offer Google sign-in, enable Google for the Supabase Auth project and set `LEKHAN_GOOGLE_OAUTH=1` on the hosted app. Use the canonical app origin as the Supabase Auth Site URL. Google Cloud uses your Supabase project's callback URI. The app receives the PKCE code at `/auth/confirm` for web sign-in and `/auth/desktop-return` for desktop sign-in. The system browser offers **Open Lekhan** to return to the cloud window that started the request. For a custom Supabase Auth hostname, build the desktop app with `LEKHAN_DESKTOP_AUTH_ORIGIN` set to that HTTPS origin. Referral signup links use the email flow so the code is recorded with the account. [Google provider setup](https://supabase.com/docs/guides/auth/social-sign-in/auth-google) · [Supabase redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls)
+
+Guest pages and signed-in account pages have separate browser replicas. Account access does not move existing guest pages or send them to Supabase. Use Markdown export and import to move local material explicitly.
+
+## Observability
+
+The [observability guide](docs/operations/observability.md) covers error reporting, retention-job alerts, sync relay logs, and external availability checks.

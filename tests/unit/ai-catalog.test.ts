@@ -1,67 +1,50 @@
-import { describe, it, expect } from 'vitest'
-import { filterModels, getModelById, getDefaultAIRegistryState, DEFAULT_MODEL_CATALOG } from '../../lib/ai/catalog'
-import { ModelCard } from '../../lib/ai/types'
+import { describe, expect, it } from 'vitest'
+import { AI_REGISTRY, filterModels } from '../../lib/ai/model-catalog'
+import { endpointFor, FREE_PRESETS, providerConnectionKind, type ProviderConfig } from '../../lib/ai/provider-registry'
 
-describe('ai-catalog', () => {
-	describe('filterModels', () => {
-		it('should filter by costTier', () => {
-			const freeModels = filterModels(DEFAULT_MODEL_CATALOG, { costTier: 'free' })
-			expect(freeModels.every(m => m.costTier === 'free')).toBe(true)
-			expect(freeModels.length).toBeGreaterThan(0)
-		})
+describe('model catalog', () => {
+  it('lists 20 or more unique, sourced presets that route to the correct connection form', () => {
+    expect(AI_REGISTRY.models.length).toBeGreaterThanOrEqual(20)
+    expect(new Set(AI_REGISTRY.models.map(({ provider, model }) => provider + '/' + model)).size).toBe(AI_REGISTRY.models.length)
+    for (const model of AI_REGISTRY.models) {
+      expect(new URL(model.sourceUrl).protocol).toBe('https:')
+      expect(model.verifiedDate).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+      expect(providerConnectionKind(model)).toBe(model.access === 'byok' ? 'cloud' : model.access)
+    }
+    expect(filterModels({ access: 'free' }).map(model => model.model)).toEqual(FREE_PRESETS.map(model => model.model))
+  })
 
-		it('should filter by category', () => {
-			const reasoningModels = filterModels(DEFAULT_MODEL_CATALOG, { category: 'reasoning' })
-			expect(reasoningModels.every(m => m.category === 'reasoning')).toBe(true)
-		})
+  it('combines search, hardware, locality, cost, and the published context limit', () => {
+    expect(filterModels({ query: ' Ollama  llama ', locality: 'device', access: 'local', hardware: 'compact', minContextTokens: 128_000 })
+      .map(model => model.model)).toEqual(['llama3.2:1b'])
+    expect(filterModels({ access: 'free', minContextTokens: 1_000_000 }).map(model => model.provider)).toEqual(['gemini'])
+    expect(filterModels({ access: 'local', locality: 'cloud' })).toEqual([])
+    expect(filterModels({ locality: 'cloud', hardware: 'compact' })).toEqual([])
+    expect(filterModels({ capability: 'indic' }).map(model => model.model)).toEqual(['sarvam-105b', 'sarvam-105b-conversations'])
+    expect(filterModels({ query: 'mistral', access: 'free' })).toEqual([])
+    expect(filterModels({ query: 'mistral', access: 'byok' }).map(model => model.model)).toEqual(['mistral-small-2603'])
+  })
+})
 
-		it('should filter by provider', () => {
-			const openaiModels = filterModels(DEFAULT_MODEL_CATALOG, { provider: 'openai' })
-			expect(openaiModels.every(m => m.provider === 'openai')).toBe(true)
-		})
+describe('cloud endpoint validation', () => {
+  const qwen: ProviderConfig = { id: 'test', provider: 'qwen', model: 'qwen-flash' }
 
-		it('should filter by search query', () => {
-			const results = filterModels(DEFAULT_MODEL_CATALOG, { searchQuery: 'gpt' })
-			expect(results.every(m => m.name.toLowerCase().includes('gpt') || m.id.toLowerCase().includes('gpt'))).toBe(true)
-		})
-	})
+  it('accepts the default and a workspace-specific Model Studio endpoint', () => {
+    expect(endpointFor(qwen)).toBe('https://dashscope-intl.aliyuncs.com/compatible-mode/v1')
+    const base = 'https://ws-example.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1'
+    expect(endpointFor({ ...qwen, baseUrl: base + '/' })).toBe(base)
+    expect(endpointFor({ ...qwen, provider: 'deepseek' })).toBe('https://api.deepseek.com')
+  })
 
-	describe('getModelById', () => {
-		it('should resolve presets from the default catalog', () => {
-			const model = getModelById('gpt-5.6-luna')
-			expect(model).toBeDefined()
-			expect(model?.id).toBe('gpt-5.6-luna')
-		})
-
-		it('should resolve custom models if provided', () => {
-			const customCatalog: ModelCard[] = [{
-				id: 'custom-model',
-				name: 'Custom',
-				provider: 'custom',
-				contextWindow: 4096,
-				costTier: 'free',
-				hardwareTier: 'light',
-				speedTokPerSec: 10,
-				category: 'general',
-				description: 'A custom model'
-			}]
-			const model = getModelById('custom-model', customCatalog)
-			expect(model).toBeDefined()
-			expect(model?.id).toBe('custom-model')
-		})
-
-		it('should return undefined for unknown models', () => {
-			const model = getModelById('unknown-model')
-			expect(model).toBeUndefined()
-		})
-	})
-
-	describe('getDefaultAIRegistryState', () => {
-		it('should have correct default providers enabled', () => {
-			const state = getDefaultAIRegistryState()
-			expect(state.providers['openai']?.enabled).toBe(true)
-			expect(state.providers['anthropic']?.enabled).toBe(true)
-			expect(state.providers['custom']?.enabled).toBeUndefined()
-		})
-	})
+  it.each([
+    'https://dashscope.aliyuncs.com.other.example/compatible-mode/v1',
+    'https://extra.ws-example.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
+    'https://-workspace.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1',
+    'https://dashscope.aliyuncs.com:444/compatible-mode/v1',
+    'http://localhost/compatible-mode/v1',
+    'https://dashscope.aliyuncs.com/other',
+    'https://dashscope.aliyuncs.com/compatible-mode/v1?token=secret',
+  ])('rejects an unexpected Qwen endpoint %s', baseUrl => {
+    expect(() => endpointFor({ ...qwen, baseUrl })).toThrow()
+  })
 })

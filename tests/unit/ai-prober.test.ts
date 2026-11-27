@@ -1,100 +1,79 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import {
-	probeLocalRuntime,
-	probeAllLocalRuntimes,
-	getOsSpecificCorsCommand
-} from '../../lib/ai/prober'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { probeLocalProviders } from '../../lib/ai/client'
+import { localCorsCommand } from '../../lib/ai/local-provider-setup'
 
-describe('AI Prober', () => {
-	beforeEach(() => {
-		vi.restoreAllMocks()
-		vi.stubGlobal('performance', { now: () => 100 })
-	})
+afterEach(() => vi.unstubAllGlobals())
 
-	describe('getOsSpecificCorsCommand', () => {
-		it('returns correct commands for ollama', () => {
-			const cmds = getOsSpecificCorsCommand('ollama')
-			expect(cmds.macos).toBe('OLLAMA_ORIGINS="http://localhost:3000,https://lekhan.online,app://*" ollama serve')
-			expect(cmds.linux).toBe('OLLAMA_ORIGINS="http://localhost:3000,https://lekhan.online,app://*" ollama serve')
-			expect(cmds.windows).toBe('$env:OLLAMA_ORIGINS="http://localhost:3000,https://lekhan.online,app://*" ; ollama serve')
-		})
+describe('local model diagnostics', () => {
+  it('checks the three default endpoints and distinguishes CORS from an unreachable port', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (url, options) => {
+      if (String(url).includes(':11434')) return Response.json({ models: [{ name: 'llama3.2:3b' }, { name: 'llama3.2:3b' }] })
+      if (String(url).includes(':1234') && options?.mode === 'no-cors') return { type: 'opaque' } as Response
+      throw new TypeError('Failed to fetch')
+    })
+    vi.stubGlobal('fetch', fetch)
+    await expect(probeLocalProviders()).resolves.toMatchObject([
+      { provider: 'ollama', status: 'connected', models: ['llama3.2:3b'], latencyMs: expect.any(Number) },
+      { provider: 'lmstudio', status: 'cors_blocked' },
+      { provider: 'llamacpp', status: 'offline' },
+    ])
+    expect([...new Set(fetch.mock.calls.map(([url]) => url))]).toEqual([
+      'http://localhost:11434/api/tags', 'http://localhost:1234/v1/models', 'http://localhost:8080/v1/models',
+    ])
+    for (const [, options] of fetch.mock.calls) {
+      expect(options).toMatchObject({ credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer' })
+      expect(options).toMatchObject(options?.mode === 'no-cors'
+        ? { method: 'HEAD', redirect: 'follow' } : { method: 'GET', redirect: 'error' })
+      expect(options?.body).toBeUndefined()
+      expect(Object.keys(options?.headers ?? {})).toEqual([])
+    }
+  })
 
-		it('returns instructions for lmstudio', () => {
-			const cmds = getOsSpecificCorsCommand('lmstudio')
-			expect(cmds.macos).toContain('Enable CORS')
-		})
+  it('keeps auth and invalid responses separate from CORS and shows an empty catalog as connected', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(new Response('secret', { status: 401 }))
+      .mockResolvedValueOnce(Response.json({ invalid: true }))
+      .mockResolvedValueOnce(Response.json({ data: [] })))
+    await expect(probeLocalProviders()).resolves.toMatchObject([
+      { status: 'authorization_needed' }, { status: 'unexpected_response' }, { status: 'connected', models: [] },
+    ])
+  })
 
-		it('returns instructions for llamacpp', () => {
-			const cmds = getOsSpecificCorsCommand('llamacpp')
-			expect(cmds.macos).toContain('--cors')
-		})
-	})
+  it('does not re-probe after cancellation', async () => {
+    const controller = new AbortController()
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => {
+      controller.abort()
+      throw new TypeError('abort')
+    })
+    vi.stubGlobal('fetch', fetch)
+    await expect(probeLocalProviders({ signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
 
-	describe('probeLocalRuntime', () => {
-		it('detects connected ollama', async () => {
-			vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-				ok: true,
-				json: async () => ({ models: [{ name: 'llama2' }, { name: 'mistral' }] })
-			}))
-			vi.stubGlobal('performance', { now: vi.fn().mockReturnValueOnce(100).mockReturnValueOnce(150) })
+  it('rejects an oversized catalog without dropping other probe results', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(Response.json({ models: [{ name: 'x'.repeat(512 * 1024) }] }))
+      .mockResolvedValueOnce(Response.json({ data: [{ id: 'model' }] }))
+      .mockResolvedValueOnce(Response.json({ data: [] })))
+    await expect(probeLocalProviders()).resolves.toMatchObject([
+      { status: 'unexpected_response' }, { status: 'connected', models: ['model'] }, { status: 'connected', models: [] },
+    ])
+  })
+})
 
-			const result = await probeLocalRuntime('ollama')
-			
-			expect(result.status).toBe('connected')
-			expect(result.runtime).toBe('ollama')
-			expect(result.port).toBe(11434)
-			expect(result.models).toEqual(['llama2', 'mistral'])
-			expect(result.latencyMs).toBe(50)
-			expect(global.fetch).toHaveBeenCalledWith(
-				'http://127.0.0.1:11434/api/tags',
-				expect.objectContaining({ signal: expect.any(AbortSignal) })
-			)
-		})
+describe('origin-scoped local setup', () => {
+  const origin = 'https://www.lekhan.online'
+  it('builds Ollama commands for all three platforms', () => {
+    expect(localCorsCommand('ollama', origin, 'mac')).toBe("launchctl setenv OLLAMA_ORIGINS 'https://www.lekhan.online'")
+    expect(localCorsCommand('ollama', origin, 'windows')).toBe("$env:OLLAMA_ORIGINS = 'https://www.lekhan.online'\nollama serve")
+    expect(localCorsCommand('ollama', origin, 'linux')).toBe("OLLAMA_ORIGINS='https://www.lekhan.online' ollama serve")
+  })
 
-		it('detects connected lmstudio', async () => {
-			vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-				ok: true,
-				json: async () => ({ data: [{ id: 'gpt-3.5' }] })
-			}))
-			vi.stubGlobal('performance', { now: vi.fn().mockReturnValueOnce(100).mockReturnValueOnce(120) })
-
-			const result = await probeLocalRuntime('lmstudio')
-			
-			expect(result.status).toBe('connected')
-			expect(result.runtime).toBe('lmstudio')
-			expect(result.port).toBe(1234)
-			expect(result.models).toEqual(['gpt-3.5'])
-			expect(result.latencyMs).toBe(20)
-		})
-
-		it('detects cors_blocked when fetch throws TypeError (typical browser CORS behavior)', async () => {
-			vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
-			
-			const result = await probeLocalRuntime('ollama')
-			
-			expect(result.status).toBe('cors_blocked')
-			expect(result.error).toContain('Failed to fetch')
-		})
-
-		it('detects offline when fetch throws network error or timeout', async () => {
-			const error = new Error('Connection refused')
-			error.name = 'TimeoutError'
-			vi.stubGlobal('fetch', vi.fn().mockRejectedValue(error))
-			
-			const result = await probeLocalRuntime('ollama')
-			
-			expect(result.status).toBe('offline')
-		})
-	})
-
-	describe('probeAllLocalRuntimes', () => {
-		it('runs probes for all runtimes', async () => {
-			vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
-			
-			const results = await probeAllLocalRuntimes()
-			
-			expect(results).toHaveLength(3)
-			expect(results.map(r => r.runtime)).toEqual(['ollama', 'lmstudio', 'llamacpp'])
-		})
-	})
+  it('declines opaque and malformed origins and emits scoped llama.cpp flags', () => {
+    for (const input of ['null', "https://host' && echo x", 'https://host/path', '*']) {
+      expect(localCorsCommand('ollama', input, 'linux')).toBeUndefined()
+    }
+    expect(localCorsCommand('llamacpp', 'http://localhost:3182', 'linux')).toBe('--cors-origins "http://localhost:3182"')
+    expect(localCorsCommand('lmstudio', origin, 'linux')).toBeUndefined()
+  })
 })

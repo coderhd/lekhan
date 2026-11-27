@@ -1,35 +1,16 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-
-const geistSans = Geist({
-	variable: "--font-geist-sans",
-	subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-	variable: "--font-geist-mono",
-	subsets: ["latin"],
-});
+import type { Metadata } from 'next'
+import '@fontsource-variable/manrope'
+import '@fontsource-variable/newsreader'
+import './globals.css'
 
 export const metadata: Metadata = {
-	metadataBase: new URL(process.env.NEXT_PUBLIC_DOCS_URL ?? "https://docs.lekhan.online"),
-	title: {
-		default: "Lekhan Docs",
-		template: "%s · Lekhan Docs",
-	},
-	description:
-		"Guides for Lekhan, the AI-native knowledge workspace: pages, workspaces, links, tags, imports, and AI on your own keys or machine.",
-};
+  metadataBase: new URL(process.env.NEXT_PUBLIC_DOCS_URL || 'https://docs.lekhan.online'),
+  title: { default: 'Lekhan Docs', template: '%s · Lekhan Docs' },
+  description: 'Learn to write, link pages, import Markdown, share cloud pages, and choose an AI connection in Lekhan.',
+}
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
-	return (
-		<html
-			lang="en"
-			className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-			suppressHydrationWarning
-		>
-			<body className="flex min-h-full flex-col">{children}</body>
-		</html>
-	);
+export default function RootLayout({ children }: LayoutProps<'/'>) {
+  return <html lang="en" suppressHydrationWarning>
+    <body className="flex min-h-screen flex-col antialiased">{children}</body>
+  </html>
 }

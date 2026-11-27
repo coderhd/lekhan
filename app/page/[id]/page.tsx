@@ -1,131 +1,118 @@
-'use client'
+import Link from 'next/link'
+import { Suspense } from 'react'
+import { notFound } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { Collapsible } from '@astryxdesign/core/Collapsible'
+import { VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
+import CloudPageEditor from '@/components/cloud-page-editor'
+import CloudSearch from '@/components/cloud-search'
+import { DiscardOfflineAccess, PrepareOfflineWorkspace } from '@/components/prepare-offline-workspace'
+import { accountContext, createAuthClient } from '@/lib/auth/server'
+import { listCloudBacklinks, listCloudChildren, listCloudLinkChoices, pageAccess } from '@/lib/cloud/graph'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { syncUrl } from '@/lib/sync/config'
+import { getTicketSecret } from '@/lib/sync/ticket'
+import { addCloudPage } from '@/app/cloud/actions'
+import { renameCloudPage } from '@/app/cloud/page-actions'
+import { getPublicPage, readPublicContent } from '@/lib/cloud/public-page'
+import { PublicPage } from '@/components/public-page'
 
-import { use, useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { fetchPageDetails } from '@/services/graph'
-import { consumePendingImport } from '@/services/import'
-import GlobalLoader from '@/components/global-loader'
-import EditorWorkspace from '@/components/editor-workspace'
-import PublicAccessDenied from '@/components/public-access-denied'
-import { toast } from 'sonner'
+async function CloudSubpages({ client, id, after }: { client: SupabaseClient; id: string; after?: string }) {
+  const children = await listCloudChildren(client, id, after).catch(() => null)
+  if (!children?.pages.length) return null
+  const t = await getTranslations('cloud-workspace')
+  return <section aria-label={t('subpages')} className="cloud-subpages">
+    <h2>{t('subpages')}</h2>
+    <ul className="cloud-pages">{children.pages.map(child => <li key={child.id}>
+      <Link href={'/page/' + child.id}>{child.title}</Link>
+    </li>)}</ul>
+    {children.next && <Link href={'/page/' + id + '?children=' + children.next}>{t('moreSubpages')}</Link>}
+  </section>
+}
 
-export default function PageRoute({
-	params: paramsPromise,
-}: {
-	params: Promise<{ id: string }>
+async function CloudBacklinks({ client, id, after }: { client: SupabaseClient; id: string; after?: string }) {
+  const backlinks = await listCloudBacklinks(client, id, after).catch(() => null)
+  if (!backlinks?.pages.length) return null
+  const t = await getTranslations('app-shell')
+  return (
+    <Collapsible trigger={<Text weight="semibold">{t('backlinks')}</Text>} defaultIsOpen={after !== undefined} className="cloud-page-actions">
+      <VStack gap={2}>
+        <ul className="cloud-pages">{backlinks.pages.map(page => <li key={page.id}>
+          <Link href={'/page/' + page.id}>{page.title}</Link>
+        </li>)}</ul>
+        {backlinks.next && <Link href={'/page/' + id + '?backlinks=' + backlinks.next}>{t('showMoreBacklinks')}</Link>}
+      </VStack>
+    </Collapsible>
+  )
+}
+
+export default async function CloudPageRoute({ params, searchParams }: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ error?: string; children?: string; backlinks?: string }>
 }) {
-	const params = use(paramsPromise)
-	const router = useRouter()
-	const [user, setUser] = useState<any | null>(null)
-	const [token, setToken] = useState<string | null>(null)
-	const [pageTitle, setPageTitle] = useState<string | null>(null)
-	const [initialContent, setInitialContent] = useState<string | null>(null)
-	const [loading, setLoading] = useState(true)
-	// True once the signed-out public path granted a synthetic anonymous
-	// session; drives the public reading chrome (badge, footer CTA, reduced
-	// header) inside the workspace. `isViewer` alone cannot express this — a
-	// member with viewer role is a different experience.
-	const [isAnon, setIsAnon] = useState(false)
-	// Inline access-denied screen state; the old behaviour silently bounced to
-	// /login with no explanation for unshared or missing pages.
-	const [denied, setDenied] = useState<'public' | 'internal' | null>(null)
+  const { id } = await params
+  const account = await accountContext()
+  const access = account && await pageAccess(account.client, id, account.subject)
+  if (!account || !access?.privateAccess) {
+    const client = account?.client ?? await createAuthClient()
+    if (!client) notFound()
+    const publicPage = await getPublicPage(client, id)
+    if (!publicPage) notFound()
+    const content = await readPublicContent(client, publicPage).catch(() => null)
+    return <>
+      {account && <DiscardOfflineAccess subject={account.subject} />}
+      <PublicPage title={publicPage.title} content={content} />
+    </>
+  }
 
-	useEffect(() => {
-		let cancelled = false
-		const loadPageAndSession = async () => {
-			try {
-				// 1. Get current session and token
-				const { data: { session } } = await supabase.auth.getSession()
-				const { error: userError } = await supabase.auth.getUser()
+  const { error, children: after, backlinks } = await searchParams
+  const choices = listCloudLinkChoices(account.client, account.subject, access.page).catch(() => [])
+  const [settings, t] = await Promise.all([getTranslations('settings'), getTranslations('cloud-workspace')])
 
-				// If there is an auth error that is NOT just a missing session, it means the token expired or is invalid
-				if (userError && userError.name !== 'AuthSessionMissingError') {
-					console.error('Session error (token expired):', userError)
-					toast.error('Session expired. Please log in again.')
-					router.push('/login')
-					return
-				}
-
-				// 2. Fetch page details once and reuse the result for both the
-				// public-page validation and the page title state.
-				let page: Awaited<ReturnType<typeof fetchPageDetails>> | null = null
-				if (session) {
-					if (cancelled) return
-					setUser(session.user)
-					setToken(session.access_token)
-					page = await fetchPageDetails(params.id)
-				} else {
-					// Check if page is public
-					try {
-						page = await fetchPageDetails(params.id)
-						if (page && page.is_public) {
-							if (cancelled) return
-							setUser({
-								id: `anon-${crypto.randomUUID()}`,
-								email: 'anonymous@public',
-								full_name: 'Anonymous Viewer'
-							})
-							setToken('anonymous')
-							setIsAnon(true)
-						} else {
-							if (!cancelled) setDenied('public')
-							return
-						}
-					} catch {
-						if (!cancelled) setDenied('public')
-						return
-					}
-				}
-
-				if (cancelled) return
-				setPageTitle(page.title)
-				// A pending import payload (markdown body) is consumed here, on
-				// the page route, and passed to the workspace for first-open
-				// hydration. `consumePendingImport` is read-and-delete, so a
-				// refresh or re-mount of this route finds nothing pending.
-				setInitialContent(consumePendingImport(params.id))
-			} catch (err: unknown) {
-				console.error('Error loading page:', err)
-				if (!cancelled) setDenied('internal')
-			} finally {
-				if (!cancelled) {
-					setLoading(false)
-				}
-			}
-		}
-
-		loadPageAndSession()
-		return () => {
-			cancelled = true
-		}
-	}, [params.id, router])
-
-	if (loading) {
-		return <GlobalLoader text="Loading page..." />
-	}
-
-	if (denied) {
-		return <PublicAccessDenied variant={denied} />
-	}
-
-	if (!user || !token || pageTitle === null) {
-		return null
-	}
-
-	return (
-		<EditorWorkspace
-			key={params.id}
-			pageId={params.id}
-			initialTitle={pageTitle}
-			initialContent={initialContent}
-			token={token}
-			currentUser={{
-				id: user.id,
-				email: user.email,
-				full_name: user.user_metadata?.full_name || user.full_name
-			}}
-			anonVisitor={isAnon}
-		/>
-	)
+  return (
+    <main className="cloud-screen">
+      <PrepareOfflineWorkspace />
+      <header className="account-header">
+        <Link className="account-brand" href="/cloud"><span className="brand-mark" aria-hidden="true">L</span> {t('title')}</Link>
+        <div className="cloud-header-actions">
+          {access.page.parent_id && <Link className="account-link" href={'/page/' + access.page.parent_id}>{t('parentPage')}</Link>}
+          {access.role === 'owner' && <Link className="account-link" href={'/page/' + id + '/share'}>{t('share')}</Link>}
+          <Link className="account-link" href="/settings">{settings('title')}</Link>
+          <CloudSearch subject={account.subject} />
+        </div>
+      </header>
+      <article className="cloud-library">
+        <h1>{access.page.title}</h1>
+        {error && (
+          <div role="alert">
+            <Banner status="error" collapsible={false} title={error === 'title' ? t('titleLimit') : t('updateFailed')} />
+          </div>
+        )}
+        <CloudPageEditor
+          key={account.subject + ':' + id + ':' + access.role} page={access.page} linkChoices={choices} role={access.role}
+          subject={account.subject} enabled={!!syncUrl() && !!getTicketSecret()}
+        />
+        <Suspense><CloudSubpages client={account.client} id={id} after={after} /></Suspense>
+        <Suspense><CloudBacklinks client={account.client} id={id} after={backlinks} /></Suspense>
+        {access.role === 'owner' && (
+          <Collapsible defaultIsOpen={false} trigger={<Text weight="semibold">{t('pageSettings')}</Text>} className="cloud-page-actions">
+            <VStack gap={3}>
+              <form className="cloud-create" action={renameCloudPage.bind(null, id)}>
+                <label>{t('pageTitle')} <input name="title" defaultValue={access.page.title} maxLength={160} required /></label>
+                <Button type="submit" variant="secondary" size="sm" label={t('rename')} />
+              </form>
+              <form className="cloud-create" action={addCloudPage}>
+                <input type="hidden" name="parentId" value={id} />
+                <label>{t('subpageTitle')} <input name="title" maxLength={160} required /></label>
+                <Button type="submit" variant="secondary" size="sm" label={t('addSubpage')} />
+              </form>
+            </VStack>
+          </Collapsible>
+        )}
+      </article>
+    </main>
+  )
 }

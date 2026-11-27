@@ -9,8 +9,6 @@ import { createMDX } from "fumadocs-mdx/next";
 const appRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
-  cacheComponents: true,
-  partialPrefetching: true,
   turbopack: {
     root: appRoot,
     rules: {

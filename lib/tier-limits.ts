@@ -47,11 +47,9 @@ export function getPlanLimits(plan?: string | null, seats?: number | null): Plan
 }
 
 export function getExpirationCutoffDate(plan?: string | null, referenceNow?: Date): Date {
-	const limits = getPlanLimits(plan)
+	const limits = plan === 'team' ? TEAM_LIMITS : getPlanLimits(plan)
 	const now = referenceNow || new Date()
-	const cutoff = new Date(now.getTime())
-	cutoff.setDate(cutoff.getDate() - limits.historyRetentionDays)
-	return cutoff
+	return new Date(now.getTime() - limits.historyRetentionDays * 86_400_000)
 }
 
 export function isExpiredVersion(plan: string | null | undefined, versionCreatedAt: string | Date, referenceNow?: Date): boolean {

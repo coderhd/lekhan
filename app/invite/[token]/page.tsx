@@ -1,156 +1,76 @@
-'use client'
+import NextLink from 'next/link'
+import { notFound, redirect } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { Card } from '@astryxdesign/core/Card'
+import { Heading } from '@astryxdesign/core/Heading'
+import { Link } from '@astryxdesign/core/Link'
+import { HStack, VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
+import { createServerAdmin } from '@/lib/auth/admin'
+import { invitationPath } from '@/lib/auth/input'
+import { accountContext } from '@/lib/auth/server'
+import { inspectInvitation } from '@/lib/cloud/sharing'
+import { respondToInvitation } from './actions'
 
-import { use, useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { PageInvitation } from '@/types'
-import { fetchPageInvitationDetails, acceptPageInvitation, declinePageInvitation } from '@/services/graph'
-import GlobalLoader from '@/components/global-loader'
-import { toast } from 'sonner'
+export const metadata = { referrer: 'no-referrer', robots: { index: false, follow: false } }
 
-export default function InvitePage ({
-	params: paramsPromise,
-}: {
-	params: Promise<{ token: string }>
+export default async function InvitationPage({ params, searchParams }: {
+  params: Promise<{ token: string }>
+  searchParams: Promise<{ result?: string }>
 }) {
-	const params = use(paramsPromise)
-	const router = useRouter()
-	const [user, setUser] = useState<any | null>(null)
-	const [invite, setInvite] = useState<PageInvitation | null>(null)
-	const [loading, setLoading] = useState(true)
-	const [processing, setProcessing] = useState(false)
+  const { token } = await params
+  if (!invitationPath(token)) notFound()
+  const account = await accountContext()
+  if (!account) redirect('/login?' + new URLSearchParams({ invite: token }))
 
-	useEffect(() => {
-		const checkUserAndInvite = async () => {
-			try {
-				// 1. Get current session
-				const { data: { session } } = await supabase.auth.getSession()
-				if (!session) {
-					// Save token in cookie and redirect to login
-					document.cookie = `pending_invite_token=${params.token}; path=/; max-age=3600`
-					toast.error('Please log in or sign up to accept this invitation')
-					router.push('/login')
-					return
-				}
+  const admin = createServerAdmin()
+  const invite = admin && await inspectInvitation(admin, token, account.subject).catch(() => null)
+  const { result } = await searchParams
+  if (invite?.status === 'accepted') redirect('/page/' + invite.page_id)
+  if (invite?.status === 'declined') redirect('/cloud?view=invitations&notice=declined')
 
-				setUser(session.user)
-
-				// 2. Fetch invitation details
-				const invitation = await fetchPageInvitationDetails(params.token)
-
-				if (invitation.status === 'accepted') {
-					router.push(`/page/${invitation.page_id}`)
-					return
-				}
-
-				if (invitation.status !== 'pending') {
-					toast.error('This invitation is no longer available')
-					router.push('/')
-					return
-				}
-
-				setInvite(invitation)
-			} catch (err) {
-				console.error('Unexpected error loading invite page:', err)
-				router.push('/')
-			} finally {
-				setLoading(false)
-			}
-		}
-
-		checkUserAndInvite()
-	}, [params.token, router])
-
-	const handleAccept = async () => {
-		if (!invite || !user) {
-			return
-		}
-		setProcessing(true)
-
-		try {
-			await acceptPageInvitation(invite, user.id)
-			router.push(`/page/${invite.page_id}`)
-		} catch (err: unknown) {
-			const message = err instanceof Error ? err.message : String(err)
-			toast.error(`Failed to accept: ${message}`)
-			setProcessing(false)
-		}
-	}
-
-	const handleDecline = async () => {
-		if (!invite) {
-			return
-		}
-		setProcessing(true)
-
-		try {
-			await declinePageInvitation(invite.id)
-			router.push('/')
-		} catch (err: unknown) {
-			const message = err instanceof Error ? err.message : String(err)
-			toast.error(`Failed to decline: ${message}`)
-			setProcessing(false)
-		}
-	}
-
-	if (loading) {
-		return <GlobalLoader text="Processing invitation..." />
-	}
-
-	if (!invite) {
-		return null
-	}
-
-	return (
-		<div className='flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black p-4'>
-			<div className='w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/60 p-8 backdrop-blur-xl shadow-2xl text-center'>
-				<h2 className='text-2xl font-bold tracking-tight text-white mb-2'>
-					Page Invitation
-				</h2>
-				<p className='text-sm text-slate-400 mb-6'>
-					You have been invited to join a collaborative page workspace
-				</p>
-
-				<div className='rounded-xl bg-slate-950/60 border border-white/5 p-5 mb-6 text-left'>
-					<p className='text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1'>
-						Page Title
-					</p>
-					<p className='text-lg font-bold text-white mb-4'>
-						{invite.pages?.title || 'Untitled'}
-					</p>
-
-					<p className='text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1'>
-						Invited By
-					</p>
-					<p className='text-sm text-slate-300 font-medium mb-4'>
-						{invite.profiles?.full_name || invite.profiles?.email}
-					</p>
-
-					<p className='text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1'>
-						Access Role
-					</p>
-					<span className='inline-block rounded-full bg-orange-500/20 border border-orange-500/30 px-3 py-0.5 text-xs font-semibold text-orange-300 capitalize'>
-						{invite.role}
-					</span>
-				</div>
-
-				<div className='flex flex-col sm:flex-row gap-3'>
-					<button
-						onClick={handleAccept}
-						disabled={processing}
-						className='flex-1 rounded-lg bg-orange-500 py-2.5 font-semibold text-black transition hover:bg-orange-400 active:scale-95 disabled:opacity-50 text-sm'
-					>
-						{processing ? 'Processing...' : 'Accept Invitation'}
-					</button>
-					<button
-						onClick={handleDecline}
-						disabled={processing}
-						className='flex-1 rounded-lg bg-slate-800 py-2.5 font-semibold text-slate-300 border border-slate-700 transition hover:bg-slate-700 active:scale-95 disabled:opacity-50 text-sm'
-					>
-						Decline
-					</button>
-				</div>
-			</div>
-		</div>
-	)
+  const t = await getTranslations('cloud-workspace')
+  return (
+    <main className="account-screen">
+      <header className="account-header">
+        <NextLink className="account-brand" href="/cloud"><span className="brand-mark" aria-hidden="true">L</span> {t('title')}</NextLink>
+      </header>
+      <Card padding={6} className="account-card" aria-labelledby="invitation-heading">
+        <VStack gap={3}>
+          <Heading level={1} id="invitation-heading">{t('invitationTitle')}</Heading>
+          {invite ? (
+            <>
+              <Text weight="semibold">{invite.title}</Text>
+              <Text color="secondary">{invite.role === 'editor' ? t('invitedToEdit') : t('invitedToView')}</Text>
+              {result && (
+                <div role="alert">
+                  <Banner
+                    status="error"
+                    collapsible={false}
+                    title={result === 'limit'
+                      ? t('recipientLimit')
+                      : result === 'plan_changed' ? t('planChangedAccept')
+                        : t('respondFailed')}
+                  />
+                </div>
+              )}
+              <form action={respondToInvitation.bind(null, token)}>
+                <HStack gap={2} wrap="wrap" className="invitation-actions">
+                  <Button type="submit" variant="primary" name="response" value="accepted" label={t('acceptInvitation')} />
+                  <Button type="submit" variant="secondary" name="response" value="declined" label={t('decline')} />
+                </HStack>
+              </form>
+            </>
+          ) : (
+            <>
+              <Text color="secondary">{t('invalidRecipient')}</Text>
+              <Link href={'/login?' + new URLSearchParams({ invite: token })}>{t('switchAccount')}</Link>
+            </>
+          )}
+        </VStack>
+      </Card>
+    </main>
+  )
 }
