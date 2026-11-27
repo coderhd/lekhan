@@ -15,6 +15,8 @@ docker run --detach --name lekhan-sync --init --read-only --stop-timeout 60 \
   --publish 127.0.0.1:8080:8080 lekhan-sync:release
 ```
 
+The **Sync relay image** workflow builds the Linux amd64 image, verifies startup and volume persistence, then uploads it as `lekhan-relay-linux-amd64`. Use the artifact for the matching release revision. Download and unpack the artifact directory with `gh run download <run-id> -n lekhan-relay-linux-amd64`. Load `lekhan-relay.tar.gz` with `docker load -i lekhan-relay.tar.gz` and use the reported image tag in the run command.
+
 The example binds the container to a proxy on the same host. A container platform can route directly to port 8080. Set `PORT` if the platform assigns another port. The image runs as UID 1000 and uses `/var/lib/lekhan/wal` by default. Give UID 1000 write and traverse access to the mounted directory. The process checks that directory before listening, and the image checks `/health`.
 
 Set these variables through the relay host’s secret store or an untracked `relay.env` on the host.
