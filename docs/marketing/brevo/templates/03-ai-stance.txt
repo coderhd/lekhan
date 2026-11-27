@@ -1,0 +1,12 @@
+AI is turning into the line item every notes app learns to love. We went the other way.
+
+Bring a supported provider key. Your provider handles any usage charges. When you choose a cloud provider, the assistant sends the request to that provider.
+
+If you want inference on your machine, the desktop app can run a local model. Choose On this device in the assistant after installing a model.
+
+Harsh, Lekhan
+
+See the AI provider options
+https://docs.lekhan.online/docs/ai/byok?utm_source=brevo&utm_medium=email&utm_campaign=founding_welcome&utm_content=email-3-ai
+
+Unsubscribe: {{unsubscribe}}
