@@ -22,14 +22,12 @@ export default async function WorkspacePage() {
   }
   const scope = 'account:' + account.subject
   const mirrorEnabled = !!syncUrl() && !!getTicketSecret()
-  const plan = mirrorEnabled
-    ? await resolveOwnerWorkspaceEntitlement(account.subject, account.client).catch(() => null)
-    : null
+  const plan = await resolveOwnerWorkspaceEntitlement(account.subject, account.client).catch(() => undefined)
   return <>
     <PrepareOfflineWorkspace />
     <WebWorkspace key={scope} storageScope={scope} cloudEnabled={true} signedIn={true}
       profile={{ subject: account.subject, email: account.email, displayName: account.displayName }}
-      plan={plan ? { tier: plan.tier, relayReadOnly: plan.relayReadOnly, ...getPlanLimits(plan.tier, plan.seats) } : undefined}
-      mirrorEnabled={mirrorEnabled} automaticMirror={!!plan && plan.tier !== 'free' && !plan.relayReadOnly} />
+      plan={plan ? { tier: plan.tier, relayReadOnly: plan.relayReadOnly, ...getPlanLimits(plan.tier, plan.seats) } : plan}
+      mirrorEnabled={mirrorEnabled} automaticMirror={mirrorEnabled && !!plan && plan.tier !== 'free' && !plan.relayReadOnly} />
   </>
 }
