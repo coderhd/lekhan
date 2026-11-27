@@ -3,6 +3,7 @@
 import { type MouseEvent, useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { CloudOff, FileText } from 'lucide-react'
 import { offlineAccount } from '@/lib/cloud/offline-account'
+import { bootstrapTierGates } from '@/lib/analytics'
 import { readOfflineCloudPage, readOfflineCloudPages } from '@/lib/cloud/local-search'
 import { uuidPattern } from '@/lib/cloud/graph'
 import { useTranslations } from '@/lib/i18n/client'
@@ -56,6 +57,9 @@ function CloudOfflineScreen() {
   const t = useTranslations('cloud-offline')
   const subject = useSyncExternalStore(watchOfflineCookies, browserAccount, loading)
   const id = useSyncExternalStore(watchNavigation, pageParam, loading)
+  useEffect(() => {
+    if (subject !== undefined) bootstrapTierGates(subject ? 'account:' + subject : 'personal', subject ? undefined : null)
+  }, [subject])
   return <main className="cloud-screen">
     <header className="account-header">
       <a href="/cloud-offline" className="account-brand" onClick={handleOfflineNav(null)}>

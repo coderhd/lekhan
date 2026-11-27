@@ -75,16 +75,9 @@ export function syncTierGateBootstrap(flags: TierGateFlagMap, allowed: () => boo
 
 export function refreshTierGateFlags(allowed: () => boolean) {
   if (!initialized || !allowed() || isOffline()) return false
+  posthog.set_config({ advanced_disable_flags: false })
   posthog.reloadFeatureFlags()
   return true
-}
-
-export function readPostHogTierFlag(key: keyof TierGateFlagMap) {
-  if (initialized) {
-    const value = posthog.getFeatureFlag(key, { send_event: false })
-    if (value !== undefined) return value
-  }
-  return latestBootstrap[key]
 }
 
 export function revokeProductAnalytics() {

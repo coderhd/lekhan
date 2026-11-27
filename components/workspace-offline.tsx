@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { CloudOff, Settings2 } from 'lucide-react'
 import { offlineNotebookScope } from '@/lib/cloud/offline-account'
+import { bootstrapTierGates } from '@/lib/analytics'
 import { useTranslations } from '@/lib/i18n/client'
 import LocaleSelect from './locale-select'
 import { watchOfflineCookies, setOfflineLocale } from './offline-shell'
@@ -31,6 +32,7 @@ function OfflineNotebook({ scope }: { scope: string }) {
   const settings = useTranslations('settings')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const cloudSubject = scope.startsWith('account:') ? scope.slice('account:'.length) : undefined
+  useEffect(() => { bootstrapTierGates(scope) }, [scope])
   return <>
     <WorkspaceApp storageScope={scope} workspaceName={t('notebook')}
       cloudSearchSubject={cloudSubject}

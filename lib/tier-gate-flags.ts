@@ -1,4 +1,4 @@
-import { getPlanLimits, type PlanLimits, type PlanTier } from './tier-limits'
+import { getPlanLimits, type PlanTier } from './tier-limits'
 
 const storagePrefix = 'lekhan:tier-gates:'
 const validTiers = new Set<PlanTier>(['free', 'plus', 'pro', 'team'])
@@ -16,7 +16,6 @@ export type TierGateFlagMap = {
   'tier-gate-auto-mirror': boolean
   'tier-gate-history-days': string
   'tier-gate-collaborator-cap': string
-  'tier-gate-storage-mb': string
 }
 
 export function deriveTierGateFlags(plan?: TierGatePlanInput | null): TierGateFlagMap {
@@ -29,7 +28,6 @@ export function deriveTierGateFlags(plan?: TierGatePlanInput | null): TierGateFl
     'tier-gate-auto-mirror': tier !== 'free' && cloudSync,
     'tier-gate-history-days': String(limits.historyRetentionDays),
     'tier-gate-collaborator-cap': String(limits.maxDistinctCollaborators),
-    'tier-gate-storage-mb': String(limits.maxStorageMb),
   }
 }
 
@@ -48,13 +46,11 @@ export function parseTierGateFlags(raw: string | null): TierGateFlagMap | null {
     const autoMirror = parsed['tier-gate-auto-mirror']
     const historyDays = parsed['tier-gate-history-days']
     const collaboratorCap = parsed['tier-gate-collaborator-cap']
-    const storageMb = parsed['tier-gate-storage-mb']
     if (typeof tier !== 'string' || !validTiers.has(tier as PlanTier)) return null
     if (typeof cloudSync !== 'boolean' || typeof autoMirror !== 'boolean') return null
     if (
       typeof historyDays !== 'string' || !positiveInteger.test(historyDays) ||
-      typeof collaboratorCap !== 'string' || !positiveInteger.test(collaboratorCap) ||
-      typeof storageMb !== 'string' || !positiveInteger.test(storageMb)
+      typeof collaboratorCap !== 'string' || !positiveInteger.test(collaboratorCap)
     ) return null
     return {
       'tier-gate-tier': tier as PlanTier,
@@ -62,7 +58,6 @@ export function parseTierGateFlags(raw: string | null): TierGateFlagMap | null {
       'tier-gate-auto-mirror': autoMirror,
       'tier-gate-history-days': historyDays,
       'tier-gate-collaborator-cap': collaboratorCap,
-      'tier-gate-storage-mb': storageMb,
     }
   } catch {
     return null
@@ -87,19 +82,4 @@ export function writeTierGateBootstrap(scope = 'personal', flags: TierGateFlagMa
     // Offline flag caching is optional when browser storage is restricted.
   }
   return flags
-}
-
-export function tierSummaryFromFlags(flags: TierGateFlagMap): PlanLimits & {
-  tier: PlanTier
-  cloudSyncEnabled: boolean
-  automaticMirrorEnabled: boolean
-} {
-  return {
-    tier: flags['tier-gate-tier'],
-    historyRetentionDays: Number(flags['tier-gate-history-days']),
-    maxDistinctCollaborators: Number(flags['tier-gate-collaborator-cap']),
-    maxStorageMb: Number(flags['tier-gate-storage-mb']),
-    cloudSyncEnabled: flags['tier-gate-cloud-sync'],
-    automaticMirrorEnabled: flags['tier-gate-auto-mirror'],
-  }
 }

@@ -17,7 +17,7 @@ import type { PlanLimits, PlanTier } from '@/lib/tier-limits'
 export default function WebWorkspace({ storageScope, cloudEnabled, signedIn, mirrorEnabled, automaticMirror, profile, plan }: {
   storageScope: string; cloudEnabled: boolean; signedIn: boolean; mirrorEnabled: boolean; automaticMirror: boolean
   profile?: SettingsProfile
-  plan?: PlanLimits & { tier: PlanTier }
+  plan?: PlanLimits & { tier: PlanTier; relayReadOnly: boolean }
 }) {
   const router = useRouter()
   const t = useTranslations('auth')
@@ -29,13 +29,12 @@ export default function WebWorkspace({ storageScope, cloudEnabled, signedIn, mir
       bootstrapTierGates(storageScope, null)
       return
     }
-    if (!plan) return
-    bootstrapTierGates(storageScope, {
+    bootstrapTierGates(storageScope, plan && {
       tier: plan.tier,
       seats: plan.tier === 'team' ? plan.maxDistinctCollaborators : undefined,
-      relayReadOnly: plan.tier !== 'free' && !automaticMirror,
+      relayReadOnly: plan.relayReadOnly,
     })
-  }, [automaticMirror, plan, signedIn, storageScope])
+  }, [plan, signedIn, storageScope])
   return <><WorkspaceApp storageScope={storageScope} mirrorEnabled={mirrorEnabled} automaticMirror={automaticMirror}
     cloudSearchSubject={profile?.subject}
     openCloudPage={signedIn ? id => {

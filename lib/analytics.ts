@@ -268,14 +268,10 @@ export function trackWritingEdit(previous: string, next: string) {
   }
 }
 
-export function readTierGates(scope = 'personal'): TierGateFlagMap {
-  return readTierGateBootstrap(scope)
-}
-
 export function bootstrapTierGates(scope = 'personal', plan?: TierGatePlanInput | null): TierGateFlagMap {
-  const flags = writeTierGateBootstrap(scope, deriveTierGateFlags(plan))
+  const flags = plan === undefined ? readTierGateBootstrap(scope) : writeTierGateBootstrap(scope, deriveTierGateFlags(plan))
   latestTierFlags = flags
-  if (posthogConfigured && analyticsAllowed()) {
+  if (posthogConfigured && analyticsAllowed() && (typeof navigator === 'undefined' || navigator.onLine !== false)) {
     productAnalytics ??= loadProductAnalytics()
     void productAnalytics.then(sdk => sdk.syncTierGateBootstrap(flags, analyticsAllowed)).catch(() => undefined)
   }

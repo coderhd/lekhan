@@ -4,7 +4,6 @@ import {
   parseTierGateFlags,
   readTierGateBootstrap,
   tierGateStorageKey,
-  tierSummaryFromFlags,
   writeTierGateBootstrap,
 } from '../../lib/tier-gate-flags'
 
@@ -33,7 +32,6 @@ describe('tier-gate PostHog bootstrap', () => {
       'tier-gate-auto-mirror': false,
       'tier-gate-history-days': '1',
       'tier-gate-collaborator-cap': '2',
-      'tier-gate-storage-mb': '20',
     })
 
     expect(deriveTierGateFlags({ tier: 'plus' })).toEqual({
@@ -42,7 +40,6 @@ describe('tier-gate PostHog bootstrap', () => {
       'tier-gate-auto-mirror': true,
       'tier-gate-history-days': '90',
       'tier-gate-collaborator-cap': '10',
-      'tier-gate-storage-mb': '10000',
     })
 
     expect(deriveTierGateFlags({ tier: 'team', seats: 12, relayReadOnly: true })).toEqual({
@@ -51,7 +48,6 @@ describe('tier-gate PostHog bootstrap', () => {
       'tier-gate-auto-mirror': false,
       'tier-gate-history-days': '365',
       'tier-gate-collaborator-cap': '12',
-      'tier-gate-storage-mb': '50000',
     })
   })
 
@@ -66,14 +62,6 @@ describe('tier-gate PostHog bootstrap', () => {
     expect(stored).not.toBeNull()
     expect(stored).not.toMatch(/email|title|workspace_id|token/)
     expect(readTierGateBootstrap('account:subject-a')).toEqual(flags)
-    expect(tierSummaryFromFlags(readTierGateBootstrap('account:subject-a'))).toEqual({
-      tier: 'pro',
-      historyRetentionDays: 365,
-      maxDistinctCollaborators: 25,
-      maxStorageMb: 50000,
-      cloudSyncEnabled: true,
-      automaticMirrorEnabled: true,
-    })
 
     storage.setItem(tierGateStorageKey('account:subject-a'), JSON.stringify({ 'tier-gate-tier': 'enterprise' }))
     expect(readTierGateBootstrap('account:subject-a')).toEqual(deriveTierGateFlags(null))
@@ -88,11 +76,13 @@ describe('tier-gate PostHog bootstrap', () => {
     vi.stubEnv('NEXT_PUBLIC_POSTHOG_KEY', 'phc_LekhanFixture')
     vi.resetModules()
 
-    const { bootstrapTierGates, readTierGates } = await import('../../lib/analytics')
+    const { bootstrapTierGates } = await import('../../lib/analytics')
     const written = bootstrapTierGates('account:offline-user', { tier: 'plus' })
 
     expect(written['tier-gate-tier']).toBe('plus')
-    expect(readTierGates('account:offline-user')).toEqual(written)
+    expect(bootstrapTierGates('account:offline-user')).toEqual(written)
+    expect(bootstrapTierGates('account:another-user')).toEqual(deriveTierGateFlags(null))
+    expect(bootstrapTierGates('account:offline-user')).toEqual(written)
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 })

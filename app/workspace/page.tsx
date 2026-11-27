@@ -26,7 +26,7 @@ export default async function WorkspacePage() {
     <PrepareOfflineWorkspace />
     <WebWorkspace key={scope} storageScope={scope} cloudEnabled={!!config} signedIn={!!account}
       profile={account ? { subject: account.subject, email: account.email, displayName: account.displayName } : undefined}
-      plan={plan ? { tier: plan.tier, ...getPlanLimits(plan.tier, plan.seats) } : undefined}
+      plan={plan ? { tier: plan.tier, relayReadOnly: plan.relayReadOnly, ...getPlanLimits(plan.tier, plan.seats) } : undefined}
       mirrorEnabled={mirrorEnabled} automaticMirror={!!plan && plan.tier !== 'free' && !plan.relayReadOnly} />
   </>
 }
