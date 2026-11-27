@@ -1,0 +1,12 @@
+Your wave is up. Use the link below to open your beta workspace.
+
+Three things to try first: import a small folder, link two pages, then share a disposable page with one person if your workspace has sharing enabled.
+
+If the link doesn’t work, reply and tell me where you got stuck.
+
+Harsh, Lekhan
+
+Open my workspace
+REPLACE_WITH_APPROVED_BETA_INVITE_URL
+
+Unsubscribe: {{unsubscribe}}

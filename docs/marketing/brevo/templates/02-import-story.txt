@@ -1,0 +1,12 @@
+Most importers say the move worked. Then you open a page and your wikilinks are plain text.
+
+Lekhan brings in Markdown pages and their folders, resolves links where it finds a matching page, and reports skipped files and unresolved links. Start with a small folder and compare the report to what you expected.
+
+Keep your source vault around while you check the import. You can export your Lekhan pages back to Markdown.
+
+Harsh, Lekhan
+
+See the Obsidian import guide
+https://docs.lekhan.online/docs/getting-started/obsidian-import?utm_source=brevo&utm_medium=email&utm_campaign=founding_welcome&utm_content=email-2-import
+
+Unsubscribe: {{unsubscribe}}
