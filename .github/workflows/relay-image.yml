@@ -1,0 +1,86 @@
+name: Sync relay image
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/relay-image.yml'
+      - 'server/sync/**'
+      - 'lib/**'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build the relay
+        run: docker build -f server/sync/Dockerfile -t lekhan-relay:${{ github.sha }} .
+
+      - name: Verify readiness and the durable volume
+        shell: bash
+        env:
+          RELAY_IMAGE: lekhan-relay:${{ github.sha }}
+        run: |
+          relay_config=(
+            --init --read-only
+            -e LEKHAN_PUBLIC_URL=http://127.0.0.1:3000
+            -e NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:1
+            -e NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_fixture
+            -e SUPABASE_SECRET_KEY=sb_secret_fixture
+            -e LEKHAN_SYNC_TICKET_SECRET=fixture-only-ticket-secret-with-over-32-bytes
+            -e LEKHAN_ENCRYPTION_KEY=fixture-only-snapshot-key-with-over-32-bytes
+          )
+          if docker run --rm "${relay_config[@]}" -e LEKHAN_WAL_DIR=/app/package.json "$RELAY_IMAGE" > broken-wal.log 2>&1; then
+            echo 'The relay accepted a file as the WAL directory.'
+            exit 1
+          fi
+          grep -Eq 'EEXIST|ENOTDIR' broken-wal.log
+
+          docker volume create relay-wal
+          cleanup() {
+            docker logs relay || true
+            docker rm -f relay || true
+            docker volume rm relay-wal || true
+          }
+          trap cleanup EXIT
+
+          start_relay() {
+            docker run -d --name relay "${relay_config[@]}" --mount type=volume,source=relay-wal,target=/var/lib/lekhan/wal "$RELAY_IMAGE"
+            for attempt in {1..20}; do
+              if docker exec relay node -e "fetch('http://127.0.0.1:8080/health').then(r=>{if(!r.ok)process.exitCode=1})"; then
+                return
+              fi
+              sleep 1
+            done
+            return 1
+          }
+
+          start_relay
+          docker exec relay node -e "if (process.versions.node.split('.')[0] !== '24' || process.getuid() !== 1000) process.exitCode = 1"
+          docker exec relay node -e "require('node:fs').writeFileSync(process.env.LEKHAN_WAL_DIR + '/volume-probe', 'relay fixture')"
+          docker stop -t 30 relay
+          test "$(docker inspect --format '{{.State.ExitCode}}' relay)" = 0
+          docker rm relay
+          start_relay
+          docker exec relay node -e "if (require('node:fs').readFileSync(process.env.LEKHAN_WAL_DIR + '/volume-probe', 'utf8') !== 'relay fixture') process.exitCode = 1"
+          docker stop -t 30 relay
+          test "$(docker inspect --format '{{.State.ExitCode}}' relay)" = 0
+
+      - name: Export the verified image
+        shell: bash
+        run: docker save lekhan-relay:${{ github.sha }} | gzip > lekhan-relay.tar.gz
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: lekhan-relay-linux-amd64
+          path: lekhan-relay.tar.gz
+          if-no-files-found: error
+          retention-days: 7
