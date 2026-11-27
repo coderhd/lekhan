@@ -5,7 +5,7 @@ import { mapMarkdownDestinations } from './markdown-destinations'
 import { wikiLinks } from './markdown-references'
 import { attachmentReference } from './local-attachments'
 import type { Page } from './types'
-import { exportPage, pagePath, resolvePage } from './workspace'
+import { exportPage, isFolderPage, pagePath, resolvePage } from './workspace'
 
 const filesystemKey = (name: string) => name.normalize('NFC').toLowerCase()
 
@@ -84,6 +84,7 @@ export function workspaceArchiveEntries(pages: Page[]) {
   const files: Record<string, Uint8Array> = Object.create(null)
   const notes: Record<string, ArchivedNote> = Object.create(null)
   for (const page of pages) {
+    if (isFolderPage(page) && !page.markdown && !page.frontmatter && !page.properties && !page.files?.length) continue
     const path = paths.get(page.id)!
     const filename = path + '.md'
     const retained = new Map<string, string>()

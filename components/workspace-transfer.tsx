@@ -2,6 +2,12 @@
 
 import { useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { Heading } from '@astryxdesign/core/Heading'
+import { VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
+import { TextInput } from '@astryxdesign/core/TextInput'
 import { useTranslations } from '@/lib/i18n/client'
 import InviteLink from './invite-link'
 
@@ -30,18 +36,18 @@ async function transferRequest(input: { action: 'invite'; email: string } | { ac
 
 export function WorkspaceTransferInvite() {
   const t = useTranslations('billing')
+  const [email, setEmail] = useState('')
   const [url, setUrl] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<TransferFailureCode | 'transferInviteFailed' | null>(null)
 
   async function invite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const email = new FormData(event.currentTarget).get('email')
-    if (busy || typeof email !== 'string') return
+    if (busy || !email.trim()) return
     setError(null)
     setBusy(true)
     try {
-      const result = await transferRequest({ action: 'invite', email })
+      const result = await transferRequest({ action: 'invite', email: email.trim() })
       setUrl(result.url)
     } catch (failure) {
       setError(failure instanceof TransferFailure ? failure.code : 'transferInviteFailed')
@@ -50,19 +56,41 @@ export function WorkspaceTransferInvite() {
     }
   }
 
-  return <section className="billing-transfer" aria-labelledby="billing-transfer">
-    <h2 id="billing-transfer">{t('transferOwnership')}</h2>
-    <p>{t('transferInviteIntro')}</p>
-    <form className="account-form billing-transfer-form" onSubmit={invite}>
-      <label>{t('recipientEmail')} <input name="email" type="email" required maxLength={254} autoComplete="off" /></label>
-      <button className="secondary-button" disabled={busy}>{busy ? t('creatingTransferLink') : t('createTransferLink')}</button>
-    </form>
-    {error && <p className="account-error" role="alert">{t(error)}</p>}
-    {url && <>
-      <p role="status">{t('transferLinkReady')}</p>
-      <InviteLink key={url} path={url} origin={null} label={t('transferLink')} />
-    </>}
-  </section>
+  return (
+    <section className="billing-transfer" aria-labelledby="billing-transfer">
+      <VStack gap={3}>
+        <Heading level={2} id="billing-transfer">{t('transferOwnership')}</Heading>
+        <Text color="secondary">{t('transferInviteIntro')}</Text>
+        <form onSubmit={invite}>
+          <VStack gap={3} align="start" className="billing-transfer-form">
+            <TextInput
+              type="email"
+              label={t('recipientEmail')}
+              htmlName="email"
+              autoComplete="off"
+              isRequired
+              width="100%"
+              value={email}
+              onChange={value => setEmail(value.slice(0, 254))}
+            />
+            <Button
+              type="submit"
+              variant="secondary"
+              isLoading={busy}
+              label={busy ? t('creatingTransferLink') : t('createTransferLink')}
+            />
+          </VStack>
+        </form>
+        {error && <div role="alert"><Banner status="error" collapsible={false} title={t(error)} /></div>}
+        {url && (
+          <VStack gap={2}>
+            <Text type="supporting" role="status">{t('transferLinkReady')}</Text>
+            <InviteLink key={url} path={url} origin={null} label={t('transferLink')} />
+          </VStack>
+        )}
+      </VStack>
+    </section>
+  )
 }
 
 export function WorkspaceTransferAccept({ token }: { token: string }) {
@@ -84,11 +112,17 @@ export function WorkspaceTransferAccept({ token }: { token: string }) {
     }
   }
 
-  return <>
-    <p>{t('transferAcceptIntro')}</p>
-    {error && <p className="account-error" role="alert">{t(error)}</p>}
-    <button className="primary-button" type="button" disabled={busy} onClick={accept}>
-      {busy ? t('confirmingTransfer') : t('acceptOwnership')}
-    </button>
-  </>
+  return (
+    <VStack gap={3} align="start">
+      <Text color="secondary">{t('transferAcceptIntro')}</Text>
+      {error && <div role="alert" style={{ width: '100%' }}><Banner status="error" collapsible={false} title={t(error)} /></div>}
+      <Button
+        type="button"
+        variant="primary"
+        isLoading={busy}
+        label={busy ? t('confirmingTransfer') : t('acceptOwnership')}
+        onClick={accept}
+      />
+    </VStack>
+  )
 }

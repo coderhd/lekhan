@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { track } from '@/lib/analytics'
 import { analyticsPreference } from '@/lib/analytics-settings'
-import { UsageAnalyticsControl, useAnalyticsConsent } from './usage-analytics'
+import { useAnalyticsConsent } from './usage-analytics'
 
 export default function EarlyAccessAnalytics({ signup }: { signup: string | null }) {
   const consent = useAnalyticsConsent()
@@ -16,5 +16,5 @@ export default function EarlyAccessAnalytics({ signup }: { signup: string | null
     } catch { return }
   }, [consent, signup])
 
-  return <UsageAnalyticsControl early />
+  return null
 }

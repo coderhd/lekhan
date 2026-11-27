@@ -2,6 +2,9 @@
 
 import { useRef, useState } from 'react'
 import { ImagePlus, LoaderCircle } from 'lucide-react'
+import { Button } from '@astryxdesign/core/Button'
+import { IconButton } from '@astryxdesign/core/IconButton'
+import { Text } from '@astryxdesign/core/Text'
 import { CloudImageError, PAID_IMAGE_BYTES, type CloudImagePolicy } from '@/lib/cloud/image-policy'
 import { useTranslations } from '@/lib/i18n/client'
 
@@ -40,14 +43,35 @@ export default function CloudImageControl({ policy, onInsert, compact = false }:
         event.currentTarget.value = ''
         if (file) void add(file)
       }} />
-    <button type="button" className={compact ? 'writer-icon-button' : 'secondary-button'}
-      title={t('addImage')} aria-label={t('addImage')} aria-busy={busy} disabled={busy}
-      onMouseDown={event => event.preventDefault()} onClick={() => input.current?.click()}>
-      {busy ? <LoaderCircle size={16} className="spin" aria-hidden="true" /> : <ImagePlus size={16} aria-hidden="true" />}
-      {!compact && <> {t('addImage')}</>}
-    </button>
-    {failure && <span role="alert" className="account-error">
-      {failure === 'imageTooLarge' ? t(failure, { limit: PAID_IMAGE_BYTES / 1_000_000 }) : t(failure)}
-    </span>}
+    {compact ? (
+      <IconButton
+        variant="ghost"
+        size="sm"
+        label={t('addImage')}
+        tooltip={t('addImage')}
+        isDisabled={busy}
+        aria-busy={busy}
+        icon={busy ? <LoaderCircle size={16} className="spin" aria-hidden="true" /> : <ImagePlus size={16} aria-hidden="true" />}
+        onMouseDown={event => event.preventDefault()}
+        onClick={() => input.current?.click()}
+      />
+    ) : (
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        isLoading={busy}
+        isDisabled={busy}
+        icon={<ImagePlus size={16} aria-hidden="true" />}
+        label={t('addImage')}
+        onMouseDown={event => event.preventDefault()}
+        onClick={() => input.current?.click()}
+      />
+    )}
+    {failure && (
+      <Text role="alert" type="supporting" className="account-error">
+        {failure === 'imageTooLarge' ? t(failure, { limit: PAID_IMAGE_BYTES / 1_000_000 }) : t(failure)}
+      </Text>
+    )}
   </>
 }

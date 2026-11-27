@@ -2,6 +2,7 @@
 
 import { type MouseEvent, useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { CloudOff, FileText } from 'lucide-react'
+import { Button } from '@astryxdesign/core/Button'
 import { offlineAccount } from '@/lib/cloud/offline-account'
 import { bootstrapTierGates } from '@/lib/analytics'
 import { readOfflineCloudPage, readOfflineCloudPages } from '@/lib/cloud/local-search'
@@ -125,7 +126,9 @@ function OfflineCopies({ subject, id }: { subject: string; id: string | null }) 
       : pages?.length ? <ul className="cloud-pages">{pages.slice(0, visible).map(page => <li key={page.id}>
         <a href={hrefFor(page.id)} onClick={handleOfflineNav(page.id)}><FileText size={17} aria-hidden="true" /> {page.title}</a>
       </li>)}</ul> : <p role="status">{pages ? t('empty') : t('loading')}</p>}
-    {!id && pages && pages.length > visible && <button type="button" className="secondary-button" onClick={() => setVisible(count => count + 60)}>{t('more')}</button>}
+    {!id && pages && pages.length > visible && (
+      <Button type="button" variant="secondary" label={t('more')} onClick={() => setVisible(count => count + 60)} />
+    )}
     {id && <a className="account-link" href="/cloud-offline" onClick={handleOfflineNav(null)}>{t('browse')}</a>}
   </section>
 }

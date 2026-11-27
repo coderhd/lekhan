@@ -1,12 +1,20 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Download, FileText, Paperclip, Trash2, X } from 'lucide-react'
+import { Download, FileText, Paperclip, Trash2 } from 'lucide-react'
+import { AlertDialog } from '@astryxdesign/core/AlertDialog'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { Dialog as AstryxDialog, DialogHeader } from '@astryxdesign/core/Dialog'
+import { IconButton } from '@astryxdesign/core/IconButton'
+import { Item } from '@astryxdesign/core/Item'
+import { Layout, LayoutContent } from '@astryxdesign/core/Layout'
+import { HStack, VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
 import { attachmentName, type CloudAttachment } from '@/lib/cloud/attachments'
 import { AttachmentTransferError, listCloudAttachments, transferCloudAttachment, type CloudAttachmentList } from '@/lib/cloud/attachment-client'
 import { useLocale, useTranslations } from '@/lib/i18n/client'
 import { downloadBlob } from '@/lib/downloads'
-import { Dialog } from './workspace-dialogs'
 
 function formatBytes(bytes: number, locale: string) {
   const format = new Intl.NumberFormat(locale, { maximumFractionDigits: bytes < 1_000_000 ? 0 : 1 })
@@ -26,6 +34,7 @@ export default function CloudAttachments({ pageId, onClose }: { pageId: string; 
   const [reload, setReload] = useState(0)
   const [pendingRemoval, setPendingRemoval] = useState<CloudAttachment | null>(null)
   const aborter = useRef<AbortController | null>(null)
+  const fileInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -80,48 +89,108 @@ export default function CloudAttachments({ pageId, onClose }: { pageId: string; 
     }, 'attachmentRemoveFailed')
   }
 
-  return <Dialog title={cloud('attachments')} className="form-dialog checkpoint-dialog" onClose={onClose}>
-    <div className="checkpoint-header">
-      <h2>{cloud('attachments')}</h2>
-      <button type="button" className="icon-button" aria-label={t('closeAttachments')} onClick={onClose}><X size={18} /></button>
-    </div>
-    {error && <p role="alert" className="account-error">{error}</p>}
-    {(busy || message) && <p role="status">{busy || message}</p>}
-    {!list && (error ? <button className="secondary-button" onClick={() => { setError(null); setReload(value => value + 1) }}>{t('retry')}</button>
-      : <p role="status">{t('loadingAttachments')}</p>)}
-    {list?.writable && <div className="attachment-picker">
-      <label className="secondary-button"><Paperclip size={16} /> {t('attachFile')}
-        <input type="file" aria-label={t('attachFile')} disabled={!!busy} onChange={event => {
-          const file = event.currentTarget.files?.[0]
-          event.currentTarget.value = ''
-          if (file) pick(file)
-        }} />
-      </label>
-      <span>{t('maxFileSize', { size: formatBytes(list.maxBytes, locale) })}</span>
-    </div>}
-    {list && (!list.files.length ? <p>{t('noAttachments')}</p> : <ul className="checkpoint-list attachment-list">
-      {list.files.map(file => <li key={file.id} className="attachment-row">
-        <button type="button" className="search-result" disabled={!!busy} onClick={() => download(file)} aria-label={t('downloadFile', { name: file.filename })}>
-          <FileText size={17} aria-hidden="true" /><span><strong>{file.filename}</strong><small>{formatBytes(file.byte_count, locale)}</small></span>
-          <Download size={16} aria-hidden="true" />
-        </button>
-        {list.canRemove && <button type="button" className="icon-button" disabled={!!busy} title={t('removeFileLabel', { name: file.filename })}
-          aria-label={t('removeFileLabel', { name: file.filename })} onClick={() => setPendingRemoval(file)}><Trash2 size={16} /></button>}
-      </li>)}
-    </ul>)}
-    {pendingRemoval && <div className="billing-notice">
-      <p>{t('confirmRemoveFile', { name: pendingRemoval.filename })}</p>
-      <div className="dialog-actions">
-        <button type="button" className="secondary-button" disabled={!!busy} onClick={() => setPendingRemoval(null)}>{t('cancel')}</button>
-        <button type="button" className="primary-button" disabled={!!busy} onClick={() => remove(pendingRemoval)}>{t('removeFile')}</button>
-      </div>
-    </div>}
-    {list?.after && <button type="button" className="secondary-button" disabled={!!busy} onClick={() => {
-      const after = list.after
-      void act(t('loadingMoreFiles'), async signal => {
-        const next = await listCloudAttachments(pageId, signal, after)
-        setList(current => current && { ...next, files: Array.from(new Map([...current.files, ...next.files].map(file => [file.id, file])).values()) })
-      })
-    }}>{t('loadMore')}</button>}
-  </Dialog>
+  return (
+    <AstryxDialog isOpen onOpenChange={open => { if (!open) onClose() }} width={540} padding={0}>
+      <Layout
+        header={<DialogHeader title={cloud('attachments')} onOpenChange={open => { if (!open) onClose() }} />}
+        content={
+          <LayoutContent>
+            <VStack gap={3}>
+              {error && <div role="alert"><Banner status="error" collapsible={false} title={error} /></div>}
+              {(busy || message) && <div role="status"><Banner status="info" collapsible={false} title={busy || message} /></div>}
+              {!list && (error
+                ? <Button type="button" variant="secondary" label={t('retry')} onClick={() => { setError(null); setReload(value => value + 1) }} />
+                : <Text type="supporting" role="status">{t('loadingAttachments')}</Text>)}
+              {list?.writable && (
+                <HStack gap={2} align="center" wrap="wrap">
+                  <input
+                    ref={fileInput}
+                    type="file"
+                    hidden
+                    aria-label={t('attachFile')}
+                    onChange={event => {
+                      const file = event.currentTarget.files?.[0]
+                      event.currentTarget.value = ''
+                      if (file) pick(file)
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    icon={<Paperclip size={16} aria-hidden="true" />}
+                    isDisabled={!!busy}
+                    label={t('attachFile')}
+                    onClick={() => fileInput.current?.click()}
+                  />
+                  <Text type="supporting" color="secondary">{t('maxFileSize', { size: formatBytes(list.maxBytes, locale) })}</Text>
+                </HStack>
+              )}
+              {list && (!list.files.length ? <Text color="secondary">{t('noAttachments')}</Text> : (
+                <VStack gap={1}>
+                  {list.files.map(file => (
+                    <Item
+                      key={file.id}
+                      density="compact"
+                      startContent={<FileText size={17} aria-hidden="true" />}
+                      label={file.filename}
+                      description={formatBytes(file.byte_count, locale)}
+                      isDisabled={!!busy}
+                      aria-label={t('downloadFile', { name: file.filename })}
+                      onClick={() => download(file)}
+                      endContent={
+                        <HStack gap={1} align="center">
+                          <Download size={16} aria-hidden="true" />
+                          {list.canRemove && (
+                            <IconButton
+                              variant="ghost"
+                              size="sm"
+                              isDisabled={!!busy}
+                              label={t('removeFileLabel', { name: file.filename })}
+                              tooltip={t('removeFileLabel', { name: file.filename })}
+                              icon={<Trash2 size={16} />}
+                              onClick={event => { event.stopPropagation(); setPendingRemoval(file) }}
+                            />
+                          )}
+                        </HStack>
+                      }
+                    />
+                  ))}
+                </VStack>
+              ))}
+              {list?.after && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  isDisabled={!!busy}
+                  label={t('loadMore')}
+                  onClick={() => {
+                    const after = list.after
+                    void act(t('loadingMoreFiles'), async signal => {
+                      const next = await listCloudAttachments(pageId, signal, after)
+                      setList(current => current && { ...next, files: Array.from(new Map([...current.files, ...next.files].map(file => [file.id, file])).values()) })
+                    })
+                  }}
+                />
+              )}
+              {pendingRemoval && (
+                <AlertDialog
+                  isOpen
+                  onOpenChange={open => { if (!open) setPendingRemoval(null) }}
+                  title={pendingRemoval.filename}
+                  description={t('confirmRemoveFile', { name: pendingRemoval.filename })}
+                  cancelLabel={t('cancel')}
+                  actionLabel={t('removeFile')}
+                  actionVariant="destructive"
+                  isActionLoading={!!busy}
+                  onAction={() => remove(pendingRemoval)}
+                />
+              )}
+            </VStack>
+          </LayoutContent>
+        }
+      />
+    </AstryxDialog>
+  )
 }

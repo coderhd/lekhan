@@ -3,6 +3,21 @@
 import { ArrowUpRight, Check, Copy, LockKeyhole, Plus, Send, Square, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { CheckboxInput } from '@astryxdesign/core/CheckboxInput'
+import { Collapsible } from '@astryxdesign/core/Collapsible'
+import { Dialog as AstryxDialog, DialogHeader } from '@astryxdesign/core/Dialog'
+import { Heading } from '@astryxdesign/core/Heading'
+import { IconButton } from '@astryxdesign/core/IconButton'
+import { Item } from '@astryxdesign/core/Item'
+import { Layout, LayoutContent, LayoutFooter } from '@astryxdesign/core/Layout'
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl'
+import { Selector } from '@astryxdesign/core/Selector'
+import { HStack, VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
+import { TextArea } from '@astryxdesign/core/TextArea'
+import { TextInput } from '@astryxdesign/core/TextInput'
 import type { Page } from '@/lib/types'
 import { probeLocalProviders, streamChat, testProviderConnection, type ChatMessage, type ChatOptions, type LocalProviderProbe, type ProviderTransport } from '@/lib/ai/client'
 import { allowsProviderEndpoint, endpointFor, FREE_PRESETS, PROVIDERS, providerConnectionKind, providerDefinition, type ProviderConfig, type ProviderId } from '@/lib/ai/provider-registry'
@@ -12,7 +27,6 @@ import { createProviderVault, unlockProviderVault } from '@/lib/ai/vault'
 import { encryptedVaultRevision, providerVaultLimit, readAccountVault, validProviderEnvelope, writeAccountVault, ProviderVaultConflict, vaultRevisionPattern, type CloudProviderVault } from '@/lib/ai/vault-sync'
 import { track } from '@/lib/analytics'
 import { useLocale, useTranslations } from '@/lib/i18n/client'
-import { Dialog } from './workspace-dialogs'
 import BotBarModelPicker, { type ModelTelemetry } from './editor/bot-bar-model-picker'
 import FallbackModelSettings from './editor/fallback-model-settings'
 import LocalProviderDiscovery from './editor/local-provider-discovery'
@@ -394,83 +408,127 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
     setTab('providers')
   }
 
-  const accountSyncControls = (account || settingsPanel === 'privacy') && <section className="account-vault-status"
-    aria-label={account ? text('vaultSyncTitle') : settingsText('deviceVault')}>
-    <h3>{account ? text('vaultSyncTitle') : settingsText('deviceVault')}</h3>
-    <p>{account ? text(accountVault === undefined ? 'vaultSyncChecking'
-      : accountVault === 'unavailable' ? 'vaultSyncUnavailable'
-        : vaultConflict ? 'vaultSyncConflict'
-          : remote && remote.envelope === envelope ? 'vaultSyncSaved'
-            : remote ? 'vaultSyncExists'
-              : cloudBase ? 'vaultSyncPending' : 'vaultSyncIntro') : settingsText('deviceVaultHelp')}</p>
-    <div className="assistant-actions">
-      {account && vault && envelope && !vaultConflict && remote?.envelope !== envelope &&
-        <button className="secondary-button" type="button" disabled={busy || accountVault === undefined}
-          onClick={() => void run(signal => syncVault(envelope, cloudBase, signal))}>{text('vaultSyncNow')}</button>}
-      {vaultConflict && <button className="secondary-button" type="button" disabled={busy || restoreAccount || !!importedVault} onClick={() => {
-        lockForRestore()
-        setRestoreAccount(true)
-      }}>{text('vaultUseAccount')}</button>}
-      {(vaultConflict || (settingsPanel === 'privacy' && envelope)) && <button className="secondary-button" type="button" disabled={busy}
-        onClick={() => exportEncryptedVault(envelope, 'device')}>{text('vaultExportEncrypted')}</button>}
-      {account && accountVault === 'unavailable' && <button className="secondary-button" type="button" disabled={busy} onClick={() => void run(async signal => {
-        setAccountVault(await readAccountVault(account, signal).catch(() => 'unavailable' as const))
-      })}>{text('vaultCheckAgain')}</button>}
-      {!importedVault && !restoreAccount && <button type="button" className="secondary-button" disabled={busy}
-        onClick={() => vaultFile.current?.click()}>{text('vaultImportEncrypted')}</button>}
-    </div>
-    <input ref={vaultFile} hidden type="file" accept=".txt,text/plain" onChange={event => {
-      const file = event.currentTarget.files?.[0]
-      event.currentTarget.value = ''
-      if (!file) return
-      void run(async signal => {
-        if (file.size > providerVaultLimit) throw new Error(text('vaultInvalidFile'))
-        const encrypted = (await file.text()).trim()
-        signal.throwIfAborted()
-        if (!validProviderEnvelope(encrypted)) throw new Error(text('vaultInvalidFile'))
-        lockForRestore()
-        setImportedVault(encrypted)
-      })
-    }} />
-    {vaultConflict && vault && <details className="vault-replace">
-      <summary>{text('vaultChooseDevice')}</summary>
-      <p>{text('vaultReplaceAccountHint')}</p>
-      <div className="assistant-actions">
-        <button type="button" className="secondary-button" disabled={busy}
-          onClick={() => exportEncryptedVault(remote.envelope, 'account')}>{text('vaultExportAccount')}</button>
-        <button type="button" className="danger-button" disabled={busy}
-          onClick={() => void run(signal => syncVault(envelope, remote.revision, signal))}>{text('vaultReplaceAccount')}</button>
-      </div>
-    </details>}
-  </section>
+  const accountSyncControls = (account || settingsPanel === 'privacy') && (
+    <VStack gap={2} className="account-vault-status" aria-label={account ? text('vaultSyncTitle') : settingsText('deviceVault')}>
+      <Heading level={3}>{account ? text('vaultSyncTitle') : settingsText('deviceVault')}</Heading>
+      <Text size="sm" color="secondary">
+        {account ? text(accountVault === undefined ? 'vaultSyncChecking'
+          : accountVault === 'unavailable' ? 'vaultSyncUnavailable'
+            : vaultConflict ? 'vaultSyncConflict'
+              : remote && remote.envelope === envelope ? 'vaultSyncSaved'
+                : remote ? 'vaultSyncExists'
+                  : cloudBase ? 'vaultSyncPending' : 'vaultSyncIntro') : settingsText('deviceVaultHelp')}
+      </Text>
+      <HStack gap={2} wrap="wrap">
+        {account && vault && envelope && !vaultConflict && remote?.envelope !== envelope && (
+          <Button variant="secondary" size="sm" isDisabled={busy || accountVault === undefined}
+            label={text('vaultSyncNow')} onClick={() => void run(signal => syncVault(envelope, cloudBase, signal))} />
+        )}
+        {vaultConflict && (
+          <Button variant="secondary" size="sm" isDisabled={busy || restoreAccount || !!importedVault}
+            label={text('vaultUseAccount')} onClick={() => { lockForRestore(); setRestoreAccount(true) }} />
+        )}
+        {(vaultConflict || (settingsPanel === 'privacy' && envelope)) && (
+          <Button variant="secondary" size="sm" isDisabled={busy}
+            label={text('vaultExportEncrypted')} onClick={() => exportEncryptedVault(envelope, 'device')} />
+        )}
+        {account && accountVault === 'unavailable' && (
+          <Button variant="secondary" size="sm" isDisabled={busy} label={text('vaultCheckAgain')}
+            onClick={() => void run(async signal => {
+              setAccountVault(await readAccountVault(account, signal).catch(() => 'unavailable' as const))
+            })} />
+        )}
+        {!importedVault && !restoreAccount && (
+          <Button variant="secondary" size="sm" isDisabled={busy}
+            label={text('vaultImportEncrypted')} onClick={() => vaultFile.current?.click()} />
+        )}
+      </HStack>
+      <input ref={vaultFile} hidden type="file" accept=".txt,text/plain" onChange={event => {
+        const file = event.currentTarget.files?.[0]
+        event.currentTarget.value = ''
+        if (!file) return
+        void run(async signal => {
+          if (file.size > providerVaultLimit) throw new Error(text('vaultInvalidFile'))
+          const encrypted = (await file.text()).trim()
+          signal.throwIfAborted()
+          if (!validProviderEnvelope(encrypted)) throw new Error(text('vaultInvalidFile'))
+          lockForRestore()
+          setImportedVault(encrypted)
+        })
+      }} />
+      {vaultConflict && vault && (
+        <Collapsible defaultIsOpen={false} trigger={<Text weight="semibold" size="sm">{text('vaultChooseDevice')}</Text>} className="vault-replace">
+          <VStack gap={2}>
+            <Text size="sm" color="secondary">{text('vaultReplaceAccountHint')}</Text>
+            <HStack gap={2} wrap="wrap">
+              <Button variant="secondary" size="sm" isDisabled={busy} label={text('vaultExportAccount')}
+                onClick={() => exportEncryptedVault(remote.envelope, 'account')} />
+              <Button variant="destructive" size="sm" isDisabled={busy} label={text('vaultReplaceAccount')}
+                onClick={() => void run(signal => syncVault(envelope, remote.revision, signal))} />
+            </HStack>
+          </VStack>
+        </Collapsible>
+      )}
+    </VStack>
+  )
 
-  const content = <div className={settingsPanel ? 'form-dialog embedded-assistant' : 'form-dialog'}>
-        {!settingsPanel && <h2>{dialogTitle}</h2>}
-        {!settingsPanel && (vault || installed.length > 0) && <div className="assistant-navigation" role="group" aria-label={text('assistantView')}>
-          {installed.length > 0 && <button className="secondary-button" disabled={busy} aria-pressed={tab === 'local'} onClick={() => openTab('local')}>{desktopText('onThisDevice')}</button>}
-          {vault && <button className="secondary-button" disabled={busy} aria-pressed={tab === 'chat'} onClick={() => openTab('chat')}>{editorRequest ? text('providerModels') : text('assistantAsk')}</button>}
-          <button className="secondary-button" disabled={busy} aria-pressed={tab === 'providers'} onClick={() => openTab('providers')}>{text('assistantProviders')}</button>
-        </div>}
-        {!vault && tab !== 'local' ? (
-          <form className="assistant-form" onSubmit={openVault}>
-            <p>{importedVault ? text('vaultImportHint') : openingFromAccount ? text(restoreAccount ? 'vaultReplaceDevice' : 'vaultUnlockAccount')
-              : text(envelope ? 'unlockDeviceHint' : 'createVaultHint')}</p>
-            <label>{text('vaultPassphrase')}
-              <input type="password" autoComplete={unlockEnvelope ? 'current-password' : 'new-password'} minLength={12} value={passphrase} onChange={event => setPassphrase(event.target.value)} required />
-            </label>
-            <div className="assistant-actions">
-              <button className="primary-button" disabled={busy || (!!account && !envelope && !importedVault && accountVault === undefined)}>
-                <LockKeyhole size={15} /> {importedVault ? text('vaultUnlockFile') : openingFromAccount ? text(restoreAccount ? 'vaultUnlockReplace' : 'vaultUnlockRestore')
+  const body = (
+    <VStack gap={3} className={settingsPanel ? 'embedded-assistant' : undefined}>
+      {!settingsPanel && (vault || installed.length > 0) && (
+        <SegmentedControl
+          label={text('assistantView')}
+          value={tab}
+          isDisabled={busy}
+          size="sm"
+          onChange={value => openTab(value as typeof tab)}
+        >
+          {installed.length > 0 && <SegmentedControlItem value="local" label={desktopText('onThisDevice')} />}
+          {vault && <SegmentedControlItem value="chat" label={editorRequest ? text('providerModels') : text('assistantAsk')} />}
+          <SegmentedControlItem value="providers" label={text('assistantProviders')} />
+        </SegmentedControl>
+      )}
+      {!vault && tab !== 'local' ? (
+        <form onSubmit={openVault}>
+          <VStack gap={3} className="assistant-form">
+            <Text color="secondary">
+              {importedVault ? text('vaultImportHint') : openingFromAccount ? text(restoreAccount ? 'vaultReplaceDevice' : 'vaultUnlockAccount')
+                : text(envelope ? 'unlockDeviceHint' : 'createVaultHint')}
+            </Text>
+            <TextInput
+              type="password"
+              label={text('vaultPassphrase')}
+              autoComplete={unlockEnvelope ? 'current-password' : 'new-password'}
+              isRequired
+              width="100%"
+              value={passphrase}
+              onChange={setPassphrase}
+            />
+            <HStack gap={2} wrap="wrap">
+              <Button
+                type="submit"
+                variant="primary"
+                icon={<LockKeyhole size={15} />}
+                isDisabled={busy || (!!account && !envelope && !importedVault && accountVault === undefined)}
+                label={importedVault ? text('vaultUnlockFile') : openingFromAccount ? text(restoreAccount ? 'vaultUnlockReplace' : 'vaultUnlockRestore')
                   : text(envelope ? 'vaultUnlockDevice' : 'createVault')}
-              </button>
-              {(restoreAccount || importedVault) && <button className="secondary-button" type="button" disabled={busy}
-                onClick={() => { setRestoreAccount(false); setImportedVault(undefined); setPassphrase(''); setError('') }}>{text('vaultKeepDevice')}</button>}
-            </div>
+              />
+              {(restoreAccount || importedVault) && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  isDisabled={busy}
+                  label={text('vaultKeepDevice')}
+                  onClick={() => { setRestoreAccount(false); setImportedVault(undefined); setPassphrase(''); setError('') }}
+                />
+              )}
+            </HStack>
             {settingsPanel !== 'models' && accountSyncControls}
-          </form>
-        ) : settingsPanel === 'privacy' ? <>
+          </VStack>
+        </form>
+      ) : settingsPanel === 'privacy' ? (
+        <VStack gap={4}>
           {accountSyncControls}
-          <form className="assistant-form" onSubmit={event => {
+          <form onSubmit={event => {
             event.preventDefault()
             const fields = new FormData(event.currentTarget)
             const next = String(fields.get('next-passphrase') ?? '')
@@ -488,186 +546,395 @@ export default function AssistantDialog({ page, storageScope, onInsert, onClose,
               setFeedback(settingsText('passphraseChanged'))
             })
           }}>
-            <h3>{settingsText('changePassphrase')}</h3>
-            <label>{settingsText('newPassphrase')}<input name="next-passphrase" type="password" autoComplete="new-password" minLength={12} required disabled={busy} /></label>
-            <label>{settingsText('confirmPassphrase')}<input name="confirm-passphrase" type="password" autoComplete="new-password" minLength={12} required disabled={busy} /></label>
-            <button className="primary-button" disabled={busy}>{settingsText('rewrapVault')}</button>
+            <VStack gap={3} align="start" className="assistant-form">
+              <Heading level={3}>{settingsText('changePassphrase')}</Heading>
+              <label>{settingsText('newPassphrase')}<input name="next-passphrase" type="password" autoComplete="new-password" minLength={12} required disabled={busy} /></label>
+              <label>{settingsText('confirmPassphrase')}<input name="confirm-passphrase" type="password" autoComplete="new-password" minLength={12} required disabled={busy} /></label>
+              <Button type="submit" variant="primary" isDisabled={busy} label={settingsText('rewrapVault')} />
+            </VStack>
           </form>
-        </> : (
-          <>
-            {tab === 'providers' ? (
-              <>
-                {!settingsPanel && accountSyncControls}
-                {settingsPanel === 'models' && configs.length > 0 && <BotBarModelPicker choices={providerRoutes} selected={'provider:' + active}
-                  disabled={busy} telemetry={telemetry?.key === modelKey ? telemetry.result : undefined} onChange={key => {
+        </VStack>
+      ) : (
+        <>
+          {tab === 'providers' ? (
+            <VStack gap={3}>
+              {!settingsPanel && accountSyncControls}
+              {settingsPanel === 'models' && configs.length > 0 && (
+                <BotBarModelPicker
+                  choices={providerRoutes}
+                  selected={'provider:' + active}
+                  disabled={busy}
+                  telemetry={telemetry?.key === modelKey ? telemetry.result : undefined}
+                  onChange={key => {
                     const id = key.slice('provider:'.length)
                     try { localStorage.setItem(activeKey, id); setActive(id) } catch { setError(settingsText('appearanceSaveFailed')) }
-                  }} />}
-                {configs.length > 0 && <ul className="assistant-connections">
-                  {configs.map(config => <li key={config.id}>
-                    <button className="connection-name" onClick={() => {
-                      setDraft(config)
-                      setModels([])
-                      setConnectionKind(providerConnectionKind(config))
-                    }}>{config.label || PROVIDERS[config.provider].label} <small>{config.model}</small></button>
-                    <button className="icon-button" title={text('removeConnection')} aria-label={text('removeNamedConnection', { name: config.label || config.model })} disabled={busy} onClick={() => {
-                      const routeId = 'provider:' + config.id
-                      const next = configs.filter(item => item.id !== config.id).map(item => item.fallback?.includes(routeId)
-                        ? { ...item, fallback: item.fallback.filter(id => id !== routeId) } : item)
-                      void run(signal => persist(next, active === config.id ? next[0]?.id ?? '' : active, signal))
-                      if (draft.id === config.id) setDraft(settingsPanel === 'models' ? newDraftFor(connectionKind) : newConnection())
-                    }}><Trash2 size={15} /></button>
-                  </li>)}
-                </ul>}
-                {settingsPanel === 'models' && <ProviderCatalog disabled={busy} onSelect={model => {
-                  setConnectionKind(providerConnectionKind(model))
-                  setDraft({ ...newConnection(), provider: model.provider, model: model.model })
-                  setModels([])
-                  setError('')
-                  setFeedback(text(model.access === 'local' ? 'catalogLocalSelected' : 'catalogSelected', { model: model.label }))
-                  if (model.access === 'local') modelInput.current?.focus()
-                  else keyInput.current?.focus()
-                }} />}
-                <form className="assistant-form" onSubmit={saveProvider}>
-                  <h3>{text(configs.some(item => item.id === draft.id) ? 'editConnection' : 'addConnection')}</h3>
-                  {settingsPanel === 'models' && <div className="assistant-navigation" role="group" aria-label={settingsText('connectionTypes')}>
-                    {connectionKinds.map(kind => <button key={kind} className="secondary-button" type="button" disabled={busy}
-                      aria-pressed={connectionKind === kind} onClick={() => chooseConnectionKind(kind)}>{settingsText('connection_' + kind)}</button>)}
-                  </div>}
-                  {(!settingsPanel || connectionKind === 'free') && <><label>{text('freeKeyPresets')}
-                    <select value={FREE_PRESETS.find(item => item.provider === draft.provider && item.model === draft.model)?.model ?? ''} disabled={busy} onChange={event => {
-                      const preset = FREE_PRESETS.find(item => item.model === event.target.value)
-                      if (preset) setProvider(preset.provider, preset.model)
-                    }}>
-                      <option value="" disabled>{text('choosePreset')}</option>
-                      {FREE_PRESETS.map(preset => <option key={preset.model} value={preset.model}>{preset.label}</option>)}
-                    </select>
-                  </label>
-                  <p className="assistant-hint">{text('freeKeyHint')}</p></>}
-                  {(!settingsPanel || connectionKind !== 'free') && <label>{text('providerName')}
-                    <select value={draft.provider} disabled={busy} onChange={event => setProvider(event.target.value as ProviderId)}>
-                      {(Object.keys(PROVIDERS) as ProviderId[]).filter(id => !settingsPanel ||
-                        Boolean(providerDefinition(id).local) === (connectionKind === 'local'))
-                        .map(id => <option key={id} value={id}>{PROVIDERS[id].label}</option>)}
-                    </select>
-                  </label>}
-                  {allowsProviderEndpoint(draft.provider) && <label>{text('apiEndpoint')}
-                    <input type="url" value={draft.baseUrl ?? ''} placeholder={definition.baseUrl ?? 'https://'} disabled={busy} onChange={event => setDraft({ ...draft, baseUrl: event.target.value })} />
-                  </label>}
-                  <label>{text('modelId')}
-                    <input ref={modelInput} list="assistant-discovered-models" value={draft.model} placeholder={text('modelIdPlaceholder')} disabled={busy} onChange={event => setDraft({ ...draft, model: event.target.value })} />
-                    <datalist id="assistant-discovered-models">{models.map(model => <option key={model} value={model} />)}</datalist>
-                  </label>
-                  <label>{definition.local ? text('optionalLocalKey') : text('apiKey')}
-                    <input ref={keyInput} type="password" autoComplete="off" value={draft.apiKey ?? ''} disabled={busy} onChange={event => setDraft({ ...draft, apiKey: event.target.value })} />
-                  </label>
-                  {definition.signupUrl && <a className="assistant-provider-link" href={definition.signupUrl} target="_blank" rel="noopener noreferrer">{text('getProviderKey', { provider: definition.label })} <ArrowUpRight size={14} /></a>}
-                  <FallbackModelSettings routes={allRoutes.filter(route => route.id !== 'provider:' + draft.id)}
-                    chain={draft.fallback ?? []} disabled={busy} onChange={fallback => setDraft({ ...draft, fallback })} />
-                  <div className="assistant-actions">
-                    <button type="button" className="secondary-button" disabled={busy} onClick={() => void run(async signal => {
-                      const result = await testProviderConnection(draft, { signal, transport })
-                      if (signal.aborted) return
-                      setModels(result.models)
-                      if (!draft.model && result.models[0]) setDraft({ ...draft, model: result.models[0] })
-                      setTelemetry({ key: 'provider:' + draft.id, result: { elapsedMs: result.latencyMs } })
-                      setFeedback(text('connectedToProvider', { provider: definition.label }))
-                    })}>{text('testConnection')}</button>
-                    {(!settingsPanel || connectionKind === 'local') && <button type="button" className="secondary-button" disabled={busy} onClick={() => void run(async signal => {
-                      const results = await probeLocalProviders({ signal, transport })
-                      if (signal.aborted) return
-                      setLocalProbes(results)
-                      setFeedback(text('localDiscoveryComplete'))
-                    })}>{text(localProbes ? 'rescanLocalModels' : 'findLocalModels')}</button>}
-                    <button className="primary-button" disabled={busy}><Plus size={15} /> {text('saveConnection')}</button>
-                  </div>
-                  {localProbes && (!settingsPanel || connectionKind === 'local') && <LocalProviderDiscovery
-                    results={localProbes} disabled={busy} native={!!transport} onSelect={(probe, model) => {
-                    setDraft({ id: crypto.randomUUID(), provider: probe.provider, baseUrl: probe.baseUrl, model })
-                    setModels(probe.status === 'connected' ? probe.models : [])
-                    setFeedback(text('localModelReadyToConfigure', { provider: PROVIDERS[probe.provider].label }))
-                    const field = probe.status === 'authorization_needed' ? keyInput : modelInput
-                    field.current?.focus()
-                  }} />}
-                </form>
-              </>
-            ) : editorRequest ? (
-              <form className="assistant-form" onSubmit={generate}>
-                <BotBarModelPicker choices={modelChoices} selected={modelKey} disabled={busy} onChange={pickModel}
-                  telemetry={telemetry?.key === modelKey ? telemetry.result : undefined} />
-                <p className="assistant-hint">{tab === 'local' || (selected && providerDefinition(selected.provider).local)
-                  ? text('localSelection') : selected ? text('remoteSelection', { provider: PROVIDERS[selected.provider].label }) : text('needsModel')}</p>
+                  }}
+                />
+              )}
+              {configs.length > 0 && (
+                <VStack gap={1} className="assistant-connections">
+                  {configs.map(config => (
+                    <Item
+                      key={config.id}
+                      density="compact"
+                      label={config.label || PROVIDERS[config.provider].label}
+                      description={config.model}
+                      isSelected={draft.id === config.id}
+                      onClick={() => {
+                        setDraft(config)
+                        setModels([])
+                        setConnectionKind(providerConnectionKind(config))
+                      }}
+                      endContent={
+                        <IconButton
+                          variant="ghost"
+                          size="sm"
+                          label={text('removeNamedConnection', { name: config.label || config.model })}
+                          tooltip={text('removeConnection')}
+                          isDisabled={busy}
+                          icon={<Trash2 size={15} />}
+                          onClick={event => {
+                            event.stopPropagation()
+                            const routeId = 'provider:' + config.id
+                            const next = configs.filter(item => item.id !== config.id).map(item => item.fallback?.includes(routeId)
+                              ? { ...item, fallback: item.fallback.filter(id => id !== routeId) } : item)
+                            void run(signal => persist(next, active === config.id ? next[0]?.id ?? '' : active, signal))
+                            if (draft.id === config.id) setDraft(settingsPanel === 'models' ? newDraftFor(connectionKind) : newConnection())
+                          }}
+                        />
+                      }
+                    />
+                  ))}
+                </VStack>
+              )}
+              {settingsPanel === 'models' && (
+                <ProviderCatalog
+                  disabled={busy}
+                  onSelect={model => {
+                    setConnectionKind(providerConnectionKind(model))
+                    setDraft({ ...newConnection(), provider: model.provider, model: model.model })
+                    setModels([])
+                    setError('')
+                    setFeedback(text(model.access === 'local' ? 'catalogLocalSelected' : 'catalogSelected', { model: model.label }))
+                    if (model.access === 'local') modelInput.current?.focus()
+                    else keyInput.current?.focus()
+                  }}
+                />
+              )}
+              <form onSubmit={saveProvider}>
+                <VStack gap={3} className="assistant-form">
+                  <Heading level={3}>{text(configs.some(item => item.id === draft.id) ? 'editConnection' : 'addConnection')}</Heading>
+                  {settingsPanel === 'models' && (
+                    <SegmentedControl
+                      label={settingsText('connectionTypes')}
+                      value={connectionKind}
+                      isDisabled={busy}
+                      size="sm"
+                      onChange={value => chooseConnectionKind(value as ConnectionKind)}
+                    >
+                      {connectionKinds.map(kind => (
+                        <SegmentedControlItem key={kind} value={kind} label={settingsText('connection_' + kind)} />
+                      ))}
+                    </SegmentedControl>
+                  )}
+                  {(!settingsPanel || connectionKind === 'free') && (
+                    <>
+                      <Selector
+                        label={text('freeKeyPresets')}
+                        placeholder={text('choosePreset')}
+                        isDisabled={busy}
+                        width="100%"
+                        value={FREE_PRESETS.find(item => item.provider === draft.provider && item.model === draft.model)?.model ?? ''}
+                        options={FREE_PRESETS.map(preset => ({ value: preset.model, label: preset.label }))}
+                        onChange={value => {
+                          const preset = FREE_PRESETS.find(item => item.model === value)
+                          if (preset) setProvider(preset.provider, preset.model)
+                        }}
+                      />
+                      <Text type="supporting" color="secondary">{text('freeKeyHint')}</Text>
+                    </>
+                  )}
+                  {(!settingsPanel || connectionKind !== 'free') && (
+                    <Selector
+                      label={text('providerName')}
+                      isDisabled={busy}
+                      width="100%"
+                      value={draft.provider}
+                      options={(Object.keys(PROVIDERS) as ProviderId[])
+                        .filter(id => !settingsPanel || Boolean(providerDefinition(id).local) === (connectionKind === 'local'))
+                        .map(id => ({ value: id, label: PROVIDERS[id].label }))}
+                      onChange={value => setProvider(value as ProviderId)}
+                    />
+                  )}
+                  {allowsProviderEndpoint(draft.provider) && (
+                    <TextInput
+                      type="url"
+                      label={text('apiEndpoint')}
+                      placeholder={definition.baseUrl ?? 'https://'}
+                      isDisabled={busy}
+                      width="100%"
+                      value={draft.baseUrl ?? ''}
+                      onChange={value => setDraft({ ...draft, baseUrl: value })}
+                    />
+                  )}
+                  <TextInput
+                    ref={modelInput}
+                    label={text('modelId')}
+                    placeholder={text('modelIdPlaceholder')}
+                    isDisabled={busy}
+                    width="100%"
+                    value={draft.model}
+                    onChange={value => setDraft({ ...draft, model: value })}
+                  />
+                  {models.length > 0 && (
+                    <Selector
+                      label={text('modelId')}
+                      isLabelHidden
+                      placeholder={text('choosePreset')}
+                      isDisabled={busy}
+                      size="sm"
+                      width="100%"
+                      value={models.includes(draft.model) ? draft.model : ''}
+                      options={models.map(model => ({ value: model, label: model }))}
+                      onChange={value => setDraft({ ...draft, model: value })}
+                    />
+                  )}
+                  <TextInput
+                    ref={keyInput}
+                    type="password"
+                    label={definition.local ? text('optionalLocalKey') : text('apiKey')}
+                    autoComplete="off"
+                    isDisabled={busy}
+                    width="100%"
+                    value={draft.apiKey ?? ''}
+                    onChange={value => setDraft({ ...draft, apiKey: value })}
+                  />
+                  {definition.signupUrl && (
+                    <Button
+                      as="a"
+                      variant="ghost"
+                      size="sm"
+                      href={definition.signupUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      label={text('getProviderKey', { provider: definition.label })}
+                      endContent={<ArrowUpRight size={14} />}
+                    />
+                  )}
+                  <FallbackModelSettings
+                    routes={allRoutes.filter(route => route.id !== 'provider:' + draft.id)}
+                    chain={draft.fallback ?? []}
+                    disabled={busy}
+                    onChange={fallback => setDraft({ ...draft, fallback })}
+                  />
+                  <HStack gap={2} wrap="wrap">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      isDisabled={busy}
+                      label={text('testConnection')}
+                      onClick={() => void run(async signal => {
+                        const result = await testProviderConnection(draft, { signal, transport })
+                        if (signal.aborted) return
+                        setModels(result.models)
+                        if (!draft.model && result.models[0]) setDraft({ ...draft, model: result.models[0] })
+                        setTelemetry({ key: 'provider:' + draft.id, result: { elapsedMs: result.latencyMs } })
+                        setFeedback(text('connectedToProvider', { provider: definition.label }))
+                      })}
+                    />
+                    {(!settingsPanel || connectionKind === 'local') && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        isDisabled={busy}
+                        label={text(localProbes ? 'rescanLocalModels' : 'findLocalModels')}
+                        onClick={() => void run(async signal => {
+                          const results = await probeLocalProviders({ signal, transport })
+                          if (signal.aborted) return
+                          setLocalProbes(results)
+                          setFeedback(text('localDiscoveryComplete'))
+                        })}
+                      />
+                    )}
+                    <Button type="submit" variant="primary" size="sm" icon={<Plus size={15} />} isDisabled={busy} label={text('saveConnection')} />
+                  </HStack>
+                  {localProbes && (!settingsPanel || connectionKind === 'local') && (
+                    <LocalProviderDiscovery
+                      results={localProbes}
+                      disabled={busy}
+                      native={!!transport}
+                      onSelect={(probe, model) => {
+                        setDraft({ id: crypto.randomUUID(), provider: probe.provider, baseUrl: probe.baseUrl, model })
+                        setModels(probe.status === 'connected' ? probe.models : [])
+                        setFeedback(text('localModelReadyToConfigure', { provider: PROVIDERS[probe.provider].label }))
+                        const field = probe.status === 'authorization_needed' ? keyInput : modelInput
+                        field.current?.focus()
+                      }}
+                    />
+                  )}
+                </VStack>
+              </form>
+            </VStack>
+          ) : editorRequest ? (
+            <form onSubmit={generate}>
+              <VStack gap={3} className="assistant-form">
+                <BotBarModelPicker
+                  choices={modelChoices}
+                  selected={modelKey}
+                  disabled={busy}
+                  onChange={pickModel}
+                  telemetry={telemetry?.key === modelKey ? telemetry.result : undefined}
+                />
+                <Text type="supporting" color="secondary">
+                  {tab === 'local' || (selected && providerDefinition(selected.provider).local)
+                    ? text('localSelection') : selected ? text('remoteSelection', { provider: PROVIDERS[selected.provider].label }) : text('needsModel')}
+                </Text>
                 {fallbackHint}
                 {fallbackStatus}
-                {editorRequest.action === 'translate' && <label>{text('language')}
-                  <select value={language} disabled={busy} onChange={event => {
-                    setLanguage(event.target.value as typeof language)
-                    setSuggestion('')
-                  }}>
-                    {Object.entries(translationLanguages).map(([code, name]) => <option key={code} value={code}>
-                      {languageNames.of(code === 'zh' ? 'zh-Hans' : code) ?? name}
-                    </option>)}
-                  </select>
-                </label>}
-                <details className="assistant-selection"><summary>{text('selectedText')}</summary><p>{editorRequest.selection.text}</p></details>
-                {busy && <p className="assistant-hint" role="status">{text('generating')}</p>}
-                {(reply || suggestion) && <div className="assistant-selection-result" role="region" aria-label={text('suggestion')}>{reply || suggestion}</div>}
-                <div className="assistant-actions">
-                  {busy ? <button type="button" className="secondary-button" onClick={stopReply}><Square size={14} /> {text('stop')}</button>
-                    : <>
-                      <button className={suggestion ? 'secondary-button' : 'primary-button'} disabled={!primary}>{text(suggestion ? 'retry' : 'generate')}</button>
-                      {suggestion && <>
-                        <button type="button" className="icon-button" aria-label={text('copy')} title={text('copy')} onClick={() => {
-                          setError('')
-                          setFeedback('')
-                          if (!navigator.clipboard) {
-                            setError(text('copyFailed'))
-                            return
-                          }
-                          void navigator.clipboard.writeText(suggestion).then(
-                            () => setFeedback(text('copied')), () => setError(text('copyFailed')),
-                          )
-                        }}><Copy size={15} aria-hidden="true" /></button>
-                        {offerReplacement && <button type="button" className={preferInsert ? 'secondary-button' : 'primary-button'}
-                          onClick={() => applySuggestion(false)}>{text('replace')}</button>}
-                        <button type="button" className={preferInsert ? 'primary-button' : 'secondary-button'}
-                          onClick={() => applySuggestion(true)}>{text('insertAfter')}</button>
-                      </>}
-                    </>}
-                </div>
-              </form>
-            ) : (
-              <form className="assistant-form" onSubmit={send}>
-                <BotBarModelPicker choices={modelChoices} selected={modelKey} disabled={busy} onChange={pickModel}
-                  telemetry={telemetry?.key === modelKey ? telemetry.result : undefined} />
-                {tab === 'local' && deviceModel && <p className="assistant-hint">{desktopText('localModelActive', { model: deviceModel.label })}</p>}
+                {editorRequest.action === 'translate' && (
+                  <Selector
+                    label={text('language')}
+                    isDisabled={busy}
+                    width="100%"
+                    value={language}
+                    options={Object.entries(translationLanguages).map(([code, name]) => ({
+                      value: code,
+                      label: languageNames.of(code === 'zh' ? 'zh-Hans' : code) ?? name,
+                    }))}
+                    onChange={value => {
+                      setLanguage(value as typeof language)
+                      setSuggestion('')
+                    }}
+                  />
+                )}
+                <Collapsible trigger={<Text size="sm" weight="semibold">{text('selectedText')}</Text>}>
+                  <Text size="sm" color="secondary">{editorRequest.selection.text}</Text>
+                </Collapsible>
+                {busy && <Text type="supporting" color="secondary" role="status">{text('generating')}</Text>}
+                {(reply || suggestion) && (
+                  <div className="assistant-selection-result" role="region" aria-label={text('suggestion')}>{reply || suggestion}</div>
+                )}
+                <HStack gap={2} wrap="wrap">
+                  {busy ? (
+                    <Button type="button" variant="secondary" icon={<Square size={14} />} label={text('stop')} onClick={stopReply} />
+                  ) : (
+                    <>
+                      <Button type="submit" variant={suggestion ? 'secondary' : 'primary'} isDisabled={!primary} label={text(suggestion ? 'retry' : 'generate')} />
+                      {suggestion && (
+                        <>
+                          <IconButton
+                            variant="ghost"
+                            size="sm"
+                            label={text('copy')}
+                            tooltip={text('copy')}
+                            icon={<Copy size={15} aria-hidden="true" />}
+                            onClick={() => {
+                              setError('')
+                              setFeedback('')
+                              if (!navigator.clipboard) {
+                                setError(text('copyFailed'))
+                                return
+                              }
+                              void navigator.clipboard.writeText(suggestion).then(
+                                () => setFeedback(text('copied')), () => setError(text('copyFailed')),
+                              )
+                            }}
+                          />
+                          {offerReplacement && (
+                            <Button type="button" variant={preferInsert ? 'secondary' : 'primary'} label={text('replace')} onClick={() => applySuggestion(false)} />
+                          )}
+                          <Button type="button" variant={preferInsert ? 'primary' : 'secondary'} label={text('insertAfter')} onClick={() => applySuggestion(true)} />
+                        </>
+                      )}
+                    </>
+                  )}
+                </HStack>
+              </VStack>
+            </form>
+          ) : (
+            <form onSubmit={send}>
+              <VStack gap={3} className="assistant-form">
+                <BotBarModelPicker
+                  choices={modelChoices}
+                  selected={modelKey}
+                  disabled={busy}
+                  onChange={pickModel}
+                  telemetry={telemetry?.key === modelKey ? telemetry.result : undefined}
+                />
+                {tab === 'local' && deviceModel && <Text type="supporting" color="secondary">{desktopText('localModelActive', { model: deviceModel.label })}</Text>}
                 {fallbackStatus}
-                {messages.length > 0 && <ol className="assistant-thread" aria-label={text('conversation')}>
-                  {messages.map((message, index) => <li key={index} data-role={message.role}>
-                    <p>{message.content}</p>
-                    {message.role === 'assistant' && <button className="secondary-button" type="button" onClick={() => { onInsert?.(message.content); onClose?.() }}>{text('insertInPage')}</button>}
-                  </li>)}
-                </ol>}
-                {tab === 'local' && busy && !reply && <p className="assistant-hint" role="status">{desktopText('localModelPreparing')}</p>}
-                {reply && <p className="assistant-partial" role="status">{reply}</p>}
-                <label>{text('prompt')}
-                  <textarea value={prompt} maxLength={12_000} onChange={event => setPrompt(event.target.value)} rows={3} placeholder={text('promptPlaceholder')} />
-                </label>
-                <label className="assistant-share"><input type="checkbox" checked={sharePage} onChange={event => setSharePage(event.target.checked)} /> {text('shareCurrentPage')}</label>
-                {tab !== 'local' && selected && <p className="assistant-hint">{text('directRequest', { provider: PROVIDERS[selected.provider].label })}</p>}
+                {messages.length > 0 && (
+                  <ol className="assistant-thread" aria-label={text('conversation')}>
+                    {messages.map((message, index) => (
+                      <li key={index} data-role={message.role}>
+                        <Text size="sm">{message.content}</Text>
+                        {message.role === 'assistant' && (
+                          <Button type="button" variant="secondary" size="sm" label={text('insertInPage')} onClick={() => { onInsert?.(message.content); onClose?.() }} />
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                {tab === 'local' && busy && !reply && <Text type="supporting" color="secondary" role="status">{desktopText('localModelPreparing')}</Text>}
+                {reply && <Text size="sm" role="status">{reply}</Text>}
+                <TextArea
+                  label={text('prompt')}
+                  value={prompt}
+                  onChange={value => setPrompt(value.slice(0, 12_000))}
+                  rows={3}
+                  width="100%"
+                  placeholder={text('promptPlaceholder')}
+                />
+                <CheckboxInput
+                  label={text('shareCurrentPage')}
+                  value={sharePage}
+                  size="sm"
+                  onChange={setSharePage}
+                />
+                {tab !== 'local' && selected && <Text type="supporting" color="secondary">{text('directRequest', { provider: PROVIDERS[selected.provider].label })}</Text>}
                 {fallbackHint}
-                <div className="assistant-actions">
-                  {busy
-                    ? <button type="button" className="secondary-button" onClick={stopReply}><Square size={14} /> {text('stop')}</button>
-                    : <button className="primary-button" disabled={!primary || !prompt.trim()}><Send size={15} /> {text('sendPrompt')}</button>}
-                </div>
-              </form>
-            )}
-          </>
-        )}
-        {error && <p className="assistant-error" role="alert">{error}</p>}
-        {feedback && <p className="vault-status" role="status"><Check size={15} /> {feedback}</p>}
-        {onClose && <div className="dialog-actions"><button className="secondary-button" onClick={onClose}>{text('close')}</button></div>}
-      </div>
-  return onClose ? <Dialog title={dialogTitle} className="assistant-dialog" onClose={onClose}>{content}</Dialog> : content
+                <HStack gap={2}>
+                  {busy ? (
+                    <Button type="button" variant="secondary" icon={<Square size={14} />} label={text('stop')} onClick={stopReply} />
+                  ) : (
+                    <Button type="submit" variant="primary" icon={<Send size={15} />} isDisabled={!primary || !prompt.trim()} label={text('sendPrompt')} />
+                  )}
+                </HStack>
+              </VStack>
+            </form>
+          )}
+        </>
+      )}
+      {error && (
+        <div role="alert">
+          <Banner status="error" collapsible={false} title={error} />
+        </div>
+      )}
+      {feedback && (
+        <div role="status">
+          <Banner status="success" collapsible={false} icon={<Check size={15} />} title={feedback} />
+        </div>
+      )}
+    </VStack>
+  )
+
+  if (!onClose) return body
+
+  return (
+    <AstryxDialog isOpen onOpenChange={open => { if (!open) onClose() }} className="assistant-dialog" width={600} padding={0}>
+      <Layout
+        header={<DialogHeader title={dialogTitle} onOpenChange={open => { if (!open) onClose() }} />}
+        content={<LayoutContent>{body}</LayoutContent>}
+        footer={
+          <LayoutFooter hasDivider>
+            <HStack justify="end">
+              <Button type="button" variant="secondary" label={text('close')} onClick={onClose} />
+            </HStack>
+          </LayoutFooter>
+        }
+      />
+    </AstryxDialog>
+  )
 }

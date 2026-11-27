@@ -1,14 +1,14 @@
 'use client'
 
 import { Cloud, LogIn, LogOut, Settings2 } from 'lucide-react'
-import Link from 'next/link'
+import NextLink from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { Item } from '@astryxdesign/core/Item'
 import { signOut } from '@/app/auth/actions'
 import { bootstrapTierGates } from '@/lib/analytics'
 import { useTranslations } from '@/lib/i18n/client'
 import LocaleSwitcher from './locale-switcher'
-import { UsageAnalyticsControl } from './usage-analytics'
 import WorkspaceApp from './workspace-app'
 import WebSettings from './settings/web-settings'
 import type { SettingsProfile } from './settings/profile-settings'
@@ -48,12 +48,36 @@ export default function WebWorkspace({ storageScope, cloudEnabled, signedIn, mir
     } : undefined}
     sidebarControls={<>
       <LocaleSwitcher />
-      <UsageAnalyticsControl />
-      <button type="button" className="nav-action" onClick={() => setOpen(true)}><Settings2 size={16} aria-hidden="true" /> {settings('title')}</button>
-      {cloudEnabled && signedIn && <Link className="nav-action account-link" href="/cloud"><Cloud size={15} /> {cloud('title')}</Link>}
-      {signedIn
-        ? <form action={signOut}><button className="nav-action" type="submit"><LogOut size={15} /> {t('signout')}</button></form>
-        : <Link className="nav-action account-link" href="/login"><LogIn size={15} /> {t('login')}</Link>}
+      <Item
+        density="compact"
+        startContent={<Settings2 size={16} aria-hidden="true" />}
+        label={settings('title')}
+        onClick={() => setOpen(true)}
+      />
+      {cloudEnabled && signedIn && (
+        <Item
+          as={NextLink}
+          density="compact"
+          startContent={<Cloud size={15} aria-hidden="true" />}
+          label={cloud('title')}
+          href="/cloud"
+        />
+      )}
+      {signedIn ? (
+        <form action={signOut}>
+          <button type="submit" className="nav-action">
+            <LogOut size={15} aria-hidden="true" /> {t('signout')}
+          </button>
+        </form>
+      ) : (
+        <Item
+          as={NextLink}
+          density="compact"
+          startContent={<LogIn size={15} aria-hidden="true" />}
+          label={t('login')}
+          href="/login"
+        />
+      )}
     </>} />
     {open && <WebSettings scope={storageScope} profile={profile} available={cloudEnabled} planSummary={plan ?? undefined} onClose={() => setOpen(false)} />}
   </>

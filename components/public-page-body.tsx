@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from 'react'
 import { Marked, type Token, type Tokens } from 'marked'
+import { CheckboxInput } from '@astryxdesign/core/CheckboxInput'
 import { splitYamlFrontmatter, isEmbeddedRaster } from '../lib/markdown'
 import { wikiLinks } from '../lib/markdown-references'
 import { toTitleKey } from '../lib/cloud/graph-index'
@@ -118,12 +119,14 @@ export default function PublicPageBody({ source, targets, taskStatus }: { source
       case 'list': {
         const list = token as Tokens.List
         const items = list.items.map((item, index) => <li key={index}>
-          {item.task && !item.tokens.some(child => child.type === 'checkbox') && <input type="checkbox" checked={item.checked} disabled aria-label={taskStatus} />}
+          {item.task && !item.tokens.some(child => child.type === 'checkbox') && (
+            <CheckboxInput label={taskStatus} isLabelHidden isDisabled value={Boolean(item.checked)} size="sm" />
+          )}
           {render(item.tokens)}
         </li>)
         return list.ordered ? <ol start={typeof list.start === 'number' ? list.start : undefined}>{items}</ol> : <ul>{items}</ul>
       }
-      case 'checkbox': return <input type="checkbox" checked={Boolean(token.checked)} disabled aria-label={taskStatus} />
+      case 'checkbox': return <CheckboxInput label={taskStatus} isLabelHidden isDisabled value={Boolean(token.checked)} size="sm" />
       case 'table': {
         const table = token as Tokens.Table
         return <div className="public-table"><table>

@@ -1,32 +1,44 @@
-import { X } from 'lucide-react'
-import { workspaceShortcuts } from '@/lib/workspace-shortcuts'
-import { useTranslations } from '@/lib/i18n/client'
-import { Dialog } from './workspace-dialogs'
+'use client'
 
-const keyLabels: Record<string, string> = { ArrowLeft: '←', ArrowRight: '→', Backspace: '⌫' }
+import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog'
+import { Kbd } from '@astryxdesign/core/Kbd'
+import { Layout, LayoutContent } from '@astryxdesign/core/Layout'
+import { useTranslations } from '@/lib/i18n/client'
+import { workspaceShortcuts } from '@/lib/workspace-shortcuts'
+
+const shortcutKeyMap: Record<string, string> = {
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+  Backspace: 'backspace',
+}
 
 export default function WorkspaceShortcutHelp({ onClose }: { onClose: () => void }) {
   const t = useTranslations('app-shell')
-  const mac = /Mac|iPhone|iPad/.test(navigator.platform)
-  return <Dialog title={t('keyboardShortcuts')} onClose={onClose} className="shortcut-dialog">
-    <div className="form-dialog">
-      <header className="shortcut-dialog-header">
-        <h2>{t('keyboardShortcuts')}</h2>
-        <button className="icon-button" type="button" aria-label={t('close')} onClick={onClose} autoFocus>
-          <X size={17} aria-hidden="true" />
-        </button>
-      </header>
-      <dl className="shortcut-list">
-        {workspaceShortcuts.map(shortcut => <div key={shortcut.action}>
-          <dt>{t(shortcut.action)}</dt>
-          <dd>
-            <kbd>{mac ? '⌘' : 'Ctrl'}</kbd>
-            {'alt' in shortcut && <kbd>{mac ? '⌥' : 'Alt'}</kbd>}
-            {'shift' in shortcut && <kbd>{mac ? '⇧' : 'Shift'}</kbd>}
-            <kbd>{keyLabels[shortcut.key] ?? shortcut.key.toUpperCase()}</kbd>
-          </dd>
-        </div>)}
-      </dl>
-    </div>
-  </Dialog>
+  return (
+    <Dialog isOpen onOpenChange={open => { if (!open) onClose() }} width={480} padding={0}>
+      <Layout
+        header={<DialogHeader title={t('keyboardShortcuts')} onOpenChange={open => { if (!open) onClose() }} />}
+        content={
+          <LayoutContent>
+            <dl className="shortcut-list">
+              {workspaceShortcuts.map(shortcut => {
+                const keys = [
+                  'mod',
+                  ...('alt' in shortcut && shortcut.alt ? ['alt'] : []),
+                  ...('shift' in shortcut && shortcut.shift ? ['shift'] : []),
+                  shortcutKeyMap[shortcut.key] ?? shortcut.key.toLowerCase(),
+                ].join('+')
+                return (
+                  <div key={shortcut.action}>
+                    <dt>{t(shortcut.action)}</dt>
+                    <dd><Kbd keys={keys} /></dd>
+                  </div>
+                )
+              })}
+            </dl>
+          </LayoutContent>
+        }
+      />
+    </Dialog>
+  )
 }

@@ -3,14 +3,19 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import Link from 'next/link'
-import { X } from 'lucide-react'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { Dialog as AstryxDialog, DialogHeader } from '@astryxdesign/core/Dialog'
+import { Item } from '@astryxdesign/core/Item'
+import { Layout, LayoutContent, LayoutFooter } from '@astryxdesign/core/Layout'
+import { HStack, VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
 import * as Y from 'yjs'
 import { Awareness } from 'y-protocols/awareness'
 import { checkpointInlineBytes, checkpointTransferBytes, replaceCheckpointContent, type Checkpoint } from '@/lib/cloud/checkpoints'
 import { track } from '@/lib/analytics'
 import { useLocale, useTranslations } from '@/lib/i18n/client'
 import type { CloudCollaboration } from '@/lib/sync/use-cloud-collaboration'
-import { Dialog } from './workspace-dialogs'
 import PageEditor from './page-editor'
 import PublicPageBody from './public-page-body'
 
@@ -197,43 +202,89 @@ export default function CheckpointDialog({ pageId, session, live, writable, onCl
     })
   }
 
-  return <Dialog title={cloud('history')} className="form-dialog checkpoint-dialog" onClose={onClose}>
-    <div className="checkpoint-header">
-      <h2>{cloud('history')}</h2>
-      <button className="icon-button" type="button" aria-label={t('closeHistory')} onClick={onClose}><X size={18} /></button>
-    </div>
-    {failure && <p className="account-error" role="alert">{t(failure)}</p>}
-    {message && <p role="status">{t(message)}</p>}
-    {!!history?.retentionDays && !preview && <p>
-      {t('checkpointRetention', { days: history.retentionDays })}{history.olderHistoryLimited && history.canManageHistory &&
-        <> <Link className="account-link" href="/billing">{t('compareHistory')}</Link></>}
-    </p>}
-    {mayChange && !preview && <form onSubmit={save} className="cloud-create">
-      <label>{t('checkpointName')} <input value={name} onChange={event => setName(event.target.value)} maxLength={200} required /></label>
-      <button className="primary-button" disabled={busy}>{t('saveCheckpoint')}</button>
-    </form>}
-    {!history ? failure
-      ? <button className="secondary-button" onClick={() => { setFailure(null); setReload(value => value + 1) }}>{t('retry')}</button>
-      : <p role="status">{t('loadingCheckpoints')}</p>
-      : !preview && (history.checkpoints.length ? <ul className="checkpoint-list">
-        {history.checkpoints.map(record => <li key={record.id}>
-          <button className="search-result" type="button" disabled={busy} onClick={() => open(record)}>
-            <span><strong>{record.version_name}</strong><small>{date.format(new Date(record.created_at))}</small></span>
-          </button>
-        </li>)}
-      </ul> : <p>{history.olderHistoryLimited ? t('checkpointsOutsideWindow') : t('noCheckpoints')}</p>)}
-    {preview && <section aria-label={t('checkpointPreview')} className="checkpoint-preview">
-      <h3>{preview.record.version_name}</h3>
-      {previewFault === preview.record.id && <p role="alert">{t('checkpointUnsupported')}</p>}
-      {preview.source !== null ? <PublicPageBody source={preview.source} targets={new Map()} taskStatus={reader('taskStatus')} /> : <PageEditor
-        key={preview.record.id} pageId={preview.record.id} collaboration={preview.replica}
-        editable={false} showModePicker={false} choices={[]} markdown="" onChange={() => {}} onOpenLink={() => {}}
-        onSchemaError={() => setPreviewFault(preview.record.id)}
-      />}
-      <div className="dialog-actions">
-        <button type="button" className="secondary-button" disabled={busy} onClick={() => setPreview(null)}>{t('backToHistory')}</button>
-        {mayChange && <button type="button" className="primary-button" disabled={busy || previewFault === preview.record.id} onClick={restore}>{t('restoreWithBackup')}</button>}
-      </div>
-    </section>}
-  </Dialog>
+  return (
+    <AstryxDialog isOpen onOpenChange={open => { if (!open) onClose() }} className="checkpoint-dialog" width={580} padding={0}>
+      <Layout
+        header={<DialogHeader title={cloud('history')} onOpenChange={open => { if (!open) onClose() }} />}
+        content={
+          <LayoutContent>
+            <VStack gap={3}>
+              {failure && <div role="alert"><Banner status="error" collapsible={false} title={t(failure)} /></div>}
+              {message && <div role="status"><Banner status="success" collapsible={false} title={t(message)} /></div>}
+              {!!history?.retentionDays && !preview && (
+                <Text size="sm" color="secondary">
+                  {t('checkpointRetention', { days: history.retentionDays })}
+                  {history.olderHistoryLimited && history.canManageHistory && (
+                    <> <Link className="account-link" href="/billing">{t('compareHistory')}</Link></>
+                  )}
+                </Text>
+              )}
+              {mayChange && !preview && (
+                <form onSubmit={save} className="cloud-create">
+                  <label>{t('checkpointName')} <input value={name} onChange={event => setName(event.target.value)} maxLength={200} required /></label>
+                  <Button type="submit" variant="primary" size="sm" isDisabled={busy} label={t('saveCheckpoint')} />
+                </form>
+              )}
+              {!history ? failure ? (
+                <Button type="button" variant="secondary" label={t('retry')} onClick={() => { setFailure(null); setReload(value => value + 1) }} />
+              ) : (
+                <Text type="supporting" role="status">{t('loadingCheckpoints')}</Text>
+              ) : !preview && (history.checkpoints.length ? (
+                <VStack gap={1} className="checkpoint-list">
+                  {history.checkpoints.map(record => (
+                    <Item
+                      key={record.id}
+                      density="compact"
+                      label={record.version_name}
+                      description={date.format(new Date(record.created_at))}
+                      isDisabled={busy}
+                      onClick={() => open(record)}
+                    />
+                  ))}
+                </VStack>
+              ) : (
+                <Text color="secondary">{history.olderHistoryLimited ? t('checkpointsOutsideWindow') : t('noCheckpoints')}</Text>
+              ))}
+              {preview && (
+                <section aria-label={t('checkpointPreview')} className="checkpoint-preview">
+                  <VStack gap={3}>
+                    <h3>{preview.record.version_name}</h3>
+                    {previewFault === preview.record.id && (
+                      <div role="alert"><Banner status="warning" collapsible={false} title={t('checkpointUnsupported')} /></div>
+                    )}
+                    {preview.source !== null ? (
+                      <PublicPageBody source={preview.source} targets={new Map()} taskStatus={reader('taskStatus')} />
+                    ) : (
+                      <PageEditor
+                        key={preview.record.id}
+                        pageId={preview.record.id}
+                        collaboration={preview.replica}
+                        editable={false}
+                        showModePicker={false}
+                        choices={[]}
+                        markdown=""
+                        onChange={() => {}}
+                        onOpenLink={() => {}}
+                        onSchemaError={() => setPreviewFault(preview.record.id)}
+                      />
+                    )}
+                  </VStack>
+                </section>
+              )}
+            </VStack>
+          </LayoutContent>
+        }
+        footer={preview ? (
+          <LayoutFooter hasDivider>
+            <HStack gap={2} justify="end">
+              <Button type="button" variant="secondary" isDisabled={busy} label={t('backToHistory')} onClick={() => setPreview(null)} />
+              {mayChange && (
+                <Button type="button" variant="primary" isDisabled={busy || previewFault === preview.record.id} label={t('restoreWithBackup')} onClick={restore} />
+              )}
+            </HStack>
+          </LayoutFooter>
+        ) : undefined}
+      />
+    </AstryxDialog>
+  )
 }

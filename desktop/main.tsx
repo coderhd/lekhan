@@ -6,8 +6,15 @@ import { createRoot } from 'react-dom/client'
 import '@fontsource-variable/manrope'
 import '@fontsource-variable/newsreader'
 import '@/app/globals.css'
+import '@/lib/lekhan.css'
 import '@/components/settings/settings.css'
 import './desktop.css'
+import { Theme } from '@astryxdesign/core/theme'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { Item } from '@astryxdesign/core/Item'
+import { lekhanTheme } from '@/lib/lekhan'
+import { useResolvedEditorTheme } from '@/components/astryx-provider'
 import LocaleSelect from '@/components/locale-select'
 import WorkspaceApp from '@/components/workspace-app'
 import { SettingsDialog } from '@/components/settings/settings-content'
@@ -119,20 +126,34 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
 
   const commonControls = (canInstall: boolean) => <>
     <LocaleSelect onSelect={selectLanguage} />
-    <button type="button" className="nav-action" onClick={() => {
-      setModelLibraryOpen(true)
-      void refreshLibrary()
-    }}><Cpu size={15} aria-hidden="true" /> {t('modelLibrary')}</button>
-    <button type="button" className="nav-action" onClick={() => {
-      setSettingsOpen(true)
-      void refreshLibrary()
-    }}><Settings2 size={15} aria-hidden="true" /> {settings('title')}</button>
-    <button type="button" className="nav-action account-link" disabled={opening} onClick={() => void openCloud()}>
-      <Cloud size={15} /> {t('cloudWorkspace')}
-    </button>
+    <Item
+      density="compact"
+      startContent={<Cpu size={15} aria-hidden="true" />}
+      label={t('modelLibrary')}
+      onClick={() => {
+        setModelLibraryOpen(true)
+        void refreshLibrary()
+      }}
+    />
+    <Item
+      density="compact"
+      startContent={<Settings2 size={15} aria-hidden="true" />}
+      label={settings('title')}
+      onClick={() => {
+        setSettingsOpen(true)
+        void refreshLibrary()
+      }}
+    />
+    <Item
+      density="compact"
+      startContent={<Cloud size={15} aria-hidden="true" />}
+      label={t('cloudWorkspace')}
+      isDisabled={opening}
+      onClick={() => void openCloud()}
+    />
     {launchFailed && <p className="locale-error desktop-cloud-error" role="alert">{t('cloudFailed')}</p>}
     <DesktopUpdateControls updates={updates} canInstall={canInstall} />
-    {preview.length > 0 && <button type="button" className="nav-action" onClick={() => downloadWorkspace(preview)}>{t('exportPreview')}</button>}
+    {preview.length > 0 && <Item density="compact" label={t('exportPreview')} onClick={() => downloadWorkspace(preview)} />}
   </>
   const libraryDialog = modelLibraryOpen && <ModelLibrary library={library} selected={selectedModel} onSelect={selectModel}
     refresh={refreshLibrary} onClose={() => setModelLibraryOpen(false)} />
@@ -148,12 +169,18 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
       pageAttachments={(page, insert) => <AttachmentPanel key={page.id} token={handle.token} page={page}
         path={catalog?.token === handle.token ? catalog.paths.get(page.id) ?? '' : ''}
         assets={catalog?.token === handle.token ? catalog.assets : []} onAttach={storage.rememberAttachment} onInsert={insert} />}
-      sidebarControls={canSwitch => <>
-        <button type="button" className="nav-action" disabled={!canSwitch || choosing} onClick={() => void selectVault()}>
-          <FolderOpen size={15} /> {t('swapVault')}
-        </button>
+      sidebarNotice={recoveredVault === handle.token || failure ? <>
         {failure}
-        {recoveredVault === handle.token && <p className="desktop-recovery-notice" role="status">{t('recoveredDrafts')}</p>}
+        {recoveredVault === handle.token && <div role="status"><Banner status="info" collapsible={false} title={t('recoveredDrafts')} /></div>}
+      </> : undefined}
+      sidebarControls={canSwitch => <>
+        <Item
+          density="compact"
+          startContent={<FolderOpen size={15} aria-hidden="true" />}
+          label={t('swapVault')}
+          isDisabled={!canSwitch || choosing}
+          onClick={() => void selectVault()}
+        />
         {commonControls(canSwitch && !choosing)}
       </>} />
     {libraryDialog}
@@ -166,9 +193,14 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
       <span className="brand-mark" aria-hidden="true">L</span>
       <h1>{t('vaultTitle')}</h1>
       <p>{t('vaultBody')}</p>
-      <button type="button" className="primary-button" disabled={restoring || choosing} onClick={() => void selectVault()}>
-        <FolderOpen size={18} /> {t('chooseVault')}
-      </button>
+      <Button
+        type="button"
+        variant="primary"
+        icon={<FolderOpen size={18} aria-hidden="true" />}
+        isDisabled={restoring || choosing}
+        label={t('chooseVault')}
+        onClick={() => void selectVault()}
+      />
       {failure}
       <div className="desktop-vault-controls">{commonControls(!restoring && !choosing)}</div>
     </div>
@@ -180,6 +212,7 @@ function DesktopWriter({ selectLanguage }: { selectLanguage: (locale: Locale) =>
 
 function Desktop({ initial }: { initial: DesktopLocale }) {
   const [{ locale, messages }, setLocale] = useState(initial)
+  const mode = useResolvedEditorTheme()
   async function selectLanguage(language: Locale) {
     const next = await getCatalog(language)
     localStorage.setItem(languageKey, language)
@@ -189,8 +222,10 @@ function Desktop({ initial }: { initial: DesktopLocale }) {
   }
 
   return <NextIntlClientProvider locale={locale} messages={messages} timeZone="UTC">
-    <EditorAppearance />
-    <DesktopWriter selectLanguage={selectLanguage} />
+    <Theme theme={lekhanTheme} mode={mode}>
+      <EditorAppearance />
+      <DesktopWriter selectLanguage={selectLanguage} />
+    </Theme>
   </NextIntlClientProvider>
 }
 

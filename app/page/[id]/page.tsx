@@ -2,6 +2,11 @@ import Link from 'next/link'
 import { Suspense } from 'react'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { Collapsible } from '@astryxdesign/core/Collapsible'
+import { VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
 import CloudPageEditor from '@/components/cloud-page-editor'
 import CloudSearch from '@/components/cloud-search'
 import { DiscardOfflineAccess, PrepareOfflineWorkspace } from '@/components/prepare-offline-workspace'
@@ -32,13 +37,16 @@ async function CloudBacklinks({ client, id, after }: { client: SupabaseClient; i
   const backlinks = await listCloudBacklinks(client, id, after).catch(() => null)
   if (!backlinks?.pages.length) return null
   const t = await getTranslations('app-shell')
-  return <details className="cloud-page-actions" open={after !== undefined}>
-    <summary>{t('backlinks')}</summary>
-    <ul className="cloud-pages">{backlinks.pages.map(page => <li key={page.id}>
-      <Link href={'/page/' + page.id}>{page.title}</Link>
-    </li>)}</ul>
-    {backlinks.next && <Link href={'/page/' + id + '?backlinks=' + backlinks.next}>{t('showMoreBacklinks')}</Link>}
-  </details>
+  return (
+    <Collapsible trigger={<Text weight="semibold">{t('backlinks')}</Text>} defaultIsOpen={after !== undefined} className="cloud-page-actions">
+      <VStack gap={2}>
+        <ul className="cloud-pages">{backlinks.pages.map(page => <li key={page.id}>
+          <Link href={'/page/' + page.id}>{page.title}</Link>
+        </li>)}</ul>
+        {backlinks.next && <Link href={'/page/' + id + '?backlinks=' + backlinks.next}>{t('showMoreBacklinks')}</Link>}
+      </VStack>
+    </Collapsible>
+  )
 }
 
 export default async function CloudPageRoute({ params, searchParams }: {
@@ -78,27 +86,32 @@ export default async function CloudPageRoute({ params, searchParams }: {
       </header>
       <article className="cloud-library">
         <h1>{access.page.title}</h1>
-        {error && <p role="alert" className="account-error">
-          {error === 'title' ? t('titleLimit') : t('updateFailed')}
-        </p>}
+        {error && (
+          <div role="alert">
+            <Banner status="error" collapsible={false} title={error === 'title' ? t('titleLimit') : t('updateFailed')} />
+          </div>
+        )}
         <CloudPageEditor
           key={account.subject + ':' + id + ':' + access.role} page={access.page} linkChoices={choices} role={access.role}
           subject={account.subject} enabled={!!syncUrl() && !!getTicketSecret()}
         />
         <Suspense><CloudSubpages client={account.client} id={id} after={after} /></Suspense>
         <Suspense><CloudBacklinks client={account.client} id={id} after={backlinks} /></Suspense>
-        {access.role === 'owner' && <details className="cloud-page-actions">
-          <summary>{t('pageSettings')}</summary>
-          <form className="cloud-create" action={renameCloudPage.bind(null, id)}>
-            <label>{t('pageTitle')} <input name="title" defaultValue={access.page.title} maxLength={160} required /></label>
-            <button className="secondary-button">{t('rename')}</button>
-          </form>
-          <form className="cloud-create" action={addCloudPage}>
-            <input type="hidden" name="parentId" value={id} />
-            <label>{t('subpageTitle')} <input name="title" maxLength={160} required /></label>
-            <button className="secondary-button">{t('addSubpage')}</button>
-          </form>
-        </details>}
+        {access.role === 'owner' && (
+          <Collapsible defaultIsOpen={false} trigger={<Text weight="semibold">{t('pageSettings')}</Text>} className="cloud-page-actions">
+            <VStack gap={3}>
+              <form className="cloud-create" action={renameCloudPage.bind(null, id)}>
+                <label>{t('pageTitle')} <input name="title" defaultValue={access.page.title} maxLength={160} required /></label>
+                <Button type="submit" variant="secondary" size="sm" label={t('rename')} />
+              </form>
+              <form className="cloud-create" action={addCloudPage}>
+                <input type="hidden" name="parentId" value={id} />
+                <label>{t('subpageTitle')} <input name="title" maxLength={160} required /></label>
+                <Button type="submit" variant="secondary" size="sm" label={t('addSubpage')} />
+              </form>
+            </VStack>
+          </Collapsible>
+        )}
       </article>
     </main>
   )

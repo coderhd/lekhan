@@ -5,12 +5,12 @@ import { cookies } from 'next/headers'
 import { authConfig, confirmationTarget, siteOrigin } from '@/lib/auth/config'
 import { createAuthClient } from '@/lib/auth/server'
 import { offlineAccountCookie } from '@/lib/cloud/offline-account'
-import { invitationPath, readCredentials, referralCode, workspaceTransferPath, type AuthMode, type AuthResult } from '@/lib/auth/input'
+import { billingNextPath, invitationPath, readCredentials, referralCode, workspaceTransferPath, type AuthMode, type AuthResult } from '@/lib/auth/input'
 import { googleCallback, googleFlowCookie, googleFlowLifetime, googleOAuthEnabled } from '@/lib/auth/google-oauth'
 import { recordAnalyticsReceipt } from '@/lib/server/analytics'
 
 export async function submitAuth(mode: AuthMode, invite: string | undefined, referral: string | undefined, transfer: string | undefined,
-  _previous: AuthResult, form: FormData): Promise<AuthResult> {
+  nextTarget: string | undefined, _previous: AuthResult, form: FormData): Promise<AuthResult> {
   if (!['login', 'signup', 'forgot', 'reset'].includes(mode)) return { issue: 'invalid' }
   const credentials = readCredentials(form, mode)
   if (!credentials) return { issue: 'invalid' }
@@ -18,12 +18,13 @@ export async function submitAuth(mode: AuthMode, invite: string | undefined, ref
   if (!client) return { issue: 'unavailable' }
   const { email, password } = credentials
   const next = invitationPath(invite)
+  const billingNext = billingNextPath(nextTarget)
 
   if (mode === 'login') {
     const { error } = await client.auth.signInWithPassword({ email, password })
     if (error) return { issue: 'loginError' }
     await clearGoogleFlow()
-    redirect(workspaceTransferPath(transfer) ?? next ?? '/workspace')
+    redirect(workspaceTransferPath(transfer) ?? next ?? billingNext ?? '/workspace')
   }
 
   if (mode === 'reset') {
@@ -49,7 +50,7 @@ export async function submitAuth(mode: AuthMode, invite: string | undefined, ref
   if (data.session) {
     await clearGoogleFlow()
     await recordAnalyticsReceipt('signup')
-    redirect(next ?? '/workspace')
+    redirect(next ?? billingNext ?? '/workspace')
   }
   return { outcome: 'confirmEmail' }
 }

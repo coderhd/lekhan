@@ -189,7 +189,9 @@
     "noResults": "未找到页面。",
     "navigate": "选择",
     "open": "打开",
-    "close": "关闭"
+    "close": "关闭",
+    "addPageInFolder": "在“{title}”中新建页面",
+    "workspaceMenu": "工作区选项"
   },
   "editor-ai": {
     "writingAssistant": "写作助手",
@@ -984,6 +986,19 @@
     "emailTitle": "发送邮件",
     "emailBody": "适用于账号访问、隐私请求或抢先体验相关问题。",
     "githubTitle": "打开 GitHub Issues",
-    "githubBody": "用于反馈错误和提交功能建议，请勿包含私密页面内容。"
+    "githubBody": "用于反馈错误和提交功能建议，请勿包含私密页面内容。",
+    "pricing": "价格方案",
+    "pricingTitle": "适合个人笔记与团队协作的简洁方案。",
+    "pricingIntro": "在浏览器中免费开始使用。随时升级以获取云端同步、版本历史和团队席位。",
+    "freeStart": "免费开始写作",
+    "recommended": "推荐",
+    "signInToBuy": "登录以购买 {plan}"
+  },
+  "cookie-banner": {
+    "title": "分析 Cookie",
+    "description": "必要 Cookie 用于保持您的登录会话。可选分析在不记录笔记内容的前提下帮助改进 Lekhan。",
+    "accept": "允许分析",
+    "decline": "仅保留必要项",
+    "privacyPolicy": "隐私政策"
   }
 }

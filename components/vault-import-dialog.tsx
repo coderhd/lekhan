@@ -1,9 +1,15 @@
 'use client'
 
-import { AlertCircle, Archive, Check, FileText, FolderOpen, LoaderCircle } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent } from 'react'
-import { Dialog } from './workspace-dialogs'
+import { AlertCircle, Archive, Check, FileText, FolderOpen, LoaderCircle } from 'lucide-react'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Button } from '@astryxdesign/core/Button'
+import { Dialog as AstryxDialog, DialogHeader } from '@astryxdesign/core/Dialog'
+import { Layout, LayoutContent, LayoutFooter } from '@astryxdesign/core/Layout'
+import { MetadataList, MetadataListItem } from '@astryxdesign/core/MetadataList'
+import { HStack, VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
 import { planVaultImport, type ImportReport, type VaultImportPlan } from '@/lib/vault-import'
 import type { SaveStatus } from '@/lib/use-workspace'
 import { pickVaultFolder, readVaultFiles, readVaultZip, type VaultContents } from '@/lib/vault-reader'
@@ -174,63 +180,122 @@ export function VaultImportDialog(props: Destination & { onClose: () => void }) 
   const title = props.cloud ? t('cloudTitle') : t('localTitle')
 
   return (
-    <Dialog title={title} onClose={() => { if (!busy.current) onClose() }}>
-      <div className="form-dialog vault-dialog">
-        <h2>{title}</h2>
-        <p>{props.cloud ? t('cloudIntro')
-          : t('localIntro')}</p>
-        <input ref={zip} type="file" accept=".zip,application/zip" hidden aria-label={t('vaultZip')} onChange={selectZip} />
-        <input ref={directory} type="file" {...{ webkitdirectory: "" }} multiple hidden aria-label={t('vaultFolder')} onChange={selectFolder} />
-        {props.cloud && <input ref={markdown} type="file" accept=".md,.markdown,text/markdown" multiple hidden aria-label={t('markdownFiles')} onChange={event => selectFolder(event, 'markdown')} />}
-        {!report && !draft && <div className="vault-options">
-          <button className="secondary-button" disabled={!!reading} onClick={() => zip.current?.click()}><Archive size={17} /> {t('chooseZip')}</button>
-          <button className="secondary-button" disabled={!!reading} onClick={() => {
-            if (!('showDirectoryPicker' in window) || !window.isSecureContext) {
-              directory.current?.click()
-            } else {
-              void run(() => pickVaultFolder(includeAttachments))
-            }
-          }}><FolderOpen size={17} /> {t('chooseFolder')}</button>
-          {props.cloud && <button className="secondary-button" disabled={!!reading} onClick={() => markdown.current?.click()}><FileText size={17} /> {t('chooseMarkdown')}</button>}
-        </div>}
-        {reading && <div role="status" className="vault-status">
-          <LoaderCircle size={16} className="spin" /> {reading === 'cloud' ? t('preparing') : t('reading')}
-        </div>}
-        {progress && <div role="status" className="vault-status">
-          {uploading && <LoaderCircle size={16} className="spin" />}
-          <span>{t('pagesProgress', { saved: progress.saved, total: progress.total })}
-            {progress.resumed ? ' · ' + t('resumedProgress', { count: progress.resumed }) : ''}
-            {progress.filesTotal ? ' · ' + t('filesProgress', { saved: progress.files, total: progress.filesTotal }) : ''}</span>
-        </div>}
-        {error && <div role="alert" className="vault-status vault-error"><AlertCircle size={16} /> <span>{error}</span></div>}
-        {report && <>
-          <div role="status" className="vault-status">
-            {saved ? <Check size={16} /> : saveFailed ? <AlertCircle size={16} /> : <LoaderCircle size={16} className="spin" />}
-            {saved ? report.repeated ? t('alreadyImported') : props.cloud ? t('cloudSaved') : t('localSaved')
-              : saveFailed ? t('localSaveFailed') : t('saving')}
-          </div>
-          <dl className="vault-report">
-            {[
-              [t('notes'), report.notes], [t('folders'), report.folders], [t('images'), report.images],
-              ...(report.files === undefined ? [] : [[t('filesSaved'), report.files]]),
-              ...(report.omittedFiles ? [[t('filesOmitted'), report.omittedFiles]] : []),
-              [t('resolved'), report.resolved], [t('unresolved'), report.unresolved],
-              [t('converted'), report.degraded],
-            ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{numbers.format(Number(value))}</dd></div>)}
-          </dl>
-          {!!report.omittedFiles && <p>{t('omittedNotice')}</p>}
-          {report.degraded > 0 && <p>{t('degradedNotice')}</p>}
-          {optimizedImages > 0 && <p>{t('optimized', { count: optimizedImages })}</p>}
-          {report.invalidProperties > 0 && <p>{t('propertiesNotice')}</p>}
-        </>}
-        <div className="dialog-actions">
-          <button className={saved && !props.cloud ? 'primary-button' : 'secondary-button'} onClick={onClose} disabled={!!reading || uploading}>
-            {report ? props.cloud ? t('done') : t('openWorkspace') : t('cancel')}
-          </button>
-          {props.cloud && error && draft && <button className="primary-button" disabled={uploading} onClick={resume}>{t('resume')}</button>}
-          {props.cloud && report && firstPage && <button className="primary-button" onClick={() => props.onOpenPage(firstPage)}>{t('openFirst')}</button>}
-        </div>
-      </div>
-    </Dialog>
+    <AstryxDialog isOpen onOpenChange={open => { if (!open && !busy.current) onClose() }} width={540} padding={0}>
+      <Layout
+        header={<DialogHeader title={title} onOpenChange={open => { if (!open && !busy.current) onClose() }} />}
+        content={
+          <LayoutContent>
+            <VStack gap={3}>
+              <Text color="secondary">{props.cloud ? t('cloudIntro') : t('localIntro')}</Text>
+              <input ref={zip} type="file" accept=".zip,application/zip" hidden aria-label={t('vaultZip')} onChange={selectZip} />
+              <input ref={directory} type="file" {...{ webkitdirectory: '' }} multiple hidden aria-label={t('vaultFolder')} onChange={selectFolder} />
+              {props.cloud && <input ref={markdown} type="file" accept=".md,.markdown,text/markdown" multiple hidden aria-label={t('markdownFiles')} onChange={event => selectFolder(event, 'markdown')} />}
+              {!report && !draft && (
+                <HStack gap={2} wrap="wrap" className="vault-options">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    icon={<Archive size={17} aria-hidden="true" />}
+                    label={t('chooseZip')}
+                    isDisabled={!!reading}
+                    onClick={() => zip.current?.click()}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    icon={<FolderOpen size={17} aria-hidden="true" />}
+                    label={t('chooseFolder')}
+                    isDisabled={!!reading}
+                    onClick={() => {
+                      if (!('showDirectoryPicker' in window) || !window.isSecureContext) {
+                        directory.current?.click()
+                      } else {
+                        void run(() => pickVaultFolder(includeAttachments))
+                      }
+                    }}
+                  />
+                  {props.cloud && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      icon={<FileText size={17} aria-hidden="true" />}
+                      label={t('chooseMarkdown')}
+                      isDisabled={!!reading}
+                      onClick={() => markdown.current?.click()}
+                    />
+                  )}
+                </HStack>
+              )}
+              {reading && (
+                <HStack gap={2} align="center" role="status" className="vault-status">
+                  <LoaderCircle size={16} className="spin" aria-hidden="true" />
+                  <Text size="sm">{reading === 'cloud' ? t('preparing') : t('reading')}</Text>
+                </HStack>
+              )}
+              {progress && (
+                <HStack gap={2} align="center" role="status" className="vault-status">
+                  {uploading && <LoaderCircle size={16} className="spin" aria-hidden="true" />}
+                  <Text size="sm">
+                    {t('pagesProgress', { saved: progress.saved, total: progress.total })}
+                    {progress.resumed ? ' · ' + t('resumedProgress', { count: progress.resumed }) : ''}
+                    {progress.filesTotal ? ' · ' + t('filesProgress', { saved: progress.files, total: progress.filesTotal }) : ''}
+                  </Text>
+                </HStack>
+              )}
+              {error && (
+                <div role="alert">
+                  <Banner status="error" collapsible={false} title={error} icon={<AlertCircle size={16} />} />
+                </div>
+              )}
+              {report && (
+                <VStack gap={3}>
+                  <Banner
+                    role="status"
+                    status={saved ? 'success' : saveFailed ? 'error' : 'info'}
+                    collapsible={false}
+                    icon={saved ? <Check size={16} /> : saveFailed ? <AlertCircle size={16} /> : <LoaderCircle size={16} className="spin" />}
+                    title={saved ? report.repeated ? t('alreadyImported') : props.cloud ? t('cloudSaved') : t('localSaved')
+                      : saveFailed ? t('localSaveFailed') : t('saving')}
+                  />
+                  <MetadataList columns="multi">
+                    <MetadataListItem label={t('notes')}>{numbers.format(report.notes)}</MetadataListItem>
+                    <MetadataListItem label={t('folders')}>{numbers.format(report.folders)}</MetadataListItem>
+                    <MetadataListItem label={t('images')}>{numbers.format(report.images)}</MetadataListItem>
+                    {report.files !== undefined && <MetadataListItem label={t('filesSaved')}>{numbers.format(report.files)}</MetadataListItem>}
+                    {!!report.omittedFiles && <MetadataListItem label={t('filesOmitted')}>{numbers.format(report.omittedFiles)}</MetadataListItem>}
+                    <MetadataListItem label={t('resolved')}>{numbers.format(report.resolved)}</MetadataListItem>
+                    <MetadataListItem label={t('unresolved')}>{numbers.format(report.unresolved)}</MetadataListItem>
+                    <MetadataListItem label={t('converted')}>{numbers.format(report.degraded)}</MetadataListItem>
+                  </MetadataList>
+                  {!!report.omittedFiles && <Text type="supporting" color="secondary">{t('omittedNotice')}</Text>}
+                  {report.degraded > 0 && <Text type="supporting" color="secondary">{t('degradedNotice')}</Text>}
+                  {optimizedImages > 0 && <Text type="supporting" color="secondary">{t('optimized', { count: optimizedImages })}</Text>}
+                  {report.invalidProperties > 0 && <Text type="supporting" color="secondary">{t('propertiesNotice')}</Text>}
+                </VStack>
+              )}
+            </VStack>
+          </LayoutContent>
+        }
+        footer={
+          <LayoutFooter hasDivider>
+            <HStack gap={2} justify="end">
+              <Button
+                type="button"
+                variant={saved && !props.cloud ? 'primary' : 'secondary'}
+                label={report ? props.cloud ? t('done') : t('openWorkspace') : t('cancel')}
+                isDisabled={!!reading || uploading}
+                onClick={onClose}
+              />
+              {props.cloud && error && draft && (
+                <Button type="button" variant="primary" label={t('resume')} isDisabled={uploading} onClick={resume} />
+              )}
+              {props.cloud && report && firstPage && (
+                <Button type="button" variant="primary" label={t('openFirst')} onClick={() => props.onOpenPage(firstPage)} />
+              )}
+            </HStack>
+          </LayoutFooter>
+        }
+      />
+    </AstryxDialog>
   )
 }

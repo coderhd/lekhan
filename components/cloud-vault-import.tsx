@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Archive } from 'lucide-react'
+import { Button } from '@astryxdesign/core/Button'
 import { useTranslations } from '@/lib/i18n/client'
 import { VaultImportDialog } from './vault-import-dialog'
 
@@ -11,7 +12,14 @@ export default function CloudVaultImport() {
   const router = useRouter()
   const t = useTranslations('cloud-workspace')
   return <>
-    <button className="secondary-button" type="button" onClick={() => setOpen(true)}><Archive size={16} /> {t('importFiles')}</button>
+    <Button
+      type="button"
+      variant="secondary"
+      size="sm"
+      icon={<Archive size={16} aria-hidden="true" />}
+      label={t('importFiles')}
+      onClick={() => setOpen(true)}
+    />
     {open && <VaultImportDialog cloud onClose={() => { setOpen(false); router.refresh() }}
       onOpenPage={id => { setOpen(false); router.push('/page/' + id) }} />}
   </>

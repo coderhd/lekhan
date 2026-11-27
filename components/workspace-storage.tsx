@@ -1,4 +1,9 @@
 import { getLocale, getTranslations } from 'next-intl/server'
+import { Heading } from '@astryxdesign/core/Heading'
+import { MetadataList, MetadataListItem } from '@astryxdesign/core/MetadataList'
+import { ProgressBar } from '@astryxdesign/core/ProgressBar'
+import { HStack, VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
 
 const megabyte = 1_000_000
 const freeGuide = 30 * megabyte
@@ -19,17 +24,21 @@ export default async function WorkspaceStorage({ images, files, free }: { images
   const fill = Math.min(100, Math.round(used / capacity * 100))
   const guidance = t(free ? 'storageGuide' : 'storageLimit', { size: formatBytes(capacity, decimal) })
   const usage = t('storageUsed', { size: formatBytes(used, decimal) })
-  return <section className="billing-storage" aria-labelledby="workspace-storage">
-    <h2 id="workspace-storage">{t('workspaceStorage')}</h2>
-    <div className="billing-storage-line"><strong>{usage}</strong><span>{guidance}</span></div>
-    <div className="billing-storage-meter" role="meter" aria-labelledby="workspace-storage" aria-valuemin={0} aria-valuemax={100}
-      aria-valuenow={fill} aria-valuetext={`${usage}, ${guidance}`}>
-      <span style={{ width: `${fill}%` }} />
-    </div>
-    <dl className="billing-storage-breakdown">
-      <div><dt>{t('inlineImages')}</dt><dd>{formatBytes(images, decimal)}</dd></div>
-      <div><dt>{t('fileAttachments')}</dt><dd>{formatBytes(files, decimal)}</dd></div>
-    </dl>
-    {free && <p>{t('freeStorageNote')}</p>}
-  </section>
+  return (
+    <section className="billing-storage" aria-labelledby="workspace-storage">
+      <VStack gap={3}>
+        <Heading level={2} id="workspace-storage">{t('workspaceStorage')}</Heading>
+        <HStack justify="between" align="center" wrap="wrap" gap={2} className="billing-storage-line">
+          <Text weight="semibold">{usage}</Text>
+          <Text type="supporting" color="secondary">{guidance}</Text>
+        </HStack>
+        <ProgressBar label={t('workspaceStorage')} isLabelHidden value={fill} max={100} />
+        <MetadataList columns="multi">
+          <MetadataListItem label={t('inlineImages')}>{formatBytes(images, decimal)}</MetadataListItem>
+          <MetadataListItem label={t('fileAttachments')}>{formatBytes(files, decimal)}</MetadataListItem>
+        </MetadataList>
+        {free && <Text type="supporting" color="secondary">{t('freeStorageNote')}</Text>}
+      </VStack>
+    </section>
+  )
 }

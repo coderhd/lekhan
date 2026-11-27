@@ -146,12 +146,14 @@ test('links offline workspace to saved cloud copies and searches cached cloud pa
 
   await page.goto('/workspace-offline')
   await expect(page.getByRole('textbox', { name: 'Page title' })).toHaveValue('Field guide')
+  await page.getByRole('button', { name: 'Workspace options' }).click()
   await expect(page.getByRole('link', { name: 'Open notebook online' })).toHaveAttribute('href', '/workspace')
 
   if (cookieName) {
     await expect(page.getByRole('link', { name: 'On this device' })).toHaveAttribute('href', '/cloud-offline')
+    await page.keyboard.press('Escape')
     await page.keyboard.press('Control+k')
-    await page.getByRole('button', { name: 'Cloud' }).click()
+    await page.getByRole('radio', { name: 'Cloud' }).click()
     const searchBox = page.getByRole('combobox', { name: 'Search pages' })
     await searchBox.fill('Alpha Note')
     await expect(page.getByRole('option', { name: /Alpha Note/ })).toBeVisible()

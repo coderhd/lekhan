@@ -1,6 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { Banner } from '@astryxdesign/core/Banner'
+import { CheckboxInput } from '@astryxdesign/core/CheckboxInput'
+import { Selector } from '@astryxdesign/core/Selector'
+import { VStack } from '@astryxdesign/core/Stack'
 import { useTranslations } from '@/lib/i18n/client'
 import { editorFonts, editorPreferenceKey, editorSpacing, editorThemes, parseEditorPreferences, type EditorPreferences } from '@/lib/editor-preferences'
 
@@ -52,24 +56,40 @@ export function AppearanceSettings() {
     } catch { setFailed(true) }
   }
 
-  return <div className="settings-fields">
-    <label>{t('theme')}
-      <select value={value.theme} onChange={event => change({ theme: event.target.value as EditorPreferences['theme'] })}>
-        {editorThemes.map(theme => <option key={theme} value={theme}>{t('theme_' + theme)}</option>)}
-      </select>
-    </label>
-    <label>{t('editorFont')}
-      <select value={value.font} onChange={event => change({ font: event.target.value as EditorPreferences['font'] })}>
-        {editorFonts.map(font => <option key={font} value={font}>{t('font_' + font)}</option>)}
-      </select>
-    </label>
-    <label>{t('lineSpacing')}
-      <select value={value.spacing} onChange={event => change({ spacing: event.target.value as EditorPreferences['spacing'] })}>
-        {editorSpacing.map(spacing => <option key={spacing} value={spacing}>{t('spacing_' + spacing)}</option>)}
-      </select>
-    </label>
-    <label className="settings-check"><input type="checkbox" checked={value.spellcheck}
-      onChange={event => change({ spellcheck: event.target.checked })} /> {t('spellcheck')}</label>
-    {failed && <p role="alert">{t('appearanceSaveFailed')}</p>}
-  </div>
+  return (
+    <VStack gap={3} className="settings-fields">
+      <Selector
+        label={t('theme')}
+        value={value.theme}
+        width="100%"
+        options={editorThemes.map(theme => ({ value: theme, label: t('theme_' + theme) }))}
+        onChange={next => change({ theme: next as EditorPreferences['theme'] })}
+      />
+      <Selector
+        label={t('editorFont')}
+        value={value.font}
+        width="100%"
+        options={editorFonts.map(font => ({ value: font, label: t('font_' + font) }))}
+        onChange={next => change({ font: next as EditorPreferences['font'] })}
+      />
+      <Selector
+        label={t('lineSpacing')}
+        value={value.spacing}
+        width="100%"
+        options={editorSpacing.map(spacing => ({ value: spacing, label: t('spacing_' + spacing) }))}
+        onChange={next => change({ spacing: next as EditorPreferences['spacing'] })}
+      />
+      <CheckboxInput
+        label={t('spellcheck')}
+        value={value.spellcheck}
+        size="sm"
+        onChange={checked => change({ spellcheck: checked })}
+      />
+      {failed && (
+        <div role="alert">
+          <Banner status="error" collapsible={false} title={t('appearanceSaveFailed')} />
+        </div>
+      )}
+    </VStack>
+  )
 }

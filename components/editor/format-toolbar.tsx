@@ -1,6 +1,13 @@
+'use client'
+
 import type { ReactNode } from 'react'
 import { type Editor, useEditorState } from '@tiptap/react'
 import { Bold, Code2, Italic, Link2, Plus, Strikethrough } from 'lucide-react'
+import { Button } from '@astryxdesign/core/Button'
+import { Divider } from '@astryxdesign/core/Divider'
+import { IconButton } from '@astryxdesign/core/IconButton'
+import { HStack } from '@astryxdesign/core/Stack'
+import { ToggleButton } from '@astryxdesign/core/ToggleButton'
 import { useTranslations } from '@/lib/i18n/client'
 
 interface FormatToolbarProps {
@@ -33,50 +40,48 @@ export function FormatToolbar({ editor, openBlocks, openPageLinks, openMenu, men
   ] as const
 
   return (
-    <div className="writer-toolbar" role="group" aria-label={t('formatting')}>
-      <button
+    <HStack gap={1} align="center" wrap="wrap" className="writer-toolbar" role="group" aria-label={t('formatting')}>
+      <Button
         type="button"
-        className="writer-icon-button writer-add-block"
-        aria-label={t('addBlock')}
+        variant="ghost"
+        size="sm"
+        icon={<Plus size={16} aria-hidden="true" />}
+        label={t('addBlock')}
+        tooltip={t('addBlockShortcut')}
         aria-expanded={openMenu === 'block'}
         aria-controls={openMenu === 'block' ? menuId : undefined}
-        title={t('addBlockShortcut')}
-        onMouseDown={(event) => event.preventDefault()}
+        onMouseDown={event => event.preventDefault()}
         onClick={openBlocks}
-      >
-        <Plus size={17} aria-hidden="true" />
-        <span>{t('addBlock')}</span>
-      </button>
-      <span className="writer-toolbar-divider" aria-hidden="true" />
+      />
+      <Divider orientation="vertical" />
       {formats.map(({ key, icon: Icon, active, apply }) => (
-        <button
+        <ToggleButton
           key={key}
-          type="button"
-          className="writer-icon-button"
-          aria-label={t(key)}
-          aria-pressed={active}
-          title={t(key)}
-          onMouseDown={(event) => event.preventDefault()}
+          label={t(key)}
+          tooltip={t(key)}
+          isIconOnly
+          size="sm"
+          isPressed={active}
+          icon={<Icon size={16} aria-hidden="true" />}
+          onMouseDown={event => event.preventDefault()}
           onClick={apply}
-        >
-          <Icon size={16} aria-hidden="true" />
-        </button>
+        />
       ))}
-      <span className="writer-toolbar-divider" aria-hidden="true" />
-      <button
+      <Divider orientation="vertical" />
+      <IconButton
         type="button"
-        className="writer-icon-button"
-        aria-label={t('insertPageLink')}
+        variant="ghost"
+        size="sm"
+        label={t('insertPageLink')}
+        tooltip={t('insertPageLinkShortcut')}
         aria-expanded={openMenu === 'page'}
         aria-controls={openMenu === 'page' ? menuId : undefined}
-        title={t('insertPageLinkShortcut')}
-        disabled={!marks.canLink}
-        onMouseDown={(event) => event.preventDefault()}
+        isDisabled={!marks.canLink}
+        icon={<Link2 size={17} aria-hidden="true" />}
+        onMouseDown={event => event.preventDefault()}
         onClick={openPageLinks}
-      >
-        <Link2 size={17} aria-hidden="true" />
-      </button>
+      />
       {children}
-    </div>
+    </HStack>
   )
 }

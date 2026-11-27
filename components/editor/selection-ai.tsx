@@ -1,8 +1,12 @@
+'use client'
+
 import { type ComponentProps, useState } from 'react'
 import { TextSelection } from '@tiptap/pm/state'
 import type { Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import { AlignLeft, Languages, PenLine, Sparkles, SpellCheck } from 'lucide-react'
+import { Button } from '@astryxdesign/core/Button'
+import { HStack } from '@astryxdesign/core/Stack'
 import { useTranslations } from '@/lib/i18n/client'
 import { type EditorAction, maxEditorActionChars, replaceSourceRange, selectedSourceRange } from '@/lib/ai/editor-actions'
 import AssistantDialog, { type LocalAssistantModel } from '../assistant-dialog'
@@ -20,12 +24,23 @@ const actions = [
 
 function SelectionActions({ start }: { start: (action: EditorAction) => void }) {
   const t = useTranslations('editor-ai')
-  return <div className="selection-ai-actions" role="group" aria-label={t('actions')}>
-    {actions.map(([action, Icon]) => <button className="writer-icon-button" key={action} type="button"
-      title={t(action)} onMouseDown={event => event.preventDefault()} onClick={() => start(action)}>
-      <Icon size={15} aria-hidden="true" /> <span>{t(action)}</span>
-    </button>)}
-  </div>
+  return (
+    <HStack gap={1} wrap="wrap" className="selection-ai-actions" role="group" aria-label={t('actions')}>
+      {actions.map(([action, Icon]) => (
+        <Button
+          key={action}
+          type="button"
+          variant="ghost"
+          size="sm"
+          icon={<Icon size={15} aria-hidden="true" />}
+          label={t(action)}
+          tooltip={t(action)}
+          onMouseDown={event => event.preventDefault()}
+          onClick={() => start(action)}
+        />
+      ))}
+    </HStack>
+  )
 }
 
 function supportsSelection(editor: Editor) {
@@ -47,7 +62,6 @@ export function RichSelectionAI({ editor, assistant, formattingMenuOpen }: {
     setRequest({ action, selection: {
       text: doc.textBetween(from, to, '\n'),
       apply(result, append) {
-        // Keep delayed replies and remote edits from replacing changed content.
         if (editor.isDestroyed || !editor.isEditable) return false
         const tr = suggestionTransaction(editor.state, { doc, from, to }, result, append)
         if (!tr) return false

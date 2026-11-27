@@ -56,6 +56,14 @@ describe('page hierarchy', () => {
       ...existing, pages: [outside], activePageId: 'c',
     })
   })
+
+  it('skips folder containers when choosing the next active page after deletion', () => {
+    const folder: Page = { ...page('folder', 'Vault'), folder: true }
+    const child = page('child', 'Note', 'folder', 'Body')
+    const other = page('other', 'Other', null, 'Elsewhere')
+    expect(deletePage({ revision: 0, pages: [folder, child, other], activePageId: 'child' }, 'child').activePageId).toBe('other')
+    expect(deletePage({ revision: 0, pages: [folder, child], activePageId: 'child' }, 'child').activePageId).toBeNull()
+  })
 })
 
 describe('page links', () => {

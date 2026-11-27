@@ -12,6 +12,13 @@ export function workspaceTransferPath(token: string | undefined | null) {
   return token && /^[\w-]{43}$/.test(token) ? '/billing/transfer/' + token : null
 }
 
+export function billingNextPath(value: string | undefined | null) {
+  if (!value || value.length > 256) return null
+  if (value === '/billing') return '/billing'
+  if (!value.startsWith('/billing?')) return null
+  return /^\/billing\?[a-zA-Z0-9_=&%-]+$/.test(value) ? value : null
+}
+
 export function referralCode(input: unknown) {
   const value = typeof input === 'string' ? input.trim() : ''
   return /^[a-zA-Z0-9_-]{1,100}$/.test(value) ? value : undefined

@@ -3,16 +3,17 @@ import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { authConfig, docsOrigin, siteOrigin } from '@/lib/auth/config'
 import { googleOAuthEnabled } from '@/lib/auth/google-oauth'
-import { invitationPath, referralCode, workspaceTransferPath, type AuthMode } from '@/lib/auth/input'
+import { billingNextPath, invitationPath, referralCode, workspaceTransferPath, type AuthMode } from '@/lib/auth/input'
 import { AccountForm } from './account-form'
 import LocaleSwitcher from './locale-switcher'
 
-export default async function AccountScreen({ mode, notice, invite, referral, transfer }: {
+export default async function AccountScreen({ mode, notice, invite, referral, transfer, nextTarget }: {
   mode: AuthMode
   notice?: string
   invite?: string
   referral?: string
   transfer?: string
+  nextTarget?: string
 }) {
   const [t, marketing] = await Promise.all([getTranslations('auth'), getTranslations('marketing')])
   const titles = { login: 'login', signup: 'signup', forgot: 'forgot', reset: 'reset' } as const
@@ -20,9 +21,11 @@ export default async function AccountScreen({ mode, notice, invite, referral, tr
   const docs = docsOrigin()
   const token = invitationPath(invite) ? invite : undefined
   const ref = referralCode(referral)
+  const billingNext = billingNextPath(nextTarget)
   const query = new URLSearchParams()
   if (token) query.set('invite', token)
   if (ref) query.set('ref', ref)
+  if (billingNext) query.set('next', billingNext)
   const next = query.size ? '?' + query : ''
   return (
     <main className="account-screen account-screen-auth">
@@ -53,7 +56,7 @@ export default async function AccountScreen({ mode, notice, invite, referral, tr
             {notice === 'confirm' && <p className="account-error" role="alert">{t('confirmError')}</p>}
             {notice === 'signout' && <p className="account-error" role="alert">{t('signoutError')}</p>}
             {notice === 'google' && <p className="account-error" role="alert">{t('googleError')}</p>}
-            {ready ? <AccountForm mode={mode} invite={token} referral={ref}
+            {ready ? <AccountForm mode={mode} invite={token} referral={ref} nextTarget={billingNext ?? undefined}
               google={googleOAuthEnabled() && !!siteOrigin() && !ref && (mode === 'login' || mode === 'signup')}
               transfer={workspaceTransferPath(transfer) ? transfer : undefined} /> : <p className="account-unavailable" role="status">{t('unavailable')}</p>}
             <div className="account-links">

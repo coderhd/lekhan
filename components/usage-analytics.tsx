@@ -4,10 +4,11 @@ import { useEffect, useSyncExternalStore } from 'react'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from '@/lib/i18n/client'
 import {
-  analyticsAllowed, consumeAnalyticsReceipts, disableUsageAnalytics,
-  refreshOnlineTierGates, syncAnalyticsConsent, trackMarketingPage,
+  analyticsAllowed, analyticsConsentState, consumeAnalyticsReceipts, disableUsageAnalytics,
+  refreshOnlineTierGates, setAnalyticsConsent, syncAnalyticsConsent, trackMarketingPage,
 } from '@/lib/analytics'
-import { analyticsConfigured, analyticsPreference } from '@/lib/analytics-settings'
+import { CheckboxInput } from '@astryxdesign/core/CheckboxInput'
+import { analyticsPreference } from '@/lib/analytics-settings'
 
 function subscribe(check: () => void) {
   window.addEventListener('storage', check)
@@ -20,6 +21,10 @@ function subscribe(check: () => void) {
 
 export function useAnalyticsConsent() {
   return useSyncExternalStore(subscribe, analyticsAllowed, () => false)
+}
+
+export function useAnalyticsConsentChoice() {
+  return useSyncExternalStore<'granted' | 'denied' | null>(subscribe, analyticsConsentState, () => 'denied')
 }
 
 export function UsageAnalyticsObserver() {
@@ -49,18 +54,17 @@ export function UsageAnalyticsReceipts() {
   return null
 }
 
-export function UsageAnalyticsControl({ early = false }: { early?: boolean }) {
+export function UsageAnalyticsControl() {
   const t = useTranslations('early-access')
-  const consent = useAnalyticsConsent()
-  if (!analyticsConfigured) return null
-  return <label className={early ? 'analytics-control early-analytics' : 'analytics-control'}>
-    <input type="checkbox" checked={consent} onChange={event => {
-      try {
-        localStorage.setItem(analyticsPreference, event.target.checked ? 'granted' : 'denied')
-      } catch { return }
-      syncAnalyticsConsent(event.target.checked)
-      if (!event.target.checked) disableUsageAnalytics()
-      window.dispatchEvent(new Event(analyticsPreference))
-    }} /> {t('analytics')}
-  </label>
+  const choice = useAnalyticsConsentChoice()
+  return (
+    <CheckboxInput
+      label={t('analytics')}
+      value={choice === 'granted'}
+      onChange={checked => {
+        setAnalyticsConsent(checked)
+      }}
+      size="sm"
+    />
+  )
 }

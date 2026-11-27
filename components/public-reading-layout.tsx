@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react'
 import { Moon, Sun } from 'lucide-react'
+import { IconButton } from '@astryxdesign/core/IconButton'
 import { useTranslations } from '@/lib/i18n/client'
 
 export default function PublicReadingLayout({ children }: { children: ReactNode }) {
@@ -10,18 +11,30 @@ export default function PublicReadingLayout({ children }: { children: ReactNode 
 
   function toggleTheme() {
     const dark = theme === 'dark' || (!theme && matchMedia('(prefers-color-scheme: dark)').matches)
-    const next = dark ? 'light' : 'dark'
-    setTheme(next)
+    setTheme(dark ? 'light' : 'dark')
   }
 
-  return <main className="public-reading" data-reading-theme={theme}>
-    <div className="public-reading-inner">
-      <button type="button" className="public-theme icon-button" onClick={toggleTheme}
-        aria-label={t('theme')} aria-pressed={theme === undefined ? undefined : theme === 'dark'}>
-        <Moon className="public-theme-moon" size={19} aria-hidden="true" />
-        <Sun className="public-theme-sun" size={19} aria-hidden="true" />
-      </button>
-      {children}
-    </div>
-  </main>
+  return (
+    <main className="public-reading" data-reading-theme={theme}>
+      <div className="public-reading-inner">
+        <IconButton
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="public-theme"
+          label={t('theme')}
+          tooltip={t('theme')}
+          aria-pressed={theme === undefined ? undefined : theme === 'dark'}
+          onClick={toggleTheme}
+          icon={
+            <>
+              <Moon className="public-theme-moon" size={19} aria-hidden="true" />
+              <Sun className="public-theme-sun" size={19} aria-hidden="true" />
+            </>
+          }
+        />
+        {children}
+      </div>
+    </main>
+  )
 }

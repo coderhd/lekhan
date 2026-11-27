@@ -1,15 +1,32 @@
 'use client'
 
 import {
-  ArrowDownToLine, ArrowUpFromLine, BookOpen, CalendarDays, Check, ChevronDown,
-  ChevronRight, CircleAlert, FileText, FolderClosed, Keyboard, List, LoaderCircle, Menu, MoreHorizontal,
-  Cloud, PanelRight, Plus, Search, Star, X, Link2, MoveRight, Trash2, Pencil, CornerDownRight, NotebookPen, Sparkles, Paperclip,
+  ArrowDownToLine, ArrowUpFromLine, BookOpen, CalendarDays, Check, ChevronRight, ChevronsUpDown,
+  CircleAlert, FileText, FolderClosed, Keyboard, List, LoaderCircle, Menu, MoreHorizontal,
+  Cloud, PanelRight, Plus, Search, SlidersHorizontal, Star, X, Link2, MoveRight, Trash2, Pencil, CornerDownRight, NotebookPen, Sparkles, Paperclip,
 } from 'lucide-react'
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
-import type { ChangeEvent, FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react'
+import type { ChangeEvent, FormEvent, ReactNode } from 'react'
+import { AlertDialog } from '@astryxdesign/core/AlertDialog'
+import { Badge } from '@astryxdesign/core/Badge'
+import { Banner } from '@astryxdesign/core/Banner'
+import { Breadcrumbs, BreadcrumbItem } from '@astryxdesign/core/Breadcrumbs'
+import { Button } from '@astryxdesign/core/Button'
+import { Dialog as AstryxDialog, DialogHeader } from '@astryxdesign/core/Dialog'
+import { DropdownMenu, type DropdownMenuOption } from '@astryxdesign/core/DropdownMenu'
+import { EmptyState } from '@astryxdesign/core/EmptyState'
+import { IconButton } from '@astryxdesign/core/IconButton'
+import { Item } from '@astryxdesign/core/Item'
+import { Kbd } from '@astryxdesign/core/Kbd'
+import { Layout, LayoutContent, LayoutFooter } from '@astryxdesign/core/Layout'
+import { Popover } from '@astryxdesign/core/Popover'
+import { Selector } from '@astryxdesign/core/Selector'
+import { HStack, VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
+import { TreeList, type TreeListItemData } from '@astryxdesign/core/TreeList'
 import type { Page } from '@/lib/types'
 import {
-  applyVaultImport, createPage, deletePage, getBacklinks, notebookNavigation, pageChoices, pageHeadings,
+  applyVaultImport, createPage, deletePage, getBacklinks, isFolderPage, notebookNavigation, pageChoices, pageHeadings,
   pagePath, resolvePage, updatePage, type PageLocation,
 } from '@/lib/workspace'
 import { pageTags, workspaceSearch } from '@/lib/workspace-search'
@@ -19,7 +36,7 @@ import { useWorkspace } from '@/lib/use-workspace'
 import { workspaceShortcut } from '@/lib/workspace-shortcuts'
 import type { SaveStatus } from '@/lib/use-workspace'
 import type { WorkspaceStorage } from '@/lib/storage'
-import { Dialog, SearchDialog } from './workspace-dialogs'
+import { SearchDialog } from './workspace-dialogs'
 import WorkspaceShortcutHelp from './workspace-shortcut-help'
 import { useLocale, useTranslations } from '@/lib/i18n/client'
 import AssistantDialog, { type LocalAssistantModel } from './assistant-dialog'
@@ -50,30 +67,20 @@ function scrollToHeading(target: HTMLElement) {
   target.scrollIntoView({ block: 'start' })
 }
 
-function navigatePageRows(event: ReactKeyboardEvent<HTMLElement>) {
-  if (event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return
-  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
-  const rows = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('.page-row-link'))
-  const current = rows.findIndex(row => row === event.target)
-  if (current < 0) return
-  event.preventDefault()
-  if (event.key === 'Home') rows[0]?.focus()
-  else if (event.key === 'End') rows.at(-1)?.focus()
-  else rows[current + (event.key === 'ArrowDown' ? 1 : -1)]?.focus()
-}
-
-function restoreListFocus(button: HTMLButtonElement, list: Element | null, rows: string, firstNewRow: number) {
+function restoreListFocus(button: HTMLElement, list: Element | null, rows: string, firstNewRow: number) {
   requestAnimationFrame(() => {
     if (document.activeElement === button || !button.isConnected && document.activeElement === document.body) {
-      list?.querySelectorAll<HTMLButtonElement>(rows)[firstNewRow]?.focus()
+      list?.querySelectorAll<HTMLElement>(rows)[firstNewRow]?.focus()
     }
   })
 }
 
 export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled = false, automaticMirror = false,
-  sidebarControls, openCloudPage, storage, workspaceName, pageAttachments, localModel, localModels, providerTransport, cloudSearchSubject }: {
+  sidebarControls, sidebarNotice, openCloudPage, storage, workspaceName, pageAttachments, localModel, localModels, providerTransport, cloudSearchSubject }: {
   storageScope?: string; mirrorEnabled?: boolean; automaticMirror?: boolean
-  sidebarControls?: ReactNode | ((canSwitch: boolean) => ReactNode); openCloudPage?: (id: string) => void
+  sidebarControls?: ReactNode | ((canSwitch: boolean) => ReactNode)
+  sidebarNotice?: ReactNode | ((canSwitch: boolean) => ReactNode)
+  openCloudPage?: (id: string) => void
   storage?: WorkspaceStorage; workspaceName?: string
   pageAttachments?: (page: Page, insert: ((markdown: string) => void) | undefined) => ReactNode
   localModel?: LocalAssistantModel
@@ -98,11 +105,14 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
   const [searchQuery, setSearchQuery] = useState('')
   const [navigationOpen, setNavigationOpen] = useState(false)
   const [sidebarHidden, setSidebarHidden] = useState(false)
+  const [optionsOpen, setOptionsOpen] = useState(false)
   const [contextOpen, setContextOpen] = useState(true)
   const [mobileContext, setMobileContext] = useState(false)
   const [collapsed, setCollapsed] = useState<string[]>([])
+  const [treeSyncKey, setTreeSyncKey] = useState(0)
   const [favoriteLimit, setFavoriteLimit] = useState(navigationBatch)
   const [action, setAction] = useState<PageAction | null>(null)
+  const [moveTarget, setMoveTarget] = useState('')
   const [focusTitle, setFocusTitle] = useState<string | null>(null)
   const [notice, setNotice] = useState('')
   const [titleFocusRequest, setTitleFocusRequest] = useState(0)
@@ -113,7 +123,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
   const mirrorRequest = useRef<AbortController | null>(null)
   const importInput = useRef<HTMLInputElement>(null)
   const titleInput = useRef<HTMLTextAreaElement>(null)
-  const pageMenu = useRef<HTMLDetailsElement>(null)
+  const optionsTrigger = useRef<HTMLButtonElement>(null)
   const anchorToOpen = useRef<string | null>(null)
   const navigationToggle = useRef<HTMLButtonElement>(null)
   const contextToggle = useRef<HTMLButtonElement>(null)
@@ -123,7 +133,8 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
   const pageHistory = useRef<{ ids: string[]; position: number }>({ ids: [], position: -1 })
 
   const pages = workspace?.pages ?? emptyPages
-  const page = pages.find(item => item.id === workspace?.activePageId) ?? pages[0]
+  const page = pages.find(item => item.id === workspace?.activePageId && !isFolderPage(item))
+    ?? pages.find(item => !isFolderPage(item))
   const deferredPage = useDeferredValue(page)
   const mirror = page?.cloudMirror
   const localReadOnly = !!mirror || syncingPage === page?.id
@@ -132,37 +143,29 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
   const trail = useMemo(() => pageId ? path(pageId) : emptyTrail, [path, pageId])
   const links = useMemo(() => page ? getBacklinks(pages, page.id) : [], [pages, page])
   const headings = useMemo(() => deferredPage ? pageHeadings(deferredPage.markdown) : [], [deferredPage])
-  const choices = useMemo(() => pageChoices(pages), [pages])
+  const choices = useMemo(() => {
+    const folders = new Set(pages.filter(isFolderPage).map(item => item.id))
+    return pageChoices(pages).filter(choice => !folders.has(choice.id))
+  }, [pages])
   const tags = useMemo(() => deferredPage ? pageTags(deferredPage) : [], [deferredPage])
   const activePath = useMemo(() => new Map(trail.map(note => [note.parentId, note.id])), [trail])
   const editorAssistant = useMemo(() => ({ storageScope, localModel, localModels, transport: providerTransport }),
     [storageScope, localModel, localModels, providerTransport])
-  const toggleBranch = useCallback((id: string) => {
-    setCollapsed(previous => previous.includes(id) ? previous.filter(item => item !== id) : [...previous, id])
-  }, [])
 
   useEffect(() => () => mirrorRequest.current?.abort(), [])
 
   useEffect(() => {
     if (!pages.length) return
     const timer = setTimeout(() => { workspaceSearch(pages) }, 650)
-    return () => clearTimeout(timer)
+  return () => clearTimeout(timer)
   }, [pages])
 
   useEffect(() => {
     if (titleFocusRequest) titleInput.current?.focus()
   }, [titleFocusRequest])
 
-  useEffect(() => {
-    function closeOnOutside(event: PointerEvent) {
-      const menu = pageMenu.current
-      if (menu?.open && event.target instanceof Node && !menu.contains(event.target)) menu.open = false
-    }
-    document.addEventListener('pointerdown', closeOnOutside)
-    return () => document.removeEventListener('pointerdown', closeOnOutside)
-  }, [])
-
   const open = useCallback((id: string) => {
+    if (isFolderPage(pages.find(item => item.id === id))) return
     change(state => state.activePageId === id ? state : { ...state, activePageId: id })
     setFocusTitle(null)
     setSearchOpen(false)
@@ -170,8 +173,8 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
     setSearchQuery('')
     setNavigationOpen(false)
     setMobileContext(false)
-    if (pageMenu.current) pageMenu.current.open = false
-  }, [change])
+    setOptionsOpen(false)
+  }, [change, pages])
 
   const add = useCallback((parentId: string | null = null, title?: string, markdown?: string) => {
     let createdId: string | null = null
@@ -180,9 +183,13 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
       createdId = next.activePageId
       return next
     }, () => trackMilestone('page_created'))
-    if (parentId) setCollapsed(previous => previous.filter(id => id !== parentId))
+    if (parentId) {
+      setCollapsed(previous => previous.filter(id => id !== parentId))
+      setTreeSyncKey(key => key + 1)
+    }
     setFocusTitle(createdId)
     setNavigationOpen(false)
+    setOptionsOpen(false)
     setSearchOpen(false)
     setSearchQuery('')
     setAction(null)
@@ -219,10 +226,6 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
         if (mobileContext) requestAnimationFrame(() => contextToggle.current?.focus())
         setNavigationOpen(false)
         setMobileContext(false)
-        if (pageMenu.current?.open) {
-          pageMenu.current.open = false
-          pageMenu.current.querySelector('summary')?.focus()
-        }
       }
       const command = workspaceShortcut(event)
       if (!command) return
@@ -273,7 +276,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
       }
     }
     window.addEventListener('keydown', shortcuts)
-    return () => window.removeEventListener('keydown', shortcuts)
+  return () => window.removeEventListener('keydown', shortcuts)
   }, [add, workspace, page, pages, open, navigationOpen, mobileContext, searchOpen, switcherOpen, shortcutsOpen, syncingPage, toggleNavigation])
 
   function openToday() {
@@ -323,6 +326,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
       return parentId ? { ...next, activePageId: parentId } : next
     }, () => { if (created) trackMilestone('page_created') })
     setCollapsed([])
+    setTreeSyncKey(key => key + 1)
     setFocusTitle(newId)
     setAction(null)
   }
@@ -362,6 +366,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
       if (report && !report.repeated) track('import_completed', 'obsidian', report.notes)
     })
     setCollapsed([])
+    setTreeSyncKey(key => key + 1)
     return report
   }
 
@@ -372,11 +377,6 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
     } catch {
       setNotice(t('exportFailed'))
     }
-  }
-
-  function withMenuClosed(run: () => void) {
-    if (pageMenu.current) pageMenu.current.open = false
-    run()
   }
 
   function mirrorError(failure: unknown) {
@@ -450,7 +450,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
     schedule()
     window.addEventListener('online', reconnect)
     document.addEventListener('focusout', schedule)
-    return () => {
+  return () => {
       clearTimeout(timer)
       window.removeEventListener('online', reconnect)
       document.removeEventListener('focusout', schedule)
@@ -501,7 +501,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
       if (!event.matches) setNavigationOpen(false)
     }
     layout.addEventListener('change', closeMobileNavigation)
-    return () => layout.removeEventListener('change', closeMobileNavigation)
+  return () => layout.removeEventListener('change', closeMobileNavigation)
   }, [])
 
   useEffect(() => {
@@ -525,7 +525,7 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
     if (findAnchor()) return
     const observer = new MutationObserver(() => { if (findAnchor()) observer.disconnect() })
     observer.observe(container, { childList: true, subtree: true })
-    return () => observer.disconnect()
+  return () => observer.disconnect()
   }, [page?.id])
 
   const actionPage = action && 'id' in action ? pages.find(item => item.id === action.id) : undefined
@@ -539,86 +539,274 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
     [deferredPage],
   )
 
+  const pageMenuItems = useMemo<DropdownMenuOption[]>(() => {
+    if (!page) return []
+    return [
+      ...(!localReadOnly ? [{
+        id: 'rename',
+        icon: <Pencil size={16} aria-hidden="true" />,
+        label: t('renamePage'),
+        onClick: () => setTitleFocusRequest(value => value + 1),
+      }] : []),
+      ...(mirrorEnabled && !mirror ? [{
+        id: 'mirror',
+        icon: <Cloud size={16} aria-hidden="true" />,
+        label: t('mirrorPage'),
+        isDisabled: !!syncingPage || status === 'error' || status === 'conflict',
+        onClick: () => setAction({ kind: 'mirror', id: page.id }),
+      }] : []),
+      {
+        id: 'subpage',
+        icon: <CornerDownRight size={16} aria-hidden="true" />,
+        label: t('newSubpage'),
+        onClick: () => add(page.id),
+      },
+      {
+        id: 'move',
+        icon: <MoveRight size={16} aria-hidden="true" />,
+        label: t('movePage'),
+        onClick: () => {
+          setMoveTarget(page.parentId ?? '')
+          setAction({ kind: 'move', id: page.id })
+        },
+      },
+      {
+        id: 'export',
+        icon: <ArrowDownToLine size={16} aria-hidden="true" />,
+        label: mirror?.state === 'linked' ? t('mirrorExportSnapshot') : t('exportMarkdown'),
+        onClick: () => downloadPage(page),
+      },
+      ...(mirror?.state !== 'pending' && syncingPage !== page.id ? [
+        { type: 'divider' as const },
+        {
+          id: 'delete',
+          icon: <Trash2 size={16} aria-hidden="true" />,
+          label: t('deletePage'),
+          variant: 'destructive' as const,
+          onClick: () => setAction({ kind: 'delete', id: page.id }),
+        },
+      ] : []),
+    ]
+  }, [add, localReadOnly, mirror, mirrorEnabled, page, status, syncingPage, t])
+
   return (
     <div className="workspace" data-context={contextOpen ? 'open' : 'closed'} data-navigation={sidebarHidden ? 'hidden' : undefined}>
-      {navigationOpen && <button className="pane-scrim nav-scrim" aria-label={t('closeNavigation')} onClick={() => setNavigationOpen(false)} />}
+      {navigationOpen && <button type="button" className="pane-scrim nav-scrim" aria-label={t('closeNavigation')} onClick={() => setNavigationOpen(false)} />}
       <aside className={`sidebar ${navigationOpen ? 'pane-open' : ''}`} aria-label={t('workspaceNavigation')} inert={mobileContext}>
         <div className="identity">
           <span className="brand-mark" aria-hidden="true">L</span>
           <div><span className="brand-name">Lekhan</span><span className="workspace-name" title={workspaceName}>{workspaceName ?? t('personalWorkspace')}</span></div>
-          <button className="icon-button close-sidebar" ref={navClose} aria-label={t('closeNavigation')} onClick={() => { setNavigationOpen(false); requestAnimationFrame(() => navigationToggle.current?.focus()) }}>
-            <X size={18} />
-          </button>
+          <IconButton
+            ref={navClose}
+            className="close-sidebar"
+            variant="ghost"
+            size="sm"
+            label={t('closeNavigation')}
+            icon={<X size={18} />}
+            onClick={() => { setNavigationOpen(false); requestAnimationFrame(() => navigationToggle.current?.focus()) }}
+          />
         </div>
-        <div className="sidebar-actions">
-          <button className="search-trigger" ref={searchTrigger} onClick={() => setSearchOpen(true)} aria-keyshortcuts="Meta+K Control+K">
-            <Search size={17} /><span>{t('findPage')}</span><kbd>⌘ K</kbd>
-          </button>
-          <button className="nav-action" onClick={openToday} disabled={!workspace}>
-            <CalendarDays size={17} /><span>{t('today')}</span>
-          </button>
-        </div>
-        <nav className="page-nav" aria-label={t('pages')} onKeyDown={navigatePageRows}>
+        <VStack gap={1.5} className="sidebar-actions">
+          <Button
+            ref={searchTrigger}
+            type="button"
+            variant="secondary"
+            size="sm"
+            width="100%"
+            icon={<Search size={16} aria-hidden="true" />}
+            endContent={<Kbd keys="mod+k" />}
+            label={t('findPage')}
+            aria-keyshortcuts="Meta+K Control+K"
+            onClick={() => setSearchOpen(true)}
+          />
+          <Item
+            density="compact"
+            startContent={<CalendarDays size={16} aria-hidden="true" />}
+            label={t('today')}
+            isDisabled={!workspace}
+            onClick={openToday}
+          />
+        </VStack>
+        <nav className="page-nav" aria-label={t('pages')}>
           {favorites.length > 0 && (
             <section className="nav-section" aria-label={t('favorites')}>
-              <div className="nav-heading"><span>{t('favorites')}</span></div>
+              <div className="nav-heading"><Text type="supporting" weight="semibold">{t('favorites')}</Text></div>
               {favorites.slice(0, favoriteLimit).map(item => (
-                <button key={item.id} className="favorite-row" onClick={() => open(item.id)}>
-                  <Star size={14} aria-hidden="true" /><span>{item.title}</span>
-                </button>
+                <Item
+                  key={item.id}
+                  density="compact"
+                  startContent={<Star size={14} aria-hidden="true" />}
+                  label={item.title}
+                  labelLines={1}
+                  isSelected={page?.id === item.id}
+                  onClick={() => open(item.id)}
+                />
               ))}
-              {favorites.length > favoriteLimit && <button className="notebook-list-more" type="button"
-                onClick={({ currentTarget }) => {
-                  setFavoriteLimit(limit => limit + navigationBatch)
-                  restoreListFocus(currentTarget, currentTarget.parentElement, '.favorite-row', favoriteLimit)
-                }}>{t('showMoreFavorites')}</button>}
+              {favorites.length > favoriteLimit && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  label={t('showMoreFavorites')}
+                  onClick={({ currentTarget }) => {
+                    setFavoriteLimit(limit => limit + navigationBatch)
+                    restoreListFocus(currentTarget, currentTarget.parentElement, '[role="button"], button', favoriteLimit)
+                  }}
+                />
+              )}
             </section>
           )}
           <section className="nav-section" aria-label={t('allPages')}>
             <div className="nav-heading">
-              <span>{t('pages')}</span>
-              <button className="icon-button small-icon" aria-label={t('addTopLevelPage')} title={t('addTopLevelPage')} disabled={!workspace} onClick={() => add()}><Plus size={16} /></button>
+              <Text type="supporting" weight="semibold">{t('pages')}</Text>
+              <IconButton
+                variant="ghost"
+                size="sm"
+                label={t('addTopLevelPage')}
+                tooltip={t('addTopLevelPage')}
+                isDisabled={!workspace}
+                icon={<Plus size={16} />}
+                onClick={() => add()}
+              />
             </div>
-            <PageTree
-              parentId={null}
+            <WorkspaceTree
+              treeSyncKey={treeSyncKey}
               childPages={childPages}
               activePath={activePath}
               currentId={page?.id}
               collapsed={collapsed}
               onOpen={open}
-              onToggle={toggleBranch}
+              onAddInFolder={parentId => add(parentId)}
             />
-            {workspace && pages.length === 0 && <p className="nav-empty">{t('pagesEmpty')}</p>}
+            {workspace && pages.length === 0 && <Text type="supporting" color="secondary" className="nav-empty">{t('pagesEmpty')}</Text>}
           </section>
         </nav>
-        <div className="sidebar-footer">
-          <button className="new-page-button" disabled={!workspace} onClick={() => add()}><Plus size={18} /> {t('newPage')}</button>
+        <VStack gap={1.5} className="sidebar-footer">
+          <Button
+            type="button"
+            variant="primary"
+            size="md"
+            width="100%"
+            icon={<Plus size={18} aria-hidden="true" />}
+            label={t('newPage')}
+            isDisabled={!workspace}
+            onClick={() => add()}
+          />
           <div className="file-actions">
-            <button className="nav-action" disabled={!workspace} onClick={() => importInput.current?.click()}><ArrowUpFromLine size={15} /> {t('import')}</button>
-            <button className="nav-action" disabled={!pages.length} onClick={exportAll}><ArrowDownToLine size={15} /> {t('export')}</button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              width="100%"
+              icon={<ArrowUpFromLine size={15} aria-hidden="true" />}
+              label={t('import')}
+              isDisabled={!workspace}
+              onClick={() => importInput.current?.click()}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              width="100%"
+              icon={<ArrowDownToLine size={15} aria-hidden="true" />}
+              label={t('export')}
+              isDisabled={!pages.length}
+              onClick={exportAll}
+            />
           </div>
-          <button className="nav-action vault-launch" disabled={!workspace} onClick={() => {
-            setNavigationOpen(false)
-            setVaultOpen(true)
-          }}><FolderClosed size={15} /> {importText('openVaultImport')}</button>
-          {typeof sidebarControls === 'function' ? sidebarControls(!workspace || status === 'saved') : sidebarControls}
-          <button className="nav-action" type="button" aria-keyshortcuts="Meta+/ Control+/" onClick={() => setShortcutsOpen(true)}>
-            <Keyboard size={16} aria-hidden="true" /> {t('keyboardShortcuts')}
-          </button>
-        </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            width="100%"
+            icon={<FolderClosed size={15} aria-hidden="true" />}
+            label={importText('openVaultImport')}
+            isDisabled={!workspace}
+            onClick={() => {
+              setNavigationOpen(false)
+              setVaultOpen(true)
+            }}
+          />
+          {typeof sidebarNotice === 'function' ? sidebarNotice(!workspace || status === 'saved') : sidebarNotice}
+          <Popover
+            isOpen={optionsOpen}
+            onOpenChange={setOptionsOpen}
+            placement="above"
+            alignment="start"
+            width={260}
+            padding={2}
+            presentation="adaptive"
+            label={t('workspaceMenu')}
+            content={
+              <VStack
+                gap={1}
+                className="sidebar-popover-menu"
+                onClick={event => {
+                  const target = event.target instanceof Element ? event.target.closest('a[href], button, [role="button"]') : null
+                  if (!target || target.matches('[role="combobox"], [role="option"]')) return
+                  requestAnimationFrame(() => setOptionsOpen(false))
+                }}
+              >
+                {typeof sidebarControls === 'function' ? sidebarControls(!workspace || status === 'saved') : sidebarControls}
+                <Item
+                  density="compact"
+                  startContent={<Keyboard size={16} aria-hidden="true" />}
+                  endContent={<Kbd keys="mod+/" />}
+                  label={t('keyboardShortcuts')}
+                  aria-keyshortcuts="Meta+/ Control+/"
+                  onClick={() => setShortcutsOpen(true)}
+                />
+              </VStack>
+            }
+          >
+            <Button
+              ref={optionsTrigger}
+              type="button"
+              variant="secondary"
+              size="sm"
+              width="100%"
+              icon={<SlidersHorizontal size={15} aria-hidden="true" />}
+              endContent={<ChevronsUpDown size={14} className="sidebar-options-chevron" aria-hidden="true" />}
+              label={t('workspaceMenu')}
+            />
+          </Popover>
+        </VStack>
       </aside>
 
       <main className="main-panel" inert={navigationOpen || mobileContext}>
         <header className="topbar">
-          <button className="icon-button open-sidebar" ref={navigationToggle} aria-label={t('openNavigation')} aria-expanded={navigationOpen} onClick={toggleNavigation}><Menu size={21} /></button>
-          <nav className="breadcrumbs" aria-label={t('breadcrumb')}>
-            <BookOpen className="breadcrumb-icon" size={16} aria-hidden="true" />
-            {trail.length === 0 && <span>{t('workspace')}</span>}
-            {trail.map((item, index) => index === trail.length - 1
-              ? <span key={item.id} aria-current="page">{item.title}</span>
-              : <span className="crumb-parent" key={item.id}><button onClick={() => open(item.id)}>{item.title}</button><ChevronRight size={13} /></span>)}
-          </nav>
-          <div className="top-actions">
+          <IconButton
+            ref={navigationToggle}
+            className="open-sidebar"
+            variant="ghost"
+            size="sm"
+            label={t('openNavigation')}
+            aria-expanded={navigationOpen}
+            icon={<Menu size={21} />}
+            onClick={toggleNavigation}
+          />
+          <Breadcrumbs label={t('breadcrumb')} variant="supporting" className="breadcrumbs">
+            {trail.length === 0 ? (
+              <BreadcrumbItem startIcon={<BookOpen size={15} aria-hidden="true" />} isCurrent>
+                {t('workspace')}
+              </BreadcrumbItem>
+            ) : trail.map((item, index) => (
+              <BreadcrumbItem
+                key={item.id}
+                startIcon={index === 0 ? <BookOpen size={15} aria-hidden="true" /> : undefined}
+                isCurrent={index === trail.length - 1}
+                onClick={index === trail.length - 1 ? undefined : isFolderPage(item) ? () => {
+                  setCollapsed(previous => previous.filter(id => id !== item.id))
+                  setTreeSyncKey(key => key + 1)
+                  setSidebarHidden(false)
+                  if (window.matchMedia('(max-width: 680px)').matches) setNavigationOpen(true)
+                } : () => open(item.id)}
+              >
+                {item.title}
+              </BreadcrumbItem>
+            ))}
+          </Breadcrumbs>
+          <HStack gap={1.5} align="center" className="top-actions">
             <span className="save-status" data-status={status} role="status">
               {status === 'saved' ? <Check size={15} /> : status === 'saving' || status === 'loading'
                 ? <LoaderCircle className="spin" size={15} /> : <CircleAlert size={15} />}
@@ -626,45 +814,84 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
             </span>
             {page && (
               <>
-                <button
-                  className="icon-button favorite-button"
-                  aria-label={page.favorite ? t('removeFavorite') : t('addFavorite')}
-                  title={page.favorite ? t('removeFavorite') : t('addFavorite')}
+                <IconButton
+                  variant="ghost"
+                  size="sm"
+                  label={page.favorite ? t('removeFavorite') : t('addFavorite')}
+                  tooltip={page.favorite ? t('removeFavorite') : t('addFavorite')}
                   aria-pressed={page.favorite}
+                  icon={<Star size={18} fill={page.favorite ? 'currentColor' : 'none'} />}
                   onClick={() => change(state => updatePage(state, page.id, { favorite: !page.favorite }))}
-                ><Star size={18} fill={page.favorite ? 'currentColor' : 'none'} /></button>
-                {!localReadOnly && <button className="icon-button" aria-label={aiText('writingAssistant')} title={aiText('writingAssistant')} onClick={() => setAssistantOpen(true)}><Sparkles size={17} /></button>}
-                <details className="page-menu" ref={pageMenu}>
-                  <summary className="icon-button" aria-label={t('pageActions')} title={t('pageActions')}><MoreHorizontal size={21} /></summary>
-                  <div className="page-menu-content">
-                    {!localReadOnly && <button onClick={() => withMenuClosed(() => setTitleFocusRequest(value => value + 1))}><Pencil size={16} /> {t('renamePage')}</button>}
-                    {mirrorEnabled && !mirror && <button disabled={!!syncingPage || status === 'error' || status === 'conflict'}
-                      onClick={() => withMenuClosed(() => setAction({ kind: 'mirror', id: page.id }))}><Cloud size={16} /> {t('mirrorPage')}</button>}
-                    <button onClick={() => withMenuClosed(() => add(page.id))}><CornerDownRight size={16} /> {t('newSubpage')}</button>
-                    <button onClick={() => withMenuClosed(() => setAction({ kind: 'move', id: page.id }))}><MoveRight size={16} /> {t('movePage')}</button>
-                    <button onClick={() => withMenuClosed(() => downloadPage(page))}><ArrowDownToLine size={16} /> {mirror?.state === 'linked' ? t('mirrorExportSnapshot') : t('exportMarkdown')}</button>
-                    {mirror?.state !== 'pending' && syncingPage !== page.id && <button className="destructive-text" onClick={() => withMenuClosed(() => setAction({ kind: 'delete', id: page.id }))}><Trash2 size={16} /> {t('deletePage')}</button>}
-                  </div>
-                </details>
+                />
+                {!localReadOnly && (
+                  <IconButton
+                    variant="ghost"
+                    size="sm"
+                    label={aiText('writingAssistant')}
+                    tooltip={aiText('writingAssistant')}
+                    icon={<Sparkles size={17} />}
+                    onClick={() => setAssistantOpen(true)}
+                  />
+                )}
+                <DropdownMenu
+                  placement="below"
+                  alignment="end"
+                  presentation="adaptive"
+                  renderTrigger={props => (
+                    <IconButton
+                      {...props}
+                      variant="ghost"
+                      size="sm"
+                      label={t('pageActions')}
+                      tooltip={t('pageActions')}
+                      icon={<MoreHorizontal size={20} />}
+                    />
+                  )}
+                  items={pageMenuItems}
+                />
               </>
             )}
-            <button className="icon-button context-trigger" ref={contextToggle} aria-label={t('toggleContext')} title={t('toggleContext')} onClick={toggleContext} disabled={!page}>
-              <PanelRight size={18} />
-            </button>
-          </div>
+            <IconButton
+              ref={contextToggle}
+              className="context-trigger"
+              variant="ghost"
+              size="sm"
+              label={t('toggleContext')}
+              tooltip={t('toggleContext')}
+              isDisabled={!page}
+              icon={<PanelRight size={18} />}
+              onClick={toggleContext}
+            />
+          </HStack>
         </header>
 
         {workspace && (status === 'error' || status === 'conflict') && (
           <div className="save-warning" role="alert">
-            {status === 'conflict' ? storage ? desktopText('externalConflict') : t('saveConflict') : t('saveError')}
-            <button onClick={exportAll} disabled={!pages.length}>{t('exportEdits')}</button>
-            {status === 'error' ? <button onClick={() => void retry()}>{t('retrySave')}</button> : <button onClick={() => setAction({ kind: 'reload' })}>{t('openSavedCopy')}</button>}
+            <Banner
+              status={status === 'error' ? 'error' : 'warning'}
+              container="section"
+              collapsible={false}
+              title={status === 'conflict' ? storage ? desktopText('externalConflict') : t('saveConflict') : t('saveError')}
+              endContent={
+                <HStack gap={2}>
+                  <Button size="sm" variant="secondary" label={t('exportEdits')} isDisabled={!pages.length} onClick={exportAll} />
+                  {status === 'error'
+                    ? <Button size="sm" variant="primary" label={t('retrySave')} onClick={() => void retry()} />
+                    : <Button size="sm" variant="primary" label={t('openSavedCopy')} onClick={() => setAction({ kind: 'reload' })} />}
+                </HStack>
+              }
+            />
           </div>
         )}
         {automaticMirror && !paidSyncEnded && syncFailure && syncFailure.id !== page?.id && (
           <div className="save-warning" role="alert">
-            {mirrorError(syncFailure.failure)}
-            <button onClick={() => setSyncFailure(null)}>{t('mirrorRetryNotebook')}</button>
+            <Banner
+              status="warning"
+              container="section"
+              collapsible={false}
+              title={mirrorError(syncFailure.failure)}
+              endContent={<Button size="sm" variant="secondary" label={t('mirrorRetryNotebook')} onClick={() => setSyncFailure(null)} />}
+            />
           </div>
         )}
 
@@ -704,24 +931,52 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
                   document.querySelector<HTMLElement>('.writer-content')?.focus()
                 }}
               />
-              {syncFailure?.id === page.id && <div className="local-mirror-callout" role="alert">
-                <p>{mirrorError(syncFailure.failure)}</p>
-                {automaticMirror && !paidSyncEnded && !mirror &&
-                  <button type="button" className="secondary-button" onClick={() => setSyncFailure(null)}>{t('mirrorRetryNotebook')}</button>}
-              </div>}
-              {syncingPage === page.id && <p role="status">{t(page.files?.length ? 'mirrorSyncingFiles' : 'mirrorSyncing')}</p>}
-              {mirror?.state === 'pending' && syncingPage !== page.id && <div className="local-mirror-callout">
-                <p>{t('mirrorPending')}</p>
-                <button type="button" className="secondary-button" disabled={!mirrorEnabled || !!syncingPage || status !== 'saved'} onClick={() => void syncLocalPage(page)}>{t('mirrorRetry')}</button>
-              </div>}
-              {mirror?.state === 'linked' ? <div className="local-mirror-callout">
-                <p>{t('mirrorLinked')}</p>
-                <a className="primary-button" href={'/page/' + mirror.pageId} onClick={event => {
-                  if (!openCloudPage || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-                  event.preventDefault()
-                  openCloudPage(mirror.pageId)
-                }}><Cloud size={16} /> {t('mirrorOpen')}</a>
-              </div> : <PageEditor
+              {syncFailure?.id === page.id && (
+                <div role="alert" className="local-mirror-callout">
+                  <Banner
+                    status="warning"
+                    collapsible={false}
+                    title={mirrorError(syncFailure.failure)}
+                    endContent={automaticMirror && !paidSyncEnded && !mirror
+                      ? <Button size="sm" variant="secondary" label={t('mirrorRetryNotebook')} onClick={() => setSyncFailure(null)} />
+                      : undefined}
+                  />
+                </div>
+              )}
+              {syncingPage === page.id && <Text type="supporting" role="status">{t(page.files?.length ? 'mirrorSyncingFiles' : 'mirrorSyncing')}</Text>}
+              {mirror?.state === 'pending' && syncingPage !== page.id && (
+                <div className="local-mirror-callout">
+                  <Banner
+                    status="info"
+                    collapsible={false}
+                    title={t('mirrorPending')}
+                    endContent={<Button size="sm" variant="secondary" label={t('mirrorRetry')} isDisabled={!mirrorEnabled || !!syncingPage || status !== 'saved'} onClick={() => void syncLocalPage(page)} />}
+                  />
+                </div>
+              )}
+              {mirror?.state === 'linked' ? (
+                <div className="local-mirror-callout">
+                  <Banner
+                    status="success"
+                    collapsible={false}
+                    title={t('mirrorLinked')}
+                    endContent={
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        href={'/page/' + mirror.pageId}
+                        icon={<Cloud size={16} aria-hidden="true" />}
+                        label={t('mirrorOpen')}
+                        onClick={event => {
+                          if (!openCloudPage || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+                          event.preventDefault()
+                          openCloudPage(mirror.pageId)
+                        }}
+                      />
+                    }
+                  />
+                </div>
+              ) : <PageEditor
                 markdown={page.markdown}
                 pageId={page.id}
                 choices={choices}
@@ -741,31 +996,52 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
           </div>
         ) : (
           <div className="workspace-empty">
-            <span className="page-emblem"><NotebookPen size={24} /></span>
-            <h1>{!workspace && status === 'error' ? t('workspaceUnavailable') : workspace ? t('startWithPage') : t('openingYourWorkspace')}</h1>
-            {workspace
-              ? <button className="primary-button" onClick={() => add()}><Plus size={17} /> {t('newPage')}</button>
-              : status === 'error'
-                ? <button className="primary-button" onClick={() => void reload()}>{t('tryAgain')}</button>
-                : <LoaderCircle className="spin" size={22} aria-hidden="true" />}
+            <EmptyState
+              headingLevel={1}
+              icon={<NotebookPen size={26} />}
+              title={!workspace && status === 'error' ? t('workspaceUnavailable') : workspace ? t('startWithPage') : t('openingYourWorkspace')}
+              actions={workspace
+                ? <Button variant="primary" size="md" icon={<Plus size={17} />} label={t('newPage')} onClick={() => add()} />
+                : status === 'error'
+                  ? <Button variant="primary" size="md" label={t('tryAgain')} onClick={() => void reload()} />
+                  : <LoaderCircle className="spin" size={22} aria-hidden="true" />}
+            />
           </div>
         )}
         <footer className="editor-footer">
-          <span>{page ? editorText('wordCount', { count: words }) : 'Lekhan'}</span>
-          {page && <button onClick={() => setSearchOpen(true)} aria-label={t('findPage')}><Search size={13} /> {editorText('quickSearch')}</button>}
+          <Text type="supporting" color="secondary">{page ? editorText('wordCount', { count: words }) : 'Lekhan'}</Text>
+          {page && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              icon={<Search size={13} aria-hidden="true" />}
+              label={editorText('quickSearch')}
+              aria-label={t('findPage')}
+              onClick={() => setSearchOpen(true)}
+            />
+          )}
         </footer>
       </main>
 
-      {mobileContext && <button className="pane-scrim context-scrim" aria-label={t('closeContext')} onClick={() => setMobileContext(false)} />}
+      {mobileContext && <button type="button" className="pane-scrim context-scrim" aria-label={t('closeContext')} onClick={() => setMobileContext(false)} />}
       <aside className={`context-panel ${mobileContext ? 'pane-open' : ''}`} aria-label={t('pageContext')}>
         <div className="context-header">
           <PanelRight size={17} aria-hidden="true" />
           <h2>{t('pageContext')}</h2>
-          <button className="icon-button" ref={contextClose} aria-label={t('closeContext')} title={t('closeContext')} onClick={() => {
-            setContextOpen(false)
-            setMobileContext(false)
-            requestAnimationFrame(() => contextToggle.current?.focus())
-          }}><X size={16} /></button>
+          <IconButton
+            ref={contextClose}
+            variant="ghost"
+            size="sm"
+            label={t('closeContext')}
+            tooltip={t('closeContext')}
+            icon={<X size={16} />}
+            onClick={() => {
+              setContextOpen(false)
+              setMobileContext(false)
+              requestAnimationFrame(() => contextToggle.current?.focus())
+            }}
+          />
         </div>
         {page && (
           <div className="context-body">
@@ -777,12 +1053,19 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
             })}
             {!!page.files?.length && <section className="context-section">
               <h3><Paperclip size={16} aria-hidden="true" /> {desktopText('attachments')}</h3>
-              <ul className="context-file-list">{page.files.map(file => <li key={file.id}>
-                <button type="button" onClick={() => downloadAttachment(file)}>
-                  <ArrowDownToLine size={14} aria-hidden="true" /> <span>{file.filename}</span>
-                </button>
-              </li>)}</ul>
-              {automaticMirror && !mirror && hasUnsupportedMirrorFile(page) && <p>{t('filesPreventSync')}</p>}
+              <VStack gap={0.5} className="context-file-list">
+                {page.files.map(file => (
+                  <Item
+                    key={file.id}
+                    density="compact"
+                    startContent={<ArrowDownToLine size={14} aria-hidden="true" />}
+                    label={file.filename}
+                    labelLines={1}
+                    onClick={() => downloadAttachment(file)}
+                  />
+                ))}
+              </VStack>
+              {automaticMirror && !mirror && hasUnsupportedMirrorFile(page) && <Text type="supporting" color="secondary">{t('filesPreventSync')}</Text>}
             </section>}
             {page.properties && Object.keys(page.properties).length > 0 && (
               <section className="context-section">
@@ -797,13 +1080,22 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
             {tags.length > 0 && (
               <section className="context-section">
                 <h3><span aria-hidden="true">#</span> {t('tags')}</h3>
-                <div className="page-tags">
-                  {tags.map(tag => <button key={tag} onClick={() => {
-                    setMobileContext(false)
-                    setSearchQuery('#' + tag)
-                    setSearchOpen(true)
-                  }}>#{tag}</button>)}
-                </div>
+                <HStack gap={1.5} wrap="wrap" className="page-tags">
+                  {tags.map(tag => (
+                    <Button
+                      key={tag}
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      label={`#${tag}`}
+                      onClick={() => {
+                        setMobileContext(false)
+                        setSearchQuery('#' + tag)
+                        setSearchOpen(true)
+                      }}
+                    />
+                  ))}
+                </HStack>
               </section>
             )}
             <section className="context-section">
@@ -811,10 +1103,12 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
               {headings.length ? (
                 <ol className="outline-list">
                   {headings.map((heading, index) => (
-                    <li key={`${heading.text}-${index}`}><button onClick={() => jumpToHeading(index)} style={{ paddingInlineStart: 8 + Math.max(0, heading.level - 2) * 10 }}>{heading.text}</button></li>
+                    <li key={`${heading.text}-${index}`} style={{ paddingInlineStart: Math.max(0, heading.level - 2) * 10 }}>
+                      <Item density="compact" label={heading.text} labelLines={1} onClick={() => jumpToHeading(index)} />
+                    </li>
                   ))}
                 </ol>
-              ) : <p className="context-empty">{t('headingsEmpty')}</p>}
+              ) : <Text type="supporting" color="secondary" className="context-empty">{t('headingsEmpty')}</Text>}
             </section>
             <BacklinksSection key={'backlinks:' + page.id} links={links} onOpen={open} />
           </div>
@@ -840,82 +1134,141 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
         } : undefined}
         onClose={() => { setSearchOpen(false); setSearchQuery('') }} />}
       {action?.kind === 'move' && actionPage && (
-        <Dialog title={t('movePage')} onClose={() => setAction(null)}>
-          <form className="form-dialog" onSubmit={(event: FormEvent<HTMLFormElement>) => {
+        <AstryxDialog isOpen onOpenChange={nextOpen => { if (!nextOpen) setAction(null) }} purpose="form" width={440} padding={0}>
+          <form onSubmit={(event: FormEvent<HTMLFormElement>) => {
             event.preventDefault()
-            const parentId = new FormData(event.currentTarget).get('parent')?.toString() || null
+            const parentId = moveTarget || null
             change(state => updatePage(state, actionPage.id, { parentId }))
-            if (parentId) setCollapsed(previous => previous.filter(id => id !== parentId))
+            if (parentId) {
+              setCollapsed(previous => previous.filter(id => id !== parentId))
+              setTreeSyncKey(key => key + 1)
+            }
             setAction(null)
           }}>
-            <h2>{t('movePage')}</h2>
-            <label>{t('destination')}
-              <select name="parent" defaultValue={actionPage.parentId ?? ''} autoFocus>
-                <option value="">{t('topLevel')}</option>
-                {pages.filter(item => !descendants.some(child => child.id === item.id)).map(item => (
-                  <option key={item.id} value={item.id}>{pagePath(pages, item.id).map(parent => parent.title).join(' / ')}</option>
-                ))}
-              </select>
-            </label>
-            <div className="dialog-actions"><button type="button" className="secondary-button" onClick={() => setAction(null)}>{t('cancel')}</button><button className="primary-button">{t('movePage')}</button></div>
+            <Layout
+              header={<DialogHeader title={t('movePage')} onOpenChange={nextOpen => { if (!nextOpen) setAction(null) }} />}
+              content={
+                <LayoutContent>
+                  <Selector
+                    label={t('destination')}
+                    value={moveTarget}
+                    onChange={setMoveTarget}
+                    width="100%"
+                    options={[
+                      { value: '', label: t('topLevel') },
+                      ...pages.filter(item => !descendants.some(child => child.id === item.id)).map(item => ({
+                        value: item.id,
+                        label: pagePath(pages, item.id).map(parent => parent.title).join(' / '),
+                      })),
+                    ]}
+                  />
+                </LayoutContent>
+              }
+              footer={
+                <LayoutFooter hasDivider>
+                  <HStack gap={2} justify="end">
+                    <Button type="button" variant="secondary" label={t('cancel')} onClick={() => setAction(null)} />
+                    <Button type="submit" variant="primary" label={t('movePage')} />
+                  </HStack>
+                </LayoutFooter>
+              }
+            />
           </form>
-        </Dialog>
+        </AstryxDialog>
       )}
       {action?.kind === 'delete' && actionPage && (
-        <Dialog title={t('deletePage')} onClose={() => setAction(null)}>
-          <div className="form-dialog">
-            <h2>{t('deletePageTitle', { title: actionPage.title })}</h2>
-            <p>{deletingPendingPage ? t('mirrorDeletePending')
-              : actionPage.cloudMirror?.state === 'linked' && descendants.length === 1
-                ? t('mirrorDeleteLocal')
-                : `${descendants.length > 1 ? t('deleteNested', { count: descendants.length - 1 }) : t('deleteFromWorkspace')} ${t('cannotUndo')}`}</p>
-            <div className="dialog-actions">
-              <button className="secondary-button" autoFocus onClick={() => setAction(null)}>{t('cancel')}</button>
-              <button className="danger-button" disabled={deletingPendingPage} onClick={() => {
-                change(state => deletePage(state, actionPage.id))
-                setAction(null)
-              }}>{t(descendants.length > 1 ? 'deletePages' : 'deletePage')}</button>
-            </div>
-          </div>
-        </Dialog>
+        deletingPendingPage ? (
+          <AstryxDialog isOpen onOpenChange={nextOpen => { if (!nextOpen) setAction(null) }} width={440} padding={0}>
+            <Layout
+              header={<DialogHeader title={t('deletePageTitle', { title: actionPage.title })} onOpenChange={nextOpen => { if (!nextOpen) setAction(null) }} />}
+              content={<LayoutContent><Text>{t('mirrorDeletePending')}</Text></LayoutContent>}
+              footer={
+                <LayoutFooter hasDivider>
+                  <HStack gap={2} justify="end">
+                    <Button type="button" variant="secondary" label={t('cancel')} onClick={() => setAction(null)} />
+                  </HStack>
+                </LayoutFooter>
+              }
+            />
+          </AstryxDialog>
+        ) : (
+          <AlertDialog
+            isOpen
+            onOpenChange={nextOpen => { if (!nextOpen) setAction(null) }}
+            title={t('deletePageTitle', { title: actionPage.title })}
+            description={actionPage.cloudMirror?.state === 'linked' && descendants.length === 1
+              ? t('mirrorDeleteLocal')
+              : `${descendants.length > 1 ? t('deleteNested', { count: descendants.length - 1 }) : t('deleteFromWorkspace')} ${t('cannotUndo')}`}
+            cancelLabel={t('cancel')}
+            actionLabel={t(descendants.length > 1 ? 'deletePages' : 'deletePage')}
+            actionVariant="destructive"
+            onAction={() => {
+              change(state => deletePage(state, actionPage.id))
+              setAction(null)
+            }}
+          />
+        )
       )}
-      {action?.kind === 'mirror' && actionPage && <Dialog title={t('mirrorPage')} onClose={() => setAction(null)}>
-        <div className="form-dialog">
-          <h2>{t('mirrorPageTitle', { title: actionPage.title })}</h2>
-          <p>{t(actionPage.files?.length ? 'mirrorConfirmFiles' : 'mirrorConfirm')}</p>
-          <div className="dialog-actions">
-            <button type="button" className="secondary-button" onClick={() => setAction(null)}>{t('cancel')}</button>
-            <button type="button" className="primary-button" onClick={() => void syncLocalPage(actionPage)}>{t('mirrorPage')}</button>
-          </div>
-        </div>
-      </Dialog>}
+      {action?.kind === 'mirror' && actionPage && (
+        <AstryxDialog isOpen onOpenChange={nextOpen => { if (!nextOpen) setAction(null) }} width={440} padding={0}>
+          <Layout
+            header={<DialogHeader title={t('mirrorPageTitle', { title: actionPage.title })} onOpenChange={nextOpen => { if (!nextOpen) setAction(null) }} />}
+            content={<LayoutContent><Text>{t(actionPage.files?.length ? 'mirrorConfirmFiles' : 'mirrorConfirm')}</Text></LayoutContent>}
+            footer={
+              <LayoutFooter hasDivider>
+                <HStack gap={2} justify="end">
+                  <Button type="button" variant="secondary" label={t('cancel')} onClick={() => setAction(null)} />
+                  <Button type="button" variant="primary" label={t('mirrorPage')} onClick={() => void syncLocalPage(actionPage)} />
+                </HStack>
+              </LayoutFooter>
+            }
+          />
+        </AstryxDialog>
+      )}
       {action?.kind === 'link' && (
-        <Dialog title={t('unresolvedLink')} onClose={() => setAction(null)}>
-          <div className="form-dialog">
-            <h2>{t('linkedAs', { target: action.target })}</h2>
-            <p>{t('unresolvedLinkHelp')}</p>
-            <div className="dialog-actions">
-              <button className="secondary-button" onClick={() => { setAction(null); setSearchOpen(true) }}>{t('searchPages')}</button>
-              <button className="primary-button" onClick={() => createLinkedPage(action.target)}>{t('createPage')}</button>
-            </div>
-          </div>
-        </Dialog>
+        <AstryxDialog isOpen onOpenChange={nextOpen => { if (!nextOpen) setAction(null) }} width={440} padding={0}>
+          <Layout
+            header={<DialogHeader title={t('linkedAs', { target: action.target })} onOpenChange={nextOpen => { if (!nextOpen) setAction(null) }} />}
+            content={<LayoutContent><Text>{t('unresolvedLinkHelp')}</Text></LayoutContent>}
+            footer={
+              <LayoutFooter hasDivider>
+                <HStack gap={2} justify="end">
+                  <Button type="button" variant="secondary" label={t('searchPages')} onClick={() => { setAction(null); setSearchOpen(true) }} />
+                  <Button type="button" variant="primary" label={t('createPage')} onClick={() => createLinkedPage(action.target)} />
+                </HStack>
+              </LayoutFooter>
+            }
+          />
+        </AstryxDialog>
       )}
       {action?.kind === 'reload' && (
-        <Dialog title={t('openSavedCopy')} onClose={() => setAction(null)}>
-          <div className="form-dialog">
-            <h2>{t('openSavedCopyTitle')}</h2>
-          <p>{storage ? desktopText('externalReload') : t('openSavedCopyHelp')}</p>
-            <div className="dialog-actions">
-              <button autoFocus className="secondary-button" onClick={() => setAction(null)}>{t('cancel')}</button>
-              <button className="primary-button" onClick={() => { setAction(null); void reload() }}>{t('openSavedCopy')}</button>
-            </div>
-          </div>
-        </Dialog>
+        <AstryxDialog isOpen onOpenChange={nextOpen => { if (!nextOpen) setAction(null) }} width={440} padding={0}>
+          <Layout
+            header={<DialogHeader title={t('openSavedCopyTitle')} onOpenChange={nextOpen => { if (!nextOpen) setAction(null) }} />}
+            content={<LayoutContent><Text>{storage ? desktopText('externalReload') : t('openSavedCopyHelp')}</Text></LayoutContent>}
+            footer={
+              <LayoutFooter hasDivider>
+                <HStack gap={2} justify="end">
+                  <Button type="button" variant="secondary" label={t('cancel')} onClick={() => setAction(null)} />
+                  <Button type="button" variant="primary" label={t('openSavedCopy')} onClick={() => { setAction(null); void reload() }} />
+                </HStack>
+              </LayoutFooter>
+            }
+          />
+        </AstryxDialog>
       )}
-      <div className={`notice ${notice ? 'visible' : ''}`} aria-live="polite">
-        {notice && <><span>{notice}</span><button className="icon-button" aria-label={t('dismissMessage')} onClick={() => setNotice('')}><X size={16} /></button></>}
-      </div>
+      {notice && (
+        <div className="notice visible" aria-live="polite">
+          <Banner
+            status="info"
+            elevation="high"
+            title={notice}
+            isDismissable
+            dismissLabel={t('dismissMessage')}
+            onDismiss={() => setNotice('')}
+          />
+        </div>
+      )}
     </div>
   )
 }
@@ -923,71 +1276,115 @@ export default function WorkspaceApp({ storageScope = 'personal', mirrorEnabled 
 const emptyPages: Page[] = []
 const emptyTrail: readonly PageLocation[] = []
 
-interface PageTreeProps {
-  parentId: string | null
+interface WorkspaceTreeProps {
+  treeSyncKey: number
   childPages: ReadonlyMap<string | null, readonly PageLocation[]>
   activePath: ReadonlyMap<string | null, string>
-  currentId: string | undefined
+  currentId?: string
   collapsed: string[]
   onOpen: (id: string) => void
-  onToggle: (id: string) => void
+  onAddInFolder: (parentId: string) => void
 }
 
-const PageTree = memo(function PageTree({ parentId, childPages, activePath, currentId, collapsed, onOpen, onToggle }: PageTreeProps) {
+const WorkspaceTree = memo(function WorkspaceTree({
+  treeSyncKey, childPages, activePath, currentId, collapsed, onOpen, onAddInFolder,
+}: WorkspaceTreeProps) {
   const t = useTranslations('app-shell')
-  const [limit, setLimit] = useState(navigationBatch)
-  const children = childPages.get(parentId)
-  if (!children?.length) return null
-  const shown = children.slice(0, limit)
-  const active = children.find(page => page.id === activePath.get(parentId))
-  if (active && !shown.includes(active)) shown.push(active)
-  return (
-    <ul className={`page-tree ${parentId ? 'nested-tree' : ''}`}>
-      {shown.map(page => {
+  const [limits, setLimits] = useState<Record<string, number>>({})
+
+  const treeItems = useMemo(() => {
+    function buildBranch(parentId: string | null): TreeListItemData[] {
+      const children = childPages.get(parentId)
+      if (!children?.length) return []
+      const branchKey = parentId ?? '__root__'
+      const limit = limits[branchKey] ?? navigationBatch
+      const shown = children.slice(0, limit)
+      const active = children.find(page => page.id === activePath.get(parentId))
+      if (active && !shown.includes(active)) shown.push(active)
+
+      const items: TreeListItemData[] = shown.map(page => {
+        const isFolder = isFolderPage(page)
         const hasChildren = childPages.has(page.id)
-        const expanded = !collapsed.includes(page.id)
-        return (
-          <li key={page.id}>
-            <div className="page-row" data-active={currentId === page.id}>
-              {hasChildren ? (
-                <button className="tree-toggle" aria-label={t(expanded ? 'collapsePage' : 'expandPage', { title: page.title })} aria-expanded={expanded} onClick={() => onToggle(page.id)}>
-                  {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                </button>
-              ) : <span className="tree-spacer" />}
-              <button className="page-row-link" aria-current={currentId === page.id ? 'page' : undefined} onClick={() => onOpen(page.id)}>
-                {hasChildren ? <FolderClosed size={16} /> : <FileText size={16} />}<span>{page.title}</span>
-              </button>
-            </div>
-            {expanded && hasChildren && <PageTree parentId={page.id} childPages={childPages} activePath={activePath}
-              currentId={currentId} collapsed={collapsed} onOpen={onOpen} onToggle={onToggle} />}
-          </li>
-        )
-      })}
-      {children.length > shown.length && <li><button className="notebook-list-more" type="button"
-        onClick={({ currentTarget }) => {
-          setLimit(previous => previous + navigationBatch)
-          restoreListFocus(currentTarget, currentTarget.closest('ul'), ':scope > li > .page-row > .page-row-link', limit)
-        }}>{t('showMorePages')}</button></li>}
-    </ul>
+        return {
+          id: page.id,
+          label: page.title,
+          startContent: isFolder || hasChildren
+            ? <FolderClosed size={16} aria-hidden="true" />
+            : <FileText size={16} aria-hidden="true" />,
+          endContent: isFolder ? (
+            <IconButton
+              size="sm"
+              variant="ghost"
+              label={t('addPageInFolder', { title: page.title })}
+              tooltip={t('addPageInFolder', { title: page.title })}
+              icon={<Plus size={14} aria-hidden="true" />}
+              onClick={event => {
+                event.stopPropagation()
+                onAddInFolder(page.id)
+              }}
+            />
+          ) : undefined,
+          children: hasChildren ? buildBranch(page.id) : undefined,
+          onClick: isFolder ? undefined : () => onOpen(page.id),
+          isSelected: !isFolder && currentId === page.id,
+          isExpanded: !collapsed.includes(page.id),
+        }
+      })
+
+      if (children.length > shown.length) {
+        items.push({
+          id: `__more__:${branchKey}`,
+          label: t('showMorePages'),
+          onClick: () => setLimits(previous => ({ ...previous, [branchKey]: limit + navigationBatch })),
+        })
+      }
+      return items
+    }
+
+    return buildBranch(null)
+  }, [activePath, childPages, collapsed, currentId, limits, onAddInFolder, onOpen, t])
+
+  if (!treeItems.length) return null
+
+  return (
+    <TreeList
+      key={treeSyncKey}
+      items={treeItems}
+      density="compact"
+      variant="lineGuides"
+      aria-label={t('allPages')}
+    />
   )
 })
 
 const BacklinksSection = memo(function BacklinksSection({ links, onOpen }: { links: ReturnType<typeof getBacklinks>; onOpen: (id: string) => void }) {
   const t = useTranslations('app-shell')
-  const locale = useLocale()
   const [limit, setLimit] = useState(backlinkBatch)
   return <section className="context-section">
-    <h3><Link2 size={16} /> {t('backlinks')} <span className="count">{new Intl.NumberFormat(locale).format(links.length)}</span></h3>
+    <h3><Link2 size={16} aria-hidden="true" /> {t('backlinks')} <Badge label={links.length} /></h3>
     {links.length ? links.slice(0, limit).map(({ page, excerpt }) => (
-      <button className="backlink" key={page.id} onClick={() => onOpen(page.id)}>
-        <span><FileText size={15} /> {page.title} <ChevronRight size={13} /></span>
-        {excerpt && <small>{excerpt}</small>}
-      </button>
-    )) : <p className="context-empty">{t('backlinksEmpty')}</p>}
-    {links.length > limit && <button className="notebook-list-more" type="button"
-      onClick={({ currentTarget }) => {
-        setLimit(previous => previous + backlinkBatch)
-        restoreListFocus(currentTarget, currentTarget.parentElement, '.backlink', limit)
-      }}>{t('showMoreBacklinks')}</button>}
+      <Item
+        key={page.id}
+        density="compact"
+        startContent={<FileText size={15} aria-hidden="true" />}
+        label={page.title}
+        description={excerpt || undefined}
+        descriptionLines={2}
+        endContent={<ChevronRight size={13} aria-hidden="true" />}
+        onClick={() => onOpen(page.id)}
+      />
+    )) : <Text type="supporting" color="secondary" className="context-empty">{t('backlinksEmpty')}</Text>}
+    {links.length > limit && (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        label={t('showMoreBacklinks')}
+        onClick={({ currentTarget }) => {
+          setLimit(previous => previous + backlinkBatch)
+          restoreListFocus(currentTarget, currentTarget.parentElement, '[role="button"], button', limit)
+        }}
+      />
+    )}
   </section>
 })

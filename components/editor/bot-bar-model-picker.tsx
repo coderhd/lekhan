@@ -1,5 +1,9 @@
-import { useId } from 'react'
+'use client'
+
 import { Cpu } from 'lucide-react'
+import { Selector } from '@astryxdesign/core/Selector'
+import { VStack } from '@astryxdesign/core/Stack'
+import { Text } from '@astryxdesign/core/Text'
 import { useTranslations } from '@/lib/i18n/client'
 import { usageTokenCount } from '@/lib/ai/editor-actions'
 import type { Usage } from '@/lib/ai/client'
@@ -14,17 +18,25 @@ export default function BotBarModelPicker({ choices, selected, disabled, telemet
   onChange: (value: string) => void
 }) {
   const t = useTranslations('editor-ai')
-  const id = useId()
   const tokens = usageTokenCount(telemetry?.usage)
 
-  return <div className="bot-bar-model">
-    <label htmlFor={id}><span><Cpu size={15} aria-hidden="true" /> {t('model')}</span></label>
-    <select id={id} value={selected} disabled={disabled || !choices.length} onChange={event => onChange(event.target.value)}>
-      {!choices.length && <option value="">{t('needsModel')}</option>}
-      {choices.map(choice => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
-    </select>
-    {telemetry && <small className="bot-bar-telemetry">
-      {tokens === undefined ? t('tokensUnavailable') : t('tokens', { count: tokens })} · {t('latency', { milliseconds: telemetry.elapsedMs })}
-    </small>}
-  </div>
+  return (
+    <VStack gap={1} className="bot-bar-model">
+      <Selector
+        label={t('model')}
+        startIcon={<Cpu size={15} aria-hidden="true" />}
+        placeholder={t('needsModel')}
+        isDisabled={disabled || !choices.length}
+        width="100%"
+        value={choices.length ? selected : ''}
+        options={choices.map(choice => ({ value: choice.id, label: choice.label }))}
+        onChange={onChange}
+      />
+      {telemetry && (
+        <Text type="supporting" color="secondary" className="bot-bar-telemetry">
+          {tokens === undefined ? t('tokensUnavailable') : t('tokens', { count: tokens })} · {t('latency', { milliseconds: telemetry.elapsedMs })}
+        </Text>
+      )}
+    </VStack>
+  )
 }

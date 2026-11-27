@@ -14,6 +14,25 @@ function queuedEvents(page: Page) {
   })
 }
 
+test('shows the cookie banner until decided and syncs analytics preference with Settings', async ({ page, context }) => {
+  await page.goto('/about')
+  const banner = page.getByRole('complementary', { name: 'Analytics cookies' })
+  await expect(banner).toBeVisible()
+  await expect(page.getByRole('checkbox', { name: 'Share usage analytics' })).toHaveCount(0)
+
+  await banner.getByRole('button', { name: 'Essential only' }).click()
+  await expect(banner).toHaveCount(0)
+  await page.reload()
+  await expect(banner).toHaveCount(0)
+
+  await signInContext(context)
+  await page.goto('/settings?tab=privacy')
+  const consent = page.getByRole('checkbox', { name: 'Share usage analytics' })
+  await expect(consent).not.toBeChecked()
+  await consent.check()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('lekhan:usage-analytics'))).toBe('granted')
+})
+
 test('only shares coarse product events after opt-in and stops after revocation', async ({ page, context }) => {
   const id = process.env.NEXT_PUBLIC_GA4_ID
   test.skip(!id || !/^G-[A-Z0-9]+$/.test(id), 'Set NEXT_PUBLIC_GA4_ID to enable the analytics fixture.')
@@ -48,8 +67,9 @@ test('only shares coarse product events after opt-in and stops after revocation'
   })
   await page.goto('/workspace?private=secret-token')
   const newPage = page.getByRole('button', { name: 'New page', exact: true })
-  const consent = page.getByRole('checkbox', { name: 'Share usage analytics' })
-  await expect(consent).not.toBeChecked()
+  await expect(page.getByRole('checkbox', { name: 'Share usage analytics' })).toHaveCount(0)
+  const banner = page.getByRole('complementary', { name: 'Analytics cookies' })
+  await expect(banner).toBeVisible()
   await newPage.click()
   await expect(page.getByText('Saved locally', { exact: true })).toBeVisible()
   expect(loads).toBe(0)
@@ -58,14 +78,15 @@ test('only shares coarse product events after opt-in and stops after revocation'
   await expect.poll(() => page.evaluate(scope => localStorage.getItem('lekhan:tier-gates:' + scope), defaultScope))
     .toContain('"tier-gate-tier":"free"')
 
-  await consent.check()
+  await banner.getByRole('button', { name: 'Accept analytics' }).click()
+  await expect(banner).toHaveCount(0)
   await newPage.click()
   await expect.poll(async () => (await queuedEvents(page)).map(event => event.name)).toContain('page_created')
   const title = page.getByRole('textbox', { name: 'Page title' })
   await title.fill('Private title')
   const body = page.getByRole('textbox', { name: 'Page content' })
   await body.fill('Private body')
-  await page.getByRole('button', { name: 'Markdown', exact: true }).click()
+  await page.getByRole('radio', { name: 'Markdown', exact: true }).click()
   const source = page.getByRole('textbox', { name: 'Markdown source' })
   await source.fill('Private body with a [[Private linked title]]')
   await source.fill('Edited body with a [[Private linked title]]')
@@ -101,11 +122,18 @@ test('only shares coarse product events after opt-in and stops after revocation'
   })
   const second = await page.context().newPage()
   await second.route('https://www.googletagmanager.com/**', route => route.fulfill({ body: '' }))
-  await second.goto('/workspace')
+  await second.goto('/settings?tab=privacy')
   const secondConsent = second.getByRole('checkbox', { name: 'Share usage analytics' })
   await expect(secondConsent).toBeChecked()
+  await page.getByRole('button', { name: 'Workspace options' }).click()
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Settings' })
+  await dialog.getByRole('tab', { name: 'Privacy & Encryption' }).click()
+  const consent = dialog.getByRole('checkbox', { name: 'Share usage analytics' })
+  await expect(consent).toBeChecked()
   await consent.uncheck()
   await expect(secondConsent).not.toBeChecked()
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click()
   await expect.poll(() => revocations).toContainEqual({ token })
   await expect.poll(() => page.evaluate(keys => keys.map(key => localStorage.getItem(key)), [billingConsent, billingRevocation]))
     .toEqual([null, null])
@@ -118,7 +146,9 @@ test('only shares coarse product events after opt-in and stops after revocation'
   }
   await second.close()
   await page.goto('/about?private=secret-token')
-  await consent.check()
+  await page.evaluate(() => localStorage.removeItem('lekhan:usage-analytics'))
+  await page.reload()
+  await page.getByRole('complementary', { name: 'Analytics cookies' }).getByRole('button', { name: 'Accept analytics' }).click()
   await expect.poll(() => queuedEvents(page)).toEqual([
     { name: 'page_view', payload: { page_location: new URL('/about', page.url()).href, page_title: 'Lekhan', page_referrer: '' } },
   ])
