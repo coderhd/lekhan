@@ -35,11 +35,13 @@ Set `LEKHAN_SYNC_URL` on the app to the relay’s `wss://` origin. Proxy `/check
 
 ## Render staging
 
-Create the `lekhan-sync-staging` Blueprint from `coderhd/lekhan` on `integration/h0-rebuild` using the path `server/sync/render-staging.yaml`. The Blueprint creates a separate free service. The existing Lekhan service in Render's Production environment serves the earlier deployment.
+The [free staging relay](https://lekhan-sync-staging.onrender.com/health) runs the `integration/h0-rebuild` branch from `coderhd/lekhan`. It was provisioned with the Render CLI using the native Node 24 runtime, `npm ci --omit=dev`, and the relay entry point. It loads its staging credentials from a Render secret file and uses `/tmp/lekhan-wal`. Automatic deployments are off. The Docker Blueprint at `server/sync/render-staging.yaml` remains available for a separate free test environment. The existing Lekhan service in Render's Production environment serves the earlier deployment.
 
-Use the same approved HTTPS preview origin for `LEKHAN_PUBLIC_URL` on the relay and in the integration branch's Vercel Preview settings. The branch alias [responds to the app health check](https://lekhan-staging-git-integra-e71f33-harshdave1995-admins-projects.vercel.app/api/health) and stays stable across builds. Add that exact host's Auth callback paths to the staging Supabase redirect allowlist before using it for signup and recovery. Set the same staging ticket secret and encryption key on both services. Once the relay reports healthy, set `LEKHAN_SYNC_URL` to its `wss://` origin in the same branch-specific Preview settings and redeploy the app.
+Both services use the [stable branch Preview alias](https://lekhan-staging-git-integra-e71f33-harshdave1995-admins-projects.vercel.app) for `LEKHAN_PUBLIC_URL` and share the staging ticket secret and encryption key. Supabase Auth returned the exact alias for the web confirmation and recovery callbacks and for the desktop return callback. The Vercel Preview uses `wss://lekhan-sync-staging.onrender.com` as `LEKHAN_SYNC_URL`.
 
 The free service loses its WAL at restart, redeploy, or idle shutdown. Use throwaway staging pages for HTTP and WebSocket tests. For the production durability drill, attach a persistent disk at `/var/lib/lekhan/wal` on a plan that supports it. [Render free service limits](https://render.com/docs/free) · [Render persistent disks](https://render.com/docs/disks)
+
+On staging commit `0cbf363`, the protected Preview issued owner, editor, and viewer tickets and denied an unrelated signed-in account. The owner and editor exchanged edits over the hosted WebSocket. The viewer received both edits, and both were present in the encrypted Supabase Storage snapshot. The disposable accounts, workspace, page, and snapshot were removed.
 
 ## Verify and replace the relay
 
