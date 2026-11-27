@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: lekhan-sync-staging
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./server/sync/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeployTrigger: 'off'
+    envVars:
+      - key: LEKHAN_PUBLIC_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: LEKHAN_SYNC_TICKET_SECRET
+        sync: false
+      - key: LEKHAN_ENCRYPTION_KEY
+        sync: false
+      - key: SENTRY_ENVIRONMENT
+        value: staging
